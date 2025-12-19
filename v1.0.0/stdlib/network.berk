@@ -1,0 +1,654 @@
+//! # Network Module
+//!
+//! Advanced network programming library.
+//!
+//! Gelişmiş ağ programlama kütüphanesi.
+//!
+//! ## Features / Özellikler
+//!
+//! - **TCP/UDP sockets**: Client & server / İstemci ve sunucu
+//! - **DNS resolution**: Async & sync / Asenkron ve senkron
+//! - **TLS/SSL**: Secure connections / Güvenli bağlantılar
+//! - **WebSocket**: Client support / İstemci desteği
+//! - **Network interfaces**: List, info / Ağ arayüzleri
+//! - **Socket options**: Timeout, keepalive, nodelay / Soket seçenekleri
+//! - **Non-blocking I/O**: Async networking / Asenkron ağ
+//!
+//! ## Example / Örnek
+//!
+//! ```berk
+//! kullan network
+//!
+//! // TCP client
+//! değişken conn = network.tcp_connect("example.com:80")?
+//! network.write(conn, "GET / HTTP/1.0\r\n\r\n")
+//! değişken yanıt = network.read(conn)?
+//! ```
+//!
+//! Backend: Rust tokio + trust-dns + rustls
+
+modül network
+
+kullan result
+kullan time
+kullan thread
+
+// ============================================================================
+// IP ADDRESS
+// ============================================================================
+
+tip IpAddr = Ipv4 | Ipv6
+
+tip Ipv4 = yapı yap
+    octets: liste[bayt]  // [192, 168, 1, 1]
+son
+
+tip Ipv6 = yapı yap
+    segments: liste[tamsayı]  // [0x2001, 0x0db8, ...]
+son
+
+// Parse IP address from string
+@native
+fonksiyon parse_ip(addr: yazı) -> Sonuç[IpAddr, yazı]
+
+// Create IPv4
+fonksiyon ipv4(a: bayt, b: bayt, c: bayt, d: bayt) -> IpAddr
+yap
+    dön Ipv4 yap octets: [a, b, c, d] son
+son
+
+// Create IPv6
+@native
+fonksiyon ipv6(segments: liste[tamsayı]) -> IpAddr
+
+// To string
+@native
+fonksiyon ip_to_string(addr: IpAddr) -> yazı
+
+// Is loopback (127.0.0.1 or ::1)
+@native
+fonksiyon ip_is_loopback(addr: IpAddr) -> mantıksal
+
+// Is private (10.0.0.0/8, 192.168.0.0/16, etc.)
+@native
+fonksiyon ip_is_private(addr: IpAddr) -> mantıksal
+
+// ============================================================================
+// SOCKET ADDRESS
+// ============================================================================
+
+tip SocketAddr = yapı yap
+    ip: IpAddr,
+    port: tamsayı
+son
+
+// Parse socket address (e.g., "127.0.0.1:8080")
+@native
+fonksiyon parse_socket_addr(addr: yazı) -> Sonuç[SocketAddr, yazı]
+
+// Create socket address
+fonksiyon socket_addr(ip: IpAddr, port: tamsayı) -> SocketAddr
+yap
+    dön SocketAddr yap ip: ip, port: port son
+son
+
+// To string
+fonksiyon socket_addr_to_string(addr: SocketAddr) -> yazı
+yap
+    dön string::format("{}:{}", [ip_to_string(addr.ip), addr.port])
+son
+
+// ============================================================================
+// TCP SOCKET (Connection-Oriented)
+// ============================================================================
+
+tip TcpStream = yapı yap
+    handle: tamsayı,
+    local_addr: SocketAddr,
+    peer_addr: SocketAddr
+son
+
+// Connect to TCP server
+@native
+fonksiyon tcp_connect(addr: yazı) -> Sonuç[TcpStream, yazı]
+
+// Connect with timeout
+@native
+fonksiyon tcp_connect_timeout(addr: yazı, timeout: time::Duration) -> Sonuç[TcpStream, yazı]
+
+// Read from TCP stream
+@native
+fonksiyon tcp_read(stream: TcpStream, buffer: liste[bayt]) -> Sonuç[tamsayı, yazı]  // Returns bytes read
+
+// Read exact number of bytes
+@native
+fonksiyon tcp_read_exact(stream: TcpStream, buffer: liste[bayt]) -> Sonuç[boş, yazı]
+
+// Write to TCP stream
+@native
+fonksiyon tcp_write(stream: TcpStream, data: liste[bayt]) -> Sonuç[tamsayı, yazı]  // Returns bytes written
+
+// Write all data
+@native
+fonksiyon tcp_write_all(stream: TcpStream, data: liste[bayt]) -> Sonuç[boş, yazı]
+
+// Close TCP stream
+@native
+fonksiyon tcp_close(stream: TcpStream) -> Sonuç[boş, yazı]
+
+// Shutdown TCP stream (read, write, or both)
+tip Shutdown = "Read" | "Write" | "Both"
+
+@native
+fonksiyon tcp_shutdown(stream: TcpStream, how: Shutdown) -> Sonuç[boş, yazı]
+
+// Get peer address
+fonksiyon tcp_peer_addr(stream: TcpStream) -> SocketAddr
+yap
+    dön stream.peer_addr
+son
+
+// Get local address
+fonksiyon tcp_local_addr(stream: TcpStream) -> SocketAddr
+yap
+    dön stream.local_addr
+son
+
+// ============================================================================
+// TCP LISTENER (Server)
+// ============================================================================
+
+tip TcpListener = yapı yap
+    handle: tamsayı,
+    local_addr: SocketAddr
+son
+
+// Bind TCP listener
+@native
+fonksiyon tcp_bind(addr: yazı) -> Sonuç[TcpListener, yazı]
+
+// Accept incoming connection (blocking)
+@native
+fonksiyon tcp_accept(listener: TcpListener) -> Sonuç[TcpStream, yazı]
+
+// Accept with timeout
+@native
+fonksiyon tcp_accept_timeout(listener: TcpListener, timeout: time::Duration) -> Sonuç[Seçenek[TcpStream], yazı]
+
+// Get local address
+fonksiyon tcp_listener_local_addr(listener: TcpListener) -> SocketAddr
+yap
+    dön listener.local_addr
+son
+
+// ============================================================================
+// UDP SOCKET (Connectionless)
+// ============================================================================
+
+tip UdpSocket = yapı yap
+    handle: tamsayı,
+    local_addr: SocketAddr
+son
+
+// Bind UDP socket
+@native
+fonksiyon udp_bind(addr: yazı) -> Sonuç[UdpSocket, yazı]
+
+// Send to address
+@native
+fonksiyon udp_send_to(socket: UdpSocket, data: liste[bayt], addr: yazı) -> Sonuç[tamsayı, yazı]
+
+// Receive from (returns bytes read and sender address)
+@native
+fonksiyon udp_recv_from(socket: UdpSocket, buffer: liste[bayt]) -> Sonuç[(tamsayı, SocketAddr), yazı]
+
+// Connect UDP socket (sets default destination)
+@native
+fonksiyon udp_connect(socket: UdpSocket, addr: yazı) -> Sonuç[boş, yazı]
+
+// Send (after connect)
+@native
+fonksiyon udp_send(socket: UdpSocket, data: liste[bayt]) -> Sonuç[tamsayı, yazı]
+
+// Receive (after connect)
+@native
+fonksiyon udp_recv(socket: UdpSocket, buffer: liste[bayt]) -> Sonuç[tamsayı, yazı]
+
+// ============================================================================
+// SOCKET OPTIONS
+// ============================================================================
+
+// Set read timeout
+@native
+fonksiyon set_read_timeout(stream: TcpStream, timeout: Seçenek[time::Duration]) -> Sonuç[boş, yazı]
+
+// Set write timeout
+@native
+fonksiyon set_write_timeout(stream: TcpStream, timeout: Seçenek[time::Duration]) -> Sonuç[boş, yazı]
+
+// Set TCP_NODELAY (disable Nagle's algorithm)
+@native
+fonksiyon set_nodelay(stream: TcpStream, nodelay: mantıksal) -> Sonuç[boş, yazı]
+
+// Set SO_KEEPALIVE
+@native
+fonksiyon set_keepalive(stream: TcpStream, keepalive: Seçenek[time::Duration]) -> Sonuç[boş, yazı]
+
+// Set SO_REUSEADDR
+@native
+fonksiyon set_reuseaddr(listener: TcpListener, reuse: mantıksal) -> Sonuç[boş, yazı]
+
+// Set SO_BROADCAST (UDP)
+@native
+fonksiyon set_broadcast(socket: UdpSocket, broadcast: mantıksal) -> Sonuç[boş, yazı]
+
+// Set TTL (Time To Live)
+@native
+fonksiyon set_ttl(stream: TcpStream, ttl: tamsayı) -> Sonuç[boş, yazı]
+
+// ============================================================================
+// DNS RESOLUTION
+// ============================================================================
+
+// Resolve hostname to IP addresses
+@native
+fonksiyon resolve_host(hostname: yazı) -> Sonuç[liste[IpAddr], yazı]
+
+// Resolve with timeout
+@native
+fonksiyon resolve_host_timeout(hostname: yazı, timeout: time::Duration) -> Sonuç[liste[IpAddr], yazı]
+
+// Reverse DNS lookup (IP to hostname)
+@native
+fonksiyon reverse_lookup(ip: IpAddr) -> Sonuç[liste[yazı], yazı]
+
+// Get local hostname
+@native
+fonksiyon local_hostname() -> Sonuç[yazı, yazı]
+
+// ============================================================================
+// TLS/SSL SUPPORT
+// ============================================================================
+
+tip TlsStream = yapı yap
+    handle: tamsayı,
+    tcp_stream: TcpStream,
+    server_name: yazı
+son
+
+// Connect with TLS
+@native
+fonksiyon tls_connect(addr: yazı, server_name: yazı) -> Sonuç[TlsStream, yazı]
+
+// Connect with TLS and custom certificates
+@native
+fonksiyon tls_connect_with_certs(addr: yazı, server_name: yazı, cert_path: yazı) -> Sonuç[TlsStream, yazı]
+
+// Read from TLS stream
+@native
+fonksiyon tls_read(stream: TlsStream, buffer: liste[bayt]) -> Sonuç[tamsayı, yazı]
+
+// Write to TLS stream
+@native
+fonksiyon tls_write(stream: TlsStream, data: liste[bayt]) -> Sonuç[tamsayı, yazı]
+
+// Close TLS stream
+@native
+fonksiyon tls_close(stream: TlsStream) -> Sonuç[boş, yazı]
+
+// ============================================================================
+// HTTP CLIENT
+// ============================================================================
+
+tip HttpMethod = "GET" | "POST" | "PUT" | "DELETE" | "PATCH" | "HEAD" | "OPTIONS"
+
+tip HttpRequest = yapı yap
+    method: HttpMethod,
+    url: yazı,
+    headers: liste[(yazı, yazı)],
+    body: Seçenek[liste[bayt]],
+    timeout: Seçenek[time::Duration]
+son
+
+tip HttpResponse = yapı yap
+    status_code: tamsayı,
+    status_text: yazı,
+    headers: liste[(yazı, yazı)],
+    body: liste[bayt]
+son
+
+// Create HTTP request
+fonksiyon http_request_new(method: HttpMethod, url: yazı) -> HttpRequest
+yap
+    dön HttpRequest yap
+        method: method,
+        url: url,
+        headers: liste_oluştur[(yazı, yazı)](),
+        body: Hiç,
+        timeout: Hiç
+    son
+son
+
+// Add header
+fonksiyon http_request_header(req: HttpRequest, name: yazı, value: yazı) -> HttpRequest
+yap
+    liste_ekle(req.headers, (name, value))
+    dön req
+son
+
+// Set body
+fonksiyon http_request_body(req: HttpRequest, body: liste[bayt]) -> HttpRequest
+yap
+    req.body = Bazı(body)
+    dön req
+son
+
+// Execute HTTP request
+@native
+fonksiyon http_send(request: HttpRequest) -> Sonuç[HttpResponse, yazı]
+
+// Simple GET request
+fonksiyon http_get(url: yazı) -> Sonuç[HttpResponse, yazı]
+yap
+    değişken req = http_request_new("GET", url)
+    dön http_send(req)
+son
+
+// Simple POST request
+fonksiyon http_post(url: yazı, body: liste[bayt]) -> Sonuç[HttpResponse, yazı]
+yap
+    değişken req = http_request_new("POST", url)
+    req = http_request_header(req, "Content-Type", "application/json")
+    req = http_request_body(req, body)
+    dön http_send(req)
+son
+
+// Download file
+@native
+fonksiyon http_download(url: yazı, dest_path: yazı) -> Sonuç[tamsayı, yazı]  // Returns bytes downloaded
+
+// ============================================================================
+// WEBSOCKET CLIENT
+// ============================================================================
+
+tip WebSocket = yapı yap
+    handle: tamsayı,
+    url: yazı
+son
+
+tip WebSocketMessage = Text { data: yazı } | Binary { data: liste[bayt] } | Ping | Pong | Close
+
+// Connect to WebSocket
+@native
+fonksiyon websocket_connect(url: yazı) -> Sonuç[WebSocket, yazı]
+
+// Send message
+@native
+fonksiyon websocket_send(ws: WebSocket, message: WebSocketMessage) -> Sonuç[boş, yazı]
+
+// Receive message (blocking)
+@native
+fonksiyon websocket_recv(ws: WebSocket) -> Sonuç[WebSocketMessage, yazı]
+
+// Close WebSocket
+@native
+fonksiyon websocket_close(ws: WebSocket) -> Sonuç[boş, yazı]
+
+// ============================================================================
+// NETWORK INTERFACES
+// ============================================================================
+
+tip NetworkInterface = yapı yap
+    name: yazı,
+    index: tamsayı,
+    mac_addr: Seçenek[yazı],
+    ip_addrs: liste[IpAddr],
+    is_up: mantıksal,
+    is_loopback: mantıksal,
+    is_multicast: mantıksal
+son
+
+// List all network interfaces
+@native
+fonksiyon list_interfaces() -> liste[NetworkInterface]
+
+// Get interface by name
+@native
+fonksiyon get_interface(name: yazı) -> Sonuç[NetworkInterface, yazı]
+
+// ============================================================================
+// MULTICAST (UDP)
+// ============================================================================
+
+// Join multicast group
+@native
+fonksiyon udp_join_multicast(socket: UdpSocket, multicast_addr: IpAddr, interface_addr: IpAddr) -> Sonuç[boş, yazı]
+
+// Leave multicast group
+@native
+fonksiyon udp_leave_multicast(socket: UdpSocket, multicast_addr: IpAddr, interface_addr: IpAddr) -> Sonuç[boş, yazı]
+
+// Set multicast TTL
+@native
+fonksiyon udp_set_multicast_ttl(socket: UdpSocket, ttl: tamsayı) -> Sonuç[boş, yazı>
+
+// Set multicast loopback
+@native
+fonksiyon udp_set_multicast_loop(socket: UdpSocket, loopback: mantıksal) -> Sonuç[boş, yazı]
+
+// ============================================================================
+// URL PARSING
+// ============================================================================
+
+tip Url = yapı yap
+    scheme: yazı,      // "http", "https", "ws", etc.
+    host: yazı,
+    port: Seçenek[tamsayı],
+    path: yazı,
+    query: Seçenek[yazı],
+    fragment: Seçenek[yazı]
+son
+
+// Parse URL
+@native
+fonksiyon parse_url(url_str: yazı) -> Sonuç[Url, yazı]
+
+// Build URL
+@native
+fonksiyon build_url(url: Url) -> yazı
+
+// URL encode
+@native
+fonksiyon url_encode(text: yazı) -> yazı
+
+// URL decode
+@native
+fonksiyon url_decode(text: yazı) -> Sonuç[yazı, yazı]
+
+// ============================================================================
+// CONNECTION POOL
+// ============================================================================
+
+tip ConnectionPool = yapı yap
+    host: yazı,
+    port: tamsayı,
+    max_size: tamsayı,
+    connections: liste[TcpStream],
+    available: tamsayı
+son
+
+// Create connection pool
+@native
+fonksiyon pool_new(host: yazı, port: tamsayı, max_size: tamsayı) -> Sonuç[ConnectionPool, yazı]
+
+// Get connection from pool
+@native
+fonksiyon pool_get(pool: ConnectionPool) -> Sonuç[TcpStream, yazı]
+
+// Return connection to pool
+@native
+fonksiyon pool_return(pool: ConnectionPool, conn: TcpStream) -> Sonuç[boş, yazı]
+
+// Close all connections in pool
+@native
+fonksiyon pool_close(pool: ConnectionPool) -> Sonuç[boş, yazı]
+
+// ============================================================================
+// PROXY SUPPORT
+// ============================================================================
+
+tip ProxyType = "Http" | "Socks4" | "Socks5"
+
+tip Proxy = yapı yap
+    proxy_type: ProxyType,
+    host: yazı,
+    port: tamsayı,
+    username: Seçenek[yazı],
+    password: Seçenek[yazı]
+son
+
+// Connect through proxy
+@native
+fonksiyon tcp_connect_proxy(addr: yazı, proxy: Proxy) -> Sonuç[TcpStream, yazı]
+
+// ============================================================================
+// NETWORK UTILITIES
+// ============================================================================
+
+// Ping host (ICMP echo request)
+@native
+fonksiyon ping(host: yazı, timeout: time::Duration) -> Sonuç[time::Duration, yazı]  // Returns RTT
+
+// Check if port is open
+fonksiyon is_port_open(host: yazı, port: tamsayı, timeout: time::Duration) -> mantıksal
+yap
+    değişken addr = string::format("{}:{}", [host, port])
+    değişken result = tcp_connect_timeout(addr, timeout)
+    
+    eşleşme result yap
+        Tamam[stream] => yap
+            tcp_close(stream)
+            dön doğru
+        son,
+        Hata[_] => dön yanlış
+    son
+son
+
+// Get public IP address (via external service)
+@native
+fonksiyon get_public_ip() -> Sonuç[IpAddr, yazı]
+
+// ============================================================================
+// BANDWIDTH MONITORING
+// ============================================================================
+
+tip BandwidthStats = yapı yap
+    bytes_sent: tamsayı,
+    bytes_received: tamsayı,
+    packets_sent: tamsayı,
+    packets_received: tamsayı,
+    errors: tamsayı
+son
+
+// Get network statistics
+@native
+fonksiyon get_network_stats() -> BandwidthStats
+
+// ============================================================================
+// UNIX DOMAIN SOCKETS (Unix/Linux)
+// ============================================================================
+
+tip UnixStream = yapı yap
+    handle: tamsayı,
+    path: yazı
+son
+
+// Connect to Unix domain socket
+@native
+fonksiyon unix_connect(path: yazı) -> Sonuç[UnixStream, yazı]
+
+// Bind Unix listener
+@native
+fonksiyon unix_bind(path: yazı) -> Sonuç[tamsayı, yazı]  // Returns listener handle
+
+// ============================================================================
+// SIMPLE SERVER HELPER
+// ============================================================================
+
+// Simple TCP server (accepts callback for each connection)
+fonksiyon tcp_serve(addr: yazı, handler: fonksiyon(TcpStream) -> boş) -> Sonuç[boş, yazı]
+yap
+    değişken listener = tcp_bind(addr)?
+    
+    io::println(string::format("Server listening on {}", [addr]))
+    
+    iken doğru yap
+        değişken stream_result = tcp_accept(listener)
+        
+        eşleşme stream_result yap
+            Tamam[stream] => yap
+                // Spawn thread to handle connection
+                thread::spawn(fonksiyon() yap
+                    handler(stream)
+                    tcp_close(stream)
+                son)
+            son,
+            Hata[err] => yap
+                io::eprintln(string::format("Accept error: {}", [err]))
+            son
+        son
+    son
+    
+    dön Tamam(boş)
+son
+
+// ============================================================================
+// TURKISH ALIASES
+// ============================================================================
+
+fonksiyon tcp_bağlan(adres: yazı) -> Sonuç[TcpStream, yazı]
+yap
+    dön tcp_connect(adres)
+son
+
+fonksiyon tcp_dinle(adres: yazı) -> Sonuç[TcpListener, yazı]
+yap
+    dön tcp_bind(adres)
+son
+
+fonksiyon tcp_kabul_et(dinleyici: TcpListener) -> Sonuç[TcpStream, yazı]
+yap
+    dön tcp_accept(dinleyici)
+son
+
+fonksiyon tcp_oku(akış: TcpStream, tampon: liste[bayt]) -> Sonuç[tamsayı, yazı]
+yap
+    dön tcp_read(akış, tampon)
+son
+
+fonksiyon tcp_yaz(akış: TcpStream, veri: liste[bayt]) -> Sonuç[tamsayı, yazı]
+yap
+    dön tcp_write(akış, veri)
+son
+
+fonksiyon udp_bağla(adres: yazı) -> Sonuç[UdpSocket, yazı]
+yap
+    dön udp_bind(adres)
+son
+
+fonksiyon udp_gönder(soket: UdpSocket, veri: liste[bayt], adres: yazı) -> Sonuç[tamsayı, yazı]
+yap
+    dön udp_send_to(soket, veri, adres)
+son
+
+fonksiyon http_al(url: yazı) -> Sonuç[HttpResponse, yazı]
+yap
+    dön http_get(url)
+son
+
+fonksiyon dns_çöz(host: yazı) -> Sonuç[liste[IpAddr], yazı]
+yap
+    dön resolve_host(host)
+son
+
+son  // modül network

@@ -1,0 +1,139 @@
+// Arduino I2C (Wire) Module for BERK
+// Modern I2C communication
+//
+// Connect to sensors and displays! 🔌
+
+extern "C" {
+    fn Wire_begin();
+    fn Wire_beginTransmission(address: u8);
+    fn Wire_write(data: u8);
+    fn Wire_endTransmission() -> u8;
+    fn Wire_requestFrom(address: u8, quantity: u8) -> u8;
+    fn Wire_available() -> i32;
+    fn Wire_read() -> i32;
+}
+
+// Initialize I2C
+pub fn begin() {
+    unsafe { Wire_begin(); }
+}
+
+// Start transmission to device
+pub fn begin_transmission(address: u8) {
+    unsafe { Wire_beginTransmission(address); }
+}
+
+// Write byte to I2C bus
+pub fn write(data: u8) {
+    unsafe { Wire_write(data); }
+}
+
+// End transmission
+pub fn end_transmission() -> u8 {
+    unsafe { Wire_endTransmission() }
+}
+
+// Request data from device
+pub fn request_from(address: u8, quantity: u8) -> u8 {
+    unsafe { Wire_requestFrom(address, quantity) }
+}
+
+// Check bytes available
+pub fn available() -> i32 {
+    unsafe { Wire_available() }
+}
+
+// Read byte from I2C
+pub fn read() -> Option<u8> {
+    let val = unsafe { Wire_read() };
+    if val >= 0 {
+        Some(val as u8)
+    } else {
+        None
+    }
+}
+
+// 📱 VIRAL EXAMPLE: I2C Scanner
+pub fn example_scanner() {
+    use super::{serial, time};
+    
+    begin();
+    serial::begin(9600);
+    serial::println("I2C Scanner Starting...");
+    
+    let mut found = 0;
+    
+    for address in 1..127 {
+        begin_transmission(address);
+        let error = end_transmission();
+        
+        if error == 0 {
+            serial::print("Device found at 0x");
+            serial::print_int(address as i32);
+            serial::println("");
+            found += 1;
+        }
+    }
+    
+    serial::print("Found ");
+    serial::print_int(found);
+    serial::println(" device(s)");
+}
+
+// 🌡️ VIRAL EXAMPLE: BMP280 temperature sensor
+pub fn example_bmp280() {
+    use super::{serial, time};
+    
+    const BMP280_ADDR: u8 = 0x76;
+    const REG_TEMP: u8 = 0xFA;
+    
+    begin();
+    serial::begin(9600);
+    
+    loop {
+        // Read temperature
+        begin_transmission(BMP280_ADDR);
+        write(REG_TEMP);
+        end_transmission();
+        
+        request_from(BMP280_ADDR, 3);
+        
+        if let Some(msb) = read() {
+            if let Some(lsb) = read() {
+                if let Some(xlsb) = read() {
+                    let temp_raw = ((msb as u32) << 12) | 
+                                   ((lsb as u32) << 4) | 
+                                   ((xlsb as u32) >> 4);
+                    
+                    serial::print("Temperature: ");
+                    serial::print_int(temp_raw as i32);
+                    serial::println("");
+                }
+            }
+        }
+        
+        time::delay_ms(1000);
+    }
+}
+
+// 📺 VIRAL EXAMPLE: OLED Display (SSD1306)
+pub fn example_oled() {
+    use super::time;
+    
+    const OLED_ADDR: u8 = 0x3C;
+    
+    begin();
+    
+    // Initialize OLED
+    begin_transmission(OLED_ADDR);
+    write(0x00);  // Command mode
+    write(0xAE);  // Display off
+    write(0xD5);  // Set display clock
+    write(0x80);
+    write(0xA8);  // Set multiplex
+    write(0x3F);
+    write(0xAF);  // Display on
+    end_transmission();
+    
+    // Display is ready!
+}

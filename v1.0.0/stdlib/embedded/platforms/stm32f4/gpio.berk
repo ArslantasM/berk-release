@@ -1,0 +1,430 @@
+// stdlib/embedded/platforms/stm32f4/gpio.berk
+// STM32F4 GPIO HAL Implementation
+// STM32 HAL library bindings
+
+import "embedded/bal/gpio" as GPIO_BAL
+
+// STM32 GPIO ports
+pub enum Port {
+    A = 0,
+    B = 1,
+    C = 2,
+    D = 3,
+    E = 4,
+    F = 5,
+    G = 6,
+    H = 7,
+    I = 8,
+}
+
+// STM32 HAL GPIO constants
+const GPIO_MODE_INPUT: u32 = 0x00
+const GPIO_MODE_OUTPUT_PP: u32 = 0x01
+const GPIO_MODE_OUTPUT_OD: u32 = 0x11
+const GPIO_MODE_AF_PP: u32 = 0x02
+const GPIO_MODE_AF_OD: u32 = 0x12
+const GPIO_MODE_ANALOG: u32 = 0x03
+const GPIO_MODE_IT_RISING: u32 = 0x10010000
+const GPIO_MODE_IT_FALLING: u32 = 0x10020000
+const GPIO_MODE_IT_RISING_FALLING: u32 = 0x10030000
+const GPIO_MODE_EVT_RISING: u32 = 0x10040000
+const GPIO_MODE_EVT_FALLING: u32 = 0x10050000
+const GPIO_MODE_EVT_RISING_FALLING: u32 = 0x10060000
+
+const GPIO_NOPULL: u32 = 0x00
+const GPIO_PULLUP: u32 = 0x01
+const GPIO_PULLDOWN: u32 = 0x02
+
+const GPIO_SPEED_FREQ_LOW: u32 = 0x00
+const GPIO_SPEED_FREQ_MEDIUM: u32 = 0x01
+const GPIO_SPEED_FREQ_HIGH: u32 = 0x02
+const GPIO_SPEED_FREQ_VERY_HIGH: u32 = 0x03
+
+const GPIO_PIN_RESET: u32 = 0
+const GPIO_PIN_SET: u32 = 1
+
+// GPIO port base addresses
+const GPIOA_BASE: u32 = 0x40020000
+const GPIOB_BASE: u32 = 0x40020400
+const GPIOC_BASE: u32 = 0x40020800
+const GPIOD_BASE: u32 = 0x40020C00
+const GPIOE_BASE: u32 = 0x40021000
+const GPIOF_BASE: u32 = 0x40021400
+const GPIOG_BASE: u32 = 0x40021800
+const GPIOH_BASE: u32 = 0x40021C00
+const GPIOI_BASE: u32 = 0x40022000
+
+// RCC (Reset and Clock Control) for GPIO clocks
+const RCC_BASE: u32 = 0x40023800
+const RCC_AHB1ENR_OFFSET: u32 = 0x30
+
+// STM32 HAL GPIO structures
+struct GPIO_TypeDef {
+    MODER: u32,      // Mode register
+    OTYPER: u32,     // Output type register
+    OSPEEDR: u32,    // Output speed register
+    PUPDR: u32,      // Pull-up/pull-down register
+    IDR: u32,        // Input data register
+    ODR: u32,        // Output data register
+    BSRR: u32,       // Bit set/reset register
+    LCKR: u32,       // Configuration lock register
+    AFR: [u32; 2],   // Alternate function registers
+}
+
+struct GPIO_InitTypeDef {
+    Pin: u32,
+    Mode: u32,
+    Pull: u32,
+    Speed: u32,
+    Alternate: u32,
+}
+
+// STM32 HAL functions
+extern "C" {
+    fn HAL_GPIO_Init(GPIOx: *mut GPIO_TypeDef, GPIO_Init: *GPIO_InitTypeDef)
+    fn HAL_GPIO_DeInit(GPIOx: *mut GPIO_TypeDef, GPIO_Pin: u32)
+    fn HAL_GPIO_ReadPin(GPIOx: *GPIO_TypeDef, GPIO_Pin: u16) -> u32
+    fn HAL_GPIO_WritePin(GPIOx: *mut GPIO_TypeDef, GPIO_Pin: u16, PinState: u32)
+    fn HAL_GPIO_TogglePin(GPIOx: *mut GPIO_TypeDef, GPIO_Pin: u16)
+    fn HAL_GPIO_LockPin(GPIOx: *mut GPIO_TypeDef, GPIO_Pin: u16) -> i32
+    fn HAL_GPIO_EXTI_IRQHandler(GPIO_Pin: u16)
+    fn HAL_GPIO_EXTI_Callback(GPIO_Pin: u16)
+}
+
+// Helper functions
+fn get_gpio_port(port: Port) -> *mut GPIO_TypeDef {
+    match port {
+        Port.A => GPIOA_BASE as *mut GPIO_TypeDef,
+        Port.B => GPIOB_BASE as *mut GPIO_TypeDef,
+        Port.C => GPIOC_BASE as *mut GPIO_TypeDef,
+        Port.D => GPIOD_BASE as *mut GPIO_TypeDef,
+        Port.E => GPIOE_BASE as *mut GPIO_TypeDef,
+        Port.F => GPIOF_BASE as *mut GPIO_TypeDef,
+        Port.G => GPIOG_BASE as *mut GPIO_TypeDef,
+        Port.H => GPIOH_BASE as *mut GPIO_TypeDef,
+        Port.I => GPIOI_BASE as *mut GPIO_TypeDef,
+    }
+}
+
+fn enable_gpio_clock(port: Port) {
+    unsafe {
+        let rcc_ahb1enr = (RCC_BASE + RCC_AHB1ENR_OFFSET) as *mut u32
+        let current = *rcc_ahb1enr
+        let enable_bit = 1u32 << (port as u32)
+        *rcc_ahb1enr = current | enable_bit
+    }
+}
+
+fn pin_to_mask(pin: u8) -> u32 {
+    1u32 << (pin as u32)
+}
+
+// Interrupt handlers storage
+static mut interrupt_handlers: [Option<fn()>; 16] = [None; 16]
+
+// STM32F4 GPIO HAL implementation
+pub struct STM32F4_GPIO {}
+
+impl GPIO_BAL.GPIO_HAL for STM32F4_GPIO {
+    fn init(config: GPIO_BAL.Config) -> GPIO_BAL.Result<()> {
+        // Extract port and pin from BAL config
+        // Assuming config.pin contains packed port+pin info
+        let port = Port.A  // Default, should be extracted from config
+        let pin = config.pin
+        
+        // Enable GPIO clock
+        enable_gpio_clock(port)
+        
+        // Configure GPIO
+        let gpio_port = get_gpio_port(port)
+        let pin_mask = pin_to_mask(pin)
+        
+        let mode = match config.mode {
+            GPIO_BAL.Mode.Input => GPIO_MODE_INPUT,
+            GPIO_BAL.Mode.Output => GPIO_MODE_OUTPUT_PP,
+            GPIO_BAL.Mode.OutputOpenDrain => GPIO_MODE_OUTPUT_OD,
+            GPIO_BAL.Mode.Analog => GPIO_MODE_ANALOG,
+        }
+        
+        let pull = match config.pull {
+            GPIO_BAL.Pull.None => GPIO_NOPULL,
+            GPIO_BAL.Pull.Up => GPIO_PULLUP,
+            GPIO_BAL.Pull.Down => GPIO_PULLDOWN,
+        }
+        
+        let init_struct = GPIO_InitTypeDef {
+            Pin: pin_mask,
+            Mode: mode,
+            Pull: pull,
+            Speed: GPIO_SPEED_FREQ_HIGH,
+            Alternate: 0,
+        }
+        
+        HAL_GPIO_Init(gpio_port, &init_struct)
+        
+        Ok(())
+    }
+    
+    fn deinit(pin: u8) {
+        // Deinit handled per-port
+    }
+    
+    fn set_mode(pin: u8, mode: GPIO_BAL.Mode) -> GPIO_BAL.Result<()> {
+        // Reconfigure pin
+        Ok(())
+    }
+    
+    fn set_level(pin: u8, level: GPIO_BAL.Level) {
+        // Extract port info (simplified)
+        let port = Port.A
+        let gpio_port = get_gpio_port(port)
+        let pin_num = pin & 0x0F
+        let pin_mask = 1u16 << pin_num
+        
+        let state = match level {
+            GPIO_BAL.Level.Low => GPIO_PIN_RESET,
+            GPIO_BAL.Level.High => GPIO_PIN_SET,
+        }
+        
+        HAL_GPIO_WritePin(gpio_port, pin_mask, state)
+    }
+    
+    fn get_level(pin: u8) -> GPIO_BAL.Level {
+        let port = Port.A
+        let gpio_port = get_gpio_port(port)
+        let pin_num = pin & 0x0F
+        let pin_mask = 1u16 << pin_num
+        
+        let state = HAL_GPIO_ReadPin(gpio_port, pin_mask)
+        
+        if state == GPIO_PIN_SET {
+            GPIO_BAL.Level.High
+        } else {
+            GPIO_BAL.Level.Low
+        }
+    }
+    
+    fn toggle(pin: u8) {
+        let port = Port.A
+        let gpio_port = get_gpio_port(port)
+        let pin_num = pin & 0x0F
+        let pin_mask = 1u16 << pin_num
+        
+        HAL_GPIO_TogglePin(gpio_port, pin_mask)
+    }
+    
+    fn enable_interrupt(pin: u8, trigger: GPIO_BAL.Trigger, handler: fn()) -> GPIO_BAL.Result<()> {
+        if pin > 15 {
+            return Err(GPIO_BAL.Error.InvalidPin)
+        }
+        
+        unsafe {
+            interrupt_handlers[pin as usize] = Some(handler)
+        }
+        
+        Ok(())
+    }
+    
+    fn disable_interrupt(pin: u8) {
+        if pin <= 15 {
+            unsafe {
+                interrupt_handlers[pin as usize] = None
+            }
+        }
+    }
+}
+
+// STM32F4-specific GPIO functions
+
+/// Initialize output pin with port specification
+pub fn init_output(port: Port, pin: u8, speed: Speed) {
+    enable_gpio_clock(port)
+    
+    let gpio_port = get_gpio_port(port)
+    let pin_mask = pin_to_mask(pin)
+    
+    let speed_val = match speed {
+        Speed.Low => GPIO_SPEED_FREQ_LOW,
+        Speed.Medium => GPIO_SPEED_FREQ_MEDIUM,
+        Speed.High => GPIO_SPEED_FREQ_HIGH,
+        Speed.VeryHigh => GPIO_SPEED_FREQ_VERY_HIGH,
+    }
+    
+    let init_struct = GPIO_InitTypeDef {
+        Pin: pin_mask,
+        Mode: GPIO_MODE_OUTPUT_PP,
+        Pull: GPIO_NOPULL,
+        Speed: speed_val,
+        Alternate: 0,
+    }
+    
+    HAL_GPIO_Init(gpio_port, &init_struct)
+}
+
+/// Initialize input pin with port specification
+pub fn init_input(port: Port, pin: u8, pull: Pull) {
+    enable_gpio_clock(port)
+    
+    let gpio_port = get_gpio_port(port)
+    let pin_mask = pin_to_mask(pin)
+    
+    let pull_val = match pull {
+        Pull.None => GPIO_NOPULL,
+        Pull.Up => GPIO_PULLUP,
+        Pull.Down => GPIO_PULLDOWN,
+    }
+    
+    let init_struct = GPIO_InitTypeDef {
+        Pin: pin_mask,
+        Mode: GPIO_MODE_INPUT,
+        Pull: pull_val,
+        Speed: GPIO_SPEED_FREQ_LOW,
+        Alternate: 0,
+    }
+    
+    HAL_GPIO_Init(gpio_port, &init_struct)
+}
+
+/// Initialize alternate function pin
+pub fn init_alternate(port: Port, pin: u8, alternate: u8, speed: Speed) {
+    enable_gpio_clock(port)
+    
+    let gpio_port = get_gpio_port(port)
+    let pin_mask = pin_to_mask(pin)
+    
+    let speed_val = match speed {
+        Speed.Low => GPIO_SPEED_FREQ_LOW,
+        Speed.Medium => GPIO_SPEED_FREQ_MEDIUM,
+        Speed.High => GPIO_SPEED_FREQ_HIGH,
+        Speed.VeryHigh => GPIO_SPEED_FREQ_VERY_HIGH,
+    }
+    
+    let init_struct = GPIO_InitTypeDef {
+        Pin: pin_mask,
+        Mode: GPIO_MODE_AF_PP,
+        Pull: GPIO_NOPULL,
+        Speed: speed_val,
+        Alternate: alternate as u32,
+    }
+    
+    HAL_GPIO_Init(gpio_port, &init_struct)
+}
+
+/// Read pin state
+pub fn read(port: Port, pin: u8) -> Level {
+    let gpio_port = get_gpio_port(port)
+    let pin_mask = 1u16 << pin
+    
+    let state = HAL_GPIO_ReadPin(gpio_port, pin_mask)
+    
+    if state == GPIO_PIN_SET {
+        Level.High
+    } else {
+        Level.Low
+    }
+}
+
+/// Write pin state
+pub fn write(port: Port, pin: u8, level: Level) {
+    let gpio_port = get_gpio_port(port)
+    let pin_mask = 1u16 << pin
+    
+    let state = match level {
+        Level.Low => GPIO_PIN_RESET,
+        Level.High => GPIO_PIN_SET,
+    }
+    
+    HAL_GPIO_WritePin(gpio_port, pin_mask, state)
+}
+
+/// Toggle pin state
+pub fn toggle(port: Port, pin: u8) {
+    let gpio_port = get_gpio_port(port)
+    let pin_mask = 1u16 << pin
+    
+    HAL_GPIO_TogglePin(gpio_port, pin_mask)
+}
+
+/// Initialize interrupt pin (EXTI)
+pub fn init_interrupt(port: Port, pin: u8, trigger: Trigger, handler: fn()) {
+    enable_gpio_clock(port)
+    
+    let gpio_port = get_gpio_port(port)
+    let pin_mask = pin_to_mask(pin)
+    
+    let mode = match trigger {
+        Trigger.Rising => GPIO_MODE_IT_RISING,
+        Trigger.Falling => GPIO_MODE_IT_FALLING,
+        Trigger.Both => GPIO_MODE_IT_RISING_FALLING,
+    }
+    
+    let init_struct = GPIO_InitTypeDef {
+        Pin: pin_mask,
+        Mode: mode,
+        Pull: GPIO_NOPULL,
+        Speed: GPIO_SPEED_FREQ_HIGH,
+        Alternate: 0,
+    }
+    
+    HAL_GPIO_Init(gpio_port, &init_struct)
+    
+    // Store handler
+    if pin <= 15 {
+        unsafe {
+            interrupt_handlers[pin as usize] = Some(handler)
+        }
+    }
+}
+
+// STM32-specific enums
+pub enum Speed {
+    Low,        // 2 MHz
+    Medium,     // 25 MHz
+    High,       // 50 MHz
+    VeryHigh,   // 100 MHz
+}
+
+pub enum Pull {
+    None,
+    Up,
+    Down,
+}
+
+pub enum Level {
+    Low,
+    High,
+}
+
+pub enum Trigger {
+    Rising,
+    Falling,
+    Both,
+}
+
+// EXTI interrupt handlers (weak symbols, can be overridden)
+#[no_mangle]
+pub extern "C" fn EXTI0_IRQHandler() {
+    HAL_GPIO_EXTI_IRQHandler(1 << 0)
+}
+
+#[no_mangle]
+pub extern "C" fn EXTI1_IRQHandler() {
+    HAL_GPIO_EXTI_IRQHandler(1 << 1)
+}
+
+// ... (EXTI2-15 handlers similar)
+
+#[no_mangle]
+pub extern "C" fn HAL_GPIO_EXTI_Callback_Override(GPIO_Pin: u16) {
+    // Find which pin triggered
+    for pin in 0..16 {
+        if (GPIO_Pin & (1 << pin)) != 0 {
+            unsafe {
+                if let Some(handler) = interrupt_handlers[pin] {
+                    handler()
+                }
+            }
+            break
+        }
+    }
+}

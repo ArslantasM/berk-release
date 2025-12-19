@@ -1,0 +1,157 @@
+/// ═══════════════════════════════════════════════════════════════════════════
+/// BERK Library Demo - Time Module (English Version)
+/// Time operations
+/// ═══════════════════════════════════════════════════════════════════════════
+
+use std::io
+use std::time
+
+print("============================================================")
+print("         Library Demo: Time Module                          ")
+print("============================================================")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 1: Time Units
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 1: Time Units ---")
+
+let MS_PER_SECOND = 1000
+let MS_PER_MINUTE = 60000
+let MS_PER_HOUR = 3600000
+let MS_PER_DAY = 86400000
+
+print("   1 second = ", MS_PER_SECOND, " ms")
+print("   1 minute = ", MS_PER_MINUTE, " ms")
+print("   1 hour   = ", MS_PER_HOUR, " ms")
+print("   1 day    = ", MS_PER_DAY, " ms")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 2: Time Conversions
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 2: Time Conversions ---")
+
+fn ms_to_seconds(ms: int) -> int do
+    return ms / 1000
+end
+
+fn seconds_to_minutes(s: int) -> int do
+    return s / 60
+end
+
+fn minutes_to_hours(m: int) -> int do
+    return m / 60
+end
+
+let milliseconds = 7200000
+let seconds = ms_to_seconds(milliseconds)
+let minutes = seconds_to_minutes(seconds)
+let hours = minutes_to_hours(minutes)
+
+print("   ", milliseconds, " ms = ", seconds, " seconds")
+print("   ", seconds, " seconds = ", minutes, " minutes")
+print("   ", minutes, " minutes = ", hours, " hours")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 3: Elapsed Time Calculation
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 3: Elapsed Time Calculation ---")
+
+fn format_time(total_seconds: int) do
+    let hrs = total_seconds / 3600
+    let remaining = total_seconds % 3600
+    let mins = remaining / 60
+    let secs = remaining % 60
+    print("   ", total_seconds, " seconds = ", hrs, "h ", mins, "m ", secs, "s")
+end
+
+format_time(3661)
+format_time(7322)
+format_time(86400)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 4: Date Structure
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 4: Date Structure ---")
+
+print("   Date Formats:")
+print("   - ISO 8601: 2024-12-15T14:30:00Z")
+print("   - US Format: 12/15/2024 2:30 PM")
+print("   - EU Format: 15.12.2024 14:30")
+
+// Date components
+let day = 15
+let month = 12
+let year = 2024
+
+print("\n   Date: ", month, "/", day, "/", year)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 5: Day Calculations
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 5: Day Calculations ---")
+
+fn is_leap_year(yr: int) -> bool do
+    let mod4 = yr % 4
+    let mod100 = yr % 100
+    let mod400 = yr % 400
+    
+    if mod4 == 0 then
+        if mod100 == 0 then
+            if mod400 == 0 then
+                return true
+            end
+            return false
+        end
+        return true
+    end
+    return false
+end
+
+print("   Is 2020 a leap year? ", is_leap_year(2020))
+print("   Is 2023 a leap year? ", is_leap_year(2023))
+print("   Is 2024 a leap year? ", is_leap_year(2024))
+print("   Is 2100 a leap year? ", is_leap_year(2100))
+
+// Days in month
+fn days_in_month(mo: int, leap: bool) -> int do
+    if mo == 2 then
+        if leap then
+            return 29
+        end
+        return 28
+    end
+    
+    if mo == 4 then return 30 end
+    if mo == 6 then return 30 end
+    if mo == 9 then return 30 end
+    if mo == 11 then return 30 end
+    
+    return 31
+end
+
+print("\n   Days in Month (2024):")
+print("   January: ", days_in_month(1, true))
+print("   February: ", days_in_month(2, true))
+print("   March: ", days_in_month(3, true))
+print("   April: ", days_in_month(4, true))
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 6: Stopwatch Simulation
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 6: Stopwatch Simulation ---")
+
+print("   [START] 00:00:00.000")
+print("   [LAP 1] 00:01:23.456")
+print("   [LAP 2] 00:02:45.789")
+print("   [LAP 3] 00:04:12.345")
+print("   [STOP]  00:05:30.123")
+
+print("\n   Total Time: 5 minutes 30 seconds 123 ms")
+
+print("\n[OK] Time library demo completed!")

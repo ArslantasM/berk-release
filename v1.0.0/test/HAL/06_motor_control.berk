@@ -1,0 +1,362 @@
+/// ═══════════════════════════════════════════════════════════════════════════
+/// BERK HAL - Motor Control Demo
+/// DC Motor, Stepper ve Servo Kontrol
+/// ═══════════════════════════════════════════════════════════════════════════
+
+kullan std::io
+kullan std::stm32
+kullan std::math
+
+yaz("============================================================")
+yaz("         HAL Demo: Motor Control                            ")
+yaz("         DC Motor, Stepper, Servo Sistemleri                ")
+yaz("============================================================")
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BOLUM 1: DC Motor Kontrolu (H-Bridge L298N)
+// ═══════════════════════════════════════════════════════════════════════════
+
+yaz("\n--- BOLUM 1: DC Motor Kontrolu ---")
+
+// Pin tanimlari (L298N H-Bridge)
+değişken MOTOR1_ENA = 5   // PWM - Hiz kontrolu
+değişken MOTOR1_IN1 = 6   // Yon 1
+değişken MOTOR1_IN2 = 7   // Yon 2
+değişken MOTOR2_ENB = 10  // PWM - Hiz kontrolu
+değişken MOTOR2_IN3 = 8   // Yon 1
+değişken MOTOR2_IN4 = 9   // Yon 2
+
+yaz("\n   L298N Pin Baglantilari:")
+yaz("   ┌─────────────────────────────────────┐")
+yaz("   │         L298N H-Bridge              │")
+yaz("   ├─────────────────────────────────────┤")
+yaz("   │ ENA (PWM)  ──── Pin ", MOTOR1_ENA, "             │")
+yaz("   │ IN1        ──── Pin ", MOTOR1_IN1, "             │")
+yaz("   │ IN2        ──── Pin ", MOTOR1_IN2, "             │")
+yaz("   │ ENB (PWM)  ──── Pin ", MOTOR2_ENB, "            │")
+yaz("   │ IN3        ──── Pin ", MOTOR2_IN3, "             │")
+yaz("   │ IN4        ──── Pin ", MOTOR2_IN4, "             │")
+yaz("   └─────────────────────────────────────┘")
+
+// Motor kontrol fonksiyonlari
+fonksiyon dc_motor_ileri(hiz: tamsayı) yap
+    // IN1 = HIGH, IN2 = LOW, ENA = hiz
+    yaz("   Motor ILERI: Hiz = ", hiz, " / 255")
+son
+
+fonksiyon dc_motor_geri(hiz: tamsayı) yap
+    // IN1 = LOW, IN2 = HIGH, ENA = hiz
+    yaz("   Motor GERI: Hiz = ", hiz, " / 255")
+son
+
+fonksiyon dc_motor_dur() yap
+    // IN1 = LOW, IN2 = LOW
+    yaz("   Motor DURDU")
+son
+
+fonksiyon dc_motor_fren() yap
+    // IN1 = HIGH, IN2 = HIGH (regenerative brake)
+    yaz("   Motor FREN (Rejeneratif)")
+son
+
+// PWM ile hiz rampa fonksiyonu
+fonksiyon hiz_rampa(baslangic: tamsayı, bitis: tamsayı, adim: tamsayı, gecikme_ms: tamsayı) yap
+    yaz("   Hiz Rampa: ", baslangic, " -> ", bitis)
+    olsun hiz = baslangic
+    eğer baslangic < bitis ise
+        iken hiz <= bitis yap
+            dc_motor_ileri(hiz)
+            hiz = hiz + adim
+        son
+    değilse
+        iken hiz >= bitis yap
+            dc_motor_ileri(hiz)
+            hiz = hiz - adim
+        son
+    son
+son
+
+// Test
+yaz("\n   DC Motor Test Senaryosu:")
+dc_motor_ileri(128)
+dc_motor_ileri(200)
+dc_motor_dur()
+dc_motor_geri(150)
+dc_motor_fren()
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BOLUM 2: Stepper Motor Kontrolu (A4988 / DRV8825)
+// ═══════════════════════════════════════════════════════════════════════════
+
+yaz("\n--- BOLUM 2: Stepper Motor Kontrolu ---")
+
+// Stepper pin tanimlari
+değişken STEP_PIN = 2
+değişken DIR_PIN = 3
+değişken ENABLE_PIN = 4
+değişken MS1_PIN = 11
+değişken MS2_PIN = 12
+değişken MS3_PIN = 13
+
+yaz("\n   A4988 / DRV8825 Baglantilari:")
+yaz("   ┌─────────────────────────────────────┐")
+yaz("   │    Stepper Motor Driver             │")
+yaz("   ├─────────────────────────────────────┤")
+yaz("   │ STEP   ──── Pin ", STEP_PIN, "                  │")
+yaz("   │ DIR    ──── Pin ", DIR_PIN, "                  │")
+yaz("   │ ENABLE ──── Pin ", ENABLE_PIN, "                  │")
+yaz("   │ MS1    ──── Pin ", MS1_PIN, " (Microstepping)  │")
+yaz("   │ MS2    ──── Pin ", MS2_PIN, "                 │")
+yaz("   │ MS3    ──── Pin ", MS3_PIN, "                 │")
+yaz("   └─────────────────────────────────────┘")
+
+// Microstepping modlari
+yaz("\n   Microstepping Modlari (A4988):")
+yaz("   ┌─────┬─────┬─────┬────────────┐")
+yaz("   │ MS1 │ MS2 │ MS3 │ Mod        │")
+yaz("   ├─────┼─────┼─────┼────────────┤")
+yaz("   │  L  │  L  │  L  │ Full Step  │")
+yaz("   │  H  │  L  │  L  │ Half Step  │")
+yaz("   │  L  │  H  │  L  │ 1/4 Step   │")
+yaz("   │  H  │  H  │  L  │ 1/8 Step   │")
+yaz("   │  H  │  H  │  H  │ 1/16 Step  │")
+yaz("   └─────┴─────┴─────┴────────────┘")
+
+// Motor ozellikleri
+değişken STEPS_PER_REV = 200     // 1.8 derece/adim tipik NEMA 17
+değişken MICROSTEPPING = 16      // 1/16 microstepping
+
+fonksiyon adim_aci_hesapla(steps_per_rev: tamsayı, microstepping: tamsayı) -> ondalık yap
+    dön 360.0 / (steps_per_rev * microstepping)
+son
+
+olsun aci_adim = adim_aci_hesapla(STEPS_PER_REV, MICROSTEPPING)
+yaz("\n   Motor Parametreleri:")
+yaz("   - Steps/Rev: ", STEPS_PER_REV)
+yaz("   - Microstepping: 1/", MICROSTEPPING)
+yaz("   - Aci/Adim: ", aci_adim, " derece")
+
+// Stepper hareket fonksiyonlari
+fonksiyon stepper_adim(adim_sayisi: tamsayı, yon: tamsayı, gecikme_us: tamsayı) yap
+    eğer yon > 0 ise
+        yaz("   Stepper: ", adim_sayisi, " adim SAAT YONU")
+    değilse
+        yaz("   Stepper: ", adim_sayisi, " adim TERS YON")
+    son
+son
+
+fonksiyon stepper_aci(aci: ondalık, yon: tamsayı) yap
+    olsun adim = aci / aci_adim
+    yaz("   Stepper: ", aci, " derece = ", adim, " adim")
+son
+
+fonksiyon stepper_tur(tur_sayisi: ondalık, rpm: tamsayı) yap
+    olsun toplam_adim = tur_sayisi * STEPS_PER_REV * MICROSTEPPING
+    olsun sure_ms = (tur_sayisi * 60000.0) / rpm
+    yaz("   Stepper: ", tur_sayisi, " tur @ ", rpm, " RPM")
+    yaz("            ", toplam_adim, " adim, sure: ", sure_ms, " ms")
+son
+
+// Test
+yaz("\n   Stepper Motor Test:")
+stepper_adim(1600, 1, 500)
+stepper_aci(90.0, 1)
+stepper_tur(2.5, 60)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BOLUM 3: Servo Motor Kontrolu
+// ═══════════════════════════════════════════════════════════════════════════
+
+yaz("\n--- BOLUM 3: Servo Motor Kontrolu ---")
+
+değişken SERVO1_PIN = 9
+değişken SERVO2_PIN = 10
+
+yaz("\n   Servo PWM Parametreleri:")
+yaz("   - Frekans: 50 Hz (20 ms period)")
+yaz("   - Min Pulse: 500 us (0 derece)")
+yaz("   - Max Pulse: 2500 us (180 derece)")
+yaz("   - Ortala: 1500 us (90 derece)")
+
+// Servo PWM hesaplama
+fonksiyon aci_pwm(aci: ondalık, min_us: tamsayı, max_us: tamsayı) -> tamsayı yap
+    // 0-180 derece -> min_us - max_us
+    olsun range_us = max_us - min_us
+    olsun pulse = min_us + (aci / 180.0) * range_us
+    dön pulse
+son
+
+fonksiyon servo_hareket(aci: ondalık) yap
+    olsun pulse = aci_pwm(aci, 500, 2500)
+    yaz("   Servo: ", aci, " derece = ", pulse, " us pulse")
+son
+
+// Yumusak hareket (interpolation)
+fonksiyon servo_yumusak(baslangic_aci: ondalık, bitis_aci: ondalık, sure_ms: tamsayı, adim_sayisi: tamsayı) yap
+    olsun aci_fark = bitis_aci - baslangic_aci
+    olsun adim_aci = aci_fark / adim_sayisi
+    olsun adim_sure = sure_ms / adim_sayisi
+    
+    yaz("   Servo Yumusak Hareket:")
+    yaz("   - Baslangic: ", baslangic_aci, " derece")
+    yaz("   - Bitis: ", bitis_aci, " derece")
+    yaz("   - Sure: ", sure_ms, " ms")
+    yaz("   - Adim Sayisi: ", adim_sayisi)
+son
+
+// Test
+yaz("\n   Servo Motor Test:")
+servo_hareket(0.0)
+servo_hareket(90.0)
+servo_hareket(180.0)
+servo_yumusak(0.0, 180.0, 1000, 20)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BOLUM 4: PID Kontrolcu
+// ═══════════════════════════════════════════════════════════════════════════
+
+yaz("\n--- BOLUM 4: PID Kontrolcu ---")
+
+// PID parametreleri
+değişken Kp = 2.0     // Proportional gain
+değişken Ki = 0.5     // Integral gain
+değişken Kd = 0.1     // Derivative gain
+
+// PID degiskenleri
+olsun integral = 0.0
+olsun onceki_hata = 0.0
+olsun dt = 0.01  // 10ms ornek suresi
+
+fonksiyon pid_hesapla(hedef: ondalık, gercek: ondalık, integral: ondalık, onceki_hata: ondalık, dt: ondalık) -> (ondalık, ondalık, ondalık) yap
+    olsun hata = hedef - gercek
+    
+    // P terimi
+    olsun p_out = Kp * hata
+    
+    // I terimi (anti-windup ile)
+    olsun yeni_integral = integral + hata * dt
+    // Integral sinirla
+    eğer yeni_integral > 100.0 ise
+        yeni_integral = 100.0
+    değilse eğer yeni_integral < -100.0 ise
+        yeni_integral = -100.0
+    son
+    olsun i_out = Ki * yeni_integral
+    
+    // D terimi
+    olsun turev = (hata - onceki_hata) / dt
+    olsun d_out = Kd * turev
+    
+    // Toplam cikis
+    olsun cikis = p_out + i_out + d_out
+    
+    // Cikis sinirla (-255 ile 255 arasi motor PWM icin)
+    eğer cikis > 255.0 ise
+        cikis = 255.0
+    değilse eğer cikis < -255.0 ise
+        cikis = -255.0
+    son
+    
+    dön (cikis, yeni_integral, hata)
+son
+
+yaz("\n   PID Parametreleri:")
+yaz("   - Kp: ", Kp)
+yaz("   - Ki: ", Ki)
+yaz("   - Kd: ", Kd)
+
+// Simulasyon: Hedef pozisyon 100, baslangic 0
+yaz("\n   PID Simulasyonu (Hedef: 100):")
+olsun hedef = 100.0
+olsun pozisyon = 0.0
+olsun adim = 0
+olsun sim_integral = 0.0
+olsun sim_onceki_hata = 0.0
+
+iken adim < 10 yap
+    olsun sonuc = pid_hesapla(hedef, pozisyon, sim_integral, sim_onceki_hata, dt)
+    olsun cikis = sonuc.0
+    sim_integral = sonuc.1
+    sim_onceki_hata = sonuc.2
+    
+    // Basit motor modeli: pozisyon += cikis * dt * 0.1
+    pozisyon = pozisyon + cikis * dt * 10.0
+    
+    yaz("   [", adim, "] Poz: ", pozisyon, " | PID Out: ", cikis)
+    adim = adim + 1
+son
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BOLUM 5: Encoder Okuma
+// ═══════════════════════════════════════════════════════════════════════════
+
+yaz("\n--- BOLUM 5: Rotary Encoder ---")
+
+değişken ENCODER_A = 2   // Interrupt capable pin
+değişken ENCODER_B = 3   // Interrupt capable pin
+değişken PPR = 600       // Pulses Per Revolution
+
+yaz("\n   Quadrature Encoder:")
+yaz("   - Kanal A: Pin ", ENCODER_A, " (Interrupt)")
+yaz("   - Kanal B: Pin ", ENCODER_B, " (Interrupt)")
+yaz("   - PPR: ", PPR)
+yaz("   - Cozunurluk (4x): ", PPR * 4, " count/rev")
+
+fonksiyon encoder_rpm(pulse_count: tamsayı, delta_ms: tamsayı, ppr: tamsayı) -> ondalık yap
+    // RPM = (pulse_count / PPR) * (60000 / delta_ms)
+    olsun rpm = (pulse_count * 60000.0) / (ppr * 4 * delta_ms)
+    dön rpm
+son
+
+fonksiyon encoder_aci(pulse_count: tamsayı, ppr: tamsayı) -> ondalık yap
+    dön (pulse_count * 360.0) / (ppr * 4)
+son
+
+// Ornek hesaplama
+olsun pulse_100ms = 240  // 100ms'de 240 pulse
+olsun rpm = encoder_rpm(pulse_100ms, 100, PPR)
+olsun aci = encoder_aci(pulse_100ms, PPR)
+
+yaz("\n   Encoder Okuma Ornegi:")
+yaz("   - 100ms'de pulse: ", pulse_100ms)
+yaz("   - Hesaplanan RPM: ", rpm)
+yaz("   - Aci: ", aci, " derece")
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BOLUM 6: Sistem Mimarisi
+// ═══════════════════════════════════════════════════════════════════════════
+
+yaz("\n============================================================")
+yaz("              MOTOR KONTROL SISTEMI MIMARISI                 ")
+yaz("============================================================")
+
+yaz("\n   ┌─────────────────────────────────────────────────────────┐")
+yaz("   │                    KONTROL DONGUSU                      │")
+yaz("   │                                                         │")
+yaz("   │   ┌─────────┐    ┌─────────┐    ┌─────────┐            │")
+yaz("   │   │ HEDEF   │───>│   PID   │───>│  MOTOR  │            │")
+yaz("   │   │ KONUM   │    │KONTROLCU│    │ SURUCU  │            │")
+yaz("   │   └─────────┘    └─────────┘    └────┬────┘            │")
+yaz("   │                       ^              │                  │")
+yaz("   │                       │              v                  │")
+yaz("   │                  ┌────┴────┐    ┌─────────┐            │")
+yaz("   │                  │ ENCODER │<───│  MOTOR  │            │")
+yaz("   │                  │ OKUMA   │    │         │            │")
+yaz("   │                  └─────────┘    └─────────┘            │")
+yaz("   └─────────────────────────────────────────────────────────┘")
+
+yaz("\n   Desteklenen Motor Turleri:")
+yaz("   - DC Motor (H-Bridge: L298N, L293D)")
+yaz("   - Stepper Motor (A4988, DRV8825, TMC2209)")
+yaz("   - Servo Motor (PWM 50Hz)")
+yaz("   - BLDC (FOC - Gelecek versiyon)")
+
+yaz("\n   Kontrol Yontemleri:")
+yaz("   - Acik Dongu (Open Loop)")
+yaz("   - PID Konum Kontrolu")
+yaz("   - PID Hiz Kontrolu")
+yaz("   - Profil Tabanli Hareket (S-Curve, Trapez)")
+
+yaz("\n============================================================")
+yaz("         HAL Motor Control Demo Tamamlandi                   ")
+yaz("============================================================")

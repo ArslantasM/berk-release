@@ -1,0 +1,155 @@
+/// ═══════════════════════════════════════════════════════════════════════════
+/// BERK Programlama Dili - Gomulu Sistemler
+/// Seviye: Uzman (Expert)
+/// ═══════════════════════════════════════════════════════════════════════════
+
+kullan std::io
+kullan std::arduino
+kullan std::esp32
+
+yaz("============================================================")
+yaz("         Gomulu Sistemler / Embedded Systems                ")
+yaz("============================================================")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 1: Arduino GPIO Simulasyonu
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 1: Arduino GPIO Simulasyonu ---")
+
+değişken LED_PIN = 13
+değişken BUTTON_PIN = 2
+
+yaz("\n   Pin konfigurasyonu:")
+yaz("   LED_PIN = ", LED_PIN)
+yaz("   BUTTON_PIN = ", BUTTON_PIN)
+
+// Dijital islemler
+yaz("\n   Dijital islemler:")
+yaz("   digitalWrite(", LED_PIN, ", HIGH) -> LED ON")
+yaz("   digitalWrite(", LED_PIN, ", LOW) -> LED OFF")
+yaz("   digitalRead(", BUTTON_PIN, ") -> Buton durumu")
+
+// Analog islemler
+yaz("\n   Analog islemler:")
+yaz("   analogRead(A0) -> 0-1023 arasi deger")
+yaz("   analogWrite(pin, 128) -> PWM %50 duty cycle")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 2: Sensor Simulasyonu
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 2: Sensor Simulasyonu ---")
+
+fonksiyon sicaklik_oku() -> tamsayı yap
+    // Simule edilmis sicaklik degeri
+    dön 25
+son
+
+fonksiyon nem_oku() -> tamsayı yap
+    // Simule edilmis nem degeri
+    dön 60
+son
+
+fonksiyon isik_oku() -> tamsayı yap
+    // Simule edilmis isik seviyesi (0-1023)
+    dön 750
+son
+
+yaz("\n   Sensor okumalari:")
+yaz("   Sicaklik: ", sicaklik_oku(), " C")
+yaz("   Nem: ", nem_oku(), "%")
+yaz("   Isik seviyesi: ", isik_oku(), " (0-1023)")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 3: LED Blink Pattern
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 3: LED Blink Pattern ---")
+
+fonksiyon blink_simulasyonu(sayi: tamsayı, aralik: tamsayı) yap
+    yaz("\n   Blink pattern: ", sayi, " kez, ", aralik, "ms aralik")
+    için i içinde 0..sayi yap
+        yaz("      [", i + 1, "] LED ON -> bekle ", aralik, "ms -> LED OFF")
+    son
+son
+
+blink_simulasyonu(3, 500)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 4: ESP32 WiFi Simulasyonu
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 4: ESP32 WiFi Simulasyonu ---")
+
+değişken ssid = "MyNetwork"
+değişken ip = "192.168.1.100"
+
+yaz("\n   WiFi baglanti bilgileri:")
+yaz("   SSID: ", ssid)
+yaz("   IP Adresi: ", ip)
+yaz("   Durum: Bagli")
+
+yaz("\n   HTTP Server:")
+yaz("   Port: 80")
+yaz("   Endpoint: /api/sensor")
+yaz("   Method: GET")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 5: Interrupt Simulasyonu
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 5: Interrupt Simulasyonu ---")
+
+değişken interrupt_sayaci = 0
+
+fonksiyon interrupt_handler() -> tamsayı yap
+    dön 1
+son
+
+yaz("\n   Interrupt tetikleniyor...")
+için i içinde 0..5 yap
+    interrupt_sayaci = interrupt_sayaci + interrupt_handler()
+    yaz("   [ISR] Interrupt ", i + 1, " - Sayac: ", interrupt_sayaci)
+son
+
+yaz("\n   Toplam interrupt: ", interrupt_sayaci)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 6: PWM Kontrolu
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 6: PWM Kontrolu ---")
+
+fonksiyon pwm_duty_cycle(deger: tamsayı) -> tamsayı yap
+    // 0-255 -> 0-100%
+    dön (deger * 100) / 255
+son
+
+yaz("\n   PWM duty cycle hesaplama:")
+yaz("   PWM 0 -> ", pwm_duty_cycle(0), "%")
+yaz("   PWM 64 -> ", pwm_duty_cycle(64), "%")
+yaz("   PWM 128 -> ", pwm_duty_cycle(128), "%")
+yaz("   PWM 192 -> ", pwm_duty_cycle(192), "%")
+yaz("   PWM 255 -> ", pwm_duty_cycle(255), "%")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 7: Seri Port Simulasyonu
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 7: Seri Port Simulasyonu ---")
+
+değişken baud_rate = 115200
+
+yaz("\n   Serial konfigurasyonu:")
+yaz("   Baud rate: ", baud_rate)
+yaz("   Data bits: 8")
+yaz("   Stop bits: 1")
+yaz("   Parity: None")
+
+yaz("\n   Serial cikti ornegi:")
+yaz("   > Merhaba Gomulu Dunya!")
+yaz("   > Sicaklik: 25C")
+yaz("   > Sistem hazir.")
+
+yaz("\n[OK] Gomulu sistemler demosu tamamlandi!")

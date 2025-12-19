@@ -1,0 +1,367 @@
+// stdlib/ai/nlp.berk
+// Natural Language Processing Library
+// Tokenizer, Embeddings, Attention, Transformers
+// 
+// Özellikler:
+// - Tokenization (BPE, WordPiece, SentencePiece)
+// - Word embeddings (Word2Vec, GloVe, FastText)
+// - Contextual embeddings (BERT, RoBERTa, GPT)
+// - Attention mechanisms (self-attention, cross-attention)
+// - Text generation, classification, NER
+
+import "ai/tensor" as tensor
+import "ai/nn" as nn
+import "collections" as collections
+
+/// Tokenizer implementations
+pub mod tokenizer {
+    /// Token with metadata
+    pub struct Token {
+        pub text: str,
+        pub id: u32,
+        pub start: u32,
+        pub end: u32,
+    }
+    
+    /// BPE (Byte-Pair Encoding) tokenizer
+    pub struct BPETokenizer {
+        vocab_path: str,
+        merges_path: str,
+        vocab_size: u32,
+    }
+    
+    impl BPETokenizer {
+        /// Load BPE tokenizer
+        @native("nlp::bpe_new")
+        pub fn new(vocab_path: str, merges_path: str) -> BPETokenizer {
+            // Load from vocab.json and merges.txt
+        }
+        
+        /// Tokenize text
+        @native("nlp::bpe_encode")
+        pub fn encode(self, text: str) -> [u32] {
+            // Returns token IDs
+        }
+        
+        /// Decode token IDs to text
+        @native("nlp::bpe_decode")
+        pub fn decode(self, token_ids: [u32]) -> str {
+            // Convert IDs back to text
+        }
+        
+        /// Tokenize with offsets
+        @native("nlp::bpe_tokenize")
+        pub fn tokenize(self, text: str) -> [Token] {
+            // Returns tokens with character offsets
+        }
+    }
+    
+    /// SentencePiece tokenizer
+    pub struct SentencePieceTokenizer {
+        model_path: str,
+    }
+    
+    impl SentencePieceTokenizer {
+        /// Load SentencePiece model
+        @native("nlp::sp_new")
+        pub fn new(model_path: str) -> SentencePieceTokenizer {
+            // Load .model file
+        }
+        
+        /// Encode text
+        @native("nlp::sp_encode")
+        pub fn encode(self, text: str) -> [u32] {}
+        
+        /// Decode tokens
+        @native("nlp::sp_decode")
+        pub fn decode(self, token_ids: [u32]) -> str {}
+    }
+}
+
+/// Word embeddings
+pub mod embeddings {
+    use tensor.Tensor
+    
+    /// Word2Vec embeddings
+    pub struct Word2Vec {
+        model_path: str,
+        vector_size: u32,
+    }
+    
+    impl Word2Vec {
+        /// Load Word2Vec model
+        @native("nlp::word2vec_load")
+        pub fn load(model_path: str) -> Word2Vec {
+            // Load from .bin or .txt format
+        }
+        
+        /// Get word vector
+        @native("nlp::word2vec_get_vector")
+        pub fn get_vector(self, word: str) -> Option<Tensor> {
+            // Returns None if word not in vocabulary
+        }
+        
+        /// Find most similar words
+        @native("nlp::word2vec_most_similar")
+        pub fn most_similar(self, word: str, topk: u32 = 10) -> [(str, f32)] {
+            // Returns list of (word, similarity_score)
+        }
+        
+        /// Word analogy: king - man + woman = ?
+        @native("nlp::word2vec_analogy")
+        pub fn analogy(self, positive: [str], negative: [str], topk: u32 = 1) -> [(str, f32)] {
+            // Solve analogies
+        }
+    }
+    
+    /// GloVe embeddings
+    @native("nlp::load_glove")
+    pub fn load_glove(path: str) -> collections.Map<str, Tensor> {
+        // Load GloVe vectors (glove.6B.50d.txt, etc.)
+        // Returns word -> vector mapping
+    }
+}
+
+/// BERT model for contextual embeddings
+pub mod bert {
+    use tensor.Tensor
+    
+    /// BERT configuration
+    pub struct BERTConfig {
+        pub vocab_size: u32,
+        pub hidden_size: u32,
+        pub num_hidden_layers: u32,
+        pub num_attention_heads: u32,
+        pub intermediate_size: u32,
+        pub max_position_embeddings: u32,
+    }
+    
+    /// BERT model
+    pub struct BERT {
+        config: BERTConfig,
+        model_path: str,
+    }
+    
+    impl BERT {
+        /// Load pretrained BERT
+        @native("nlp::bert_from_pretrained")
+        pub fn from_pretrained(model_name: str) -> BERT {
+            // Load bert-base-uncased, bert-large-uncased, etc.
+        }
+        
+        /// Get sentence embeddings (CLS token)
+        @native("nlp::bert_encode")
+        pub fn encode(self, texts: [str]) -> Tensor {
+            // Returns (batch_size, hidden_size)
+        }
+        
+        /// Get token embeddings
+        @native("nlp::bert_encode_tokens")
+        pub fn encode_tokens(self, texts: [str]) -> Tensor {
+            // Returns (batch_size, seq_len, hidden_size)
+        }
+        
+        /// Fill masked tokens
+        @native("nlp::bert_fill_mask")
+        pub fn fill_mask(self, text: str, top_k: u32 = 5) -> [(str, f32)] {
+            // text: "Berlin is the [MASK] of Germany"
+            // Returns top_k predictions with scores
+        }
+    }
+}
+
+/// Attention mechanisms
+pub mod attention {
+    use tensor.Tensor
+    use nn.Module
+    
+    /// Scaled Dot-Product Attention
+    @native("nlp::scaled_dot_product_attention")
+    pub fn scaled_dot_product_attention(
+        query: Tensor,    // (B, H, L, D)
+        key: Tensor,      // (B, H, S, D)
+        value: Tensor,    // (B, H, S, D)
+        mask: Option<Tensor> = None,
+        dropout_p: f32 = 0.0
+    ) -> Tensor {
+        // Returns (B, H, L, D)
+        // score = softmax(Q @ K^T / sqrt(D))
+        // output = score @ V
+    }
+    
+    /// Multi-Head Attention layer
+    pub struct MultiHeadAttention {
+        pub num_heads: u32,
+        pub head_dim: u32,
+        pub dropout: f32,
+    }
+    
+    impl MultiHeadAttention {
+        /// Create multi-head attention
+        @native("nlp::multihead_attention_new")
+        pub fn new(
+            embed_dim: u32,
+            num_heads: u32,
+            dropout: f32 = 0.0,
+            bias: bool = true
+        ) -> MultiHeadAttention {}
+        
+        /// Forward pass
+        @native("nlp::multihead_attention_forward")
+        pub fn forward(
+            self,
+            query: Tensor,
+            key: Tensor,
+            value: Tensor,
+            key_padding_mask: Option<Tensor> = None,
+            attn_mask: Option<Tensor> = None
+        ) -> (Tensor, Tensor) {
+            // Returns (output, attention_weights)
+        }
+    }
+}
+
+/// Text generation utilities
+pub mod generation {
+    use tensor.Tensor
+    
+    /// Generation config
+    pub struct GenerationConfig {
+        pub max_length: u32,
+        pub temperature: f32,
+        pub top_k: u32,
+        pub top_p: f32,
+        pub repetition_penalty: f32,
+        pub do_sample: bool,
+    }
+    
+    impl GenerationConfig {
+        pub fn default() -> GenerationConfig {
+            GenerationConfig {
+                max_length: 512,
+                temperature: 1.0,
+                top_k: 50,
+                top_p: 0.9,
+                repetition_penalty: 1.0,
+                do_sample: true,
+            }
+        }
+    }
+    
+    /// Greedy decoding
+    @native("nlp::greedy_decode")
+    pub fn greedy_decode(logits: Tensor) -> u32 {
+        // Returns token with highest probability
+    }
+    
+    /// Top-k sampling
+    @native("nlp::top_k_sampling")
+    pub fn top_k_sampling(logits: Tensor, k: u32, temperature: f32 = 1.0) -> u32 {
+        // Sample from top-k tokens
+    }
+    
+    /// Top-p (nucleus) sampling
+    @native("nlp::top_p_sampling")
+    pub fn top_p_sampling(logits: Tensor, p: f32, temperature: f32 = 1.0) -> u32 {
+        // Sample from smallest set with cumulative probability >= p
+    }
+    
+    /// Beam search
+    @native("nlp::beam_search")
+    pub fn beam_search(
+        model: fn(Tensor) -> Tensor,
+        input_ids: Tensor,
+        beam_width: u32,
+        max_length: u32
+    ) -> [Tensor] {
+        // Returns beam_width best sequences
+    }
+}
+
+/// Text classification
+pub mod classification {
+    use tensor.Tensor
+    use nn.Module
+    
+    /// Sentiment analysis
+    @native("nlp::sentiment_analysis")
+    pub fn sentiment_analysis(text: str, model: str = "bert-base-uncased") -> (str, f32) {
+        // Returns (label, confidence)
+        // label: "positive", "negative", "neutral"
+    }
+    
+    /// Zero-shot classification
+    @native("nlp::zero_shot_classification")
+    pub fn zero_shot_classification(
+        text: str,
+        candidate_labels: [str],
+        model: str = "bart-large-mnli"
+    ) -> [(str, f32)] {
+        // Returns list of (label, score) sorted by score
+    }
+}
+
+/// Named Entity Recognition
+pub mod ner {
+    /// Entity span
+    pub struct Entity {
+        pub text: str,
+        pub label: str,      // PERSON, ORG, LOC, etc.
+        pub start: u32,
+        pub end: u32,
+        pub confidence: f32,
+    }
+    
+    /// Extract named entities
+    @native("nlp::extract_entities")
+    pub fn extract_entities(text: str, model: str = "bert-base-ner") -> [Entity] {
+        // Returns list of entities with labels
+    }
+}
+
+/// Text similarity and search
+pub mod similarity {
+    use tensor.Tensor
+    
+    /// Compute cosine similarity between sentences
+    @native("nlp::sentence_similarity")
+    pub fn sentence_similarity(text1: str, text2: str, model: str = "sentence-transformers") -> f32 {
+        // Returns similarity score [-1, 1]
+    }
+    
+    /// Semantic search
+    @native("nlp::semantic_search")
+    pub fn semantic_search(
+        query: str,
+        corpus: [str],
+        top_k: u32 = 5,
+        model: str = "sentence-transformers"
+    ) -> [(u32, f32)] {
+        // Returns list of (index, score) for most similar texts
+    }
+}
+
+/// Example usage:
+/// ```berk
+/// import "ai/nlp" as nlp
+/// 
+/// // Tokenization
+/// let tokenizer = nlp.tokenizer.BPETokenizer.new("vocab.json", "merges.txt")
+/// let token_ids = tokenizer.encode("Hello world!")
+/// yaz("Token IDs: {:?}", token_ids)
+/// 
+/// // BERT embeddings
+/// let bert = nlp.bert.BERT.from_pretrained("bert-base-uncased")
+/// let embeddings = bert.encode(["The cat sat on the mat", "The dog played in the park"])
+/// yaz("Embeddings shape: {:?}", embeddings.shape)
+/// 
+/// // Sentiment analysis
+/// let (label, score) = nlp.classification.sentiment_analysis("I love this product!")
+/// yaz("Sentiment: {} ({:.2f})", label, score)
+/// 
+/// // Named Entity Recognition
+/// let entities = nlp.ner.extract_entities("Apple Inc. is located in Cupertino, California.")
+/// for entity in entities {
+///     yaz("{}: {} ({:.2f})", entity.label, entity.text, entity.confidence)
+/// }
+/// ```

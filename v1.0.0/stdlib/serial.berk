@@ -1,0 +1,133 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// BERK Standard Library - Serial Port Module
+// Hardware Bridge Phase HAL 6.0
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// USB/Serial port üzerinden gerçek donanım iletişimi.
+//
+// Örnek:
+//   kullan std::serial
+//   olsun port = serial::open("COM3", 115200)
+//   serial::write_line(port, "Merhaba!")
+//   olsun yanit = serial::read_line(port)
+//   serial::close(port)
+//
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Port Keşfi
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Mevcut seri portları listeler
+/// Döner: Port bilgisi dizisi [{name, type, ...}]
+@native("serial_list_ports")
+dpiş list_ports() -> Dizi
+
+/// Portları listele - Türkçe
+@native("serial_list_ports")
+dpiş portlari_listele() -> Dizi
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Bağlantı Yönetimi
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Seri port aç
+/// port_name: Port adı ("COM3", "/dev/ttyUSB0")
+/// baud_rate: Baud hızı (9600, 115200, vb.)
+/// Döner: Port handle
+@native("serial_open")
+dpiş open(port_name: Metin, baud_rate: Tam) -> Tam
+
+/// Port aç - Türkçe
+@native("serial_open")
+dpiş ac(port_adi: Metin, baud_hizi: Tam) -> Tam
+
+/// Seri port aç (gelişmiş ayarlar)
+/// port_name: Port adı
+/// baud_rate: Baud hızı
+/// data_bits: Veri bitleri (5, 6, 7, 8)
+/// parity: Eşlik ("none", "odd", "even")
+/// stop_bits: Dur bitleri (1, 2)
+/// timeout_ms: Zaman aşımı (ms)
+@native("serial_open_extended")
+dpiş open_extended(port_name: Metin, baud_rate: Tam, data_bits: Tam, 
+                   parity: Metin, stop_bits: Tam, timeout_ms: Tam) -> Tam
+
+/// Seri portu kapat
+@native("serial_close")
+dpiş close(handle: Tam) -> Mantık
+
+/// Port kapat - Türkçe
+@native("serial_close")
+dpiş kapat(handle: Tam) -> Mantık
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Yazma İşlemleri
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// String veri gönder
+@native("serial_write")
+dpiş write(handle: Tam, data: Metin) -> Tam
+
+/// Veri yaz - Türkçe
+@native("serial_write")
+dpiş yaz(handle: Tam, veri: Metin) -> Tam
+
+/// Byte dizisi gönder
+@native("serial_write_bytes")
+dpiş write_bytes(handle: Tam, bytes: Dizi) -> Tam
+
+/// Satır gönder (otomatik newline)
+@native("serial_write_line")
+dpiş write_line(handle: Tam, line: Metin) -> Tam
+
+/// Satır yaz - Türkçe
+@native("serial_write_line")
+dpiş satir_yaz(handle: Tam, satir: Metin) -> Tam
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Okuma İşlemleri
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Belirtilen sayıda byte oku
+@native("serial_read_bytes")
+dpiş read_bytes(handle: Tam, count: Tam) -> Dizi
+
+/// String olarak oku
+@native("serial_read_string")
+dpiş read_string(handle: Tam, max_bytes: Tam) -> Metin
+
+/// Satır oku (newline'a kadar)
+@native("serial_read_line")
+dpiş read_line(handle: Tam) -> Metin
+
+/// Satır oku - Türkçe
+@native("serial_read_line")
+dpiş satir_oku(handle: Tam) -> Metin
+
+/// Belirtilen byte'a kadar oku
+@native("serial_read_until")
+dpiş read_until(handle: Tam, terminator: Tam) -> Dizi
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Kontrol İşlemleri
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// DTR sinyali ayarla
+@native("serial_set_dtr")
+dpiş set_dtr(handle: Tam, level: Mantık) -> Mantık
+
+/// RTS sinyali ayarla
+@native("serial_set_rts")
+dpiş set_rts(handle: Tam, level: Mantık) -> Mantık
+
+/// Zaman aşımı ayarla
+@native("serial_set_timeout")
+dpiş set_timeout(handle: Tam, timeout_ms: Tam) -> Mantık
+
+/// Buffer'ı temizle
+@native("serial_flush")
+dpiş flush(handle: Tam) -> Mantık
+
+/// Bekleyen byte sayısı
+@native("serial_available")
+dpiş available(handle: Tam) -> Tam

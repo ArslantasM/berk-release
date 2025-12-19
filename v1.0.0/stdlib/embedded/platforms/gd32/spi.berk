@@ -1,0 +1,9 @@
+// GD32 SPI Module
+// Compatible with STM32 SPI implementation
+
+pub use stm32f4::spi::*;
+
+// GD32 SPI notes:
+// - Identical SPI peripheral
+// - Same DMA support
+// - Compatible timing

@@ -1,0 +1,318 @@
+// stdlib/embedded/platforms/riscv_gd32vf103/adc.berk
+// GD32VF103 ADC (Analog-to-Digital Converter) Implementation
+// 2 ADC peripherals (ADC0, ADC1) with 16 channels each
+
+kullan "embedded/bal/adc" olarak ADC_BAL
+
+// ADC port enumeration
+açık enum AdcPort yap
+    ADC0 = 0,
+    ADC1 = 1,
+son
+
+// ADC base addresses
+sabit ADC0_BASE: u32 = 0x40012400
+sabit ADC1_BASE: u32 = 0x40012800
+
+// ADC register offsets
+sabit ADC_STAT: u32 = 0x00      // Status register
+sabit ADC_CTL0: u32 = 0x04      // Control register 0
+sabit ADC_CTL1: u32 = 0x08      // Control register 1
+sabit ADC_SAMPT0: u32 = 0x0C    // Sample time register 0
+sabit ADC_SAMPT1: u32 = 0x10    // Sample time register 1
+sabit ADC_IOFF0: u32 = 0x14     // Inserted channel offset 0
+sabit ADC_IOFF1: u32 = 0x18     // Inserted channel offset 1
+sabit ADC_IOFF2: u32 = 0x1C     // Inserted channel offset 2
+sabit ADC_IOFF3: u32 = 0x20     // Inserted channel offset 3
+sabit ADC_WDHT: u32 = 0x24      // Watchdog high threshold
+sabit ADC_WDLT: u32 = 0x28      // Watchdog low threshold
+sabit ADC_RSQ0: u32 = 0x2C      // Regular sequence register 0
+sabit ADC_RSQ1: u32 = 0x30      // Regular sequence register 1
+sabit ADC_RSQ2: u32 = 0x34      // Regular sequence register 2
+sabit ADC_ISQ: u32 = 0x38       // Inserted sequence register
+sabit ADC_IDATA0: u32 = 0x3C    // Inserted data register 0
+sabit ADC_IDATA1: u32 = 0x40    // Inserted data register 1
+sabit ADC_IDATA2: u32 = 0x44    // Inserted data register 2
+sabit ADC_IDATA3: u32 = 0x48    // Inserted data register 3
+sabit ADC_RDATA: u32 = 0x4C     // Regular data register
+
+// CTL0 bits
+sabit ADC_CTL0_WDCHSEL: u32 = 0x1F      // Watchdog channel select
+sabit ADC_CTL0_EOCIE: u32 = 1 << 5      // EOC interrupt enable
+sabit ADC_CTL0_WDEIE: u32 = 1 << 6      // Watchdog event interrupt enable
+sabit ADC_CTL0_EOICIE: u32 = 1 << 7     // EOIC interrupt enable
+sabit ADC_CTL0_SM: u32 = 1 << 8         // Scan mode
+sabit ADC_CTL0_WDSC: u32 = 1 << 9       // Watchdog single channel
+sabit ADC_CTL0_ICA: u32 = 1 << 10       // Inserted channel auto conversion
+sabit ADC_CTL0_DISRC: u32 = 1 << 11     // Discontinuous mode on regular channels
+sabit ADC_CTL0_DISIC: u32 = 1 << 12     // Discontinuous mode on inserted channels
+sabit ADC_CTL0_DISNUM: u32 = 0x7 << 13  // Discontinuous mode channel count
+sabit ADC_CTL0_IWDEN: u32 = 1 << 22     // Inserted watchdog enable
+sabit ADC_CTL0_RWDEN: u32 = 1 << 23     // Regular watchdog enable
+
+// CTL1 bits
+sabit ADC_CTL1_ADCON: u32 = 1 << 0      // ADC on
+sabit ADC_CTL1_CTN: u32 = 1 << 1        // Continuous mode
+sabit ADC_CTL1_CLB: u32 = 1 << 2        // Calibration
+sabit ADC_CTL1_RSTCLB: u32 = 1 << 3     // Reset calibration
+sabit ADC_CTL1_DMA: u32 = 1 << 8        // DMA enable
+sabit ADC_CTL1_DAL: u32 = 1 << 11       // Data alignment (0=right, 1=left)
+sabit ADC_CTL1_ETERC: u32 = 0x7 << 17   // External trigger for regular channels
+sabit ADC_CTL1_ETERC_EN: u32 = 1 << 20  // External trigger enable
+sabit ADC_CTL1_SWRCST: u32 = 1 << 22    // Software trigger for regular channels
+sabit ADC_CTL1_TSVREN: u32 = 1 << 23    // Temperature sensor and VREFINT enable
+
+// STAT bits
+sabit ADC_STAT_WDE: u32 = 1 << 0        // Watchdog event
+sabit ADC_STAT_EOC: u32 = 1 << 1        // End of conversion
+sabit ADC_STAT_EOIC: u32 = 1 << 2       // End of inserted conversion
+sabit ADC_STAT_STIC: u32 = 1 << 3       // Start of inserted conversion
+sabit ADC_STAT_STRC: u32 = 1 << 4       // Start of regular conversion
+
+// ADC channels
+açık sabit ADC_CHANNEL_0: u8 = 0
+açık sabit ADC_CHANNEL_1: u8 = 1
+açık sabit ADC_CHANNEL_2: u8 = 2
+açık sabit ADC_CHANNEL_3: u8 = 3
+açık sabit ADC_CHANNEL_4: u8 = 4
+açık sabit ADC_CHANNEL_5: u8 = 5
+açık sabit ADC_CHANNEL_6: u8 = 6
+açık sabit ADC_CHANNEL_7: u8 = 7
+açık sabit ADC_CHANNEL_8: u8 = 8
+açık sabit ADC_CHANNEL_9: u8 = 9
+açık sabit ADC_CHANNEL_10: u8 = 10
+açık sabit ADC_CHANNEL_11: u8 = 11
+açık sabit ADC_CHANNEL_12: u8 = 12
+açık sabit ADC_CHANNEL_13: u8 = 13
+açık sabit ADC_CHANNEL_14: u8 = 14
+açık sabit ADC_CHANNEL_15: u8 = 15
+açık sabit ADC_CHANNEL_16: u8 = 16  // Temperature sensor
+açık sabit ADC_CHANNEL_17: u8 = 17  // VREFINT
+
+// Sample time (in ADC clock cycles)
+açık enum SampleTime yap
+    CYCLES_1_5 = 0,     // 1.5 cycles
+    CYCLES_7_5 = 1,     // 7.5 cycles
+    CYCLES_13_5 = 2,    // 13.5 cycles
+    CYCLES_28_5 = 3,    // 28.5 cycles
+    CYCLES_41_5 = 4,    // 41.5 cycles
+    CYCLES_55_5 = 5,    // 55.5 cycles
+    CYCLES_71_5 = 6,    // 71.5 cycles
+    CYCLES_239_5 = 7,   // 239.5 cycles (best for temp sensor)
+son
+
+harici "C" yap
+    // GD32VF103 ADC firmware library
+    fonksiyon adc_clock_enable(adc_periph: u32)
+    fonksiyon adc_deinit(adc_periph: u32)
+    fonksiyon adc_enable(adc_periph: u32)
+    fonksiyon adc_disable(adc_periph: u32)
+    fonksiyon adc_calibration_enable(adc_periph: u32)
+    fonksiyon adc_channel_length_config(adc_periph: u32, group: u32, length: u32)
+    fonksiyon adc_regular_channel_config(adc_periph: u32, rank: u8, channel: u8, sample_time: u32)
+    fonksiyon adc_software_trigger_enable(adc_periph: u32, group: u32)
+    fonksiyon adc_flag_get(adc_periph: u32, flag: u32) -> u32
+    fonksiyon adc_regular_data_read(adc_periph: u32) -> u16
+    fonksiyon adc_tempsensor_vrefint_enable()
+    fonksiyon adc_tempsensor_vrefint_disable()
+    
+    fonksiyon volatile_read_u32(addr: *sabit u32) -> u32
+    fonksiyon volatile_write_u32(addr: *değiştir u32, value: u32)
+son
+
+// ADC groups
+sabit ADC_REGULAR_CHANNEL: u32 = 0
+sabit ADC_INSERTED_CHANNEL: u32 = 1
+
+fonksiyon adc_base_address(port: AdcPort) -> u32 yap
+    seç port yap
+        durum AdcPort::ADC0 => dön ADC0_BASE,
+        durum AdcPort::ADC1 => dön ADC1_BASE,
+    son
+son
+
+yapı GD32VF103_ADC_HAL yap
+    port: AdcPort,
+    base_addr: u32,
+    resolution: u8,  // 12-bit
+    initialized: bool,
+son
+
+uygula GD32VF103_ADC_HAL yap
+    açık fonksiyon yeni(port: AdcPort) -> GD32VF103_ADC_HAL yap
+        değişken base_addr = adc_base_address(port)
+        
+        // Enable ADC clock
+        adc_clock_enable(base_addr)
+        
+        // Reset ADC
+        adc_deinit(base_addr)
+        
+        // Enable ADC
+        adc_enable(base_addr)
+        
+        // Wait for ADC to stabilize (recommended: 14 ADC clock cycles)
+        kulun crate::time::delay_us
+        delay_us(10)
+        
+        // Calibrate ADC
+        adc_calibration_enable(base_addr)
+        
+        // Wait for calibration to complete
+        döngü yap
+            değişken ctl1 = volatile_read_u32((base_addr + ADC_CTL1) olarak *sabit u32)
+            eğer (ctl1 & ADC_CTL1_CLB) == 0 yap
+                kır
+            son
+        son
+        
+        dön GD32VF103_ADC_HAL yap
+            port: port,
+            base_addr: base_addr,
+            resolution: 12,
+            initialized: doğru,
+        son
+    son
+    
+    açık fonksiyon read_channel(&kendim, channel: u8) -> u16 yap
+        // Configure single channel conversion
+        adc_channel_length_config(kendim.base_addr, ADC_REGULAR_CHANNEL, 1)
+        adc_regular_channel_config(kendim.base_addr, 0, channel, SampleTime::CYCLES_55_5 olarak u32)
+        
+        // Start conversion
+        adc_software_trigger_enable(kendim.base_addr, ADC_REGULAR_CHANNEL)
+        
+        // Wait for conversion complete
+        döngü yap
+            eğer adc_flag_get(kendim.base_addr, ADC_STAT_EOC) != 0 yap
+                kır
+            son
+        son
+        
+        // Read data
+        dön adc_regular_data_read(kendim.base_addr)
+    son
+    
+    açık fonksiyon read_channel_mv(&kendim, channel: u8, vref_mv: u16) -> u16 yap
+        değişken raw = kendim.read_channel(channel)
+        // Convert to millivolts: (raw * vref_mv) / 4095
+        dön ((raw olarak u32 * vref_mv olarak u32) / 4095) olarak u16
+    son
+    
+    açık fonksiyon read_multiple(&kendim, channels: &[u8], buffer: &değiştir [u16]) yap
+        değişken count = eğer channels.len() < buffer.len() yap
+            channels.len()
+        son değilse yap
+            buffer.len()
+        son
+        
+        için i içinde 0..count yap
+            buffer[i] = kendim.read_channel(channels[i])
+        son
+    son
+    
+    // Temperature sensor reading (channel 16)
+    açık fonksiyon read_temperature(&kendim) -> f32 yap
+        // Enable temperature sensor
+        adc_tempsensor_vrefint_enable()
+        
+        // Wait for sensor to stabilize
+        kulun crate::time::delay_us
+        delay_us(10)
+        
+        // Read temperature sensor (channel 16)
+        değişken raw = kendim.read_channel(ADC_CHANNEL_16)
+        
+        // Convert to temperature (Celsius)
+        // Formula from datasheet: T = (V25 - Vsense) / Avg_Slope + 25
+        // V25 = 1.43V (typical), Avg_Slope = 4.3mV/°C (typical)
+        // Vsense = (raw * 3.3V) / 4095
+        
+        değişken v_sense = (raw olarak f32 * 3.3) / 4095.0
+        değişken v25 = 1.43
+        değişken avg_slope = 0.0043  // 4.3 mV/°C
+        
+        değişken temp_c = ((v25 - v_sense) / avg_slope) + 25.0
+        
+        dön temp_c
+    son
+    
+    // VREFINT reading (channel 17)
+    açık fonksiyon read_vrefint(&kendim) -> u16 yap
+        // Enable VREFINT
+        adc_tempsensor_vrefint_enable()
+        
+        // Wait for VREFINT to stabilize
+        kulun crate::time::delay_us
+        delay_us(10)
+        
+        // Read VREFINT (channel 17)
+        dön kendim.read_channel(ADC_CHANNEL_17)
+    son
+    
+    // Calculate actual VDD voltage using VREFINT
+    açık fonksiyon read_vdd_mv(&kendim) -> u16 yap
+        değişken vrefint_raw = kendim.read_vrefint()
+        
+        // VREFINT is typically 1.2V
+        // VDD = (1.2V * 4095) / vrefint_raw
+        değişken vdd = (1200u32 * 4095) / vrefint_raw olarak u32
+        
+        dön vdd olarak u16
+    son
+    
+    // Continuous conversion mode
+    açık fonksiyon enable_continuous(&kendim) yap
+        değişken addr = (kendim.base_addr + ADC_CTL1) olarak *değiştir u32
+        değişken ctl1 = volatile_read_u32(addr olarak *sabit u32)
+        volatile_write_u32(addr, ctl1 | ADC_CTL1_CTN)
+    son
+    
+    açık fonksiyon disable_continuous(&kendim) yap
+        değişken addr = (kendim.base_addr + ADC_CTL1) olarak *değiştir u32
+        değişken ctl1 = volatile_read_u32(addr olarak *sabit u32)
+        volatile_write_u32(addr, ctl1 & !ADC_CTL1_CTN)
+    son
+    
+    // DMA mode
+    açık fonksiyon enable_dma(&kendim) yap
+        değişken addr = (kendim.base_addr + ADC_CTL1) olarak *değiştir u32
+        değişken ctl1 = volatile_read_u32(addr olarak *sabit u32)
+        volatile_write_u32(addr, ctl1 | ADC_CTL1_DMA)
+    son
+    
+    açık fonksiyon disable_dma(&kendim) yap
+        değişken addr = (kendim.base_addr + ADC_CTL1) olarak *değiştir u32
+        değişken ctl1 = volatile_read_u32(addr olarak *sabit u32)
+        volatile_write_u32(addr, ctl1 & !ADC_CTL1_DMA)
+    son
+son
+
+uygula ADC_BAL::AdcHAL için GD32VF103_ADC_HAL yap
+    fonksiyon read_channel(&kendim, channel: u8) -> u16 yap
+        dön kendim.read_channel(channel)
+    son
+    
+    fonksiyon resolution(&kendim) -> u8 yap
+        dön kendim.resolution
+    son
+son
+
+açık tip ADC_HAL = GD32VF103_ADC_HAL
+
+// Helper functions for common ADC operations
+
+// Read battery voltage (assuming voltage divider on channel 0)
+açık fonksiyon read_battery_voltage(adc: &ADC_HAL, channel: u8, divider_ratio: f32) -> f32 yap
+    değişken vdd_mv = adc.read_vdd_mv()
+    değişken raw = adc.read_channel(channel)
+    değişken voltage_mv = ((raw olarak f32 * vdd_mv olarak f32) / 4095.0) * divider_ratio
+    dön voltage_mv / 1000.0  // Convert to volts
+son
+
+// Read analog sensor (0-3.3V range)
+açık fonksiyon read_analog_sensor(adc: &ADC_HAL, channel: u8) -> f32 yap
+    değişken vdd_mv = adc.read_vdd_mv()
+    değişken raw = adc.read_channel(channel)
+    dön (raw olarak f32 * vdd_mv olarak f32) / 4095.0 / 1000.0
+son

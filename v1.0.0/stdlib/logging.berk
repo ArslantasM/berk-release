@@ -1,0 +1,521 @@
+//! # Logging Module
+//!
+//! Structured logging library.
+//!
+//! Yapısal loglama kütüphanesi.
+//!
+//! ## Features / Özellikler
+//!
+//! - **Structured logging**: Key-value pairs / Anahtar-değer çiftleri
+//! - **Log levels**: trace, debug, info, warn, error, fatal / Log seviyeleri
+//! - **Multiple outputs**: Console, file, syslog, network / Çoklu çıktı
+//! - **Log rotation**: Size-based, time-based / Log döndürme
+//! - **Async logging**: Non-blocking / Asenkron loglama
+//! - **Formats**: JSON, text, colored / Formatçılar
+//! - **Filtering**: By level, module / Filtreleme
+//!
+//! ## Example / Örnek
+//!
+//! ```berk
+//! kullan logging
+//!
+//! logging.info("Uygulama başlatıldı")
+//! logging.warn("Uyarı: Bellek %80 dolu")
+//! logging.error("Hata", hata_kod: 500, mesaj: "Bağlantı hatası")
+//! ```
+//!
+//! Backend: Rust tracing + log4rs
+
+modül logging
+
+kullan result
+kullan io
+kullan time
+
+// ============================================================================
+// LOG LEVELS
+// ============================================================================
+
+tip LogLevel = "Trace" | "Debug" | "Info" | "Warn" | "Error" | "Fatal"
+
+// Convert level to integer (for comparison)
+fonksiyon level_to_int(level: LogLevel) -> tamsayı
+yap
+    eşleşme level yap
+        "Trace" => dön 0,
+        "Debug" => dön 1,
+        "Info" => dön 2,
+        "Warn" => dön 3,
+        "Error" => dön 4,
+        "Fatal" => dön 5
+    son
+son
+
+// ============================================================================
+// LOGGER CONFIGURATION
+// ============================================================================
+
+tip Logger = yapı yap
+    handle: tamsayı,
+    name: yazı,
+    level: LogLevel,
+    outputs: liste[LogOutput]
+son
+
+tip LogOutput = Console | File | Syslog | Network | Custom
+
+tip Console = yapı yap
+    colored: mantıksal,
+    format: LogFormat
+son
+
+tip File = yapı yap
+    path: yazı,
+    rotation: Seçenek[RotationPolicy],
+    format: LogFormat
+son
+
+tip Syslog = yapı yap
+    host: yazı,
+    port: tamsayı,
+    facility: yazı
+son
+
+tip Network = yapı yap
+    protocol: yazı,  // "tcp", "udp"
+    address: yazı,
+    format: LogFormat
+son
+
+tip Custom = yapı yap
+    handler: fonksiyon(LogRecord) -> boş
+son
+
+tip LogFormat = "Text" | "Json" | "Compact" | "Pretty"
+
+tip RotationPolicy = yapı yap
+    strategy: RotationStrategy,
+    max_size: Seçenek[tamsayı],      // Bytes
+    max_age: Seçenek[tamsayı],        // Seconds
+    max_backups: tamsayı
+son
+
+tip RotationStrategy = "Size" | "Time" | "Daily" | "Hourly"
+
+// ============================================================================
+// LOGGER CREATION
+// ============================================================================
+
+// Create default console logger
+@native
+fonksiyon logger_new(name: yazı) -> Logger
+
+// Create logger with configuration
+@native
+fonksiyon logger_with_config(name: yazı, level: LogLevel, outputs: liste[LogOutput]) -> Logger
+
+// Set global default logger
+@native
+fonksiyon set_default_logger(logger: Logger) -> boş
+
+// Get default logger
+@native
+fonksiyon get_default_logger() -> Logger
+
+// ============================================================================
+// LOGGING FUNCTIONS
+// ============================================================================
+
+tip LogRecord = yapı yap
+    timestamp: tamsayı,
+    level: LogLevel,
+    message: yazı,
+    fields: liste[(yazı, yazı)],
+    target: yazı,
+    module: yazı,
+    file: Seçenek[yazı],
+    line: Seçenek[tamsayı]
+son
+
+// Core logging function
+@native
+fonksiyon log(logger: Logger, level: LogLevel, message: yazı, fields: liste[(yazı, yazı)]) -> boş
+
+// Convenience functions
+fonksiyon trace(logger: Logger, message: yazı) -> boş
+yap
+    log(logger, "Trace", message, [])
+son
+
+fonksiyon debug(logger: Logger, message: yazı) -> boş
+yap
+    log(logger, "Debug", message, [])
+son
+
+fonksiyon info(logger: Logger, message: yazı) -> boş
+yap
+    log(logger, "Info", message, [])
+son
+
+fonksiyon warn(logger: Logger, message: yazı) -> boş
+yap
+    log(logger, "Warn", message, [])
+son
+
+fonksiyon error(logger: Logger, message: yazı) -> boş
+yap
+    log(logger, "Error", message, [])
+son
+
+fonksiyon fatal(logger: Logger, message: yazı) -> boş
+yap
+    log(logger, "Fatal", message, [])
+son
+
+// Structured logging with fields
+fonksiyon trace_with(logger: Logger, message: yazı, fields: liste[(yazı, yazı)]) -> boş
+yap
+    log(logger, "Trace", message, fields)
+son
+
+fonksiyon debug_with(logger: Logger, message: yazı, fields: liste[(yazı, yazı)]) -> boş
+yap
+    log(logger, "Debug", message, fields)
+son
+
+fonksiyon info_with(logger: Logger, message: yazı, fields: liste[(yazı, yazı)]) -> boş
+yap
+    log(logger, "Info", message, fields)
+son
+
+fonksiyon warn_with(logger: Logger, message: yazı, fields: liste[(yazı, yazı)]) -> boş
+yap
+    log(logger, "Warn", message, fields)
+son
+
+fonksiyon error_with(logger: Logger, message: yazı, fields: liste[(yazı, yazı)]) -> boş
+yap
+    log(logger, "Error", message, fields)
+son
+
+fonksiyon fatal_with(logger: Logger, message: yazı, fields: liste[(yazı, yazı)]) -> boş
+yap
+    log(logger, "Fatal", message, fields)
+son
+
+// ============================================================================
+// GLOBAL LOGGING (using default logger)
+// ============================================================================
+
+fonksiyon log_trace(message: yazı) -> boş
+yap
+    değişken logger = get_default_logger()
+    trace(logger, message)
+son
+
+fonksiyon log_debug(message: yazı) -> boş
+yap
+    değişken logger = get_default_logger()
+    debug(logger, message)
+son
+
+fonksiyon log_info(message: yazı) -> boş
+yap
+    değişken logger = get_default_logger()
+    info(logger, message)
+son
+
+fonksiyon log_warn(message: yazı) -> boş
+yap
+    değişken logger = get_default_logger()
+    warn(logger, message)
+son
+
+fonksiyon log_error(message: yazı) -> boş
+yap
+    değişken logger = get_default_logger()
+    error(logger, message)
+son
+
+fonksiyon log_fatal(message: yazı) -> boş
+yap
+    değişken logger = get_default_logger()
+    fatal(logger, message)
+son
+
+// ============================================================================
+// CONTEXTUAL LOGGING (Spans)
+// ============================================================================
+
+tip Span = yapı yap
+    handle: tamsayı,
+    name: yazı,
+    fields: liste[(yazı, yazı)],
+    parent: Seçenek[Span]
+son
+
+// Create new span
+@native
+fonksiyon span_new(logger: Logger, name: yazı, fields: liste[(yazı, yazı)]) -> Span
+
+// Enter span (makes it current)
+@native
+fonksiyon span_enter(span: Span) -> boş
+
+// Exit span
+@native
+fonksiyon span_exit(span: Span) -> boş
+
+// Execute function within span
+fonksiyon with_span(logger: Logger, name: yazı, fields: liste[(yazı, yazı)], f: fonksiyon() -> boş) -> boş
+yap
+    değişken span = span_new(logger, name, fields)
+    span_enter(span)
+    f()
+    span_exit(span)
+son
+
+// Add field to current span
+@native
+fonksiyon span_add_field(span: Span, key: yazı, value: yazı) -> boş
+
+// ============================================================================
+// LOG FILTERING
+// ============================================================================
+
+tip LogFilter = yapı yap
+    min_level: LogLevel,
+    targets: liste[yazı],      // Specific modules/targets to log
+    excluded: liste[yazı]      // Modules to exclude
+son
+
+// Set filter on logger
+@native
+fonksiyon logger_set_filter(logger: Logger, filter: LogFilter) -> Logger
+
+// Create filter from string (env_logger style)
+// Example: "info,my_module=debug,other_module=trace"
+@native
+fonksiyon filter_from_string(spec: yazı) -> Sonuç[LogFilter, yazı]
+
+// ============================================================================
+// ASYNC LOGGING
+// ============================================================================
+
+// Create async logger (non-blocking writes)
+@native
+fonksiyon logger_async(logger: Logger, buffer_size: tamsayı) -> Logger
+
+// Flush async logger (write all buffered logs)
+@native
+fonksiyon logger_flush(logger: Logger) -> Sonuç[boş, yazı]
+
+// ============================================================================
+// LOG ROTATION
+// ============================================================================
+
+// Manual rotation trigger
+@native
+fonksiyon logger_rotate(logger: Logger) -> Sonuç[boş, yazı]
+
+// Get current log file size
+@native
+fonksiyon logger_file_size(logger: Logger) -> Sonuç[tamsayı, yazı]
+
+// Clean old log backups
+@native
+fonksiyon logger_clean_backups(logger: Logger) -> Sonuç[tamsayı, yazı]  // Returns number cleaned
+
+// ============================================================================
+// OUTPUT BUILDERS
+// ============================================================================
+
+// Console output
+fonksiyon console_output(colored: mantıksal) -> LogOutput
+yap
+    dön Console { colored: colored, format: "Pretty" }
+son
+
+// File output with rotation
+fonksiyon file_output(path: yazı, max_size_mb: tamsayı) -> LogOutput
+yap
+    değişken rotation = RotationPolicy {
+        strategy: "Size",
+        max_size: Bazı(max_size_mb * 1024 * 1024),
+        max_age: Hiçbiri,
+        max_backups: 5
+    }
+    
+    dön File { path: path, rotation: Bazı(rotation), format: "Text" }
+son
+
+// Daily rotating file
+fonksiyon daily_file_output(path: yazı) -> LogOutput
+yap
+    değişken rotation = RotationPolicy {
+        strategy: "Daily",
+        max_size: Hiçbiri,
+        max_age: Bazı(86400),  // 24 hours
+        max_backups: 7
+    }
+    
+    dön File { path: path, rotation: Bazı(rotation), format: "Text" }
+son
+
+// JSON file output
+fonksiyon json_file_output(path: yazı) -> LogOutput
+yap
+    dön File { path: path, rotation: Hiçbiri, format: "Json" }
+son
+
+// Syslog output
+fonksiyon syslog_output(host: yazı, port: tamsayı) -> LogOutput
+yap
+    dön Syslog { host: host, port: port, facility: "user" }
+son
+
+// ============================================================================
+// QUICK SETUP FUNCTIONS
+// ============================================================================
+
+// Simple console logger
+fonksiyon simple_logger() -> Logger
+yap
+    dön logger_with_config("default", "Info", [console_output(doğru)])
+son
+
+// File logger
+fonksiyon file_logger(path: yazı) -> Logger
+yap
+    dön logger_with_config("file", "Info", [file_output(path, 10)])
+son
+
+// Multi-output logger (console + file)
+fonksiyon multi_logger(file_path: yazı) -> Logger
+yap
+    değişken outputs = [
+        console_output(doğru),
+        file_output(file_path, 10)
+    ]
+    dön logger_with_config("multi", "Info", outputs)
+son
+
+// Development logger (verbose console)
+fonksiyon dev_logger() -> Logger
+yap
+    dön logger_with_config("dev", "Debug", [console_output(doğru)])
+son
+
+// Production logger (file + rotation + async)
+fonksiyon prod_logger(log_dir: yazı) -> Logger
+yap
+    değişken path = string::format("{}/app.log", [log_dir])
+    değişken logger = logger_with_config("prod", "Info", [
+        daily_file_output(path),
+        json_file_output(string::format("{}/app.json.log", [log_dir]))
+    ])
+    dön logger_async(logger, 10000)
+son
+
+// ============================================================================
+// LOG FORMATTING
+// ============================================================================
+
+// Format log record manually
+@native
+fonksiyon format_record(record: LogRecord, format: LogFormat) -> yazı
+
+// Custom formatter function type
+tip FormatterFn = fonksiyon(LogRecord) -> yazı
+
+// Set custom formatter
+@native
+fonksiyon logger_set_formatter(logger: Logger, formatter: FormatterFn) -> Logger
+
+// ============================================================================
+// METRICS & STATISTICS
+// ============================================================================
+
+tip LogStats = yapı yap
+    total_logs: tamsayı,
+    by_level: liste[(LogLevel, tamsayı)],
+    start_time: tamsayı,
+    bytes_written: tamsayı
+son
+
+// Get logger statistics
+@native
+fonksiyon logger_stats(logger: Logger) -> LogStats
+
+// Reset statistics
+@native
+fonksiyon logger_reset_stats(logger: Logger) -> boş
+
+// ============================================================================
+// UTILITIES
+// ============================================================================
+
+// Check if level is enabled
+fonksiyon is_enabled(logger: Logger, level: LogLevel) -> mantıksal
+yap
+    dön level_to_int(level) >= level_to_int(logger.level)
+son
+
+// Conditional logging (only if level enabled)
+fonksiyon log_if(logger: Logger, level: LogLevel, message: fonksiyon() -> yazı) -> boş
+yap
+    eğer is_enabled(logger, level) yap
+        log(logger, level, message(), [])
+    son
+son
+
+// ============================================================================
+// TURKISH ALIASES
+// ============================================================================
+
+fonksiyon günlükçü_oluştur(isim: yazı) -> Logger
+yap
+    dön logger_new(isim)
+son
+
+fonksiyon iz(günlükçü: Logger, mesaj: yazı) -> boş
+yap
+    trace(günlükçü, mesaj)
+son
+
+fonksiyon hata_ayıkla(günlükçü: Logger, mesaj: yazı) -> boş
+yap
+    debug(günlükçü, mesaj)
+son
+
+fonksiyon bilgi(günlükçü: Logger, mesaj: yazı) -> boş
+yap
+    info(günlükçü, mesaj)
+son
+
+fonksiyon uyarı(günlükçü: Logger, mesaj: yazı) -> boş
+yap
+    warn(günlükçü, mesaj)
+son
+
+fonksiyon hata(günlükçü: Logger, mesaj: yazı) -> boş
+yap
+    error(günlükçü, mesaj)
+son
+
+fonksiyon ölümcül(günlükçü: Logger, mesaj: yazı) -> boş
+yap
+    fatal(günlükçü, mesaj)
+son
+
+fonksiyon konsol_günlükçü() -> Logger
+yap
+    dön simple_logger()
+son
+
+fonksiyon dosya_günlükçü(yol: yazı) -> Logger
+yap
+    dön file_logger(yol)
+son
+
+son  // modül logging

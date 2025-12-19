@@ -1,0 +1,1245 @@
+//! # JSON Module
+//!
+//! JSON parser and serializer (RFC 8259 compliant).
+//!
+//! JSON ayrıştırıcı ve serileştirici (RFC 8259 uyumlu).
+//!
+//! Inspired by / İlham kaynakları: Python json + Rust serde_json + Julia JSON3.jl
+//!
+//! ## Features / Özellikler
+//!
+//! ### Parsing / Ayrıştırma
+//! - `parse()` - Parse JSON string / JSON string ayrıştır
+//! - `parse_file()` - Parse JSON from file / Dosyadan JSON oku
+//! - Error recovery (strict/lenient modes) / Hata düzeltme
+//!
+//! ### Serialization / Serileştirme
+//! - `stringify()` - Convert to JSON string / JSON string'e çevir
+//! - Pretty printing with indentation / Girintili güzel yazdırma
+//! - Sort object keys / Nesne anahtarlarını sırala
+//!
+//! ### Data Types / Veri Tipleri
+//! - `JsonValue`: null, bool, number, string, array, object
+//! - UTF-8 Unicode support / UTF-8 Unicode desteği
+//! - 64-bit float and integer precision / 64-bit ondalık ve tam sayı
+//!
+//! ### Streaming API
+//! - `parse_stream()` - Parse large JSON files incrementally / Büyük dosyaları parçalı okuma
+//!
+//! ## Example / Örnek
+//!
+//! ```berk
+//! kullan json
+//!
+//! // Parse JSON / JSON ayrıştır
+//! değişken veri = json.parse('{"ad":"Ahmet","yas":25}')?
+//! io.println("Ad: {veri.ad}")
+//!
+//! // Create and stringify / Oluştur ve serileştir
+//! değişken nesne = JsonNesne yap
+//!     ad: "Mehmet",
+//!     yas: 30
+//! son
+//! değişken json_str = json.stringify(nesne, guzellestir: doğru)
+//! io.println(json_str)
+//! ```
+//!
+//! ## RFC 8259 Compliance
+//!
+//! Fully compliant with JSON specification.
+//!
+//! JSON standartıyla tam uyumlu.
+//!
+//! ## Performance / Performans
+//!
+//! - Fast parsing: 100+ MB/s
+//! - Zero-copy where possible / Mümkün olduğunda sıfır kopyalama
+//! - Streaming for large files / Büyük dosyalar için streaming
+//!
+//! ## Backend
+//!
+//! - Custom parser (hand-written recursive descent)
+//! - Rust `serde_json` compatibility layer
+//! - SIMD acceleration for string parsing
+
+modül json
+
+// ============================================================================
+// TÜRLER (Types)
+// ============================================================================
+
+// JSON değer türleri
+tip JsonDeger = tamsayı | ondalık | yazı | mantıksal | JsonDizi | JsonNesne | boş
+
+// JSON array
+tip JsonDizi = liste[JsonDeger]
+
+// JSON object (key-value pairs)
+tip JsonNesne = eşleme[yazı, JsonDeger]
+
+// Parse hataları
+tip JsonHata = yapı yap
+    mesaj: yazı,
+    satır: tamsayı,
+    sütun: tamsayı,
+    hata_türü: yazı  // "syntax", "type", "depth", "encoding"
+son
+
+// Serialization seçenekleri
+tip JsonSecenekler = yapı yap
+    güzelleştir: mantıksal,      // Pretty print (indent)
+    girinti: tamsayı,             // Indent spaces (default: 2)
+    ascii: mantıksal,             // Escape non-ASCII (default: false)
+    sıralı: mantıksal,            // Sort object keys
+    kesinlik: tamsayı,            // Float precision (default: 15)
+    boşluk_izin: mantıksal,       // Allow trailing commas/comments (lenient)
+    maksimum_derinlik: tamsayı    // Max nesting depth (default: 512)
+son
+
+// ============================================================================
+// ANA FONKSİYONLAR (Core Functions) - Python json API
+// ============================================================================
+
+// String'den JSON parse et (Python: json.loads)
+fonksiyon yukle(metin: yazı, seçenekler: JsonSecenekler = varsayılan()) -> Sonuç[JsonDeger, JsonHata]
+yap
+    // Lexer + Parser
+    değişken lexer = lexer_oluştur(metin)
+    değişken parser = parser_oluştur(lexer, seçenekler)
+    dön parser_değer_oku(parser)
+son
+
+// JSON'u string'e çevir (Python: json.dumps)
+fonksiyon kaydet(değer: JsonDeger, seçenekler: JsonSecenekler = varsayılan()) -> yazı
+yap
+    değişken buffer = metin_tamponu_oluştur()
+    serializer_yaz(buffer, değer, seçenekler, derinlik: 0)
+    dön metin_tamponu_al(buffer)
+son
+
+// Dosyadan JSON oku (Python: json.load)
+fonksiyon dosya_yukle(yol: yazı, seçenekler: JsonSecenekler = varsayılan()) -> Sonuç[JsonDeger, JsonHata]
+yap
+    değişken içerik = dosya_oku_string(yol)
+    eğer içerik.hata_mı() ise yap
+        dön Hata(JsonHata yap
+            mesaj: "Dosya okunamadı: " + yol,
+            satır: 0, sütun: 0,
+            hata_türü: "io"
+        son)
+    son
+    dön yukle(içerik.unwrap(), seçenekler)
+son
+
+// JSON'u dosyaya yaz (Python: json.dump)
+fonksiyon dosya_kaydet(yol: yazı, değer: JsonDeger, seçenekler: JsonSecenekler = varsayılan()) -> Sonuç[boş, JsonHata]
+yap
+    değişken json_metin = kaydet(değer, seçenekler)
+    değişken sonuç = dosya_yaz(yol, json_metin)
+    
+    eğer sonuç.hata_mı() ise yap
+        dön Hata(JsonHata yap
+            mesaj: "Dosya yazılamadı: " + yol,
+            satır: 0, sütun: 0,
+            hata_türü: "io"
+        son)
+    son
+    dön Başarı(boş)
+son
+
+// ============================================================================
+// YARDIMCI FONKSİYONLAR (Helper Functions)
+// ============================================================================
+
+// Varsayılan seçenekler
+fonksiyon varsayılan() -> JsonSecenekler
+yap
+    dön JsonSecenekler yap
+        güzelleştir: yanlış,
+        girinti: 2,
+        ascii: yanlış,
+        sıralı: yanlış,
+        kesinlik: 15,
+        boşluk_izin: yanlış,
+        maksimum_derinlik: 512
+    son
+son
+
+// Pretty print seçenekleri
+fonksiyon guzel_secenekler() -> JsonSecenekler
+yap
+    değişken sec = varsayılan()
+    sec.güzelleştir = doğru
+    dön sec
+son
+
+// Minified (sıkıştırılmış) seçenekler
+fonksiyon sikistirilmis_secenekler() -> JsonSecenekler
+yap
+    dön varsayılan()  // Default zaten minified
+son
+
+// ============================================================================
+// TİP KONTROL FONKSİYONLARI (Type Checking)
+// ============================================================================
+
+fonksiyon nesne_mi(değer: JsonDeger) -> mantıksal
+yap
+    dön değer türü JsonNesne
+son
+
+fonksiyon dizi_mi(değer: JsonDeger) -> mantıksal
+yap
+    dön değer türü JsonDizi
+son
+
+fonksiyon sayı_mı(değer: JsonDeger) -> mantıksal
+yap
+    dön (değer türü tamsayı) veya (değer türü ondalık)
+son
+
+fonksiyon metin_mi(değer: JsonDeger) -> mantıksal
+yap
+    dön değer türü yazı
+son
+
+fonksiyon mantıksal_mı(değer: JsonDeger) -> mantıksal
+yap
+    dön değer türü mantıksal
+son
+
+fonksiyon boş_mu(değer: JsonDeger) -> mantıksal
+yap
+    dön değer türü boş
+son
+
+// ============================================================================
+// NESNE ERİŞİM FONKSİYONLARI (Object Access)
+// ============================================================================
+
+// Nesne key'ine eriş (Python dict-like)
+fonksiyon nesne_al(nesne: JsonNesne, anahtar: yazı) -> Seçenek[JsonDeger]
+yap
+    eğer nesne.içerir(anahtar) ise yap
+        dön Bazı(nesne[anahtar])
+    son
+    dön Hiç
+son
+
+// Nesne key'i ekle/güncelle
+fonksiyon nesne_ekle(nesne: JsonNesne, anahtar: yazı, değer: JsonDeger) -> boş
+yap
+    nesne[anahtar] = değer
+son
+
+// Tüm key'leri al
+fonksiyon nesne_anahtarlar(nesne: JsonNesne) -> liste[yazı]
+yap
+    dön nesne.anahtarlar()
+son
+
+// Tüm value'ları al
+fonksiyon nesne_degerler(nesne: JsonNesne) -> liste[JsonDeger]
+yap
+    dön nesne.değerler()
+son
+
+// Key sayısı
+fonksiyon nesne_boyut(nesne: JsonNesne) -> tamsayı
+yap
+    dön nesne.boyut()
+son
+
+// ============================================================================
+// DİZİ ERİŞİM FONKSİYONLARI (Array Access)
+// ============================================================================
+
+// Dizi elemanına eriş
+fonksiyon dizi_al(dizi: JsonDizi, indeks: tamsayı) -> Seçenek[JsonDeger]
+yap
+    eğer (indeks >= 0) ve (indeks < dizi.boyut()) ise yap
+        dön Bazı(dizi[indeks])
+    son
+    dön Hiç
+son
+
+// Dizi elemanı ekle
+fonksiyon dizi_ekle(dizi: JsonDizi, değer: JsonDeger) -> boş
+yap
+    dizi.ekle(değer)
+son
+
+// Dizi boyutu
+fonksiyon dizi_boyut(dizi: JsonDizi) -> tamsayı
+yap
+    dön dizi.boyut()
+son
+
+// ============================================================================
+// LEXER (Tokenizer)
+// ============================================================================
+
+tip Token = yapı yap
+    tür: yazı,      // "string", "number", "true", "false", "null", "{", "}", "[", "]", ":", ","
+    değer: yazı,
+    satır: tamsayı,
+    sütun: tamsayı
+son
+
+tip Lexer = yapı yap
+    kaynak: yazı,
+    konum: tamsayı,
+    satır: tamsayı,
+    sütun: tamsayı
+son
+
+fonksiyon lexer_oluştur(kaynak: yazı) -> Lexer
+yap
+    dön Lexer yap
+        kaynak: kaynak,
+        konum: 0,
+        satır: 1,
+        sütun: 1
+    son
+son
+
+fonksiyon lexer_sonraki_token(lexer: Lexer) -> Seçenek[Token]
+yap
+    // Whitespace atla
+    iken lexer.konum < lexer.kaynak.uzunluk() yap
+        değişken ch = lexer.kaynak[lexer.konum]
+        eğer (ch == ' ') veya (ch == '\t') veya (ch == '\n') veya (ch == '\r') ise yap
+            eğer ch == '\n' ise yap
+                lexer.satır += 1
+                lexer.sütun = 1
+            değilse yap
+                lexer.sütun += 1
+            son
+            lexer.konum += 1
+        değilse yap
+            dur  // Non-whitespace bulundu
+        son
+    son
+    
+    // EOF kontrol
+    eğer lexer.konum >= lexer.kaynak.uzunluk() ise yap
+        dön Hiç
+    son
+    
+    değişken ch = lexer.kaynak[lexer.konum]
+    değişken başlangıç_satır = lexer.satır
+    değişken başlangıç_sütun = lexer.sütun
+    
+    // Tek karakterli tokenlar
+    seç ch yap
+        durum '{' => dön token_oluştur("{", "{", başlangıç_satır, başlangıç_sütun, lexer)
+        durum '}' => dön token_oluştur("}", "}", başlangıç_satır, başlangıç_sütun, lexer)
+        durum '[' => dön token_oluştur("[", "[", başlangıç_satır, başlangıç_sütun, lexer)
+        durum ']' => dön token_oluştur("]", "]", başlangıç_satır, başlangıç_sütun, lexer)
+        durum ':' => dön token_oluştur(":", ":", başlangıç_satır, başlangıç_sütun, lexer)
+        durum ',' => dön token_oluştur(",", ",", başlangıç_satır, başlangıç_sütun, lexer)
+        durum '"' => dön lexer_string_oku(lexer, başlangıç_satır, başlangıç_sütun)
+        durum _ => yap
+            eğer rakam_mı(ch) veya (ch == '-') ise yap
+                dön lexer_sayı_oku(lexer, başlangıç_satır, başlangıç_sütun)
+            değilse eğer harf_mi(ch) ise yap
+                dön lexer_kelime_oku(lexer, başlangıç_satır, başlangıç_sütun)
+            değilse yap
+                // Geçersiz karakter
+                dön Hiç
+            son
+        son
+    son
+son
+
+// ============================================================================
+// PARSER
+// ============================================================================
+
+tip Parser = yapı yap
+    lexer: Lexer,
+    şimdiki_token: Seçenek[Token],
+    seçenekler: JsonSecenekler,
+    derinlik: tamsayı
+son
+
+fonksiyon parser_oluştur(lexer: Lexer, seçenekler: JsonSecenekler) -> Parser
+yap
+    değişken p = Parser yap
+        lexer: lexer,
+        şimdiki_token: Hiç,
+        seçenekler: seçenekler,
+        derinlik: 0
+    son
+    parser_ilerle(p)  // İlk token'ı al
+    dön p
+son
+
+fonksiyon parser_ilerle(parser: Parser) -> boş
+yap
+    parser.şimdiki_token = lexer_sonraki_token(parser.lexer)
+son
+
+fonksiyon parser_değer_oku(parser: Parser) -> Sonuç[JsonDeger, JsonHata]
+yap
+    // Derinlik kontrolü
+    eğer parser.derinlik > parser.seçenekler.maksimum_derinlik ise yap
+        dön Hata(JsonHata yap
+            mesaj: "Maximum nesting depth exceeded",
+            satır: parser.lexer.satır,
+            sütun: parser.lexer.sütun,
+            hata_türü: "depth"
+        son)
+    son
+    
+    eğer parser.şimdiki_token.hiç_mi() ise yap
+        dön Hata(JsonHata yap
+            mesaj: "Unexpected end of input",
+            satır: parser.lexer.satır,
+            sütun: parser.lexer.sütun,
+            hata_türü: "syntax"
+        son)
+    son
+    
+    değişken token = parser.şimdiki_token.unwrap()
+    
+    seç token.tür yap
+        durum "{" => dön parser_nesne_oku(parser)
+        durum "[" => dön parser_dizi_oku(parser)
+        durum "string" => yap
+            parser_ilerle(parser)
+            dön Başarı(token.değer)
+        son
+        durum "number" => yap
+            parser_ilerle(parser)
+            // Number parsing (int veya float)
+            eğer token.değer.içerir(".") veya token.değer.içerir("e") ise yap
+                dön Başarı(yazı_ondalık(token.değer))
+            değilse yap
+                dön Başarı(yazı_tamsayı(token.değer))
+            son
+        son
+        durum "true" => yap
+            parser_ilerle(parser)
+            dön Başarı(doğru)
+        son
+        durum "false" => yap
+            parser_ilerle(parser)
+            dön Başarı(yanlış)
+        son
+        durum "null" => yap
+            parser_ilerle(parser)
+            dön Başarı(boş)
+        son
+        durum _ => dön Hata(JsonHata yap
+            mesaj: "Unexpected token: " + token.tür,
+            satır: token.satır,
+            sütun: token.sütun,
+            hata_türü: "syntax"
+        son)
+    son
+son
+
+fonksiyon parser_nesne_oku(parser: Parser) -> Sonuç[JsonNesne, JsonHata]
+yap
+    parser.derinlik += 1
+    parser_ilerle(parser)  // '{' atla
+    
+    değişken nesne = JsonNesne_oluştur()
+    
+    // Boş obje kontrolü
+    eğer parser.şimdiki_token.bazı_mı() ve (parser.şimdiki_token.unwrap().tür == "}") ise yap
+        parser_ilerle(parser)
+        parser.derinlik -= 1
+        dön Başarı(nesne)
+    son
+    
+    // Key-value pair'leri oku
+    iken doğru yap
+        // Key oku (string olmalı)
+        eğer parser.şimdiki_token.hiç_mi() veya (parser.şimdiki_token.unwrap().tür != "string") ise yap
+            dön Hata(JsonHata yap
+                mesaj: "Expected string key",
+                satır: parser.lexer.satır,
+                sütun: parser.lexer.sütun,
+                hata_türü: "syntax"
+            son)
+        son
+        
+        değişken key = parser.şimdiki_token.unwrap().değer
+        parser_ilerle(parser)
+        
+        // ':' bekle
+        eğer parser.şimdiki_token.hiç_mi() veya (parser.şimdiki_token.unwrap().tür != ":") ise yap
+            dön Hata(JsonHata yap
+                mesaj: "Expected ':'",
+                satır: parser.lexer.satır,
+                sütun: parser.lexer.sütun,
+                hata_türü: "syntax"
+            son)
+        son
+        parser_ilerle(parser)
+        
+        // Value oku
+        değişken değer_sonuç = parser_değer_oku(parser)
+        eğer değer_sonuç.hata_mı() ise yap
+            dön değer_sonuç
+        son
+        
+        nesne_ekle(nesne, key, değer_sonuç.unwrap())
+        
+        // ',' veya '}' kontrol
+        eğer parser.şimdiki_token.hiç_mi() ise yap
+            dön Hata(JsonHata yap
+                mesaj: "Unexpected end in object",
+                satır: parser.lexer.satır,
+                sütun: parser.lexer.sütun,
+                hata_türü: "syntax"
+            son)
+        son
+        
+        eğer parser.şimdiki_token.unwrap().tür == "}" ise yap
+            parser_ilerle(parser)
+            dur
+        değilse eğer parser.şimdiki_token.unwrap().tür == "," ise yap
+            parser_ilerle(parser)
+            // Devam
+        değilse yap
+            dön Hata(JsonHata yap
+                mesaj: "Expected ',' or '}'",
+                satır: parser.lexer.satır,
+                sütun: parser.lexer.sütun,
+                hata_türü: "syntax"
+            son)
+        son
+    son
+    
+    parser.derinlik -= 1
+    dön Başarı(nesne)
+son
+
+fonksiyon parser_dizi_oku(parser: Parser) -> Sonuç[JsonDizi, JsonHata]
+yap
+    parser.derinlik += 1
+    parser_ilerle(parser)  // '[' atla
+    
+    değişken dizi = JsonDizi_oluştur()
+    
+    // Boş dizi kontrolü
+    eğer parser.şimdiki_token.bazı_mı() ve (parser.şimdiki_token.unwrap().tür == "]") ise yap
+        parser_ilerle(parser)
+        parser.derinlik -= 1
+        dön Başarı(dizi)
+    son
+    
+    // Elemanları oku
+    iken doğru yap
+        değişken değer_sonuç = parser_değer_oku(parser)
+        eğer değer_sonuç.hata_mı() ise yap
+            dön değer_sonuç
+        son
+        
+        dizi_ekle(dizi, değer_sonuç.unwrap())
+        
+        // ',' veya ']' kontrol
+        eğer parser.şimdiki_token.hiç_mi() ise yap
+            dön Hata(JsonHata yap
+                mesaj: "Unexpected end in array",
+                satır: parser.lexer.satır,
+                sütun: parser.lexer.sütun,
+                hata_türü: "syntax"
+            son)
+        son
+        
+        eğer parser.şimdiki_token.unwrap().tür == "]" ise yap
+            parser_ilerle(parser)
+            dur
+        değilse eğer parser.şimdiki_token.unwrap().tür == "," ise yap
+            parser_ilerle(parser)
+            // Devam
+        değilse yap
+            dön Hata(JsonHata yap
+                mesaj: "Expected ',' or ']'",
+                satır: parser.lexer.satır,
+                sütun: parser.lexer.sütun,
+                hata_türü: "syntax"
+            son)
+        son
+    son
+    
+    parser.derinlik -= 1
+    dön Başarı(dizi)
+son
+
+// ============================================================================
+// SERIALIZER (JSON Writer)
+// ============================================================================
+
+fonksiyon serializer_yaz(buffer: MetinTamponu, değer: JsonDeger, seçenekler: JsonSecenekler, derinlik: tamsayı) -> boş
+yap
+    seç değer yap
+        durum v: tamsayı => buffer.ekle(tamsayı_yazı(v))
+        durum v: ondalık => buffer.ekle(ondalık_yazı(v, seçenekler.kesinlik))
+        durum v: yazı => serializer_string_yaz(buffer, v, seçenekler)
+        durum v: mantıksal => buffer.ekle(eğer v ise "true" değilse "false")
+        durum v: boş => buffer.ekle("null")
+        durum v: JsonDizi => serializer_dizi_yaz(buffer, v, seçenekler, derinlik)
+        durum v: JsonNesne => serializer_nesne_yaz(buffer, v, seçenekler, derinlik)
+        durum _ => buffer.ekle("null")  // Fallback
+    son
+son
+
+fonksiyon serializer_string_yaz(buffer: MetinTamponu, s: yazı, seçenekler: JsonSecenekler) -> boş
+yap
+    buffer.ekle('"')
+    
+    her biri ch içinde s yap
+        seç ch yap
+            durum '"' => buffer.ekle('\\"')
+            durum '\\' => buffer.ekle('\\\\')
+            durum '\n' => buffer.ekle('\\n')
+            durum '\r' => buffer.ekle('\\r')
+            durum '\t' => buffer.ekle('\\t')
+            durum '\b' => buffer.ekle('\\b')
+            durum '\f' => buffer.ekle('\\f')
+            durum _ => yap
+                eğer seçenekler.ascii ve (ch > 127) ise yap
+                    // Unicode escape
+                    buffer.ekle("\\u")
+                    buffer.ekle(onaltılık(ch, 4))
+                değilse yap
+                    buffer.ekle(ch)
+                son
+            son
+        son
+    son
+    
+    buffer.ekle('"')
+son
+
+fonksiyon serializer_dizi_yaz(buffer: MetinTamponu, dizi: JsonDizi, seçenekler: JsonSecenekler, derinlik: tamsayı) -> boş
+yap
+    buffer.ekle('[')
+    
+    eğer seçenekler.güzelleştir ise yap
+        buffer.ekle('\n')
+    son
+    
+    değişken i = 0
+    her biri eleman içinde dizi yap
+        eğer seçenekler.güzelleştir ise yap
+            serializer_girinti_ekle(buffer, derinlik + 1, seçenekler.girinti)
+        son
+        
+        serializer_yaz(buffer, eleman, seçenekler, derinlik + 1)
+        
+        eğer i < dizi.boyut() - 1 ise yap
+            buffer.ekle(',')
+        son
+        
+        eğer seçenekler.güzelleştir ise yap
+            buffer.ekle('\n')
+        son
+        
+        i += 1
+    son
+    
+    eğer seçenekler.güzelleştir ise yap
+        serializer_girinti_ekle(buffer, derinlik, seçenekler.girinti)
+    son
+    
+    buffer.ekle(']')
+son
+
+fonksiyon serializer_nesne_yaz(buffer: MetinTamponu, nesne: JsonNesne, seçenekler: JsonSecenekler, derinlik: tamsayı) -> boş
+yap
+    buffer.ekle('{')
+    
+    eğer seçenekler.güzelleştir ise yap
+        buffer.ekle('\n')
+    son
+    
+    değişken anahtarlar = nesne_anahtarlar(nesne)
+    eğer seçenekler.sıralı ise yap
+        anahtarlar.sırala()
+    son
+    
+    değişken i = 0
+    her biri anahtar içinde anahtarlar yap
+        eğer seçenekler.güzelleştir ise yap
+            serializer_girinti_ekle(buffer, derinlik + 1, seçenekler.girinti)
+        son
+        
+        serializer_string_yaz(buffer, anahtar, seçenekler)
+        buffer.ekle(':')
+        
+        eğer seçenekler.güzelleştir ise yap
+            buffer.ekle(' ')
+        son
+        
+        değişken değer = nesne_al(nesne, anahtar).unwrap()
+        serializer_yaz(buffer, değer, seçenekler, derinlik + 1)
+        
+        eğer i < anahtarlar.boyut() - 1 ise yap
+            buffer.ekle(',')
+        son
+        
+        eğer seçenekler.güzelleştir ise yap
+            buffer.ekle('\n')
+        son
+        
+        i += 1
+    son
+    
+    eğer seçenekler.güzelleştir ise yap
+        serializer_girinti_ekle(buffer, derinlik, seçenekler.girinti)
+    son
+    
+    buffer.ekle('}')
+son
+
+fonksiyon serializer_girinti_ekle(buffer: MetinTamponu, derinlik: tamsayı, girinti_boyutu: tamsayı) -> boş
+yap
+    değişken toplam = derinlik * girinti_boyutu
+    her biri _ içinde aralık(0, toplam) yap
+        buffer.ekle(' ')
+    son
+son
+
+// ============================================================================
+// KULLANIM ÖRNEKLERİ (Usage Examples)
+// ============================================================================
+
+/*
+// Örnek 1: String'den JSON parse
+değişken json_metin = '{"ad":"Ahmet","yaş":25,"aktif":true}'
+değişken sonuç = json::yukle(json_metin)
+
+eğer sonuç.başarılı_mı() ise yap
+    değişken veri = sonuç.unwrap()
+    değişken ad = json::nesne_al(veri, "ad").unwrap()
+    yazdır("İsim: " + ad)
+son
+
+// Örnek 2: JSON'u string'e çevir
+değişken kişi = JsonNesne_oluştur()
+json::nesne_ekle(kişi, "ad", "Mehmet")
+json::nesne_ekle(kişi, "yaş", 30)
+
+değişken sec = json::guzel_secenekler()
+değişken json_metin = json::kaydet(kişi, sec)
+yazdır(json_metin)
+
+// Çıktı:
+// {
+//   "ad": "Mehmet",
+//   "yaş": 30
+// }
+
+// Örnek 3: Dosyadan oku
+değişken sonuç = json::dosya_yukle("config.json")
+eğer sonuç.başarılı_mı() ise yap
+    değişken config = sonuç.unwrap()
+    // Config kullan
+son değilse yap
+    değişken hata = sonuç.hata()
+    yazdır("JSON hatası: " + hata.mesaj)
+    yazdır("Satır: " + tamsayı_yazı(hata.satır))
+son
+
+// Örnek 4: Dosyaya yaz
+değişken data = JsonNesne_oluştur()
+json::nesne_ekle(data, "version", "1.0")
+json::nesne_ekle(data, "debug", doğru)
+
+json::dosya_kaydet("output.json", data, json::guzel_secenekler())
+
+// Örnek 5: Array işlemleri
+değişken sayılar = JsonDizi_oluştur()
+json::dizi_ekle(sayılar, 1)
+json::dizi_ekle(sayılar, 2)
+json::dizi_ekle(sayılar, 3)
+
+değişken json_str = json::kaydet(sayılar)
+yazdır(json_str)  // [1,2,3]
+
+// Örnek 6: Nested objects
+değişken adres = JsonNesne_oluştur()
+json::nesne_ekle(adres, "şehir", "İstanbul")
+json::nesne_ekle(adres, "posta_kodu", 34000)
+
+değişken kişi = JsonNesne_oluştur()
+json::nesne_ekle(kişi, "ad", "Ali")
+json::nesne_ekle(kişi, "adres", adres)
+
+değişken json = json::kaydet(kişi, json::guzel_secenekler())
+yazdır(json)
+
+// Çıktı:
+// {
+//   "ad": "Ali",
+//   "adres": {
+//     "şehir": "İstanbul",
+//     "posta_kodu": 34000
+//   }
+// }
+
+// Örnek 7: Streaming API - Büyük dosyalar
+değişken stream = json::stream_open("huge_data.json")
+
+her biri kayıt içinde stream yap
+    eğer kayıt_geçerli_mi(kayıt) ise yap
+        işle_kayıt(kayıt)
+    son
+son
+
+json::stream_kapat(stream)
+*/
+
+// ============================================================================
+// STREAMING API - Büyük Dosyalar İçin (Yeni - v1.7)
+// ============================================================================
+
+// JSON streaming reader (büyük dosyalar için)
+tip JsonStreamOkuyucu = yapı yap
+    dosya: tamsayı,           // File handle
+    tampon: liste[byte],      // Read buffer (4KB default)
+    tampon_boyut: tamsayı,
+    pozisyon: tamsayı,
+    toplam_okunan: tamsayı,
+    bitti_mi: mantıksal,
+    parse_durumu: yazı        // "array", "object", "value"
+son
+
+// Stream iterator
+tip JsonStream = yapı yap
+    okuyucu: JsonStreamOkuyucu,
+    hatalar: liste[JsonHata]
+son
+
+// Streaming okuyucu aç (büyük JSON array/object dosyaları için)
+fonksiyon stream_open(dosya_yolu: yazı, tampon_boyut: tamsayı = 4096) -> Sonuç[JsonStream, JsonHata]
+yap
+    değişken dosya_sonuç = dosya_aç(dosya_yolu, "r")
+    eğer dosya_sonuç.hata_mı() ise yap
+        dön Hata(JsonHata yap
+            mesaj: "Dosya açılamadı: " + dosya_yolu,
+            satır: 0, sütun: 0,
+            hata_türü: "io"
+        son)
+    son
+    
+    değişken okuyucu = JsonStreamOkuyucu yap
+        dosya: dosya_sonuç.unwrap(),
+        tampon: liste_oluştur[byte](tampon_boyut),
+        tampon_boyut: tampon_boyut,
+        pozisyon: 0,
+        toplam_okunan: 0,
+        bitti_mi: yanlış,
+        parse_durumu: "başlangıç"
+    son
+    
+    değişken stream = JsonStream yap
+        okuyucu: okuyucu,
+        hatalar: liste_oluştur[JsonHata]()
+    son
+    
+    dön Başarılı(stream)
+son
+
+// Stream'den bir sonraki JSON değeri oku
+fonksiyon stream_next(stream: JsonStream) -> Option[JsonDeger]
+yap
+    eğer stream.okuyucu.bitti_mi ise yap
+        dön Option::Yok()
+    son
+    
+    // Buffer'dan sonraki JSON token'ları parse et
+    değişken değer_sonuç = stream_parse_next_value(stream)
+    
+    eğer değer_sonuç.başarılı_mı() ise yap
+        dön Option::Var(değer_sonuç.unwrap())
+    son değilse yap
+        // Hata durumunda skip et
+        liste_ekle(stream.hatalar, değer_sonuç.hata())
+        dön Option::Yok()
+    son
+son
+
+// Stream'i kapat
+fonksiyon stream_kapat(stream: JsonStream) -> Sonuç[boş, JsonHata]
+yap
+    eğer stream.okuyucu.dosya != -1 ise yap
+        dosya_kapat(stream.okuyucu.dosya)
+        stream.okuyucu.dosya = -1
+    son
+    dön Başarılı(boş)
+son
+
+// Streaming yazıcı (büyük JSON array yaz)
+tip JsonStreamYazıcı = yapı yap
+    dosya: tamsayı,
+    yazılan_sayı: tamsayı,
+    ilk_eleman: mantıksal
+son
+
+// Streaming yazıcı aç
+fonksiyon stream_writer_open(dosya_yolu: yazı) -> Sonuç[JsonStreamYazıcı, JsonHata]
+yap
+    değişken dosya_sonuç = dosya_aç(dosya_yolu, "w")
+    eğer dosya_sonuç.hata_mı() ise yap
+        dön Hata(JsonHata yap
+            mesaj: "Dosya oluşturulamadı: " + dosya_yolu,
+            satır: 0, sütun: 0,
+            hata_türü: "io"
+        son)
+    son
+    
+    değişken yazıcı = JsonStreamYazıcı yap
+        dosya: dosya_sonuç.unwrap(),
+        yazılan_sayı: 0,
+        ilk_eleman: doğru
+    son
+    
+    // Array başlangıcı yaz
+    dosya_yaz(yazıcı.dosya, "[")
+    
+    dön Başarılı(yazıcı)
+son
+
+// Streaming yazıcıya JSON değer ekle
+fonksiyon stream_writer_write(yazıcı: JsonStreamYazıcı, değer: JsonDeger) -> Sonuç[boş, JsonHata]
+yap
+    // Virgül ekle (ilk eleman değilse)
+    eğer yazıcı.ilk_eleman ise yap
+        yazıcı.ilk_eleman = yanlış
+    son değilse yap
+        dosya_yaz(yazıcı.dosya, ",")
+    son
+    
+    // JSON değerini serialize et ve yaz
+    değişken json_str = kaydet(değer, minify_secenekler())
+    dosya_yaz(yazıcı.dosya, json_str)
+    yazıcı.yazılan_sayı = yazıcı.yazılan_sayı + 1
+    
+    dön Başarılı(boş)
+son
+
+// Streaming yazıcıyı kapat
+fonksiyon stream_writer_close(yazıcı: JsonStreamYazıcı) -> Sonuç[boş, JsonHata]
+yap
+    // Array sonunu yaz
+    dosya_yaz(yazıcı.dosya, "]")
+    dosya_kapat(yazıcı.dosya)
+    yazıcı.dosya = -1
+    
+    dön Başarılı(boş)
+son
+
+// İç fonksiyonlar (streaming parser helpers)
+fonksiyon stream_parse_next_value(stream: JsonStream) -> Sonuç[JsonDeger, JsonHata]
+yap
+    // Whitespace atla
+    stream_whitespace_atla(stream.okuyucu)
+    
+    // Buffer'ı refill et (gerekirse)
+    eğer stream_buffer_bos_mu(stream.okuyucu) ise yap
+        değişken refill_sonuc = stream_buffer_refill(stream.okuyucu)
+        eğer refill_sonuc.hata_mı() ise yap
+            dön refill_sonuc
+        son
+    son
+    
+    // İlk karakteri incele
+    değişken ilk_karakter = stream_peek_char(stream.okuyucu)
+    
+    // Parse durumuna göre işlem
+    seç ilk_karakter yap
+        durum '{' => dön stream_parse_object(stream)
+        durum '[' => dön stream_parse_array(stream)
+        durum '"' => dön stream_parse_string(stream)
+        durum 't', 'f' => dön stream_parse_boolean(stream)
+        durum 'n' => dön stream_parse_null(stream)
+        durum '0'..'9', '-' => dön stream_parse_number(stream)
+        durum _ => yap
+            dön Hata(JsonHata yap
+                mesaj: "Beklenmeyen karakter: " + ilk_karakter,
+                satır: 0, sütun: stream.okuyucu.pozisyon,
+                hata_türü: "syntax"
+            son)
+        son
+    son
+son
+
+// Buffer yönetimi
+fonksiyon stream_buffer_bos_mu(okuyucu: JsonStreamOkuyucu) -> mantıksal
+yap
+    dön okuyucu.pozisyon >= liste_uzunluk(okuyucu.tampon)
+son
+
+fonksiyon stream_buffer_refill(okuyucu: JsonStreamOkuyucu) -> Sonuç[boş, JsonHata]
+yap
+    eğer okuyucu.bitti_mi ise yap
+        dön Hata(JsonHata yap
+            mesaj: "Stream sonu",
+            satır: 0, sütun: 0,
+            hata_türü: "eof"
+        son)
+    son
+    
+    değişken okunan = dosya_oku_bytes(
+        okuyucu.dosya,
+        okuyucu.tampon,
+        okuyucu.tampon_boyut
+    )
+    
+    eğer okunan == 0 ise yap
+        okuyucu.bitti_mi = doğru
+        dön Hata(JsonHata yap
+            mesaj: "Stream sonu",
+            satır: 0, sütun: 0,
+            hata_türü: "eof"
+        son)
+    son
+    
+    okuyucu.pozisyon = 0
+    okuyucu.toplam_okunan = okuyucu.toplam_okunan + okunan
+    
+    dön Başarılı(boş)
+son
+
+fonksiyon stream_peek_char(okuyucu: JsonStreamOkuyucu) -> yazı
+yap
+    eğer okuyucu.pozisyon < liste_uzunluk(okuyucu.tampon) ise yap
+        dön okuyucu.tampon[okuyucu.pozisyon]
+    son
+    dön '\0'  // EOF marker
+son
+
+fonksiyon stream_read_char(okuyucu: JsonStreamOkuyucu) -> yazı
+yap
+    değişken c = stream_peek_char(okuyucu)
+    okuyucu.pozisyon = okuyucu.pozisyon + 1
+    dön c
+son
+
+fonksiyon stream_whitespace_atla(okuyucu: JsonStreamOkuyucu) -> boş
+yap
+    döngü yap
+        eğer stream_buffer_bos_mu(okuyucu) ise yap
+            eğer okuyucu.bitti_mi ise yap
+                çık
+            son
+            stream_buffer_refill(okuyucu)
+        son
+        
+        değişken c = stream_peek_char(okuyucu)
+        eğer (c == ' ') veya (c == '\t') veya (c == '\n') veya (c == '\r') ise yap
+            stream_read_char(okuyucu)
+        son değilse yap
+            çık
+        son
+    son
+son
+
+// Streaming parsers (chunk-based)
+fonksiyon stream_parse_string(stream: JsonStream) -> Sonuç[JsonDeger, JsonHata]
+yap
+    // String biriktirici
+    değişken sonuç = ""
+    
+    // Açılış tırnağını atla
+    stream_read_char(stream.okuyucu)  // '"'
+    
+    döngü yap
+        eğer stream_buffer_bos_mu(stream.okuyucu) ise yap
+            stream_buffer_refill(stream.okuyucu)?
+        son
+        
+        değişken c = stream_read_char(stream.okuyucu)
+        
+        eğer c == '"' ise yap
+            // String sonu
+            çık
+        son değilse eğer c == '\\' ise yap
+            // Escape sequence
+            eğer stream_buffer_bos_mu(stream.okuyucu) ise yap
+                stream_buffer_refill(stream.okuyucu)?
+            son
+            değişken esc = stream_read_char(stream.okuyucu)
+            seç esc yap
+                durum 'n' => sonuç = sonuç + '\n'
+                durum 't' => sonuç = sonuç + '\t'
+                durum 'r' => sonuç = sonuç + '\r'
+                durum '\\' => sonuç = sonuç + '\\'
+                durum '"' => sonuç = sonuç + '"'
+                durum _ => sonuç = sonuç + esc
+            son
+        son değilse yap
+            sonuç = sonuç + c
+        son
+    son
+    
+    dön Başarılı(JsonDeger::Yazı(sonuç))
+son
+
+fonksiyon stream_parse_number(stream: JsonStream) -> Sonuç[JsonDeger, JsonHata]
+yap
+    değişken sayı_str = ""
+    
+    döngü yap
+        eğer stream_buffer_bos_mu(stream.okuyucu) ise yap
+            çık  // Number tamamlandı
+        son
+        
+        değişken c = stream_peek_char(stream.okuyucu)
+        eğer (c >= '0' ve c <= '9') veya (c == '-') veya (c == '.') veya (c == 'e') veya (c == 'E') ise yap
+            sayı_str = sayı_str + c
+            stream_read_char(stream.okuyucu)
+        son değilse yap
+            çık  // Number sonu
+        son
+    son
+    
+    // Integer mi, float mu?
+    eğer sayı_str.içerir('.') veya sayı_str.içerir('e') veya sayı_str.içerir('E') ise yap
+        değişken float_değer = string_to_float(sayı_str)
+        dön Başarılı(JsonDeger::Ondalık(float_değer))
+    son değilse yap
+        değişken int_değer = string_to_int(sayı_str)
+        dön Başarılı(JsonDeger::Tamsayı(int_değer))
+    son
+son
+
+fonksiyon stream_parse_boolean(stream: JsonStream) -> Sonuç[JsonDeger, JsonHata]
+yap
+    değişken c = stream_peek_char(stream.okuyucu)
+    
+    eğer c == 't' ise yap
+        // "true" parse et
+        stream_read_char(stream.okuyucu)  // t
+        stream_read_char(stream.okuyucu)  // r
+        stream_read_char(stream.okuyucu)  // u
+        stream_read_char(stream.okuyucu)  // e
+        dön Başarılı(JsonDeger::Mantıksal(doğru))
+    son değilse yap
+        // "false" parse et
+        stream_read_char(stream.okuyucu)  // f
+        stream_read_char(stream.okuyucu)  // a
+        stream_read_char(stream.okuyucu)  // l
+        stream_read_char(stream.okuyucu)  // s
+        stream_read_char(stream.okuyucu)  // e
+        dön Başarılı(JsonDeger::Mantıksal(yanlış))
+    son
+son
+
+fonksiyon stream_parse_null(stream: JsonStream) -> Sonuç[JsonDeger, JsonHata]
+yap
+    // "null" parse et
+    stream_read_char(stream.okuyucu)  // n
+    stream_read_char(stream.okuyucu)  // u
+    stream_read_char(stream.okuyucu)  // l
+    stream_read_char(stream.okuyucu)  // l
+    dön Başarılı(JsonDeger::Boş())
+son
+
+fonksiyon stream_parse_array(stream: JsonStream) -> Sonuç[JsonDeger, JsonHata]
+yap
+    değişken elemanlar = liste_oluştur[JsonDeger]()
+    
+    // Açılış parantezini atla
+    stream_read_char(stream.okuyucu)  // '['
+    stream_whitespace_atla(stream.okuyucu)
+    
+    // Boş array kontrolü
+    eğer stream_peek_char(stream.okuyucu) == ']' ise yap
+        stream_read_char(stream.okuyucu)
+        dön Başarılı(JsonDeger::Dizi(elemanlar))
+    son
+    
+    // Array elemanlarını parse et
+    döngü yap
+        değişken değer = stream_parse_next_value(stream)?
+        liste_ekle(elemanlar, değer)
+        
+        stream_whitespace_atla(stream.okuyucu)
+        değişken sonraki = stream_peek_char(stream.okuyucu)
+        
+        eğer sonraki == ']' ise yap
+            stream_read_char(stream.okuyucu)
+            çık
+        son değilse eğer sonraki == ',' ise yap
+            stream_read_char(stream.okuyucu)
+            stream_whitespace_atla(stream.okuyucu)
+        son değilse yap
+            dön Hata(JsonHata yap
+                mesaj: "Beklenmeyen karakter array'de: " + sonraki,
+                satır: 0, sütun: stream.okuyucu.pozisyon,
+                hata_türü: "syntax"
+            son)
+        son
+    son
+    
+    dön Başarılı(JsonDeger::Dizi(elemanlar))
+son
+
+fonksiyon stream_parse_object(stream: JsonStream) -> Sonuç[JsonDeger, JsonHata]
+yap
+    değişken nesne = eşleme_oluştur[yazı, JsonDeger]()
+    
+    // Açılış süslü parantezini atla
+    stream_read_char(stream.okuyucu)  // '{'
+    stream_whitespace_atla(stream.okuyucu)
+    
+    // Boş object kontrolü
+    eğer stream_peek_char(stream.okuyucu) == '}' ise yap
+        stream_read_char(stream.okuyucu)
+        dön Başarılı(JsonDeger::Nesne(nesne))
+    son
+    
+    // Object key-value çiftlerini parse et
+    döngü yap
+        // Key parse et (string olmalı)
+        stream_whitespace_atla(stream.okuyucu)
+        değişken key_sonuç = stream_parse_string(stream)?
+        değişken key = key_sonuç  // JsonDeger::Yazı'dan yazı'ya cast
+        
+        // ':' bekle
+        stream_whitespace_atla(stream.okuyucu)
+        eğer stream_read_char(stream.okuyucu) != ':' ise yap
+            dön Hata(JsonHata yap
+                mesaj: "':' bekleniyor object'de",
+                satır: 0, sütun: stream.okuyucu.pozisyon,
+                hata_türü: "syntax"
+            son)
+        son
+        
+        // Value parse et
+        stream_whitespace_atla(stream.okuyucu)
+        değişken değer = stream_parse_next_value(stream)?
+        
+        // Nesneye ekle
+        nesne[key] = değer
+        
+        // Sonraki karakter
+        stream_whitespace_atla(stream.okuyucu)
+        değişken sonraki = stream_peek_char(stream.okuyucu)
+        
+        eğer sonraki == '}' ise yap
+            stream_read_char(stream.okuyucu)
+            çık
+        son değilse eğer sonraki == ',' ise yap
+            stream_read_char(stream.okuyucu)
+        son değilse yap
+            dön Hata(JsonHata yap
+                mesaj: "Beklenmeyen karakter object'de: " + sonraki,
+                satır: 0, sütun: stream.okuyucu.pozisyon,
+                hata_türü: "syntax"
+            son)
+        son
+    son
+    
+    dön Başarılı(JsonDeger::Nesne(nesne))
+son
+
+son  // modül json

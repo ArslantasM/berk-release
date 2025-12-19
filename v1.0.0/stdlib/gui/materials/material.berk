@@ -1,0 +1,711 @@
+// ============================================================================
+// BERK GUI Framework - Material System
+// ============================================================================
+// Fiziksel tabanlı malzeme sistemi (PBR)
+// Metal, cam, plastik, ahşap ve diğer malzemeler
+// Işık etkileşimi ve yansıma hesaplamaları
+// ============================================================================
+
+modül gui::materials::material
+
+kullan gui::rendering::canvas::{Canvas, Path, LinearGradient, RadialGradient, ColorStop, FillStyle}
+kullan gui::style::colors::Color
+kullan gui::effects::lighting::{Light, LightType}
+
+// ============================================================================
+// MATERIAL TYPES
+// ============================================================================
+
+/// Malzeme tipi
+pub tip MaterialType = enum yap
+    /// Metal (çelik, alüminyum, krom, altın, vb.)
+    Metal,
+    
+    /// Cam / Şeffaf
+    Glass,
+    
+    /// Plastik
+    Plastic,
+    
+    /// Ahşap
+    Wood,
+    
+    /// Deri
+    Leather,
+    
+    /// Kumaş
+    Fabric,
+    
+    /// Kağıt / Karton
+    Paper,
+    
+    /// Kauçuk
+    Rubber,
+    
+    /// Seramik
+    Ceramic,
+    
+    /// Emisif (ışık yayan)
+    Emissive,
+    
+    /// Özel
+    Custom
+son
+
+// ============================================================================
+// MATERIAL BASE
+// ============================================================================
+
+/// Temel malzeme yapısı
+pub tip Material = yapı yap
+    /// Malzeme tipi
+    material_type: MaterialType,
+    
+    /// Temel renk (albedo)
+    base_color: Color,
+    
+    /// İkincil renk (gradyan için)
+    secondary_color: Seçenek[Color],
+    
+    // === PBR PROPERTIES ===
+    
+    /// Metallik (0.0 = dielektrik, 1.0 = metal)
+    metallic: ondalık,
+    
+    /// Pürüzlülük (0.0 = ayna, 1.0 = mat)
+    roughness: ondalık,
+    
+    /// Speküler yoğunluğu (0.0 - 1.0)
+    specular: ondalık,
+    
+    /// Speküler tint (metal rengi yansıtma)
+    specular_tint: ondalık,
+    
+    /// Anizotropik yansıma (fırçalanmış metal için)
+    anisotropic: ondalık,
+    
+    /// Anizotropik açı
+    anisotropic_rotation: ondalık,
+    
+    /// Sheen (kadife efekti)
+    sheen: ondalık,
+    
+    /// Sheen tint
+    sheen_tint: ondalık,
+    
+    /// Clearcoat (cila katmanı)
+    clearcoat: ondalık,
+    
+    /// Clearcoat pürüzlülüğü
+    clearcoat_roughness: ondalık,
+    
+    // === APPEARANCE ===
+    
+    /// Opaklık (0.0 = şeffaf, 1.0 = opak)
+    opacity: ondalık,
+    
+    /// Kırılma indeksi (IOR) - cam için
+    ior: ondalık,
+    
+    /// Alt yüzey saçılması (SSS)
+    subsurface: ondalık,
+    
+    /// SSS rengi
+    subsurface_color: Color,
+    
+    /// Emisyon rengi
+    emission_color: Color,
+    
+    /// Emisyon gücü
+    emission_strength: ondalık,
+    
+    // === TEXTURE EFFECTS ===
+    
+    /// Doku deseni
+    pattern: Seçenek[MaterialPattern],
+    
+    /// Normal map etkisi
+    normal_strength: ondalık,
+    
+    /// Kabartma (bump) etkisi
+    bump_strength: ondalık
+son
+
+/// Malzeme doku deseni
+pub tip MaterialPattern = enum yap
+    /// Düz (desen yok)
+    Solid,
+    
+    /// Fırçalanmış (brushed metal)
+    Brushed(direction: ondalık),
+    
+    /// Dairesel fırçalanmış
+    CircularBrushed,
+    
+    /// Damla / Boncuk
+    Beaded,
+    
+    /// Çapraz çizgi
+    CrossHatch,
+    
+    /// Ahşap damar
+    WoodGrain,
+    
+    /// Deri doku
+    LeatherTexture,
+    
+    /// Karbon fiber
+    CarbonFiber,
+    
+    /// Elmas plaka
+    DiamondPlate,
+    
+    /// Özel desen
+    Custom(render: fn(canvas: Canvas, x: ondalık, y: ondalık, w: ondalık, h: ondalık) döndür void)
+son
+
+// ============================================================================
+// MATERIAL IMPLEMENTATION
+// ============================================================================
+
+impl Material:
+    /// Özel malzeme oluştur
+    pub fn new(material_type: MaterialType, base_color: Color) döndür Material:
+        döndür Material yap
+            material_type: material_type,
+            base_color: base_color,
+            secondary_color: boş,
+            metallic: 0.0,
+            roughness: 0.5,
+            specular: 0.5,
+            specular_tint: 0.0,
+            anisotropic: 0.0,
+            anisotropic_rotation: 0.0,
+            sheen: 0.0,
+            sheen_tint: 0.0,
+            clearcoat: 0.0,
+            clearcoat_roughness: 0.03,
+            opacity: 1.0,
+            ior: 1.45,
+            subsurface: 0.0,
+            subsurface_color: Color::white(),
+            emission_color: Color::black(),
+            emission_strength: 0.0,
+            pattern: boş,
+            normal_strength: 0.0,
+            bump_strength: 0.0
+        son
+    son
+    
+    // === BUILDER METHODS ===
+    
+    /// Metallik ayarla
+    pub fn metallic(mut self, value: ondalık) döndür Material:
+        self.metallic = clamp(value, 0.0, 1.0)
+        döndür self
+    son
+    
+    /// Pürüzlülük ayarla
+    pub fn roughness(mut self, value: ondalık) döndür Material:
+        self.roughness = clamp(value, 0.0, 1.0)
+        döndür self
+    son
+    
+    /// Speküler ayarla
+    pub fn specular(mut self, value: ondalık) döndür Material:
+        self.specular = clamp(value, 0.0, 1.0)
+        döndür self
+    son
+    
+    /// İkincil renk
+    pub fn secondary_color(mut self, color: Color) döndür Material:
+        self.secondary_color = Bazı(color)
+        döndür self
+    son
+    
+    /// Clearcoat (cila) ekle
+    pub fn clearcoat(mut self, value: ondalık) döndür Material:
+        self.clearcoat = clamp(value, 0.0, 1.0)
+        döndür self
+    son
+    
+    /// Opaklık
+    pub fn opacity(mut self, value: ondalık) döndür Material:
+        self.opacity = clamp(value, 0.0, 1.0)
+        döndür self
+    son
+    
+    /// Emisyon
+    pub fn emission(mut self, color: Color, strength: ondalık) döndür Material:
+        self.emission_color = color
+        self.emission_strength = strength
+        döndür self
+    son
+    
+    /// Desen ekle
+    pub fn pattern(mut self, pattern: MaterialPattern) döndür Material:
+        self.pattern = Bazı(pattern)
+        döndür self
+    son
+    
+    /// Anizotropik yansıma
+    pub fn anisotropic(mut self, value: ondalık, rotation: ondalık) döndür Material:
+        self.anisotropic = value
+        self.anisotropic_rotation = rotation
+        döndür self
+    son
+    
+    // === PRESET MATERIALS ===
+    
+    /// Deri malzeme
+    pub fn leather(color: Color) döndür Material:
+        değişken mat = Material::new(MaterialType::Leather, color)
+        mat.roughness = 0.7
+        mat.sheen = 0.3
+        mat.pattern = Bazı(MaterialPattern::LeatherTexture)
+        döndür mat
+    son
+    
+    /// Kağıt malzeme
+    pub fn paper(color: Color) döndür Material:
+        değişken mat = Material::new(MaterialType::Paper, color)
+        mat.roughness = 0.95
+        mat.specular = 0.1
+        döndür mat
+    son
+    
+    /// Plastik malzeme
+    pub fn plastic(color: Color) döndür Material:
+        değişken mat = Material::new(MaterialType::Plastic, color)
+        mat.roughness = 0.4
+        mat.specular = 0.5
+        mat.clearcoat = 0.3
+        döndür mat
+    son
+    
+    /// Kauçuk malzeme
+    pub fn rubber(color: Color) döndür Material:
+        değişken mat = Material::new(MaterialType::Rubber, color)
+        mat.roughness = 0.9
+        mat.specular = 0.1
+        döndür mat
+    son
+    
+    /// Seramik malzeme
+    pub fn ceramic(color: Color) döndür Material:
+        değişken mat = Material::new(MaterialType::Ceramic, color)
+        mat.roughness = 0.2
+        mat.specular = 0.8
+        mat.clearcoat = 0.5
+        döndür mat
+    son
+    
+    // === RENDER METHODS ===
+    
+    /// Daireye malzeme uygula
+    pub fn apply_to_circle(self, canvas: Canvas, cx: ondalık, cy: ondalık, radius: ondalık, lights: liste[Light]) döndür void:
+        // Ana renk hesapla
+        değişken final_color = self.calculate_lit_color(lights, cx, cy)
+        
+        // Gradyan oluştur
+        değişken gradient = self.create_radial_gradient(cx, cy, radius, final_color, lights)
+        
+        canvas.set_fill_style(FillStyle::RadialGradient(gradient))
+        canvas.fill_circle(cx, cy, radius)
+        
+        // Desen uygula
+        eğer değişken pat = self.pattern:
+            self.apply_pattern(canvas, cx - radius, cy - radius, radius * 2.0, radius * 2.0, pat)
+        son
+        
+        // Speküler highlight
+        eğer self.specular > 0.1:
+            self.apply_specular_highlight(canvas, cx, cy, radius, lights)
+        son
+        
+        // Clearcoat
+        eğer self.clearcoat > 0.0:
+            self.apply_clearcoat(canvas, cx, cy, radius)
+        son
+    son
+    
+    /// Dikdörtgene malzeme uygula
+    pub fn apply_to_rect(self, canvas: Canvas, x: ondalık, y: ondalık, w: ondalık, h: ondalık, lights: liste[Light]) döndür void:
+        değişken cx = x + w / 2.0
+        değişken cy = y + h / 2.0
+        
+        değişken final_color = self.calculate_lit_color(lights, cx, cy)
+        
+        // Lineer veya radyal gradyan
+        değişken gradient = self.create_linear_gradient(x, y, w, h, final_color, lights)
+        
+        canvas.set_fill_style(FillStyle::LinearGradient(gradient))
+        canvas.fill_rect(x, y, w, h)
+        
+        // Desen
+        eğer değişken pat = self.pattern:
+            self.apply_pattern(canvas, x, y, w, h, pat)
+        son
+        
+        // Speküler
+        eğer self.specular > 0.1:
+            self.apply_specular_rect(canvas, x, y, w, h, lights)
+        son
+    son
+    
+    /// Halka (ring) şekline malzeme uygula
+    pub fn apply_to_ring(self, canvas: Canvas, cx: ondalık, cy: ondalık, inner_r: ondalık, outer_r: ondalık, lights: liste[Light]) döndür void:
+        değişken final_color = self.calculate_lit_color(lights, cx, cy)
+        
+        değişken gradient = RadialGradient yap
+            x0: cx, y0: cy, r0: inner_r,
+            x1: cx, y1: cy, r1: outer_r,
+            stops: [
+                ColorStop yap offset: 0.0, color: final_color.darken(0.2) son,
+                ColorStop yap offset: 0.3, color: final_color.lighten(0.1) son,
+                ColorStop yap offset: 0.7, color: final_color son,
+                ColorStop yap offset: 1.0, color: final_color.darken(0.3) son
+            ]
+        son
+        
+        canvas.set_fill_style(FillStyle::RadialGradient(gradient))
+        canvas.fill_path(
+            Path::new()
+                .arc(cx, cy, outer_r, 0.0, 6.28318)
+                .arc_reverse(cx, cy, inner_r, 6.28318, 0.0)
+        )
+    son
+    
+    /// Arc şekline malzeme uygula
+    pub fn apply_to_arc(self, canvas: Canvas, cx: ondalık, cy: ondalık, radius: ondalık, start_deg: ondalık, end_deg: ondalık) döndür void:
+        değişken start_rad = deg_to_rad(start_deg)
+        değişken end_rad = deg_to_rad(end_deg)
+        
+        değişken gradient = RadialGradient yap
+            x0: cx, y0: cy, r0: 0.0,
+            x1: cx, y1: cy, r1: radius,
+            stops: [
+                ColorStop yap offset: 0.0, color: self.base_color.lighten(0.2) son,
+                ColorStop yap offset: 0.5, color: self.base_color son,
+                ColorStop yap offset: 1.0, color: self.base_color.darken(0.1) son
+            ]
+        son
+        
+        canvas.set_fill_style(FillStyle::RadialGradient(gradient))
+        canvas.fill_path(
+            Path::new()
+                .move_to(cx, cy)
+                .arc(cx, cy, radius, start_rad, end_rad)
+                .close()
+        )
+    son
+    
+    /// Kenarlığa malzeme uygula
+    pub fn apply_to_border(self, canvas: Canvas, x: ondalık, y: ondalık, w: ondalık, h: ondalık, border_width: ondalık) döndür void:
+        değişken gradient = LinearGradient yap
+            x0: x, y0: y,
+            x1: x, y1: y + h,
+            stops: [
+                ColorStop yap offset: 0.0, color: self.base_color.lighten(0.3) son,
+                ColorStop yap offset: 0.3, color: self.base_color son,
+                ColorStop yap offset: 0.7, color: self.base_color son,
+                ColorStop yap offset: 1.0, color: self.base_color.darken(0.3) son
+            ]
+        son
+        
+        canvas.set_stroke_style(FillStyle::LinearGradient(gradient))
+        canvas.set_line_width(border_width)
+        canvas.stroke_rect(x + border_width / 2.0, y + border_width / 2.0, w - border_width, h - border_width)
+    son
+    
+    // === INTERNAL METHODS ===
+    
+    /// Işıklandırılmış renk hesapla
+    fn calculate_lit_color(self, lights: liste[Light], x: ondalık, y: ondalık) döndür Color:
+        değişken ambient = Color::rgb(20, 20, 20)
+        değişken result = self.base_color
+        
+        için light içinde lights:
+            eşle light.light_type:
+                LightType::Ambient => yap
+                    result = result.lighten(light.intensity * 0.2)
+                son,
+                
+                LightType::Directional(angle) => yap
+                    // Basit diffuse hesaplama
+                    değişken factor = light.intensity * 0.5
+                    result = result.lighten(factor)
+                son,
+                
+                LightType::Point(lx, ly) => yap
+                    değişken dx = x - lx
+                    değişken dy = y - ly
+                    değişken dist = sqrt(dx * dx + dy * dy)
+                    değişken attenuation = 1.0 / (1.0 + dist * 0.01)
+                    result = result.lighten(light.intensity * attenuation * 0.3)
+                son,
+                
+                _ => ()
+            son
+        son
+        
+        döndür result
+    son
+    
+    /// Radyal gradyan oluştur
+    fn create_radial_gradient(self, cx: ondalık, cy: ondalık, radius: ondalık, color: Color, lights: liste[Light]) döndür RadialGradient:
+        // Işık pozisyonuna göre gradyan merkezi offset
+        değişken offset_x = 0.0
+        değişken offset_y = 0.0
+        
+        için light içinde lights:
+            eşle light.light_type:
+                LightType::Directional(angle) => yap
+                    offset_x = cos(deg_to_rad(angle)) * radius * 0.3
+                    offset_y = sin(deg_to_rad(angle)) * radius * 0.3
+                son,
+                _ => ()
+            son
+        son
+        
+        döndür RadialGradient yap
+            x0: cx - offset_x, y0: cy - offset_y, r0: 0.0,
+            x1: cx, y1: cy, r1: radius,
+            stops: [
+                ColorStop yap offset: 0.0, color: color.lighten(0.3 * (1.0 - self.roughness)) son,
+                ColorStop yap offset: 0.4, color: color son,
+                ColorStop yap offset: 0.8, color: color.darken(0.1 * self.roughness) son,
+                ColorStop yap offset: 1.0, color: color.darken(0.2) son
+            ]
+        son
+    son
+    
+    /// Lineer gradyan oluştur
+    fn create_linear_gradient(self, x: ondalık, y: ondalık, w: ondalık, h: ondalık, color: Color, lights: liste[Light]) döndür LinearGradient:
+        döndür LinearGradient yap
+            x0: x, y0: y,
+            x1: x, y1: y + h,
+            stops: [
+                ColorStop yap offset: 0.0, color: color.lighten(0.2 * (1.0 - self.roughness)) son,
+                ColorStop yap offset: 0.3, color: color son,
+                ColorStop yap offset: 0.7, color: color son,
+                ColorStop yap offset: 1.0, color: color.darken(0.2 * self.roughness) son
+            ]
+        son
+    son
+    
+    /// Speküler highlight uygula
+    fn apply_specular_highlight(self, canvas: Canvas, cx: ondalık, cy: ondalık, radius: ondalık, lights: liste[Light]) döndür void:
+        değişken spec_strength = self.specular * (1.0 - self.roughness)
+        
+        eğer spec_strength < 0.1:
+            döndür
+        son
+        
+        // Varsayılan highlight pozisyonu
+        değişken hx = cx - radius * 0.3
+        değişken hy = cy - radius * 0.3
+        
+        // Işık yönüne göre ayarla
+        için light içinde lights:
+            eşle light.light_type:
+                LightType::Directional(angle) => yap
+                    hx = cx + cos(deg_to_rad(angle + 180.0)) * radius * 0.3
+                    hy = cy + sin(deg_to_rad(angle + 180.0)) * radius * 0.3
+                son,
+                _ => ()
+            son
+        son
+        
+        değişken highlight_gradient = RadialGradient yap
+            x0: hx, y0: hy, r0: 0.0,
+            x1: hx, y1: hy, r1: radius * 0.6,
+            stops: [
+                ColorStop yap offset: 0.0, color: Color::rgba(255, 255, 255, (spec_strength * 200.0).floor()) son,
+                ColorStop yap offset: 0.3, color: Color::rgba(255, 255, 255, (spec_strength * 100.0).floor()) son,
+                ColorStop yap offset: 1.0, color: Color::transparent() son
+            ]
+        son
+        
+        canvas.set_fill_style(FillStyle::RadialGradient(highlight_gradient))
+        canvas.fill_circle(cx, cy, radius)
+    son
+    
+    /// Dikdörtgen speküler
+    fn apply_specular_rect(self, canvas: Canvas, x: ondalık, y: ondalık, w: ondalık, h: ondalık, lights: liste[Light]) döndür void:
+        değişken spec_strength = self.specular * (1.0 - self.roughness)
+        
+        eğer spec_strength < 0.1:
+            döndür
+        son
+        
+        değişken gradient = LinearGradient yap
+            x0: x, y0: y,
+            x1: x, y1: y + h * 0.5,
+            stops: [
+                ColorStop yap offset: 0.0, color: Color::rgba(255, 255, 255, (spec_strength * 80.0).floor()) son,
+                ColorStop yap offset: 0.5, color: Color::rgba(255, 255, 255, (spec_strength * 30.0).floor()) son,
+                ColorStop yap offset: 1.0, color: Color::transparent() son
+            ]
+        son
+        
+        canvas.set_fill_style(FillStyle::LinearGradient(gradient))
+        canvas.fill_rect(x, y, w, h * 0.5)
+    son
+    
+    /// Clearcoat uygula
+    fn apply_clearcoat(self, canvas: Canvas, cx: ondalık, cy: ondalık, radius: ondalık) döndür void:
+        değişken cc_gradient = RadialGradient yap
+            x0: cx - radius * 0.4, y0: cy - radius * 0.4, r0: 0.0,
+            x1: cx, y1: cy, r1: radius,
+            stops: [
+                ColorStop yap offset: 0.0, color: Color::rgba(255, 255, 255, (self.clearcoat * 60.0).floor()) son,
+                ColorStop yap offset: 0.3, color: Color::rgba(255, 255, 255, (self.clearcoat * 20.0).floor()) son,
+                ColorStop yap offset: 1.0, color: Color::transparent() son
+            ]
+        son
+        
+        canvas.set_fill_style(FillStyle::RadialGradient(cc_gradient))
+        canvas.fill_circle(cx, cy, radius)
+    son
+    
+    /// Desen uygula
+    fn apply_pattern(self, canvas: Canvas, x: ondalık, y: ondalık, w: ondalık, h: ondalık, pattern: MaterialPattern) döndür void:
+        eşle pattern:
+            MaterialPattern::Brushed(direction) => yap
+                self.render_brushed_pattern(canvas, x, y, w, h, direction)
+            son,
+            
+            MaterialPattern::CircularBrushed => yap
+                self.render_circular_brushed(canvas, x + w / 2.0, y + h / 2.0, min(w, h) / 2.0)
+            son,
+            
+            MaterialPattern::CarbonFiber => yap
+                self.render_carbon_fiber(canvas, x, y, w, h)
+            son,
+            
+            MaterialPattern::DiamondPlate => yap
+                self.render_diamond_plate(canvas, x, y, w, h)
+            son,
+            
+            _ => ()
+        son
+    son
+    
+    /// Fırçalanmış desen
+    fn render_brushed_pattern(self, canvas: Canvas, x: ondalık, y: ondalık, w: ondalık, h: ondalık, direction: ondalık) döndür void:
+        canvas.save()
+        canvas.set_global_alpha(0.1)
+        canvas.set_stroke_color(Color::white())
+        canvas.set_line_width(0.5)
+        
+        değişken step = 2.0
+        değişken count = (h / step).ceil()
+        
+        için i içinde 0..count:
+            değişken ly = y + i * step
+            canvas.stroke_path(
+                Path::new().move_to(x, ly).line_to(x + w, ly)
+            )
+        son
+        
+        canvas.restore()
+    son
+    
+    /// Dairesel fırçalanmış desen
+    fn render_circular_brushed(self, canvas: Canvas, cx: ondalık, cy: ondalık, radius: ondalık) döndür void:
+        canvas.save()
+        canvas.set_global_alpha(0.08)
+        canvas.set_stroke_color(Color::white())
+        canvas.set_line_width(0.5)
+        
+        değişken arc_count = 60
+        değişken arc_angle = 6.28318 / arc_count
+        
+        için i içinde 0..arc_count:
+            değişken angle = i * arc_angle
+            canvas.stroke_path(
+                Path::new()
+                    .arc(cx, cy, radius * 0.3, angle, angle + arc_angle * 0.8)
+            )
+            canvas.stroke_path(
+                Path::new()
+                    .arc(cx, cy, radius * 0.6, angle + arc_angle * 0.5, angle + arc_angle * 1.3)
+            )
+            canvas.stroke_path(
+                Path::new()
+                    .arc(cx, cy, radius * 0.9, angle, angle + arc_angle * 0.6)
+            )
+        son
+        
+        canvas.restore()
+    son
+    
+    /// Karbon fiber desen
+    fn render_carbon_fiber(self, canvas: Canvas, x: ondalık, y: ondalık, w: ondalık, h: ondalık) döndür void:
+        canvas.save()
+        canvas.set_global_alpha(0.15)
+        
+        değişken cell_size = 6.0
+        değişken cols = (w / cell_size).ceil()
+        değişken rows = (h / cell_size).ceil()
+        
+        için row içinde 0..rows:
+            için col içinde 0..cols:
+                değişken cx = x + col * cell_size
+                değişken cy = y + row * cell_size
+                değişken offset = (row % 2) * cell_size / 2.0
+                
+                canvas.set_fill_color(Color::rgba(0, 0, 0, 30))
+                canvas.fill_rect(cx + offset, cy, cell_size * 0.45, cell_size * 0.45)
+                canvas.fill_rect(cx + offset + cell_size * 0.5, cy + cell_size * 0.5, cell_size * 0.45, cell_size * 0.45)
+            son
+        son
+        
+        canvas.restore()
+    son
+    
+    /// Elmas plaka desen
+    fn render_diamond_plate(self, canvas: Canvas, x: ondalık, y: ondalık, w: ondalık, h: ondalık) döndür void:
+        canvas.save()
+        canvas.set_global_alpha(0.2)
+        
+        değişken diamond_size = 12.0
+        değişken cols = (w / diamond_size).ceil()
+        değişken rows = (h / diamond_size).ceil()
+        
+        için row içinde 0..rows:
+            için col içinde 0..cols:
+                değişken cx = x + col * diamond_size + diamond_size / 2.0
+                değişken cy = y + row * diamond_size + diamond_size / 2.0
+                değişken offset = (row % 2) * diamond_size / 2.0
+                
+                değişken path = Path::new()
+                    .move_to(cx + offset, cy - diamond_size * 0.3)
+                    .line_to(cx + offset + diamond_size * 0.3, cy)
+                    .line_to(cx + offset, cy + diamond_size * 0.3)
+                    .line_to(cx + offset - diamond_size * 0.3, cy)
+                    .close()
+                
+                canvas.set_fill_color(Color::rgba(255, 255, 255, 40))
+                canvas.fill_path(path)
+            son
+        son
+        
+        canvas.restore()
+    son
+son
+
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+fn clamp(value: ondalık, min: ondalık, max: ondalık) döndür ondalık:
+    eğer value < min: döndür min son
+    eğer value > max: döndür max son
+    döndür value
+son
+
+fn deg_to_rad(degrees: ondalık) döndür ondalık:
+    döndür degrees * 3.14159265359 / 180.0
+son

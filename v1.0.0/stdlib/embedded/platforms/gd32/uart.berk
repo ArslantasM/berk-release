@@ -1,0 +1,9 @@
+// GD32 UART Module
+// Compatible with STM32 USART implementation
+
+pub use stm32f4::uart::*;
+
+// GD32 UART notes:
+// - Full STM32 USART compatibility
+// - Same baudrate calculation
+// - Identical register mapping

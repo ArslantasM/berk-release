@@ -1,0 +1,472 @@
+// stdlib/embedded/platforms/esp32/wifi.berk
+// ESP32 WiFi HAL Implementation
+// ESP-IDF WiFi stack bindings
+
+// WiFi operation modes
+pub enum WiFiMode {
+    Null,      // WiFi disabled
+    STA,       // Station mode (client)
+    AP,        // Access Point mode
+    APSTA,     // Station + AP mode
+}
+
+pub enum WiFiAuthMode {
+    Open,              // No authentication
+    WEP,               // WEP (deprecated)
+    WPA_PSK,           // WPA-PSK
+    WPA2_PSK,          // WPA2-PSK
+    WPA_WPA2_PSK,      // WPA/WPA2-PSK
+    WPA2_ENTERPRISE,   // WPA2-Enterprise
+    WPA3_PSK,          // WPA3-PSK
+    WPA2_WPA3_PSK,     // WPA2/WPA3-PSK
+}
+
+pub enum WiFiStatus {
+    Idle,
+    Connecting,
+    Connected,
+    Disconnected,
+    ConnectionFailed,
+    GotIP,
+}
+
+pub enum WiFiError {
+    NotInitialized,
+    AlreadyInitialized,
+    InvalidMode,
+    InvalidSSID,
+    InvalidPassword,
+    ConnectionFailed,
+    Timeout,
+    ScanFailed,
+    DHCPFailed,
+}
+
+pub type Result<T> = result<T, WiFiError>
+
+// ESP-IDF WiFi constants
+const WIFI_MODE_NULL: u32 = 0
+const WIFI_MODE_STA: u32 = 1
+const WIFI_MODE_AP: u32 = 2
+const WIFI_MODE_APSTA: u32 = 3
+
+const WIFI_AUTH_OPEN: u32 = 0
+const WIFI_AUTH_WEP: u32 = 1
+const WIFI_AUTH_WPA_PSK: u32 = 2
+const WIFI_AUTH_WPA2_PSK: u32 = 3
+const WIFI_AUTH_WPA_WPA2_PSK: u32 = 4
+const WIFI_AUTH_WPA2_ENTERPRISE: u32 = 5
+const WIFI_AUTH_WPA3_PSK: u32 = 6
+const WIFI_AUTH_WPA2_WPA3_PSK: u32 = 7
+
+const WIFI_SCAN_TYPE_ACTIVE: u32 = 0
+const WIFI_SCAN_TYPE_PASSIVE: u32 = 1
+
+const WIFI_PS_NONE: u32 = 0         // No power save
+const WIFI_PS_MIN_MODEM: u32 = 1    // Minimum modem power save
+const WIFI_PS_MAX_MODEM: u32 = 2    // Maximum modem power save
+
+// ESP-IDF WiFi structures
+struct wifi_init_config_t {
+    osi_funcs: *void,
+    wpa_crypto_funcs: *void,
+    static_rx_buf_num: i32,
+    dynamic_rx_buf_num: i32,
+    tx_buf_type: i32,
+    static_tx_buf_num: i32,
+    dynamic_tx_buf_num: i32,
+    cache_tx_buf_num: i32,
+    csi_enable: i32,
+    ampdu_rx_enable: i32,
+    ampdu_tx_enable: i32,
+    amsdu_tx_enable: i32,
+    nvs_enable: i32,
+    nano_enable: i32,
+    rx_ba_win: i32,
+    wifi_task_core_id: i32,
+    beacon_max_len: i32,
+    mgmt_sbuf_num: i32,
+    feature_caps: u64,
+    sta_disconnected_pm: bool,
+    magic: i32,
+}
+
+struct wifi_config_t {
+    sta: wifi_sta_config_t,
+}
+
+struct wifi_sta_config_t {
+    ssid: [u8; 32],
+    password: [u8; 64],
+    scan_method: u32,
+    bssid_set: bool,
+    bssid: [u8; 6],
+    channel: u8,
+    listen_interval: u16,
+    sort_method: u32,
+    threshold: wifi_scan_threshold_t,
+    pmf_cfg: wifi_pmf_config_t,
+    sae_pwe_h2e: u32,
+    sae_h2e_identifier: [u8; 32],
+}
+
+struct wifi_scan_threshold_t {
+    rssi: i8,
+    authmode: u32,
+}
+
+struct wifi_pmf_config_t {
+    capable: bool,
+    required: bool,
+}
+
+struct wifi_ap_record_t {
+    bssid: [u8; 6],
+    ssid: [u8; 33],
+    primary: u8,
+    secondary: u32,
+    rssi: i8,
+    authmode: u32,
+    pairwise_cipher: u32,
+    group_cipher: u32,
+    ant: u32,
+    phy_11b: u32,
+    phy_11g: u32,
+    phy_11n: u32,
+    phy_lr: u32,
+    wps: u32,
+    ftm_responder: u32,
+    ftm_initiator: u32,
+    reserved: u32,
+    country: [u8; 3],
+}
+
+// ESP-IDF WiFi functions
+extern "C" {
+    fn esp_wifi_init(config: *wifi_init_config_t) -> i32
+    fn esp_wifi_deinit() -> i32
+    fn esp_wifi_set_mode(mode: u32) -> i32
+    fn esp_wifi_get_mode(mode: *mut u32) -> i32
+    fn esp_wifi_start() -> i32
+    fn esp_wifi_stop() -> i32
+    fn esp_wifi_connect() -> i32
+    fn esp_wifi_disconnect() -> i32
+    fn esp_wifi_set_config(interface: u32, conf: *wifi_config_t) -> i32
+    fn esp_wifi_get_config(interface: u32, conf: *mut wifi_config_t) -> i32
+    fn esp_wifi_scan_start(config: *void, block: bool) -> i32
+    fn esp_wifi_scan_stop() -> i32
+    fn esp_wifi_scan_get_ap_num(number: *mut u16) -> i32
+    fn esp_wifi_scan_get_ap_records(number: *mut u16, ap_records: *mut wifi_ap_record_t) -> i32
+    fn esp_wifi_set_ps(type_: u32) -> i32
+    fn esp_wifi_get_ps(type_: *mut u32) -> i32
+}
+
+const ESP_OK: i32 = 0
+const WIFI_IF_STA: u32 = 0
+const WIFI_IF_AP: u32 = 1
+
+// Global WiFi state
+static mut wifi_initialized: bool = false
+static mut wifi_status: WiFiStatus = WiFiStatus.Idle
+
+/// Initialize WiFi subsystem
+pub fn init() -> Result<()> {
+    unsafe {
+        if wifi_initialized {
+            return Err(WiFiError.AlreadyInitialized)
+        }
+        
+        // Default WiFi config
+        let config = wifi_init_config_t {
+            osi_funcs: null,
+            wpa_crypto_funcs: null,
+            static_rx_buf_num: 10,
+            dynamic_rx_buf_num: 32,
+            tx_buf_type: 1,
+            static_tx_buf_num: 0,
+            dynamic_tx_buf_num: 32,
+            cache_tx_buf_num: 0,
+            csi_enable: 0,
+            ampdu_rx_enable: 1,
+            ampdu_tx_enable: 1,
+            amsdu_tx_enable: 0,
+            nvs_enable: 1,
+            nano_enable: 0,
+            rx_ba_win: 6,
+            wifi_task_core_id: 0,
+            beacon_max_len: 752,
+            mgmt_sbuf_num: 32,
+            feature_caps: 0,
+            sta_disconnected_pm: false,
+            magic: 0x1F2F3F4F,
+        }
+        
+        let ret = esp_wifi_init(&config)
+        if ret != ESP_OK {
+            return Err(WiFiError.NotInitialized)
+        }
+        
+        wifi_initialized = true
+        Ok(())
+    }
+}
+
+/// Deinitialize WiFi subsystem
+pub fn deinit() -> Result<()> {
+    unsafe {
+        if !wifi_initialized {
+            return Err(WiFiError.NotInitialized)
+        }
+        
+        esp_wifi_stop()
+        let ret = esp_wifi_deinit()
+        
+        if ret == ESP_OK {
+            wifi_initialized = false
+            Ok(())
+        } else {
+            Err(WiFiError.NotInitialized)
+        }
+    }
+}
+
+/// Set WiFi mode
+pub fn set_mode(mode: WiFiMode) -> Result<()> {
+    unsafe {
+        if !wifi_initialized {
+            return Err(WiFiError.NotInitialized)
+        }
+        
+        let mode_val = match mode {
+            WiFiMode.Null => WIFI_MODE_NULL,
+            WiFiMode.STA => WIFI_MODE_STA,
+            WiFiMode.AP => WIFI_MODE_AP,
+            WiFiMode.APSTA => WIFI_MODE_APSTA,
+        }
+        
+        let ret = esp_wifi_set_mode(mode_val)
+        if ret == ESP_OK {
+            Ok(())
+        } else {
+            Err(WiFiError.InvalidMode)
+        }
+    }
+}
+
+/// Start WiFi
+pub fn start() -> Result<()> {
+    unsafe {
+        if !wifi_initialized {
+            return Err(WiFiError.NotInitialized)
+        }
+        
+        let ret = esp_wifi_start()
+        if ret == ESP_OK {
+            wifi_status = WiFiStatus.Idle
+            Ok(())
+        } else {
+            Err(WiFiError.NotInitialized)
+        }
+    }
+}
+
+/// Stop WiFi
+pub fn stop() -> Result<()> {
+    unsafe {
+        let ret = esp_wifi_stop()
+        if ret == ESP_OK {
+            wifi_status = WiFiStatus.Idle
+            Ok(())
+        } else {
+            Err(WiFiError.NotInitialized)
+        }
+    }
+}
+
+/// Connect to WiFi network (Station mode)
+pub fn connect(ssid: &str, password: &str) -> Result<()> {
+    unsafe {
+        if !wifi_initialized {
+            return Err(WiFiError.NotInitialized)
+        }
+        
+        if ssid.len() == 0 || ssid.len() > 32 {
+            return Err(WiFiError.InvalidSSID)
+        }
+        
+        if password.len() > 64 {
+            return Err(WiFiError.InvalidPassword)
+        }
+        
+        // Create WiFi config
+        let mut config: wifi_config_t = zeroed()
+        
+        // Copy SSID
+        for i in 0..ssid.len() {
+            config.sta.ssid[i] = ssid.as_bytes()[i]
+        }
+        
+        // Copy password
+        for i in 0..password.len() {
+            config.sta.password[i] = password.as_bytes()[i]
+        }
+        
+        config.sta.scan_method = 0
+        config.sta.bssid_set = false
+        config.sta.channel = 0
+        config.sta.listen_interval = 0
+        config.sta.sort_method = 0
+        config.sta.threshold.rssi = -127
+        config.sta.threshold.authmode = WIFI_AUTH_OPEN
+        config.sta.pmf_cfg.capable = true
+        config.sta.pmf_cfg.required = false
+        
+        let ret = esp_wifi_set_config(WIFI_IF_STA, &config)
+        if ret != ESP_OK {
+            return Err(WiFiError.InvalidSSID)
+        }
+        
+        wifi_status = WiFiStatus.Connecting
+        
+        let ret = esp_wifi_connect()
+        if ret == ESP_OK {
+            Ok(())
+        } else {
+            wifi_status = WiFiStatus.ConnectionFailed
+            Err(WiFiError.ConnectionFailed)
+        }
+    }
+}
+
+/// Disconnect from WiFi network
+pub fn disconnect() -> Result<()> {
+    unsafe {
+        let ret = esp_wifi_disconnect()
+        if ret == ESP_OK {
+            wifi_status = WiFiStatus.Disconnected
+            Ok(())
+        } else {
+            Err(WiFiError.ConnectionFailed)
+        }
+    }
+}
+
+/// Scan for available WiFi networks
+pub fn scan() -> Result<Vec<AccessPoint>> {
+    unsafe {
+        if !wifi_initialized {
+            return Err(WiFiError.NotInitialized)
+        }
+        
+        // Start scan (blocking)
+        let ret = esp_wifi_scan_start(null, true)
+        if ret != ESP_OK {
+            return Err(WiFiError.ScanFailed)
+        }
+        
+        // Get number of found APs
+        let mut ap_count: u16 = 0
+        esp_wifi_scan_get_ap_num(&mut ap_count)
+        
+        if ap_count == 0 {
+            return Ok(Vec::new())
+        }
+        
+        // Allocate buffer for AP records
+        let mut ap_records: Vec<wifi_ap_record_t> = Vec::with_capacity(ap_count as usize)
+        let mut actual_count = ap_count
+        
+        let ret = esp_wifi_scan_get_ap_records(&mut actual_count, ap_records.as_mut_ptr())
+        if ret != ESP_OK {
+            return Err(WiFiError.ScanFailed)
+        }
+        
+        ap_records.set_len(actual_count as usize)
+        
+        // Convert to AccessPoint structs
+        let mut result: Vec<AccessPoint> = Vec::new()
+        for record in ap_records {
+            let ap = AccessPoint {
+                ssid: String::from_utf8_lossy(&record.ssid[..]).to_string(),
+                rssi: record.rssi,
+                channel: record.primary,
+                authmode: auth_mode_from_u32(record.authmode),
+            }
+            result.push(ap)
+        }
+        
+        Ok(result)
+    }
+}
+
+/// Get current WiFi status
+pub fn get_status() -> WiFiStatus {
+    unsafe { wifi_status }
+}
+
+/// Set power save mode
+pub fn set_power_save(enabled: bool) -> Result<()> {
+    let ps_type = if enabled {
+        WIFI_PS_MIN_MODEM
+    } else {
+        WIFI_PS_NONE
+    }
+    
+    let ret = esp_wifi_set_ps(ps_type)
+    if ret == ESP_OK {
+        Ok(())
+    } else {
+        Err(WiFiError.NotInitialized)
+    }
+}
+
+// Helper structures
+
+pub struct AccessPoint {
+    pub ssid: String,
+    pub rssi: i8,
+    pub channel: u8,
+    pub authmode: WiFiAuthMode,
+}
+
+fn auth_mode_from_u32(mode: u32) -> WiFiAuthMode {
+    match mode {
+        WIFI_AUTH_OPEN => WiFiAuthMode.Open,
+        WIFI_AUTH_WEP => WiFiAuthMode.WEP,
+        WIFI_AUTH_WPA_PSK => WiFiAuthMode.WPA_PSK,
+        WIFI_AUTH_WPA2_PSK => WiFiAuthMode.WPA2_PSK,
+        WIFI_AUTH_WPA_WPA2_PSK => WiFiAuthMode.WPA_WPA2_PSK,
+        WIFI_AUTH_WPA2_ENTERPRISE => WiFiAuthMode.WPA2_ENTERPRISE,
+        WIFI_AUTH_WPA3_PSK => WiFiAuthMode.WPA3_PSK,
+        WIFI_AUTH_WPA2_WPA3_PSK => WiFiAuthMode.WPA2_WPA3_PSK,
+        _ => WiFiAuthMode.Open,
+    }
+}
+
+/// Get signal strength description
+pub fn signal_strength_text(rssi: i8) -> &str {
+    if rssi >= -50 {
+        "Excellent"
+    } else if rssi >= -60 {
+        "Good"
+    } else if rssi >= -70 {
+        "Fair"
+    } else {
+        "Weak"
+    }
+}
+
+/// Calculate signal strength bars (0-4)
+pub fn signal_strength_bars(rssi: i8) -> u8 {
+    if rssi >= -50 {
+        4
+    } else if rssi >= -60 {
+        3
+    } else if rssi >= -70 {
+        2
+    } else if rssi >= -80 {
+        1
+    } else {
+        0
+    }
+}

@@ -1,0 +1,248 @@
+// stdlib/embedded/platforms/riscv_gd32vf103/spi.berk
+// GD32VF103 SPI Implementation
+// 3 SPI controllers (SPI0, SPI1, SPI2)
+
+kullan "embedded/bal/spi" olarak SPI_BAL
+
+açık enum SpiPort yap
+    SPI0 = 0,
+    SPI1 = 1,
+    SPI2 = 2,
+son
+
+// SPI base addresses
+sabit SPI0_BASE: u32 = 0x40013000
+sabit SPI1_BASE: u32 = 0x40003800
+sabit SPI2_BASE: u32 = 0x40003C00
+
+// Common SPI frequencies
+açık sabit SPI_FREQ_125KHZ: u32 = 125000
+açık sabit SPI_FREQ_250KHZ: u32 = 250000
+açık sabit SPI_FREQ_500KHZ: u32 = 500000
+açık sabit SPI_FREQ_1MHZ: u32 = 1000000
+açık sabit SPI_FREQ_2MHZ: u32 = 2000000
+açık sabit SPI_FREQ_4MHZ: u32 = 4000000
+açık sabit SPI_FREQ_8MHZ: u32 = 8000000
+açık sabit SPI_FREQ_18MHZ: u32 = 18000000  // Max for GD32VF103
+
+harici "C" yap
+    // GD32VF103 SPI firmware library
+    fonksiyon spi_init(spi_periph: u32, mode: u32, direction: u32, data_size: u32, endian: u32, nss: u32, prescale: u32, ckpl: u32, ckph: u32)
+    fonksiyon spi_enable(spi_periph: u32)
+    fonksiyon spi_disable(spi_periph: u32)
+    fonksiyon spi_i2s_data_transmit(spi_periph: u32, data: u16)
+    fonksiyon spi_i2s_data_receive(spi_periph: u32) -> u16
+    fonksiyon spi_i2s_flag_get(spi_periph: u32, flag: u32) -> u32
+    fonksiyon spi_nss_output_enable(spi_periph: u32)
+    fonksiyon spi_nss_output_disable(spi_periph: u32)
+    fonksiyon spi_nss_internal_high(spi_periph: u32)
+    fonksiyon spi_nss_internal_low(spi_periph: u32)
+son
+
+// SPI modes
+sabit SPI_MASTER: u32 = 0
+sabit SPI_SLAVE: u32 = 1
+
+// SPI directions
+sabit SPI_TRANSMODE_FULLDUPLEX: u32 = 0
+sabit SPI_TRANSMODE_RECEIVEONLY: u32 = 1
+sabit SPI_TRANSMODE_BDRECEIVE: u32 = 2
+sabit SPI_TRANSMODE_BDTRANSMIT: u32 = 3
+
+// Data size
+sabit SPI_FRAMESIZE_8BIT: u32 = 0
+sabit SPI_FRAMESIZE_16BIT: u32 = 1
+
+// Endian
+sabit SPI_ENDIAN_MSB: u32 = 0
+sabit SPI_ENDIAN_LSB: u32 = 1
+
+// NSS mode
+sabit SPI_NSS_SOFT: u32 = 0
+sabit SPI_NSS_HARD: u32 = 1
+
+// Clock prescaler
+sabit SPI_PSC_2: u32 = 0
+sabit SPI_PSC_4: u32 = 1
+sabit SPI_PSC_8: u32 = 2
+sabit SPI_PSC_16: u32 = 3
+sabit SPI_PSC_32: u32 = 4
+sabit SPI_PSC_64: u32 = 5
+sabit SPI_PSC_128: u32 = 6
+sabit SPI_PSC_256: u32 = 7
+
+// Clock polarity/phase
+sabit SPI_CK_PL_LOW_PH_1EDGE: u32 = 0   // Mode 0
+sabit SPI_CK_PL_HIGH_PH_1EDGE: u32 = 1  // Mode 2
+sabit SPI_CK_PL_LOW_PH_2EDGE: u32 = 2   // Mode 1
+sabit SPI_CK_PL_HIGH_PH_2EDGE: u32 = 3  // Mode 3
+
+// Flags
+sabit SPI_FLAG_RBNE: u32 = 0x01  // Receive buffer not empty
+sabit SPI_FLAG_TBE: u32 = 0x02   // Transmit buffer empty
+sabit SPI_FLAG_TRANS: u32 = 0x80 // Transfer ongoing
+
+fonksiyon spi_base_address(port: SpiPort) -> u32 yap
+    seç port yap
+        durum SpiPort::SPI0 => dön SPI0_BASE,
+        durum SpiPort::SPI1 => dön SPI1_BASE,
+        durum SpiPort::SPI2 => dön SPI2_BASE,
+    son
+son
+
+açık enum SpiMode yap
+    MODE0 = 0,  // CPOL=0, CPHA=0
+    MODE1 = 1,  // CPOL=0, CPHA=1
+    MODE2 = 2,  // CPOL=1, CPHA=0
+    MODE3 = 3,  // CPOL=1, CPHA=1
+son
+
+açık enum BitOrder yap
+    MSB_FIRST,
+    LSB_FIRST,
+son
+
+fonksiyon calculate_prescaler(frequency: u32) -> u32 yap
+    // APB2 clock is 108 MHz for SPI0, 54 MHz for SPI1/2
+    değişken apb_clock = 108000000u32  // Simplified
+    
+    değişken ratio = apb_clock / frequency
+    
+    eğer ratio <= 2 yap dön SPI_PSC_2
+    son değilse eğer ratio <= 4 yap dön SPI_PSC_4
+    son değilse eğer ratio <= 8 yap dön SPI_PSC_8
+    son değilse eğer ratio <= 16 yap dön SPI_PSC_16
+    son değilse eğer ratio <= 32 yap dön SPI_PSC_32
+    son değilse eğer ratio <= 64 yap dön SPI_PSC_64
+    son değilse eğer ratio <= 128 yap dön SPI_PSC_128
+    son değilse yap dön SPI_PSC_256
+    son
+son
+
+yapı GD32VF103_SPI_HAL yap
+    port: SpiPort,
+    base_addr: u32,
+    frequency: u32,
+    mode: SpiMode,
+    bit_order: BitOrder,
+    initialized: bool,
+son
+
+uygula GD32VF103_SPI_HAL yap
+    açık fonksiyon yeni(
+        port: SpiPort,
+        frequency: u32,
+        mode: SpiMode,
+        bit_order: BitOrder
+    ) -> GD32VF103_SPI_HAL yap
+        değişken base_addr = spi_base_address(port)
+        
+        // Calculate prescaler
+        değişken prescaler = calculate_prescaler(frequency)
+        
+        // Determine clock polarity and phase
+        değişken (ckpl, ckph) = seç mode yap
+            durum SpiMode::MODE0 => (0u32, 0u32),
+            durum SpiMode::MODE1 => (0u32, 1u32),
+            durum SpiMode::MODE2 => (1u32, 0u32),
+            durum SpiMode::MODE3 => (1u32, 1u32),
+        son
+        
+        // Determine endianness
+        değişken endian = seç bit_order yap
+            durum BitOrder::MSB_FIRST => SPI_ENDIAN_MSB,
+            durum BitOrder::LSB_FIRST => SPI_ENDIAN_LSB,
+        son
+        
+        // Initialize SPI
+        spi_init(
+            base_addr,
+            SPI_MASTER,
+            SPI_TRANSMODE_FULLDUPLEX,
+            SPI_FRAMESIZE_8BIT,
+            endian,
+            SPI_NSS_SOFT,
+            prescaler,
+            ckpl,
+            ckph
+        )
+        
+        // Configure software NSS
+        spi_nss_internal_high(base_addr)
+        spi_nss_output_enable(base_addr)
+        
+        // Enable SPI
+        spi_enable(base_addr)
+        
+        dön GD32VF103_SPI_HAL yap
+            port: port,
+            base_addr: base_addr,
+            frequency: frequency,
+            mode: mode,
+            bit_order: bit_order,
+            initialized: doğru,
+        son
+    son
+    
+    açık fonksiyon transfer_byte(&kendim, byte: u8) -> u8 yap
+        // Wait for TX buffer empty
+        döngü yap
+            eğer spi_i2s_flag_get(kendim.base_addr, SPI_FLAG_TBE) != 0 yap
+                kır
+            son
+        son
+        
+        // Send byte
+        spi_i2s_data_transmit(kendim.base_addr, byte olarak u16)
+        
+        // Wait for RX buffer not empty
+        döngü yap
+            eğer spi_i2s_flag_get(kendim.base_addr, SPI_FLAG_RBNE) != 0 yap
+                kır
+            son
+        son
+        
+        // Read received byte
+        dön spi_i2s_data_receive(kendim.base_addr) olarak u8
+    son
+    
+    açık fonksiyon transfer(&kendim, tx_data: &[u8], rx_data: &değiştir [u8]) yap
+        değişken len = eğer tx_data.len() < rx_data.len() yap
+            tx_data.len()
+        son değilse yap
+            rx_data.len()
+        son
+        
+        için i içinde 0..len yap
+            rx_data[i] = kendim.transfer_byte(tx_data[i])
+        son
+    son
+    
+    açık fonksiyon write(&kendim, data: &[u8]) yap
+        için byte içinde data yap
+            kendim.transfer_byte(*byte)
+        son
+    son
+    
+    açık fonksiyon read(&kendim, data: &değiştir [u8]) yap
+        için i içinde 0..data.len() yap
+            data[i] = kendim.transfer_byte(0xFF)
+        son
+    son
+son
+
+uygula SPI_BAL::SpiHAL için GD32VF103_SPI_HAL yap
+    fonksiyon transfer_byte(&kendim, byte: u8) -> u8 yap
+        dön kendim.transfer_byte(byte)
+    son
+    
+    fonksiyon write(&kendim, data: &[u8]) yap
+        kendim.write(data)
+    son
+    
+    fonksiyon read(&kendim, data: &değiştir [u8]) yap
+        kendim.read(data)
+    son
+son
+
+açık tip SPI_HAL = GD32VF103_SPI_HAL

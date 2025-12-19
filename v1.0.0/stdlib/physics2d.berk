@@ -1,0 +1,3321 @@
+//! # Physics2D Module
+//!
+//! 2D physics engine (Box2D inspired).
+//!
+//! 2D fizik motoru (Box2D esinlenildi).
+//!
+//! ## Features / Özellikler
+//!
+//! - **Rigid body**: 2D dynamics / 2D katı cisim fiziği
+//! - **Collision**: Detection / Çarpışma algılama
+//! - **Shapes**: Box, circle, polygon, capsule / Şekiller
+//! - **Joints**: Revolute, prismatic, distance, weld / Eklemler
+//! - **Forces**: Forces, impulses / Kuvvet, darbe
+//! - **Physics props**: Friction, restitution, density / Fizik özellikleri
+//! - **Raycasting**: Ray intersection / Işın atma
+//! - **CCD**: Continuous collision / Sürekli çarpışma
+//! - **Callbacks**: Contact events / Çarpışma olayları
+//! - **Debug**: Rendering / Görselleştirme
+//!
+//! ## Example / Örnek
+//!
+//! ```berk
+//! kullan physics2d
+//!
+//! değişken world = physics2d.create_world(0.0, -9.8)?
+//! değişken body = physics2d.create_body(world, "Dynamic", 0.0, 5.0)?
+//! physics2d.add_box_shape(body, 1.0, 1.0)
+//! physics2d.step(world, 0.016)  // 60 FPS
+//! ```
+//!
+//! Backend: Box2D 3.0
+
+modül physics2d
+
+kullan string
+kullan math
+
+// ============================================================================
+// TÜRLER (Types)
+// ============================================================================
+
+// Fizik Dünyası (World)
+tip PhysicsWorld = yapı yap
+    gravity: Vec2,             // Yerçekimi (m/s²)
+    zaman_adimi: ondalık,      // Simulation timestep (saniye)
+    velocity_iterations: tamsayı,
+    position_iterations: tamsayı,
+    uyuyan_cisimler: mantıksal,  // Sleeping optimization
+    handle: tamsayı
+son
+
+// Rigid Body (Katı Cisim)
+tip RigidBody = yapı yap
+    tipi: BodyTipi,
+    pozisyon: Vec2,
+    aci: ondalık,              // Radyan
+    linear_velocity: Vec2,
+    angular_velocity: ondalık,
+    linear_damping: ondalık,   // Hız sönümleme
+    angular_damping: ondalık,  // Açısal sönümleme
+    fixed_rotation: mantıksal, // Rotasyon kilidi
+    bullet: mantıksal,         // CCD için hızlı cisim
+    uykuda: mantıksal,
+    handle: tamsayı
+son
+
+tip BodyTipi = "Static" | "Dynamic" | "Kinematic"
+
+// Shape (Çarpışma şekli)
+tip Shape = yapı yap
+    tipi: ShapeTipi,
+    density: ondalık,          // Yoğunluk (kg/m²)
+    friction: ondalık,         // Sürtünme (0-1)
+    restitution: ondalık,      // Sıçrama/elastikiyet (0-1)
+    sensor: mantıksal,         // Geçirilebilir mi?
+    kategori: tamsayı,         // Collision category bits
+    maske: tamsayı,            // Collision mask bits
+    handle: tamsayı
+son
+
+tip ShapeTipi = "Circle" | "Box" | "Polygon" | "Capsule" | "Edge"
+
+// Collision Shape parametreleri
+tip CircleShape = yapı yap
+    merkez: Vec2,
+    yaricap: ondalık
+son
+
+tip BoxShape = yapı yap
+    merkez: Vec2,
+    genişlik: ondalık,
+    yükseklik: ondalık,
+    aci: ondalık               // Radyan
+son
+
+tip PolygonShape = yapı yap
+    vertices: liste[Vec2]      // Max 8 vertex
+son
+
+tip CapsuleShape = yapı yap
+    p1: Vec2,
+    p2: Vec2,
+    yaricap: ondalık
+son
+
+tip EdgeShape = yapı yap
+    v1: Vec2,
+    v2: Vec2
+son
+
+// Joint (Eklem/Constraint)
+tip Joint = yapı yap
+    tipi: JointTipi,
+    cisim_a: RigidBody,
+    cisim_b: RigidBody,
+    çarpışma: mantıksal,       // İki cisim çarpışabilir mi?
+    handle: tamsayı
+son
+
+tip JointTipi = "Revolute" | "Prismatic" | "Distance" | "Weld" | "Rope" | "Motor" | "Wheel" | "Pulley"
+
+// Revolute Joint (Menteşe - rotasyon)
+tip RevoluteJoint = yapı yap
+    joint: Joint,
+    angor: Vec2,               // Dünya koordinatında anchor point
+    referans_aci: ondalık,
+    limit_aktif: mantıksal,
+    alt_limit: ondalık,
+    ust_limit: ondalık,
+    motor_aktif: mantıksal,
+    motor_hiz: ondalık,
+    max_motor_tork: ondalık
+son
+
+// Prismatic Joint (Kayar eklem)
+tip PrismaticJoint = yapı yap
+    joint: Joint,
+    angor: Vec2,
+    aks: Vec2,                 // Hareket ekseni
+    limit_aktif: mantıksal,
+    alt_limit: ondalık,
+    ust_limit: ondalık,
+    motor_aktif: mantıksal,
+    motor_hiz: ondalık,
+    max_motor_kuvvet: ondalık
+son
+
+// Distance Joint (Mesafe kısıtlaması)
+tip DistanceJoint = yapı yap
+    joint: Joint,
+    angor_a: Vec2,
+    angor_b: Vec2,
+    uzunluk: ondalık,
+    sertlik: ondalık,          // Spring stiffness
+    damplik: ondalık           // Damping ratio
+son
+
+// Weld Joint (Kaynak - sabit bağlantı)
+tip WeldJoint = yapı yap
+    joint: Joint,
+    angor: Vec2,
+    referans_aci: ondalık
+son
+
+// Contact (Çarpışma bilgisi)
+tip Contact = yapı yap
+    cisim_a: RigidBody,
+    cisim_b: RigidBody,
+    noktalar: liste[Vec2],     // Temas noktaları (max 2)
+    normal: Vec2,              // Çarpışma normali
+    derinlik: ondalık,         // Penetrasyon derinliği
+    temas_hizi: ondalık        // Relative velocity
+son
+
+// Raycast sonucu
+tip RaycastHit = yapı yap
+    cisim: RigidBody,
+    nokta: Vec2,               // Hit point
+    normal: Vec2,              // Surface normal
+    mesafe: ondalık,           // Uzaklık
+    fraksiyon: ondalık         // 0.0-1.0 (ray parametresi)
+son
+
+// AABB (Axis-Aligned Bounding Box)
+tip AABB = yapı yap
+    min: Vec2,
+    max: Vec2
+son
+
+// Mass Data (kütle bilgisi)
+tip MassData = yapı yap
+    kutle: ondalık,            // kg
+    merkez: Vec2,              // Kütle merkezi
+    inertia: ondalık           // Rotasyonel atalet (kg·m²)
+son
+
+// Vec2 (2D vektör)
+tip Vec2 = yapı yap
+    x: ondalık,
+    y: ondalık
+son
+
+// ============================================================================
+// DÜNYA YÖNETİMİ (World Management)
+// ============================================================================
+
+// Fizik dünyası oluştur
+fonksiyon dunya_olustur(gravity_x: ondalık = 0.0, gravity_y: ondalık = -9.8) -> Sonuç[PhysicsWorld, PhysicsHata]
+yap
+    değişken handle = native_world_create(gravity_x, gravity_y)
+    
+    eğer handle < 0 ise yap
+        dön Hata(PhysicsHata yap
+            mesaj: "Fizik dünyası oluşturulamadı",
+            hata_türü: "world"
+        son)
+    son
+    
+    dön Başarı(PhysicsWorld yap
+        gravity: vec2(gravity_x, gravity_y),
+        zaman_adimi: 1.0 / 60.0,
+        velocity_iterations: 8,
+        position_iterations: 3,
+        uyuyan_cisimler: doğru,
+        handle: handle
+    son)
+son
+
+// Dünyayı simüle et (tek adım)
+fonksiyon dunya_simule(dunya: PhysicsWorld, delta_time: ondalık) -> boş
+yap
+    native_world_step(dunya.handle, delta_time, dunya.velocity_iterations, dunya.position_iterations)
+son
+
+// Yerçekimi ayarla
+fonksiyon dunya_gravity_ayarla(dunya: PhysicsWorld, gravity_x: ondalık, gravity_y: ondalık) -> boş
+yap
+    dunya.gravity = vec2(gravity_x, gravity_y)
+    native_world_set_gravity(dunya.handle, gravity_x, gravity_y)
+son
+
+// Dünyayı sil
+fonksiyon dunya_sil(dunya: PhysicsWorld) -> boş
+yap
+    native_world_destroy(dunya.handle)
+son
+
+// Dünya istatistikleri
+fonksiyon dunya_istatistik(dunya: PhysicsWorld) -> yapı yap cisim_sayisi: tamsayı, joint_sayisi: tamsayı, contact_sayisi: tamsayı son
+yap
+    dön native_world_get_stats(dunya.handle)
+son
+
+// ============================================================================
+// CİSİM YÖNETİMİ (Rigid Body Management)
+// ============================================================================
+
+// Rigid body oluştur
+fonksiyon cisim_olustur(dunya: PhysicsWorld, tipi: BodyTipi, x: ondalık, y: ondalık, aci: ondalık = 0.0) -> Sonuç[RigidBody, PhysicsHata]
+yap
+    değişken handle = native_body_create(dunya.handle, tipi, x, y, aci)
+    
+    eğer handle < 0 ise yap
+        dön Hata(PhysicsHata yap
+            mesaj: "Rigid body oluşturulamadı",
+            hata_türü: "body"
+        son)
+    son
+    
+    dön Başarı(RigidBody yap
+        tipi: tipi,
+        pozisyon: vec2(x, y),
+        aci: aci,
+        linear_velocity: vec2(0.0, 0.0),
+        angular_velocity: 0.0,
+        linear_damping: 0.0,
+        angular_damping: 0.0,
+        fixed_rotation: yanlış,
+        bullet: yanlış,
+        uykuda: yanlış,
+        handle: handle
+    son)
+son
+
+// Cisim pozisyonunu ayarla
+fonksiyon cisim_pozisyon_ayarla(cisim: RigidBody, x: ondalık, y: ondalık, aci: ondalık) -> boş
+yap
+    cisim.pozisyon = vec2(x, y)
+    cisim.aci = aci
+    native_body_set_transform(cisim.handle, x, y, aci)
+son
+
+// Cisim pozisyonunu al
+fonksiyon cisim_pozisyon_al(cisim: RigidBody) -> (Vec2, ondalık)
+yap
+    değişken transform = native_body_get_transform(cisim.handle)
+    cisim.pozisyon = vec2(transform.x, transform.y)
+    cisim.aci = transform.aci
+    dön (cisim.pozisyon, cisim.aci)
+son
+
+// Linear velocity ayarla
+fonksiyon cisim_velocity_ayarla(cisim: RigidBody, vx: ondalık, vy: ondalık) -> boş
+yap
+    cisim.linear_velocity = vec2(vx, vy)
+    native_body_set_linear_velocity(cisim.handle, vx, vy)
+son
+
+// Angular velocity ayarla
+fonksiyon cisim_angular_velocity_ayarla(cisim: RigidBody, omega: ondalık) -> boş
+yap
+    cisim.angular_velocity = omega
+    native_body_set_angular_velocity(cisim.handle, omega)
+son
+
+// Kuvvet uygula (merkeze)
+fonksiyon cisim_kuvvet_uygula(cisim: RigidBody, fx: ondalık, fy: ondalık) -> boş
+yap
+    native_body_apply_force(cisim.handle, fx, fy, 0.0, 0.0)  // Center
+son
+
+// Kuvvet uygula (noktaya)
+fonksiyon cisim_kuvvet_uygula_nokta(cisim: RigidBody, fx: ondalık, fy: ondalık, px: ondalık, py: ondalık) -> boş
+yap
+    native_body_apply_force(cisim.handle, fx, fy, px, py)
+son
+
+// İmpuls uygula (darbe)
+fonksiyon cisim_impuls_uygula(cisim: RigidBody, jx: ondalık, jy: ondalık) -> boş
+yap
+    native_body_apply_impulse(cisim.handle, jx, jy, 0.0, 0.0)
+son
+
+// İmpuls uygula (noktaya)
+fonksiyon cisim_impuls_uygula_nokta(cisim: RigidBody, jx: ondalık, jy: ondalık, px: ondalık, py: ondalık) -> boş
+yap
+    native_body_apply_impulse(cisim.handle, jx, jy, px, py)
+son
+
+// Torque uygula (dönme kuvveti)
+fonksiyon cisim_torque_uygula(cisim: RigidBody, torque: ondalık) -> boş
+yap
+    native_body_apply_torque(cisim.handle, torque)
+son
+
+// Cisim tipini değiştir
+fonksiyon cisim_tip_ayarla(cisim: RigidBody, tipi: BodyTipi) -> boş
+yap
+    cisim.tipi = tipi
+    native_body_set_type(cisim.handle, tipi)
+son
+
+// Damping ayarla
+fonksiyon cisim_damping_ayarla(cisim: RigidBody, linear: ondalık, angular: ondalık) -> boş
+yap
+    cisim.linear_damping = linear
+    cisim.angular_damping = angular
+    native_body_set_damping(cisim.handle, linear, angular)
+son
+
+// Fixed rotation ayarla
+fonksiyon cisim_fixed_rotation(cisim: RigidBody, fixed: mantıksal) -> boş
+yap
+    cisim.fixed_rotation = fixed
+    native_body_set_fixed_rotation(cisim.handle, fixed)
+son
+
+// Bullet flag (CCD)
+fonksiyon cisim_bullet_ayarla(cisim: RigidBody, bullet: mantıksal) -> boş
+yap
+    cisim.bullet = bullet
+    native_body_set_bullet(cisim.handle, bullet)
+son
+
+// Cisim uyanık mı?
+fonksiyon cisim_uyanik_mi(cisim: RigidBody) -> mantıksal
+yap
+    dön native_body_is_awake(cisim.handle)
+son
+
+// Cismi uyandır
+fonksiyon cisim_uyandir(cisim: RigidBody) -> boş
+yap
+    native_body_set_awake(cisim.handle, doğru)
+    cisim.uykuda = yanlış
+son
+
+// Kütle bilgisi al
+fonksiyon cisim_mass_data_al(cisim: RigidBody) -> MassData
+yap
+    dön native_body_get_mass_data(cisim.handle)
+son
+
+// Cismi sil
+fonksiyon cisim_sil(cisim: RigidBody) -> boş
+yap
+    native_body_destroy(cisim.handle)
+son
+
+// ============================================================================
+// SHAPE (Çarpışma Şekilleri)
+// ============================================================================
+
+// Daire şekli oluştur
+fonksiyon shape_daire_olustur(cisim: RigidBody, merkez: Vec2, yaricap: ondalık, density: ondalık = 1.0) -> Sonuç[Shape, PhysicsHata]
+yap
+    değişken handle = native_shape_circle_create(cisim.handle, merkez.x, merkez.y, yaricap)
+    
+    eğer handle < 0 ise yap
+        dön Hata(PhysicsHata yap
+            mesaj: "Daire şekli oluşturulamadı",
+            hata_türü: "shape"
+        son)
+    son
+    
+    değişken shape = Shape yap
+        tipi: "Circle",
+        density: density,
+        friction: 0.3,
+        restitution: 0.0,
+        sensor: yanlış,
+        kategori: 0x0001,
+        maske: 0xFFFF,
+        handle: handle
+    son
+    
+    native_shape_set_density(handle, density)
+    dön Başarı(shape)
+son
+
+// Kutu şekli oluştur
+fonksiyon shape_kutu_olustur(cisim: RigidBody, genişlik: ondalık, yükseklik: ondalık, merkez: Vec2 = vec2(0.0, 0.0), aci: ondalık = 0.0, density: ondalık = 1.0) -> Sonuç[Shape, PhysicsHata]
+yap
+    değişken handle = native_shape_box_create(cisim.handle, genişlik, yükseklik, merkez.x, merkez.y, aci)
+    
+    eğer handle < 0 ise yap
+        dön Hata(PhysicsHata yap
+            mesaj: "Kutu şekli oluşturulamadı",
+            hata_türü: "shape"
+        son)
+    son
+    
+    değişken shape = Shape yap
+        tipi: "Box",
+        density: density,
+        friction: 0.3,
+        restitution: 0.0,
+        sensor: yanlış,
+        kategori: 0x0001,
+        maske: 0xFFFF,
+        handle: handle
+    son
+    
+    native_shape_set_density(handle, density)
+    dön Başarı(shape)
+son
+
+// Çokgen şekli oluştur
+fonksiyon shape_polygon_olustur(cisim: RigidBody, vertices: liste[Vec2], density: ondalık = 1.0) -> Sonuç[Shape, PhysicsHata]
+yap
+    eğer vertices.uzunluk() < 3 veya vertices.uzunluk() > 8 ise yap
+        dön Hata(PhysicsHata yap
+            mesaj: "Polygon 3-8 vertex içermelidir",
+            hata_türü: "shape"
+        son)
+    son
+    
+    değişken handle = native_shape_polygon_create(cisim.handle, vertices)
+    
+    eğer handle < 0 ise yap
+        dön Hata(PhysicsHata yap
+            mesaj: "Polygon şekli oluşturulamadı",
+            hata_türü: "shape"
+        son)
+    son
+    
+    değişken shape = Shape yap
+        tipi: "Polygon",
+        density: density,
+        friction: 0.3,
+        restitution: 0.0,
+        sensor: yanlış,
+        kategori: 0x0001,
+        maske: 0xFFFF,
+        handle: handle
+    son
+    
+    native_shape_set_density(handle, density)
+    dön Başarı(shape)
+son
+
+// Kapsül şekli oluştur
+fonksiyon shape_capsule_olustur(cisim: RigidBody, p1: Vec2, p2: Vec2, yaricap: ondalık, density: ondalık = 1.0) -> Sonuç[Shape, PhysicsHata]
+yap
+    değişken handle = native_shape_capsule_create(cisim.handle, p1.x, p1.y, p2.x, p2.y, yaricap)
+    
+    eğer handle < 0 ise yap
+        dön Hata(PhysicsHata yap
+            mesaj: "Capsule şekli oluşturulamadı",
+            hata_türü: "shape"
+        son)
+    son
+    
+    değişken shape = Shape yap
+        tipi: "Capsule",
+        density: density,
+        friction: 0.3,
+        restitution: 0.0,
+        sensor: yanlış,
+        kategori: 0x0001,
+        maske: 0xFFFF,
+        handle: handle
+    son
+    
+    native_shape_set_density(handle, density)
+    dön Başarı(shape)
+son
+
+// Edge (çizgi) şekli oluştur
+fonksiyon shape_edge_olustur(cisim: RigidBody, v1: Vec2, v2: Vec2) -> Sonuç[Shape, PhysicsHata]
+yap
+    değişken handle = native_shape_edge_create(cisim.handle, v1.x, v1.y, v2.x, v2.y)
+    
+    eğer handle < 0 ise yap
+        dön Hata(PhysicsHata yap
+            mesaj: "Edge şekli oluşturulamadı",
+            hata_türü: "shape"
+        son)
+    son
+    
+    değişken shape = Shape yap
+        tipi: "Edge",
+        density: 0.0,
+        friction: 0.3,
+        restitution: 0.0,
+        sensor: yanlış,
+        kategori: 0x0001,
+        maske: 0xFFFF,
+        handle: handle
+    son
+    
+    dön Başarı(shape)
+son
+
+// Shape friction ayarla
+fonksiyon shape_friction_ayarla(shape: Shape, friction: ondalık) -> boş
+yap
+    shape.friction = math::clamp(friction, 0.0, 1.0)
+    native_shape_set_friction(shape.handle, shape.friction)
+son
+
+// Shape restitution ayarla (elastikiyet)
+fonksiyon shape_restitution_ayarla(shape: Shape, restitution: ondalık) -> boş
+yap
+    shape.restitution = math::clamp(restitution, 0.0, 1.0)
+    native_shape_set_restitution(shape.handle, shape.restitution)
+son
+
+// Shape sensor ayarla (trigger)
+fonksiyon shape_sensor_ayarla(shape: Shape, sensor: mantıksal) -> boş
+yap
+    shape.sensor = sensor
+    native_shape_set_sensor(shape.handle, sensor)
+son
+
+// Collision filtering
+fonksiyon shape_filter_ayarla(shape: Shape, kategori: tamsayı, maske: tamsayı) -> boş
+yap
+    shape.kategori = kategori
+    shape.maske = maske
+    native_shape_set_filter(shape.handle, kategori, maske)
+son
+
+// Shape'i sil
+fonksiyon shape_sil(shape: Shape) -> boş
+yap
+    native_shape_destroy(shape.handle)
+son
+
+// ============================================================================
+// JOINT (Eklemler/Constraints)
+// ============================================================================
+
+// Revolute joint (menteşe) oluştur
+fonksiyon joint_revolute_olustur(cisim_a: RigidBody, cisim_b: RigidBody, angor: Vec2) -> Sonuç[RevoluteJoint, PhysicsHata]
+yap
+    değişken handle = native_joint_revolute_create(cisim_a.handle, cisim_b.handle, angor.x, angor.y)
+    
+    eğer handle < 0 ise yap
+        dön Hata(PhysicsHata yap
+            mesaj: "Revolute joint oluşturulamadı",
+            hata_türü: "joint"
+        son)
+    son
+    
+    dön Başarı(RevoluteJoint yap
+        joint: Joint yap
+            tipi: "Revolute",
+            cisim_a: cisim_a,
+            cisim_b: cisim_b,
+            çarpışma: yanlış,
+            handle: handle
+        son,
+        angor: angor,
+        referans_aci: 0.0,
+        limit_aktif: yanlış,
+        alt_limit: 0.0,
+        ust_limit: 0.0,
+        motor_aktif: yanlış,
+        motor_hiz: 0.0,
+        max_motor_tork: 0.0
+    son)
+son
+
+// Revolute joint limit ayarla
+fonksiyon joint_revolute_limit_ayarla(joint: RevoluteJoint, alt: ondalık, ust: ondalık) -> boş
+yap
+    joint.limit_aktif = doğru
+    joint.alt_limit = alt
+    joint.ust_limit = ust
+    native_joint_revolute_set_limits(joint.joint.handle, alt, ust)
+son
+
+// Revolute joint motor ayarla
+fonksiyon joint_revolute_motor_ayarla(joint: RevoluteJoint, hiz: ondalık, max_tork: ondalık) -> boş
+yap
+    joint.motor_aktif = doğru
+    joint.motor_hiz = hiz
+    joint.max_motor_tork = max_tork
+    native_joint_revolute_set_motor(joint.joint.handle, doğru, hiz, max_tork)
+son
+
+// Prismatic joint (kayar) oluştur
+fonksiyon joint_prismatic_olustur(cisim_a: RigidBody, cisim_b: RigidBody, angor: Vec2, aks: Vec2) -> Sonuç[PrismaticJoint, PhysicsHata]
+yap
+    değişken handle = native_joint_prismatic_create(cisim_a.handle, cisim_b.handle, angor.x, angor.y, aks.x, aks.y)
+    
+    eğer handle < 0 ise yap
+        dön Hata(PhysicsHata yap
+            mesaj: "Prismatic joint oluşturulamadı",
+            hata_türü: "joint"
+        son)
+    son
+    
+    dön Başarı(PrismaticJoint yap
+        joint: Joint yap
+            tipi: "Prismatic",
+            cisim_a: cisim_a,
+            cisim_b: cisim_b,
+            çarpışma: yanlış,
+            handle: handle
+        son,
+        angor: angor,
+        aks: aks,
+        limit_aktif: yanlış,
+        alt_limit: 0.0,
+        ust_limit: 0.0,
+        motor_aktif: yanlış,
+        motor_hiz: 0.0,
+        max_motor_kuvvet: 0.0
+    son)
+son
+
+// Distance joint (mesafe) oluştur
+fonksiyon joint_distance_olustur(cisim_a: RigidBody, cisim_b: RigidBody, angor_a: Vec2, angor_b: Vec2, uzunluk: ondalık) -> Sonuç[DistanceJoint, PhysicsHata]
+yap
+    değişken handle = native_joint_distance_create(cisim_a.handle, cisim_b.handle, angor_a.x, angor_a.y, angor_b.x, angor_b.y, uzunluk)
+    
+    eğer handle < 0 ise yap
+        dön Hata(PhysicsHata yap
+            mesaj: "Distance joint oluşturulamadı",
+            hata_türü: "joint"
+        son)
+    son
+    
+    dön Başarı(DistanceJoint yap
+        joint: Joint yap
+            tipi: "Distance",
+            cisim_a: cisim_a,
+            cisim_b: cisim_b,
+            çarpışma: yanlış,
+            handle: handle
+        son,
+        angor_a: angor_a,
+        angor_b: angor_b,
+        uzunluk: uzunluk,
+        sertlik: 1.0,
+        damplik: 0.5
+    son)
+son
+
+// Weld joint (kaynak) oluştur
+fonksiyon joint_weld_olustur(cisim_a: RigidBody, cisim_b: RigidBody, angor: Vec2) -> Sonuç[WeldJoint, PhysicsHata]
+yap
+    değişken handle = native_joint_weld_create(cisim_a.handle, cisim_b.handle, angor.x, angor.y)
+    
+    eğer handle < 0 ise yap
+        dön Hata(PhysicsHata yap
+            mesaj: "Weld joint oluşturulamadı",
+            hata_türü: "joint"
+        son)
+    son
+    
+    dön Başarı(WeldJoint yap
+        joint: Joint yap
+            tipi: "Weld",
+            cisim_a: cisim_a,
+            cisim_b: cisim_b,
+            çarpışma: yanlış,
+            handle: handle
+        son,
+        angor: angor,
+        referans_aci: 0.0
+    son)
+son
+
+// Joint'i sil
+fonksiyon joint_sil(joint: Joint) -> boş
+yap
+    native_joint_destroy(joint.handle)
+son
+
+// ============================================================================
+// RAYCASTING (Işın Atma)
+// ============================================================================
+
+// Raycast yap (en yakın hit)
+fonksiyon raycast(dunya: PhysicsWorld, başlangıç: Vec2, son: Vec2) -> Seçenek[RaycastHit]
+yap
+    dön native_raycast(dunya.handle, başlangıç.x, başlangıç.y, son.x, son.y)
+son
+
+// Raycast yap (tüm hit'ler)
+fonksiyon raycast_tumu(dunya: PhysicsWorld, başlangıç: Vec2, son: Vec2) -> liste[RaycastHit]
+yap
+    dön native_raycast_all(dunya.handle, başlangıç.x, başlangıç.y, son.x, son.y)
+son
+
+// AABB içindeki cisimleri bul
+fonksiyon query_aabb(dunya: PhysicsWorld, aabb: AABB) -> liste[RigidBody]
+yap
+    dön native_query_aabb(dunya.handle, aabb.min.x, aabb.min.y, aabb.max.x, aabb.max.y)
+son
+
+// Nokta çarpışma testi
+fonksiyon query_point(dunya: PhysicsWorld, nokta: Vec2) -> liste[RigidBody]
+yap
+    dön native_query_point(dunya.handle, nokta.x, nokta.y)
+son
+
+// ============================================================================
+// ÇARPIŞMA OLAYLARI (Collision Callbacks)
+// ============================================================================
+
+// Çarpışma başlangıcı callback
+fonksiyon dunya_on_collision_begin(dunya: PhysicsWorld, callback: fonksiyon(contact: Contact) -> boş) -> boş
+yap
+    native_world_set_begin_callback(dunya.handle, callback)
+son
+
+// Çarpışma bitişi callback
+fonksiyon dunya_on_collision_end(dunya: PhysicsWorld, callback: fonksiyon(contact: Contact) -> boş) -> boş
+yap
+    native_world_set_end_callback(dunya.handle, callback)
+son
+
+// Sensor trigger callback
+fonksiyon dunya_on_sensor_trigger(dunya: PhysicsWorld, callback: fonksiyon(cisim_a: RigidBody, cisim_b: RigidBody) -> boş) -> boş
+yap
+    native_world_set_sensor_callback(dunya.handle, callback)
+son
+
+// ============================================================================
+// YARDIMCI FONKSİYONLAR (Helper Functions)
+// ============================================================================
+
+// Vec2 oluştur
+fonksiyon vec2(x: ondalık, y: ondalık) -> Vec2
+yap
+    dön Vec2 yap x: x, y: y son
+son
+
+// Vec2 toplama
+fonksiyon vec2_ekle(a: Vec2, b: Vec2) -> Vec2
+yap
+    dön vec2(a.x + b.x, a.y + b.y)
+son
+
+// Vec2 çıkarma
+fonksiyon vec2_cikar(a: Vec2, b: Vec2) -> Vec2
+yap
+    dön vec2(a.x - b.x, a.y - b.y)
+son
+
+// Vec2 skaler çarpma
+fonksiyon vec2_carp(v: Vec2, s: ondalık) -> Vec2
+yap
+    dön vec2(v.x * s, v.y * s)
+son
+
+// Vec2 uzunluk
+fonksiyon vec2_uzunluk(v: Vec2) -> ondalık
+yap
+    dön math::sqrt(v.x * v.x + v.y * v.y)
+son
+
+// Vec2 normalize
+fonksiyon vec2_normalize(v: Vec2) -> Vec2
+yap
+    değişken uzunluk = vec2_uzunluk(v)
+    eğer uzunluk > 0.0 ise yap
+        dön vec2(v.x / uzunluk, v.y / uzunluk)
+    son
+    dön vec2(0.0, 0.0)
+son
+
+// Vec2 dot product
+fonksiyon vec2_dot(a: Vec2, b: Vec2) -> ondalık
+yap
+    dön a.x * b.x + a.y * b.y
+son
+
+// Vec2 cross product (2D'de skaler)
+fonksiyon vec2_cross(a: Vec2, b: Vec2) -> ondalık
+yap
+    dön a.x * b.y - a.y * b.x
+son
+
+// AABB oluştur
+fonksiyon aabb_olustur(min_x: ondalık, min_y: ondalık, max_x: ondalık, max_y: ondalık) -> AABB
+yap
+    dön AABB yap
+        min: vec2(min_x, min_y),
+        max: vec2(max_x, max_y)
+    son
+son
+
+// AABB içerir mi?
+fonksiyon aabb_icerir(aabb: AABB, nokta: Vec2) -> mantıksal
+yap
+    dön nokta.x >= aabb.min.x ve nokta.x <= aabb.max.x ve
+        nokta.y >= aabb.min.y ve nokta.y <= aabb.max.y
+son
+
+// AABB çarpışma
+fonksiyon aabb_carpisiyor(a: AABB, b: AABB) -> mantıksal
+yap
+    dön değil (a.max.x < b.min.x veya a.min.x > b.max.x veya
+               a.max.y < b.min.y veya a.min.y > b.max.y)
+son
+
+// ============================================================================
+// PHYSICS HATA
+// ============================================================================
+
+tip PhysicsHata = yapı yap
+    mesaj: yazı,
+    hata_türü: yazı
+son
+
+// ============================================================================
+// DÜŞÜK SEVİYE FONKSİYONLAR (Low-level - Native bindings)
+// ============================================================================
+
+// World
+harici fonksiyon native_world_create(gx: ondalık, gy: ondalık) -> tamsayı
+harici fonksiyon native_world_destroy(handle: tamsayı) -> boş
+harici fonksiyon native_world_step(handle: tamsayı, dt: ondalık, vel_iter: tamsayı, pos_iter: tamsayı) -> boş
+harici fonksiyon native_world_set_gravity(handle: tamsayı, gx: ondalık, gy: ondalık) -> boş
+harici fonksiyon native_world_get_stats(handle: tamsayı) -> yapı yap cisim_sayisi: tamsayı, joint_sayisi: tamsayı, contact_sayisi: tamsayı son
+
+// Body
+harici fonksiyon native_body_create(world: tamsayı, tipi: BodyTipi, x: ondalık, y: ondalık, aci: ondalık) -> tamsayı
+harici fonksiyon native_body_destroy(handle: tamsayı) -> boş
+harici fonksiyon native_body_set_transform(handle: tamsayı, x: ondalık, y: ondalık, aci: ondalık) -> boş
+harici fonksiyon native_body_get_transform(handle: tamsayı) -> yapı yap x: ondalık, y: ondalık, aci: ondalık son
+harici fonksiyon native_body_set_linear_velocity(handle: tamsayı, vx: ondalık, vy: ondalık) -> boş
+harici fonksiyon native_body_set_angular_velocity(handle: tamsayı, omega: ondalık) -> boş
+harici fonksiyon native_body_apply_force(handle: tamsayı, fx: ondalık, fy: ondalık, px: ondalık, py: ondalık) -> boş
+harici fonksiyon native_body_apply_impulse(handle: tamsayı, jx: ondalık, jy: ondalık, px: ondalık, py: ondalık) -> boş
+harici fonksiyon native_body_apply_torque(handle: tamsayı, torque: ondalık) -> boş
+harici fonksiyon native_body_set_type(handle: tamsayı, tipi: BodyTipi) -> boş
+harici fonksiyon native_body_set_damping(handle: tamsayı, linear: ondalık, angular: ondalık) -> boş
+harici fonksiyon native_body_set_fixed_rotation(handle: tamsayı, fixed: mantıksal) -> boş
+harici fonksiyon native_body_set_bullet(handle: tamsayı, bullet: mantıksal) -> boş
+harici fonksiyon native_body_is_awake(handle: tamsayı) -> mantıksal
+harici fonksiyon native_body_set_awake(handle: tamsayı, awake: mantıksal) -> boş
+harici fonksiyon native_body_get_mass_data(handle: tamsayı) -> MassData
+
+// Shape
+harici fonksiyon native_shape_circle_create(body: tamsayı, cx: ondalık, cy: ondalık, r: ondalık) -> tamsayı
+harici fonksiyon native_shape_box_create(body: tamsayı, w: ondalık, h: ondalık, cx: ondalık, cy: ondalık, aci: ondalık) -> tamsayı
+harici fonksiyon native_shape_polygon_create(body: tamsayı, vertices: liste[Vec2]) -> tamsayı
+harici fonksiyon native_shape_capsule_create(body: tamsayı, x1: ondalık, y1: ondalık, x2: ondalık, y2: ondalık, r: ondalık) -> tamsayı
+harici fonksiyon native_shape_edge_create(body: tamsayı, x1: ondalık, y1: ondalık, x2: ondalık, y2: ondalık) -> tamsayı
+harici fonksiyon native_shape_destroy(handle: tamsayı) -> boş
+harici fonksiyon native_shape_set_density(handle: tamsayı, density: ondalık) -> boş
+harici fonksiyon native_shape_set_friction(handle: tamsayı, friction: ondalık) -> boş
+harici fonksiyon native_shape_set_restitution(handle: tamsayı, restitution: ondalık) -> boş
+harici fonksiyon native_shape_set_sensor(handle: tamsayı, sensor: mantıksal) -> boş
+harici fonksiyon native_shape_set_filter(handle: tamsayı, kategori: tamsayı, maske: tamsayı) -> boş
+
+// Joint
+harici fonksiyon native_joint_revolute_create(body_a: tamsayı, body_b: tamsayı, ax: ondalık, ay: ondalık) -> tamsayı
+harici fonksiyon native_joint_revolute_set_limits(joint: tamsayı, alt: ondalık, ust: ondalık) -> boş
+harici fonksiyon native_joint_revolute_set_motor(joint: tamsayı, aktif: mantıksal, hiz: ondalık, tork: ondalık) -> boş
+harici fonksiyon native_joint_prismatic_create(body_a: tamsayı, body_b: tamsayı, ax: ondalık, ay: ondalık, aksx: ondalık, aksy: ondalık) -> tamsayı
+harici fonksiyon native_joint_distance_create(body_a: tamsayı, body_b: tamsayı, a1x: ondalık, a1y: ondalık, a2x: ondalık, a2y: ondalık, uzunluk: ondalık) -> tamsayı
+harici fonksiyon native_joint_weld_create(body_a: tamsayı, body_b: tamsayı, ax: ondalık, ay: ondalık) -> tamsayı
+harici fonksiyon native_joint_destroy(handle: tamsayı) -> boş
+
+// Raycast
+harici fonksiyon native_raycast(world: tamsayı, x1: ondalık, y1: ondalık, x2: ondalık, y2: ondalık) -> Seçenek[RaycastHit]
+harici fonksiyon native_raycast_all(world: tamsayı, x1: ondalık, y1: ondalık, x2: ondalık, y2: ondalık) -> liste[RaycastHit]
+harici fonksiyon native_query_aabb(world: tamsayı, min_x: ondalık, min_y: ondalık, max_x: ondalık, max_y: ondalık) -> liste[RigidBody]
+harici fonksiyon native_query_point(world: tamsayı, x: ondalık, y: ondalık) -> liste[RigidBody]
+
+// Callbacks
+harici fonksiyon native_world_set_begin_callback(world: tamsayı, callback: fonksiyon(contact: Contact) -> boş) -> boş
+harici fonksiyon native_world_set_end_callback(world: tamsayı, callback: fonksiyon(contact: Contact) -> boş) -> boş
+harici fonksiyon native_world_set_sensor_callback(world: tamsayı, callback: fonksiyon(a: RigidBody, b: RigidBody) -> boş) -> boş
+
+// ============================================================================
+// KULLANIM ÖRNEKLERİ (Usage Examples)
+// ============================================================================
+
+/*
+// ============================================================================
+// ÖRNEK 1: TEMEL FİZİK SİMÜLASYONU
+// ============================================================================
+
+kullan physics2d
+kullan graphics
+
+// Dünya oluştur
+değişken dunya = physics2d::dunya_olustur(0.0, -9.8).unwrap()
+
+// Zemin (static body)
+değişken zemin = physics2d::cisim_olustur(dunya, "Static", 0.0, -5.0, 0.0).unwrap()
+değişken zemin_shape = physics2d::shape_kutu_olustur(zemin, 20.0, 1.0, vec2(0.0, 0.0), 0.0, 1.0).unwrap()
+
+// Düşen kutu (dynamic body)
+değişken kutu = physics2d::cisim_olustur(dunya, "Dynamic", 0.0, 10.0, 0.0).unwrap()
+değişken kutu_shape = physics2d::shape_kutu_olustur(kutu, 1.0, 1.0, vec2(0.0, 0.0), 0.0, 1.0).unwrap()
+physics2d::shape_friction_ayarla(kutu_shape, 0.3)
+physics2d::shape_restitution_ayarla(kutu_shape, 0.5)  // Sıçrama
+
+// Simülasyon döngüsü
+değişken dt = 1.0 / 60.0  // 60 FPS
+iken doğru yap
+    physics2d::dunya_simule(dunya, dt)
+    
+    // Kutu pozisyonunu al
+    değişken (pozisyon, aci) = physics2d::cisim_pozisyon_al(kutu)
+    yazdır("Kutu: x=" + ondalık_yazı(pozisyon.x) + ", y=" + ondalık_yazı(pozisyon.y))
+    
+    bekle(dt)
+son
+
+// ============================================================================
+// ÖRNEK 2: REVOLUTE JOINT (Sarkaç)
+// ============================================================================
+
+değişken dunya = physics2d::dunya_olustur(0.0, -10.0).unwrap()
+
+// Sabit nokta (static)
+değişken angor_cisim = physics2d::cisim_olustur(dunya, "Static", 0.0, 5.0, 0.0).unwrap()
+
+// Sarkaç topu (dynamic)
+değişken top = physics2d::cisim_olustur(dunya, "Dynamic", 0.0, 0.0, 0.0).unwrap()
+değişken top_shape = physics2d::shape_daire_olustur(top, vec2(0.0, 0.0), 0.5, 1.0).unwrap()
+
+// Revolute joint ile bağla
+değişken sarkaç_joint = physics2d::joint_revolute_olustur(angor_cisim, top, vec2(0.0, 5.0)).unwrap()
+
+// İlk hız ver
+physics2d::cisim_velocity_ayarla(top, 5.0, 0.0)
+
+// Simülasyon
+iken doğru yap
+    physics2d::dunya_simule(dunya, 1.0 / 60.0)
+    bekle(1.0 / 60.0)
+son
+
+// ============================================================================
+// ÖRNEK 3: RAYCAST (Işın atma)
+// ============================================================================
+
+değişken dunya = physics2d::dunya_olustur(0.0, -9.8).unwrap()
+
+// Birkaç cisim ekle
+değişken kutu1 = physics2d::cisim_olustur(dunya, "Dynamic", 2.0, 5.0, 0.0).unwrap()
+physics2d::shape_kutu_olustur(kutu1, 1.0, 1.0).unwrap()
+
+değişken kutu2 = physics2d::cisim_olustur(dunya, "Dynamic", 5.0, 3.0, 0.0).unwrap()
+physics2d::shape_kutu_olustur(kutu2, 1.0, 1.0).unwrap()
+
+// Raycast yap
+değişken başlangıç = vec2(0.0, 10.0)
+değişken son = vec2(10.0, 0.0)
+
+değişken hit = physics2d::raycast(dunya, başlangıç, son)
+
+eğer hit.bazı_mı() ise yap
+    değişken h = hit.unwrap()
+    yazdır("Hit! Nokta: (" + ondalık_yazı(h.nokta.x) + ", " + ondalık_yazı(h.nokta.y) + ")")
+    yazdır("Mesafe: " + ondalık_yazı(h.mesafe))
+son değilse yap
+    yazdır("Işın hiçbir şeye çarpmadı")
+son
+
+// ============================================================================
+// ÖRNEK 4: ÇARPIŞMA OLAYLARI
+// ============================================================================
+
+değişken dunya = physics2d::dunya_olustur(0.0, -9.8).unwrap()
+
+// Çarpışma başlangıcı callback
+physics2d::dunya_on_collision_begin(dunya, fonksiyon(contact: Contact) yap
+    yazdır("Çarpışma başladı!")
+    yazdır("Normal: " + ondalık_yazı(contact.normal.x) + ", " + ondalık_yazı(contact.normal.y))
+son)
+
+// Çarpışma bitişi callback
+physics2d::dunya_on_collision_end(dunya, fonksiyon(contact: Contact) yap
+    yazdır("Çarpışma bitti")
+son)
+
+// Cisimler
+değişken zemin = physics2d::cisim_olustur(dunya, "Static", 0.0, 0.0, 0.0).unwrap()
+physics2d::shape_kutu_olustur(zemin, 10.0, 1.0).unwrap()
+
+değişken top = physics2d::cisim_olustur(dunya, "Dynamic", 0.0, 5.0, 0.0).unwrap()
+physics2d::shape_daire_olustur(top, vec2(0.0, 0.0), 0.5, 1.0).unwrap()
+
+// Simülasyon
+iken doğru yap
+    physics2d::dunya_simule(dunya, 1.0 / 60.0)
+    bekle(1.0 / 60.0)
+son
+
+// ============================================================================
+// ÖRNEK 5: PLATFORMER OYUN FİZİĞİ
+// ============================================================================
+
+kullan physics2d
+kullan graphics
+kullan input
+
+değişken dunya = physics2d::dunya_olustur(0.0, -20.0).unwrap()
+
+// Zemin
+değişken zemin = physics2d::cisim_olustur(dunya, "Static", 0.0, -5.0, 0.0).unwrap()
+physics2d::shape_kutu_olustur(zemin, 20.0, 1.0).unwrap()
+
+// Oyuncu karakteri
+değişken oyuncu = physics2d::cisim_olustur(dunya, "Dynamic", 0.0, 2.0, 0.0).unwrap()
+değişken oyuncu_shape = physics2d::shape_capsule_olustur(oyuncu, vec2(0.0, -0.5), vec2(0.0, 0.5), 0.5, 1.0).unwrap()
+physics2d::shape_friction_ayarla(oyuncu_shape, 0.3)
+physics2d::cisim_fixed_rotation(oyuncu, doğru)  // Rotasyonu kilitle
+
+// Oyun döngüsü
+değişken yerdemi = yanlış
+iken doğru yap
+    // Input
+    değişken hiz = physics2d::vec2(0.0, 0.0)
+    
+    eğer input::tus_basili(input::SOL) ise yap
+        hiz.x = -5.0
+    son
+    eğer input::tus_basili(input::SAG) ise yap
+        hiz.x = 5.0
+    son
+    eğer input::tus_basildi(input::BOSLUK) ve yerdemi ise yap
+        // Zıplama
+        physics2d::cisim_impuls_uygula(oyuncu, 0.0, 300.0)
+    son
+    
+    // Hız ayarla (sadece X ekseni)
+    değişken mevcut_vel = oyuncu.linear_velocity
+    physics2d::cisim_velocity_ayarla(oyuncu, hiz.x, mevcut_vel.y)
+    
+    // Fizik simülasyonu
+    physics2d::dunya_simule(dunya, 1.0 / 60.0)
+    
+    // Yerde mi kontrolü (raycast aşağı doğru)
+    değişken (poz, aci) = physics2d::cisim_pozisyon_al(oyuncu)
+    değişken ray_sonuc = physics2d::raycast(dunya, poz, vec2(poz.x, poz.y - 1.1))
+    yerdemi = ray_sonuc.bazı_mı()
+    
+    bekle(1.0 / 60.0)
+son
+*/
+
+// ============================================================================
+// ADVANCED COLLISION DETECTION ALGORITHMS (Yeni - v1.7)
+// ============================================================================
+
+// SAT (Separating Axis Theorem) - Polygon collision detection
+tip SATResult = yapı yap
+    çarpışıyor: mantıksal,
+    penetrasyon: ondalık,
+    normal: Vec2,
+    contact_points: liste[Vec2]
+son
+
+// SAT collision test (iki convex polygon için)
+fonksiyon sat_test(poly_a: liste[Vec2], poly_b: liste[Vec2]) -> SATResult
+yap
+    değişken min_penetrasyon = math::INF
+    değişken collision_normal = vec2(0.0, 0.0)
+    
+    // Her iki polygon'un kenarlarını test et
+    değişken axes = sat_get_axes(poly_a) + sat_get_axes(poly_b)
+    
+    her biri axis içinde axes yap
+        // Normalize et
+        değişken normalized_axis = vec2_normalize(axis)
+        
+        // Project polygons onto axis
+        değişken (min_a, max_a) = sat_project(poly_a, normalized_axis)
+        değişken (min_b, max_b) = sat_project(poly_b, normalized_axis)
+        
+        // Overlap kontrolü
+        eğer max_a < min_b veya max_b < min_a ise yap
+            // Separating axis bulundu - çarpışma yok
+            dön SATResult yap
+                çarpışıyor: yanlış,
+                penetrasyon: 0.0,
+                normal: vec2(0.0, 0.0),
+                contact_points: liste_oluştur[Vec2]()
+            son
+        son
+        
+        // Penetrasyon hesapla
+        değişken overlap = math::min(max_a, max_b) - math::max(min_a, min_b)
+        
+        eğer overlap < min_penetrasyon ise yap
+            min_penetrasyon = overlap
+            collision_normal = normalized_axis
+        son
+    son
+    
+    // Tüm axislerde overlap var - çarpışma var
+    // Contact points hesapla
+    değişken contacts = sat_find_contact_points(poly_a, poly_b, collision_normal)
+    
+    dön SATResult yap
+        çarpışıyor: doğru,
+        penetrasyon: min_penetrasyon,
+        normal: collision_normal,
+        contact_points: contacts
+    son
+son
+
+// SAT için kenar normallerini al
+fonksiyon sat_get_axes(polygon: liste[Vec2]) -> liste[Vec2]
+yap
+    değişken axes = liste_oluştur[Vec2]()
+    
+    her biri i içinde aralık(liste_uzunluk(polygon)) yap
+        değişken p1 = polygon[i]
+        değişken p2 = polygon[(i + 1) % liste_uzunluk(polygon)]
+        
+        // Edge vector
+        değişken edge = vec2_cikar(p2, p1)
+        
+        // Perpendicular (normal)
+        değişken normal = vec2(-edge.y, edge.x)
+        liste_ekle(axes, normal)
+    son
+    
+    dön axes
+son
+
+// Polygon'u axis'e project et
+fonksiyon sat_project(polygon: liste[Vec2], axis: Vec2) -> (ondalık, ondalık)
+yap
+    değişken min = vec2_dot(polygon[0], axis)
+    değişken max = min
+    
+    her biri vertex içinde polygon yap
+        değişken projection = vec2_dot(vertex, axis)
+        eğer projection < min ise yap
+            min = projection
+        son
+        eğer projection > max ise yap
+            max = projection
+        son
+    son
+    
+    dön (min, max)
+son
+
+// Contact points bul (Sutherland-Hodgman clipping)
+fonksiyon sat_find_contact_points(poly_a: liste[Vec2], poly_b: liste[Vec2], normal: Vec2) -> liste[Vec2]
+yap
+    // Simplified contact point generation
+    // Gerçek implementasyon Sutherland-Hodgman polygon clipping kullanır
+    
+    değişken contacts = liste_oluştur[Vec2]()
+    
+    // Her kenar intersection'ı test et
+    her biri i içinde aralık(liste_uzunluk(poly_a)) yap
+        değişken a1 = poly_a[i]
+        değişken a2 = poly_a[(i + 1) % liste_uzunluk(poly_a)]
+        
+        her biri j içinde aralık(liste_uzunluk(poly_b)) yap
+            değişken b1 = poly_b[j]
+            değişken b2 = poly_b[(j + 1) % liste_uzunluk(poly_b)]
+            
+            değişken intersection = line_segment_intersection(a1, a2, b1, b2)
+            eğer intersection.bazı_mı() ise yap
+                liste_ekle(contacts, intersection.unwrap())
+            son
+        son
+    son
+    
+    dön contacts
+son
+
+// GJK (Gilbert-Johnson-Keerthi) Algorithm - Advanced collision detection
+tip GJKResult = yapı yap
+    çarpışıyor: mantıksal,
+    simplex: liste[Vec2],
+    iterasyon: tamsayı
+son
+
+// GJK collision detection
+fonksiyon gjk_test(shape_a: liste[Vec2], shape_b: liste[Vec2]) -> GJKResult
+yap
+    // Support fonksiyonu - Minkowski difference'ın en uzak noktası
+    değişken support = fonksiyon(direction: Vec2) -> Vec2 yap
+        değişken pa = gjk_support_point(shape_a, direction)
+        değişken pb = gjk_support_point(shape_b, vec2_carp(direction, -1.0))
+        dön vec2_cikar(pa, pb)
+    son
+    
+    // İlk yön (arbitrary)
+    değişken direction = vec2(1.0, 0.0)
+    
+    // İlk simplex point
+    değişken simplex = liste_oluştur[Vec2]()
+    liste_ekle(simplex, support(direction))
+    
+    // Origin'e doğru yön
+    direction = vec2_carp(simplex[0], -1.0)
+    
+    değişken max_iterations = 32
+    değişken iteration = 0
+    
+    iken iteration < max_iterations yap
+        değişken a = support(direction)
+        
+        eğer vec2_dot(a, direction) < 0.0 ise yap
+            // Origin geçemedi - çarpışma yok
+            dön GJKResult yap
+                çarpışıyor: yanlış,
+                simplex: simplex,
+                iterasyon: iteration
+            son
+        son
+        
+        liste_ekle(simplex, a)
+        
+        // Simplex origin içeriyor mu?
+        değişken sonuç = gjk_process_simplex(simplex, direction)
+        eğer sonuç yap
+            dön GJKResult yap
+                çarpışıyor: doğru,
+                simplex: simplex,
+                iterasyon: iteration
+            son
+        son
+        
+        iteration = iteration + 1
+    son
+    
+    // Max iteration aşıldı
+    dön GJKResult yap
+        çarpışıyor: yanlış,
+        simplex: simplex,
+        iterasyon: iteration
+    son
+son
+
+// GJK support point (en uzak nokta verilen yönde)
+fonksiyon gjk_support_point(shape: liste[Vec2], direction: Vec2) -> Vec2
+yap
+    değişken max_dot = -math::INF
+    değişken best_point = shape[0]
+    
+    her biri vertex içinde shape yap
+        değişken dot = vec2_dot(vertex, direction)
+        eğer dot > max_dot ise yap
+            max_dot = dot
+            best_point = vertex
+        son
+    son
+    
+    dön best_point
+son
+
+// GJK simplex processing
+fonksiyon gjk_process_simplex(simplex: liste[Vec2], direction: Vec2) -> mantıksal
+yap
+    seç liste_uzunluk(simplex) yap
+        durum 2 => yap
+            // Line case
+            değişken a = simplex[1]
+            değişken b = simplex[0]
+            değişken ab = vec2_cikar(b, a)
+            değişken ao = vec2_carp(a, -1.0)
+            
+            eğer vec2_dot(ab, ao) > 0.0 ise yap
+                // Origin is in AB direction
+                direction.x = -ab.y
+                direction.y = ab.x
+                eğer vec2_dot(direction, ao) < 0.0 ise yap
+                    direction = vec2_carp(direction, -1.0)
+                son
+            son değilse yap
+                // Origin is past A
+                liste_sil(simplex, 0)
+                direction.x = ao.x
+                direction.y = ao.y
+            son
+            dön yanlış
+        son
+        
+        durum 3 => yap
+            // Triangle case
+            değişken a = simplex[2]
+            değişken b = simplex[1]
+            değişken c = simplex[0]
+            
+            değişken ab = vec2_cikar(b, a)
+            değişken ac = vec2_cikar(c, a)
+            değişken ao = vec2_carp(a, -1.0)
+            
+            değişken ab_perp = vec2(-ab.y, ab.x)
+            değişken ac_perp = vec2(-ac.y, ac.x)
+            
+            eğer vec2_dot(ab_perp, ao) > 0.0 ise yap
+                // Origin is outside AB
+                liste_sil(simplex, 0)
+                direction.x = ab_perp.x
+                direction.y = ab_perp.y
+                dön yanlış
+            son değilse eğer vec2_dot(ac_perp, ao) > 0.0 ise yap
+                // Origin is outside AC
+                liste_sil(simplex, 1)
+                direction.x = ac_perp.x
+                direction.y = ac_perp.y
+                dön yanlış
+            son değilse yap
+                // Origin is inside triangle
+                dön doğru
+            son
+        son
+    son
+    
+    dön yanlış
+son
+
+// EPA (Expanding Polytope Algorithm) - Penetration depth hesaplama
+tip EPAResult = yapı yap
+    penetrasyon: ondalık,
+    normal: Vec2
+son
+
+// EPA - GJK sonrası penetration depth hesapla
+fonksiyon epa_penetration(simplex: liste[Vec2], shape_a: liste[Vec2], shape_b: liste[Vec2]) -> EPAResult
+yap
+    değişken polytope = simplex  // GJK simplex'i başlangıç polytope
+    
+    değişken max_iterations = 32
+    değişken iteration = 0
+    
+    iken iteration < max_iterations yap
+        // En yakın kenarı bul
+        değişken (edge_index, edge_dist, edge_normal) = epa_find_closest_edge(polytope)
+        
+        // Support point bul
+        değişken support = gjk_support_point_diff(shape_a, shape_b, edge_normal)
+        değişken support_dist = vec2_dot(support, edge_normal)
+        
+        // Tolerance check
+        eğer math::abs(support_dist - edge_dist) < 0.001 ise yap
+            dön EPAResult yap
+                penetrasyon: support_dist,
+                normal: edge_normal
+            son
+        son
+        
+        // Support point'i polytope'a ekle
+        liste_insert(polytope, edge_index + 1, support)
+        
+        iteration = iteration + 1
+    son
+    
+    // Fallback
+    değişken (_, dist, normal) = epa_find_closest_edge(polytope)
+    dön EPAResult yap
+        penetrasyon: dist,
+        normal: normal
+    son
+son
+
+// EPA - En yakın kenarı bul
+fonksiyon epa_find_closest_edge(polytope: liste[Vec2]) -> (tamsayı, ondalık, Vec2)
+yap
+    değişken min_dist = math::INF
+    değişken min_index = 0
+    değişken min_normal = vec2(0.0, 0.0)
+    
+    her biri i içinde aralık(liste_uzunluk(polytope)) yap
+        değişken a = polytope[i]
+        değişken b = polytope[(i + 1) % liste_uzunluk(polytope)]
+        
+        değişken edge = vec2_cikar(b, a)
+        değişken normal = vec2_normalize(vec2(-edge.y, edge.x))
+        değişken dist = vec2_dot(normal, a)
+        
+        eğer dist < min_dist ise yap
+            min_dist = dist
+            min_index = i
+            min_normal = normal
+        son
+    son
+    
+    dön (min_index, min_dist, min_normal)
+son
+
+// GJK support for Minkowski difference
+fonksiyon gjk_support_point_diff(shape_a: liste[Vec2], shape_b: liste[Vec2], direction: Vec2) -> Vec2
+yap
+    değişken pa = gjk_support_point(shape_a, direction)
+    değişken pb = gjk_support_point(shape_b, vec2_carp(direction, -1.0))
+    dön vec2_cikar(pa, pb)
+son
+
+// ============================================================================
+// SPATIAL PARTITIONING - Quad Tree for Broad-phase (Yeni - v1.7)
+// ============================================================================
+
+// Quad Tree düğümü
+tip QuadTreeNode = yapı yap
+    bounds: AABB,
+    cisimler: liste[RigidBody],
+    children: Seçenek[liste[QuadTreeNode]],  // 4 çocuk: TL, TR, BL, BR
+    max_cisim: tamsayı,
+    max_derinlik: tamsayı,
+    derinlik: tamsayı
+son
+
+// Quad Tree oluştur
+fonksiyon quadtree_olustur(bounds: AABB, max_cisim: tamsayı = 10, max_derinlik: tamsayı = 8) -> QuadTreeNode
+yap
+    dön QuadTreeNode yap
+        bounds: bounds,
+        cisimler: liste_oluştur[RigidBody](),
+        children: Hiç,
+        max_cisim: max_cisim,
+        max_derinlik: max_derinlik,
+        derinlik: 0
+    son
+son
+
+// Quad Tree'ye cisim ekle
+fonksiyon quadtree_insert(node: QuadTreeNode, cisim: RigidBody) -> mantıksal
+yap
+    // Bounds içinde mi?
+    değişken cisim_aabb = cisim_aabb_hesapla(cisim)
+    eğer aabb_carpisiyor(node.bounds, cisim_aabb) == yanlış ise yap
+        dön yanlış
+    son
+    
+    // Eğer children varsa, onlara ekle
+    eğer node.children.bazı_mı() ise yap
+        değişken children = node.children.unwrap()
+        her biri child içinde children yap
+            eğer quadtree_insert(child, cisim) ise yap
+                dön doğru
+            son
+        son
+        // Hiçbir child almadıysa, bu node'a ekle
+        liste_ekle(node.cisimler, cisim)
+        dön doğru
+    son
+    
+    // Bu node'a ekle
+    liste_ekle(node.cisimler, cisim)
+    
+    // Eğer capacity aşıldıysa ve max depth değilse, subdivide et
+    eğer liste_uzunluk(node.cisimler) > node.max_cisim ve node.derinlik < node.max_derinlik ise yap
+        quadtree_subdivide(node)
+    son
+    
+    dön doğru
+son
+
+// Quad Tree subdivision
+fonksiyon quadtree_subdivide(node: QuadTreeNode) -> boş
+yap
+    değişken mid_x = (node.bounds.min.x + node.bounds.max.x) / 2.0
+    değişken mid_y = (node.bounds.min.y + node.bounds.max.y) / 2.0
+    
+    // 4 çocuk oluştur
+    değişken tl = QuadTreeNode yap
+        bounds: aabb_olustur(node.bounds.min.x, mid_y, mid_x, node.bounds.max.y),
+        cisimler: liste_oluştur[RigidBody](),
+        children: Hiç,
+        max_cisim: node.max_cisim,
+        max_derinlik: node.max_derinlik,
+        derinlik: node.derinlik + 1
+    son
+    
+    değişken tr = QuadTreeNode yap
+        bounds: aabb_olustur(mid_x, mid_y, node.bounds.max.x, node.bounds.max.y),
+        cisimler: liste_oluştur[RigidBody](),
+        children: Hiç,
+        max_cisim: node.max_cisim,
+        max_derinlik: node.max_derinlik,
+        derinlik: node.derinlik + 1
+    son
+    
+    değişken bl = QuadTreeNode yap
+        bounds: aabb_olustur(node.bounds.min.x, node.bounds.min.y, mid_x, mid_y),
+        cisimler: liste_oluştur[RigidBody](),
+        children: Hiç,
+        max_cisim: node.max_cisim,
+        max_derinlik: node.max_derinlik,
+        derinlik: node.derinlik + 1
+    son
+    
+    değişken br = QuadTreeNode yap
+        bounds: aabb_olustur(mid_x, node.bounds.min.y, node.bounds.max.x, mid_y),
+        cisimler: liste_oluştur[RigidBody](),
+        children: Hiç,
+        max_cisim: node.max_cisim,
+        max_derinlik: node.max_derinlik,
+        derinlik: node.derinlik + 1
+    son
+    
+    node.children = Bazı([tl, tr, bl, br])
+    
+    // Mevcut cisimleri children'a redistrib et
+    değişken temp_cisimler = node.cisimler
+    node.cisimler = liste_oluştur[RigidBody]()
+    
+    her biri cisim içinde temp_cisimler yap
+        quadtree_insert(node, cisim)
+    son
+son
+
+// Quad Tree query (AABB içindeki cisimleri bul)
+fonksiyon quadtree_query(node: QuadTreeNode, query_bounds: AABB) -> liste[RigidBody]
+yap
+    değişken sonuc = liste_oluştur[RigidBody]()
+    
+    // Bounds intersection check
+    eğer aabb_carpisiyor(node.bounds, query_bounds) == yanlış ise yap
+        dön sonuc
+    son
+    
+    // Bu node'daki cisimleri ekle
+    her biri cisim içinde node.cisimler yap
+        değişken cisim_aabb = cisim_aabb_hesapla(cisim)
+        eğer aabb_carpisiyor(cisim_aabb, query_bounds) ise yap
+            liste_ekle(sonuc, cisim)
+        son
+    son
+    
+    // Children varsa onları da query et
+    eğer node.children.bazı_mı() ise yap
+        değişken children = node.children.unwrap()
+        her biri child içinde children yap
+            değişken child_results = quadtree_query(child, query_bounds)
+            sonuc = sonuc + child_results
+        son
+    son
+    
+    dön sonuc
+son
+
+// Cisim için AABB hesapla
+fonksiyon cisim_aabb_hesapla(cisim: RigidBody) -> AABB
+yap
+    // Simplified - gerçek implementasyon shape'e göre hesaplar
+    değişken padding = 1.0
+    dön aabb_olustur(
+        cisim.pozisyon.x - padding,
+        cisim.pozisyon.y - padding,
+        cisim.pozisyon.x + padding,
+        cisim.pozisyon.y + padding
+    )
+son
+
+// ============================================================================
+// LINE SEGMENT INTERSECTION (Helper)
+// ============================================================================
+
+fonksiyon line_segment_intersection(p1: Vec2, p2: Vec2, p3: Vec2, p4: Vec2) -> Seçenek[Vec2]
+yap
+    değişken d = (p1.x - p2.x) * (p3.y - p4.y) - (p1.y - p2.y) * (p3.x - p4.x)
+    
+    eğer math::abs(d) < 0.0001 ise yap
+        // Paralel veya coincident
+        dön Hiç
+    son
+    
+    değişken t = ((p1.x - p3.x) * (p3.y - p4.y) - (p1.y - p3.y) * (p3.x - p4.x)) / d
+    değişken u = ((p1.x - p3.x) * (p1.y - p2.y) - (p1.y - p3.y) * (p1.x - p2.x)) / d
+    
+    eğer t >= 0.0 ve t <= 1.0 ve u >= 0.0 ve u <= 1.0 ise yap
+        // Intersection var
+        dön Bazı(vec2(
+            p1.x + t * (p2.x - p1.x),
+            p1.y + t * (p2.y - p1.y)
+        ))
+    son
+    
+    dön Hiç
+son
+
+// ============================================================================
+// SOFT BODY DYNAMICS (Yumuşak Cisim Fiziği) - Jelly/Cloth/Rope
+// ============================================================================
+
+// Soft Body (mass-spring sistemi)
+tip SoftBody = yapı yap
+    particles: liste[SoftParticle],
+    springs: liste[SoftSpring],
+    damping: ondalık,  // 0.0-1.0 (energy loss)
+    pressure: ondalık,  // Internal pressure (jelly effect)
+    area_constraint: mantıksal  // Volume preservation
+son
+
+tip SoftParticle = yapı yap
+    pozisyon: Vec2,
+    onceki_pozisyon: Vec2,
+    velocity: Vec2,
+    mass: ondalık,
+    sabitlenmis: mantıksal,  // Pinned (fixed position)
+    radius: ondalık
+son
+
+tip SoftSpring = yapı yap
+    particle_a: tamsayı,
+    particle_b: tamsayı,
+    rest_length: ondalık,
+    stiffness: ondalık,  // 0.0-1.0
+    damping: ondalık
+son
+
+// Soft body oluştur (grid-based)
+fonksiyon softbody_olustur(genişlik: tamsayı, yükseklik: tamsayı, 
+                           spacing: ondalık, mass: ondalık,
+                           stiffness: ondalık = 0.8) -> SoftBody
+yap
+    değişken particles = liste_oluştur[SoftParticle]()
+    değişken springs = liste_oluştur[SoftSpring]()
+    
+    // Create particle grid
+    her biri y içinde aralık(yükseklik) yap
+        her biri x içinde aralık(genişlik) yap
+            liste_ekle(particles, SoftParticle yap
+                pozisyon: vec2(x as ondalık * spacing, y as ondalık * spacing),
+                onceki_pozisyon: vec2(x as ondalık * spacing, y as ondalık * spacing),
+                velocity: vec2(0.0, 0.0),
+                mass: mass,
+                sabitlenmis: yanlış,
+                radius: spacing * 0.5
+            son)
+        son
+    son
+    
+    // Create springs (structural + shear + bend)
+    her biri y içinde aralık(yükseklik) yap
+        her biri x içinde aralık(genişlik) yap
+            değişken idx = y * genişlik + x
+            
+            // Structural springs (right + down)
+            eğer x < genişlik - 1 ise yap
+                liste_ekle(springs, SoftSpring yap
+                    particle_a: idx,
+                    particle_b: idx + 1,
+                    rest_length: spacing,
+                    stiffness: stiffness,
+                    damping: 0.1
+                son)
+            son
+            
+            eğer y < yükseklik - 1 ise yap
+                liste_ekle(springs, SoftSpring yap
+                    particle_a: idx,
+                    particle_b: idx + genişlik,
+                    rest_length: spacing,
+                    stiffness: stiffness,
+                    damping: 0.1
+                son)
+            son
+            
+            // Shear springs (diagonals)
+            eğer x < genişlik - 1 ve y < yükseklik - 1 ise yap
+                değişken diagonal_length = spacing * math::sqrt(2.0)
+                
+                liste_ekle(springs, SoftSpring yap
+                    particle_a: idx,
+                    particle_b: idx + genişlik + 1,
+                    rest_length: diagonal_length,
+                    stiffness: stiffness * 0.5,
+                    damping: 0.1
+                son)
+                
+                liste_ekle(springs, SoftSpring yap
+                    particle_a: idx + 1,
+                    particle_b: idx + genişlik,
+                    rest_length: diagonal_length,
+                    stiffness: stiffness * 0.5,
+                    damping: 0.1
+                son)
+            son
+        son
+    son
+    
+    dön SoftBody yap
+        particles: particles,
+        springs: springs,
+        damping: 0.99,
+        pressure: 0.0,
+        area_constraint: yanlış
+    son
+son
+
+// Soft body simülasyonu (Verlet integration)
+fonksiyon softbody_adim(soft: SoftBody, dt: ondalık, gravity: Vec2) -> boş
+yap
+    // Apply forces (gravity)
+    her biri particle içinde soft.particles yap
+        eğer particle.sabitlenmis == yanlış ise yap
+            değişken force = vec2_carp(gravity, particle.mass)
+            particle.velocity = vec2_topla(particle.velocity, vec2_carp(force, dt / particle.mass))
+        son
+    son
+    
+    // Verlet integration
+    her biri particle içinde soft.particles yap
+        eğer particle.sabitlenmis == yanlış ise yap
+            değişken temp = particle.pozisyon
+            değişken displacement = vec2_cikar(particle.pozisyon, particle.onceki_pozisyon)
+            displacement = vec2_carp(displacement, soft.damping)
+            
+            particle.pozisyon = vec2_topla(particle.pozisyon, vec2_topla(displacement, vec2_carp(particle.velocity, dt)))
+            particle.onceki_pozisyon = temp
+            particle.velocity = vec2(0.0, 0.0)  // Reset for next iteration
+        son
+    son
+    
+    // Constraint solver (spring constraints)
+    değişken iterations = 3
+    her biri _ içinde aralık(iterations) yap
+        her biri spring içinde soft.springs yap
+            değişken pa = soft.particles[spring.particle_a]
+            değişken pb = soft.particles[spring.particle_b]
+            
+            değişken delta = vec2_cikar(pb.pozisyon, pa.pozisyon)
+            değişken distance = vec2_uzunluk(delta)
+            
+            eğer distance < 0.0001 ise yap
+                devam et
+            son
+            
+            değişken diff = (distance - spring.rest_length) / distance
+            değişken correction = vec2_carp(delta, diff * spring.stiffness * 0.5)
+            
+            eğer pa.sabitlenmis == yanlış ise yap
+                pa.pozisyon = vec2_topla(pa.pozisyon, correction)
+            son
+            
+            eğer pb.sabitlenmis == yanlış ise yap
+                pb.pozisyon = vec2_cikar(pb.pozisyon, correction)
+            son
+        son
+        
+        // Pressure constraint (jelly effect)
+        eğer soft.pressure > 0.0 ve soft.area_constraint ise yap
+            değişken center = softbody_center_of_mass(soft)
+            
+            her biri particle içinde soft.particles yap
+                eğer particle.sabitlenmis == yanlış ise yap
+                    değişken dir = vec2_normalize(vec2_cikar(particle.pozisyon, center))
+                    particle.pozisyon = vec2_topla(particle.pozisyon, vec2_carp(dir, soft.pressure * dt))
+                son
+            son
+        son
+    son
+son
+
+// Soft body center of mass
+fonksiyon softbody_center_of_mass(soft: SoftBody) -> Vec2
+yap
+    değişken sum = vec2(0.0, 0.0)
+    değişken total_mass = 0.0
+    
+    her biri particle içinde soft.particles yap
+        sum = vec2_topla(sum, vec2_carp(particle.pozisyon, particle.mass))
+        total_mass = total_mass + particle.mass
+    son
+    
+    dön vec2_carp(sum, 1.0 / total_mass)
+son
+
+// ============================================================================
+// FLUID SIMULATION (SPH - Smoothed Particle Hydrodynamics)
+// ============================================================================
+
+// Fluid Particle (SPH)
+tip FluidParticle = yapı yap
+    pozisyon: Vec2,
+    velocity: Vec2,
+    density: ondalık,
+    pressure: ondalık,
+    force: Vec2,
+    mass: ondalık
+son
+
+// Fluid System
+tip FluidSystem = yapı yap
+    particles: liste[FluidParticle],
+    smoothing_radius: ondalık,  // h (kernel radius)
+    rest_density: ondalık,  // ρ₀
+    gas_constant: ondalık,  // k (stiffness)
+    viscosity: ondalık,  // μ
+    gravity: Vec2,
+    damping: ondalık,
+    spatial_hash: SpatialHash  // For neighbor search
+son
+
+// Fluid sistem oluştur
+fonksiyon fluid_olustur(rest_density: ondalık = 1000.0, 
+                        smoothing_radius: ondalık = 0.5,
+                        viscosity: ondalık = 0.01) -> FluidSystem
+yap
+    dön FluidSystem yap
+        particles: liste_oluştur[FluidParticle](),
+        smoothing_radius: smoothing_radius,
+        rest_density: rest_density,
+        gas_constant: 2000.0,
+        viscosity: viscosity,
+        gravity: vec2(0.0, -9.81),
+        damping: 0.99,
+        spatial_hash: spatial_hash_olustur(smoothing_radius * 2.0)
+    son
+son
+
+// Fluid particle ekle
+fonksiyon fluid_particle_ekle(fluid: FluidSystem, pozisyon: Vec2, velocity: Vec2, mass: ondalık = 1.0) -> boş
+yap
+    liste_ekle(fluid.particles, FluidParticle yap
+        pozisyon: pozisyon,
+        velocity: velocity,
+        density: fluid.rest_density,
+        pressure: 0.0,
+        force: vec2(0.0, 0.0),
+        mass: mass
+    son)
+son
+
+// SPH simülasyonu
+fonksiyon fluid_adim(fluid: FluidSystem, dt: ondalık) -> boş
+yap
+    // Update spatial hash
+    fluid.spatial_hash = spatial_hash_olustur(fluid.smoothing_radius * 2.0)
+    her biri i içinde aralık(liste_uzunluk(fluid.particles)) yap
+        spatial_hash_insert(fluid.spatial_hash, i, fluid.particles[i].pozisyon)
+    son
+    
+    // Compute density and pressure
+    her biri i içinde aralık(liste_uzunluk(fluid.particles)) yap
+        değişken pi = fluid.particles[i]
+        pi.density = 0.0
+        
+        // Find neighbors
+        değişken neighbors = spatial_hash_query(fluid.spatial_hash, pi.pozisyon, fluid.smoothing_radius)
+        
+        her biri j içinde neighbors yap
+            değişken pj = fluid.particles[j]
+            değişken r = vec2_uzunluk(vec2_cikar(pi.pozisyon, pj.pozisyon))
+            
+            eğer r < fluid.smoothing_radius ise yap
+                // Poly6 kernel
+                değişken q = r / fluid.smoothing_radius
+                değişken kernel = 315.0 / (64.0 * math::PI * math::pow(fluid.smoothing_radius, 9.0))
+                kernel = kernel * math::pow(1.0 - q * q, 3.0)
+                
+                pi.density = pi.density + pj.mass * kernel
+            son
+        son
+        
+        // Tait equation (pressure from density)
+        pi.pressure = fluid.gas_constant * (pi.density - fluid.rest_density)
+    son
+    
+    // Compute forces
+    her biri i içinde aralık(liste_uzunluk(fluid.particles)) yap
+        değişken pi = fluid.particles[i]
+        pi.force = vec2_carp(fluid.gravity, pi.mass)  // Gravity
+        
+        değişken neighbors = spatial_hash_query(fluid.spatial_hash, pi.pozisyon, fluid.smoothing_radius)
+        
+        her biri j içinde neighbors yap
+            eğer i == j ise yap
+                devam et
+            son
+            
+            değişken pj = fluid.particles[j]
+            değişken delta = vec2_cikar(pi.pozisyon, pj.pozisyon)
+            değişken r = vec2_uzunluk(delta)
+            
+            eğer r < fluid.smoothing_radius ve r > 0.0001 ise yap
+                değişken dir = vec2_normalize(delta)
+                
+                // Pressure force (Spiky kernel gradient)
+                değişken q = r / fluid.smoothing_radius
+                değişken kernel_grad = -45.0 / (math::PI * math::pow(fluid.smoothing_radius, 6.0))
+                kernel_grad = kernel_grad * math::pow(1.0 - q, 2.0)
+                
+                değişken pressure_force = vec2_carp(dir, 
+                    -pj.mass * (pi.pressure + pj.pressure) / (2.0 * pj.density) * kernel_grad)
+                
+                // Viscosity force (Viscosity kernel Laplacian)
+                değişken kernel_laplacian = 45.0 / (math::PI * math::pow(fluid.smoothing_radius, 6.0))
+                kernel_laplacian = kernel_laplacian * (1.0 - q)
+                
+                değişken viscosity_force = vec2_carp(vec2_cikar(pj.velocity, pi.velocity),
+                    fluid.viscosity * pj.mass / pj.density * kernel_laplacian)
+                
+                pi.force = vec2_topla(pi.force, vec2_topla(pressure_force, viscosity_force))
+            son
+        son
+    son
+    
+    // Integrate
+    her biri particle içinde fluid.particles yap
+        // Semi-implicit Euler
+        değişken acceleration = vec2_carp(particle.force, 1.0 / particle.mass)
+        particle.velocity = vec2_topla(particle.velocity, vec2_carp(acceleration, dt))
+        particle.velocity = vec2_carp(particle.velocity, fluid.damping)
+        particle.pozisyon = vec2_topla(particle.pozisyon, vec2_carp(particle.velocity, dt))
+    son
+son
+
+// Spatial hash for neighbor search
+tip SpatialHash = yapı yap
+    cell_size: ondalık,
+    buckets: eşleme[tamsayı, liste[tamsayı]]  // hash -> particle indices
+son
+
+fonksiyon spatial_hash_olustur(cell_size: ondalık) -> SpatialHash
+yap
+    dön SpatialHash yap cell_size: cell_size, buckets: eşleme_oluştur[tamsayı, liste[tamsayı]]() son
+son
+
+fonksiyon spatial_hash_insert(hash: SpatialHash, particle_idx: tamsayı, pozisyon: Vec2) -> boş
+yap
+    değişken key = spatial_hash_key(hash, pozisyon)
+    eğer eslemede_yok(hash.buckets, key) ise yap
+        hash.buckets[key] = liste_oluştur[tamsayı]()
+    son
+    liste_ekle(hash.buckets[key], particle_idx)
+son
+
+fonksiyon spatial_hash_query(hash: SpatialHash, pozisyon: Vec2, radius: ondalık) -> liste[tamsayı]
+yap
+    değişken sonuc = liste_oluştur[tamsayı]()
+    
+    // Check neighboring cells
+    değişken x = (pozisyon.x / hash.cell_size) as tamsayı
+    değişken y = (pozisyon.y / hash.cell_size) as tamsayı
+    
+    her biri dy içinde aralık(-1, 2) yap
+        her biri dx içinde aralık(-1, 2) yap
+            değişken key = spatial_hash_key_xy(x + dx, y + dy)
+            eğer eslemede_var(hash.buckets, key) ise yap
+                sonuc = sonuc + hash.buckets[key]
+            son
+        son
+    son
+    
+    dön sonuc
+son
+
+fonksiyon spatial_hash_key(hash: SpatialHash, pozisyon: Vec2) -> tamsayı
+yap
+    değişken x = (pozisyon.x / hash.cell_size) as tamsayı
+    değişken y = (pozisyon.y / hash.cell_size) as tamsayı
+    dön spatial_hash_key_xy(x, y)
+son
+
+fonksiyon spatial_hash_key_xy(x: tamsayı, y: tamsayı) -> tamsayı
+yap
+    // Cantor pairing function
+    dön (x + y) * (x + y + 1) / 2 + y
+son
+
+// ============================================================================
+// BUOYANCY (Batma/Çıkma Fiziği)
+// ============================================================================
+
+// Water/Fluid zone
+tip FluidZone = yapı yap
+    min: Vec2,
+    max: Vec2,
+    density: ondalık,  // Fluid density (kg/m³)
+    linear_damping: ondalık,  // Drag coefficient
+    angular_damping: ondalık,
+    su_yuzeyi: ondalık  // Y coordinate of water surface
+son
+
+// Buoyancy kuvveti hesapla (Archimedes principle)
+fonksiyon buoyancy_hesapla(cisim: RigidBody, zone: FluidZone, gravity: Vec2) -> Vec2
+yap
+    // Check if body is in fluid zone
+    eğer cisim.pozisyon.y > zone.max.y veya cisim.pozisyon.y < zone.min.y ise yap
+        dön vec2(0.0, 0.0)
+    son
+    
+    // Calculate submerged volume (simplified for circle/box)
+    değişken submerged_ratio = 0.0
+    
+    eşleşme cisim.sekil yap
+        Circle[radius] => yap
+            değişken depth = zone.su_yuzeyi - cisim.pozisyon.y
+            eğer depth >= radius ise yap
+                submerged_ratio = 1.0  // Fully submerged
+            son değilse eğer depth > -radius ise yap
+                // Partially submerged (circular segment)
+                değişken h = radius + depth
+                submerged_ratio = (radius * radius * math::acos((radius - h) / radius) - 
+                                 (radius - h) * math::sqrt(2.0 * radius * h - h * h)) / 
+                                 (math::PI * radius * radius)
+            son değilse yap
+                submerged_ratio = 0.0
+            son
+        son,
+        _ => yap
+            // Simplified for other shapes
+            submerged_ratio = 0.5
+        son
+    son
+    
+    // Buoyancy force = ρ * g * V (displaced volume)
+    değişken volume = cisim_hacim_hesapla(cisim)
+    değişken buoyancy_magnitude = zone.density * math::abs(gravity.y) * volume * submerged_ratio
+    
+    değişken buoyancy_force = vec2(0.0, buoyancy_magnitude)
+    
+    // Apply drag
+    değişken drag = vec2_carp(cisim.linear_velocity, -zone.linear_damping * submerged_ratio)
+    
+    dön vec2_topla(buoyancy_force, drag)
+son
+
+// Cisim hacmi hesapla
+fonksiyon cisim_hacim_hesapla(cisim: RigidBody) -> ondalık
+yap
+    eşleşme cisim.sekil yap
+        Circle[radius] => math::PI * radius * radius,
+        Box[genişlik, yükseklik] => genişlik * yükseklik,
+        _ => 1.0
+    son
+son
+
+// ============================================================================
+// RAGDOLL SYSTEM (Karakter Fiziği)
+// ============================================================================
+
+// Ragdoll preset
+tip Ragdoll = yapı yap
+    cisimler: eşleme[yazı, RigidBody],  // "head", "torso", "arm_left", etc.
+    joints: liste[Joint],
+    aktif: mantıksal
+son
+
+// İnsan ragdoll oluştur
+fonksiyon ragdoll_insan_olustur(pozisyon: Vec2, olcek: ondalık = 1.0) -> Ragdoll
+yap
+    değişken cisimler = eşleme_oluştur[yazı, RigidBody]()
+    değişken joints = liste_oluştur[Joint]()
+    
+    // Head
+    cisimler["head"] = cisim_olustur(
+        vec2_topla(pozisyon, vec2(0.0, 1.5 * olcek)),
+        Circle[0.2 * olcek],
+        5.0 * olcek,
+        "Dynamic"
+    )
+    
+    // Torso (upper + lower)
+    cisimler["torso_upper"] = cisim_olustur(
+        vec2_topla(pozisyon, vec2(0.0, 1.0 * olcek)),
+        Box[0.4 * olcek, 0.5 * olcek],
+        15.0 * olcek,
+        "Dynamic"
+    )
+    
+    cisimler["torso_lower"] = cisim_olustur(
+        vec2_topla(pozisyon, vec2(0.0, 0.5 * olcek)),
+        Box[0.4 * olcek, 0.4 * olcek],
+        12.0 * olcek,
+        "Dynamic"
+    )
+    
+    // Arms
+    cisimler["arm_left_upper"] = cisim_olustur(
+        vec2_topla(pozisyon, vec2(-0.4 * olcek, 0.9 * olcek)),
+        Capsule[0.15 * olcek, 0.35 * olcek],
+        3.0 * olcek,
+        "Dynamic"
+    )
+    
+    cisimler["arm_left_lower"] = cisim_olustur(
+        vec2_topla(pozisyon, vec2(-0.7 * olcek, 0.6 * olcek)),
+        Capsule[0.12 * olcek, 0.3 * olcek],
+        2.5 * olcek,
+        "Dynamic"
+    )
+    
+    cisimler["arm_right_upper"] = cisim_olustur(
+        vec2_topla(pozisyon, vec2(0.4 * olcek, 0.9 * olcek)),
+        Capsule[0.15 * olcek, 0.35 * olcek],
+        3.0 * olcek,
+        "Dynamic"
+    )
+    
+    cisimler["arm_right_lower"] = cisim_olustur(
+        vec2_topla(pozisyon, vec2(0.7 * olcek, 0.6 * olcek)),
+        Capsule[0.12 * olcek, 0.3 * olcek],
+        2.5 * olcek,
+        "Dynamic"
+    )
+    
+    // Legs
+    cisimler["leg_left_upper"] = cisim_olustur(
+        vec2_topla(pozisyon, vec2(-0.15 * olcek, 0.0)),
+        Capsule[0.15 * olcek, 0.4 * olcek],
+        5.0 * olcek,
+        "Dynamic"
+    )
+    
+    cisimler["leg_left_lower"] = cisim_olustur(
+        vec2_topla(pozisyon, vec2(-0.15 * olcek, -0.5 * olcek)),
+        Capsule[0.13 * olcek, 0.4 * olcek],
+        4.0 * olcek,
+        "Dynamic"
+    )
+    
+    cisimler["leg_right_upper"] = cisim_olustur(
+        vec2_topla(pozisyon, vec2(0.15 * olcek, 0.0)),
+        Capsule[0.15 * olcek, 0.4 * olcek],
+        5.0 * olcek,
+        "Dynamic"
+    )
+    
+    cisimler["leg_right_lower"] = cisim_olustur(
+        vec2_topla(pozisyon, vec2(0.15 * olcek, -0.5 * olcek)),
+        Capsule[0.13 * olcek, 0.4 * olcek],
+        4.0 * olcek,
+        "Dynamic"
+    )
+    
+    // Create joints
+    // Neck (head - torso)
+    liste_ekle(joints, revolute_joint_olustur(
+        cisimler["head"], cisimler["torso_upper"],
+        vec2_topla(pozisyon, vec2(0.0, 1.3 * olcek)),
+        -45.0, 45.0  // Angle limits (degrees)
+    ))
+    
+    // Spine (upper - lower torso)
+    liste_ekle(joints, revolute_joint_olustur(
+        cisimler["torso_upper"], cisimler["torso_lower"],
+        vec2_topla(pozisyon, vec2(0.0, 0.75 * olcek)),
+        -30.0, 30.0
+    ))
+    
+    // Shoulders
+    liste_ekle(joints, revolute_joint_olustur(
+        cisimler["torso_upper"], cisimler["arm_left_upper"],
+        vec2_topla(pozisyon, vec2(-0.25 * olcek, 1.0 * olcek)),
+        -135.0, 135.0
+    ))
+    
+    liste_ekle(joints, revolute_joint_olustur(
+        cisimler["torso_upper"], cisimler["arm_right_upper"],
+        vec2_topla(pozisyon, vec2(0.25 * olcek, 1.0 * olcek)),
+        -135.0, 135.0
+    ))
+    
+    // Elbows
+    liste_ekle(joints, revolute_joint_olustur(
+        cisimler["arm_left_upper"], cisimler["arm_left_lower"],
+        vec2_topla(pozisyon, vec2(-0.55 * olcek, 0.75 * olcek)),
+        0.0, 150.0
+    ))
+    
+    liste_ekle(joints, revolute_joint_olustur(
+        cisimler["arm_right_upper"], cisimler["arm_right_lower"],
+        vec2_topla(pozisyon, vec2(0.55 * olcek, 0.75 * olcek)),
+        0.0, 150.0
+    ))
+    
+    // Hips
+    liste_ekle(joints, revolute_joint_olustur(
+        cisimler["torso_lower"], cisimler["leg_left_upper"],
+        vec2_topla(pozisyon, vec2(-0.15 * olcek, 0.3 * olcek)),
+        -90.0, 90.0
+    ))
+    
+    liste_ekle(joints, revolute_joint_olustur(
+        cisimler["torso_lower"], cisimler["leg_right_upper"],
+        vec2_topla(pozisyon, vec2(0.15 * olcek, 0.3 * olcek)),
+        -90.0, 90.0
+    ))
+    
+    // Knees
+    liste_ekle(joints, revolute_joint_olustur(
+        cisimler["leg_left_upper"], cisimler["leg_left_lower"],
+        vec2_topla(pozisyon, vec2(-0.15 * olcek, -0.25 * olcek)),
+        -150.0, 0.0
+    ))
+    
+    liste_ekle(joints, revolute_joint_olustur(
+        cisimler["leg_right_upper"], cisimler["leg_right_lower"],
+        vec2_topla(pozisyon, vec2(0.15 * olcek, -0.25 * olcek)),
+        -150.0, 0.0
+    ))
+    
+    dön Ragdoll yap
+        cisimler: cisimler,
+        joints: joints,
+        aktif: doğru
+    son
+son
+
+// ============================================================================
+// CONVEX DECOMPOSITION (Kompleks Şekillerin Parçalanması)
+// ============================================================================
+
+// V-HACD (Voxel-based Approximate Convex Decomposition)
+tip ConvexDecomposition = yapı yap
+    convex_hulls: liste[ConvexHull],
+    original_vertices: liste[Vec2]
+son
+
+tip ConvexHull = yapı yap
+    vertices: liste[Vec2],
+    centroid: Vec2,
+    area: ondalık
+son
+
+// Convex decomposition (simplified greedy algorithm)
+fonksiyon convex_decompose(vertices: liste[Vec2], max_hulls: tamsayı = 8) -> ConvexDecomposition
+yap
+    değişken hulls = liste_oluştur[ConvexHull]()
+    değişken remaining = vertices.kopyala()
+    
+    iken liste_uzunluk(hulls) < max_hulls ve liste_uzunluk(remaining) > 3 yap
+        // Find most concave point
+        değişken (concave_idx, max_concavity) = find_most_concave_point(remaining)
+        
+        eğer max_concavity < 0.1 ise yap
+            // Convex enough, add as hull
+            liste_ekle(hulls, ConvexHull yap
+                vertices: remaining,
+                centroid: compute_centroid(remaining),
+                area: compute_polygon_area(remaining)
+            son)
+            kır
+        son
+        
+        // Split at concave point
+        değişken (part1, part2) = split_polygon(remaining, concave_idx)
+        
+        // Add smaller part as hull, continue with larger
+        eğer liste_uzunluk(part1) < liste_uzunluk(part2) ise yap
+            liste_ekle(hulls, ConvexHull yap
+                vertices: part1,
+                centroid: compute_centroid(part1),
+                area: compute_polygon_area(part1)
+            son)
+            remaining = part2
+        son değilse yap
+            liste_ekle(hulls, ConvexHull yap
+                vertices: part2,
+                centroid: compute_centroid(part2),
+                area: compute_polygon_area(part2)
+            son)
+            remaining = part1
+        son
+    son
+    
+    // Add final remaining part
+    eğer liste_uzunluk(remaining) > 2 ise yap
+        liste_ekle(hulls, ConvexHull yap
+            vertices: remaining,
+            centroid: compute_centroid(remaining),
+            area: compute_polygon_area(remaining)
+        son)
+    son
+    
+    dön ConvexDecomposition yap
+        convex_hulls: hulls,
+        original_vertices: vertices
+    son
+son
+
+// Find most concave point (negative cross product)
+fonksiyon find_most_concave_point(vertices: liste[Vec2]) -> (tamsayı, ondalık)
+yap
+    değişken max_concavity = 0.0
+    değişken max_idx = 0
+    
+    her biri i içinde aralık(liste_uzunluk(vertices)) yap
+        değişken prev = vertices[(i - 1 + liste_uzunluk(vertices)) % liste_uzunluk(vertices)]
+        değişken curr = vertices[i]
+        değişken next = vertices[(i + 1) % liste_uzunluk(vertices)]
+        
+        değişken v1 = vec2_cikar(curr, prev)
+        değişken v2 = vec2_cikar(next, curr)
+        
+        // Cross product (2D)
+        değişken cross = v1.x * v2.y - v1.y * v2.x
+        
+        eğer cross < max_concavity ise yap
+            max_concavity = -cross
+            max_idx = i
+        son
+    son
+    
+    dön (max_idx, max_concavity)
+son
+
+// Split polygon at index
+fonksiyon split_polygon(vertices: liste[Vec2], split_idx: tamsayı) -> (liste[Vec2], liste[Vec2])
+yap
+    değişken n = liste_uzunluk(vertices)
+    değişken best_idx = (split_idx + n / 2) % n
+    
+    değişken part1 = liste_oluştur[Vec2]()
+    değişken part2 = liste_oluştur[Vec2]()
+    
+    her biri i içinde aralık(n) yap
+        eğer i <= split_idx veya i > best_idx ise yap
+            liste_ekle(part1, vertices[i])
+        son
+        
+        eğer i >= split_idx ve i <= best_idx ise yap
+            liste_ekle(part2, vertices[i])
+        son
+    son
+    
+    dön (part1, part2)
+son
+
+// ============================================================================
+// SUB-STEPPING (Yüksek Stabilite)
+// ============================================================================
+
+// Gelişmiş world step (sub-stepping support)
+fonksiyon world_step_substep(world: PhysicsWorld, dt: ondalık, substeps: tamsayı = 1) -> boş
+yap
+    değişken sub_dt = dt / substeps as ondalık
+    
+    her biri _ içinde aralık(substeps) yap
+        // Broadphase collision detection
+        değişken potential_pairs = broadphase_detect(world)
+        
+        // Narrowphase collision detection
+        değişken contacts = liste_oluştur[Contact]()
+        her biri pair içinde potential_pairs yap
+            değişken contact_opt = narrowphase_detect(pair.0, pair.1)
+            eğer contact_opt.bazı_mı() ise yap
+                liste_ekle(contacts, contact_opt.unwrap())
+            son
+        son
+        
+        // Apply forces
+        her biri cisim içinde world.cisimler yap
+            eğer cisim.tipi == "Dynamic" ise yap
+                // Gravity
+                değişken force = vec2_carp(world.gravity, cisim.mass)
+                cisim.linear_velocity = vec2_topla(cisim.linear_velocity, 
+                                                   vec2_carp(force, sub_dt / cisim.mass))
+            son
+        son
+        
+        // Integrate velocities
+        her biri cisim içinde world.cisimler yap
+            eğer cisim.tipi == "Dynamic" ise yap
+                cisim.pozisyon = vec2_topla(cisim.pozisyon, 
+                                           vec2_carp(cisim.linear_velocity, sub_dt))
+                cisim.aci = cisim.aci + cisim.angular_velocity * sub_dt
+            son
+        son
+        
+        // Solve constraints (iterative)
+        her biri _ içinde aralık(world.velocity_iterations) yap
+            her biri contact içinde contacts yap
+                solve_contact_constraint(contact, sub_dt)
+            son
+        son
+    son
+son
+
+// ============================================================================
+// SLEEPING SYSTEM (Uyku Modu Optimizasyonu)
+// ============================================================================
+
+// Sleep state
+tip SleepState = yapı yap
+    uyuyor: mantıksal,
+    sleep_timer: ondalık,
+    sleep_threshold: ondalık  // Velocity threshold
+son
+
+// Cisim için sleep state ekle
+fonksiyon cisim_sleep_init(cisim: RigidBody) -> SleepState
+yap
+    dön SleepState yap
+        uyuyor: yanlış,
+        sleep_timer: 0.0,
+        sleep_threshold: 0.01  // Very slow = sleep candidate
+    son
+son
+
+// Sleep durumu güncelle
+fonksiyon cisim_sleep_update(cisim: RigidBody, sleep: SleepState, dt: ondalık) -> boş
+yap
+    eğer cisim.tipi != "Dynamic" ise yap
+        dön
+    son
+    
+    // Check velocity
+    değişken speed = vec2_uzunluk(cisim.linear_velocity)
+    değişken angular_speed = math::abs(cisim.angular_velocity)
+    
+    eğer speed < sleep.sleep_threshold ve angular_speed < 0.05 ise yap
+        sleep.sleep_timer = sleep.sleep_timer + dt
+        
+        eğer sleep.sleep_timer > 0.5 ise yap  // 0.5 seconds of inactivity
+            sleep.uyuyor = doğru
+            cisim.linear_velocity = vec2(0.0, 0.0)
+            cisim.angular_velocity = 0.0
+        son
+    son değilse yap
+        sleep.sleep_timer = 0.0
+        sleep.uyuyor = yanlış
+    son
+son
+
+// Wake up body
+fonksiyon cisim_wake_up(sleep: SleepState) -> boş
+yap
+    sleep.uyuyor = yanlış
+    sleep.sleep_timer = 0.0
+son
+
+// ============================================================================
+// KINEMATIC BODIES (Animasyon Sürülü)
+// ============================================================================
+
+// Kinematic body (kod/animasyonla kontrol edilir, kuvvetlerden etkilenmez)
+fonksiyon cisim_kinematic_move(cisim: RigidBody, hedef_pozisyon: Vec2, dt: ondalık) -> boş
+yap
+    eğer cisim.tipi != "Kinematic" ise yap
+        dön
+    son
+    
+    // Compute velocity to reach target
+    değişken delta = vec2_cikar(hedef_pozisyon, cisim.pozisyon)
+    cisim.linear_velocity = vec2_carp(delta, 1.0 / dt)
+    cisim.pozisyon = hedef_pozisyon
+son
+
+// ============================================================================
+// TRIGGER SHAPES (Tetikleyici Bölgeler)
+// ============================================================================
+
+// Trigger (sadece algılama, çarpışma yok)
+tip Trigger = yapı yap
+    sekil: Shape,
+    pozisyon: Vec2,
+    callback: TriggerCallback,
+    aktif: mantıksal
+son
+
+tip TriggerCallback = fonksiyon(giris_yapan: RigidBody) -> boş
+
+// Trigger oluştur
+fonksiyon trigger_olustur(sekil: Shape, pozisyon: Vec2, callback: TriggerCallback) -> Trigger
+yap
+    dön Trigger yap
+        sekil: sekil,
+        pozisyon: pozisyon,
+        callback: callback,
+        aktif: doğru
+    son
+son
+
+// Trigger kontrol et
+fonksiyon trigger_check(trigger: Trigger, cisim: RigidBody) -> mantıksal
+yap
+    eğer trigger.aktif == yanlış ise yap
+        dön yanlış
+    son
+    
+    // Simple overlap test
+    değişken distance = vec2_uzunluk(vec2_cikar(cisim.pozisyon, trigger.pozisyon))
+    
+    // Simplified - gerçek implementasyon shape-based overlap yapar
+    dön distance < 1.0
+son
+
+// ============================================================================
+// COLLISION FILTERING (Layer-based)
+// ============================================================================
+
+// Collision layer (bitmask)
+tip CollisionLayer = tamsayı  // 32-bit bitmask
+
+// Layer presets
+fonksiyon layer_default() -> CollisionLayer yap dön 0x0001 son
+fonksiyon layer_static() -> CollisionLayer yap dön 0x0002 son
+fonksiyon layer_player() -> CollisionLayer yap dön 0x0004 son
+fonksiyon layer_enemy() -> CollisionLayer yap dön 0x0008 son
+fonksiyon layer_projectile() -> CollisionLayer yap dön 0x0010 son
+fonksiyon layer_trigger() -> CollisionLayer yap dön 0x0020 son
+
+// Layer filtering
+tip CollisionFilter = yapı yap
+    layer: CollisionLayer,     // What layer I'm on
+    mask: CollisionLayer       // What layers I collide with
+son
+
+// Çarpışma kontrolü (layer-based)
+fonksiyon layers_collide(filter_a: CollisionFilter, filter_b: CollisionFilter) -> mantıksal
+yap
+    dön (filter_a.layer & filter_b.mask) != 0 ve (filter_b.layer & filter_a.mask) != 0
+son
+
+// ============================================================================
+// PHYSICS MATERIALS (Malzeme Presetleri)
+// ============================================================================
+
+// Material presets
+fonksiyon material_ice() -> PhysicsMaterial
+yap
+    dön PhysicsMaterial yap
+        friction: 0.02,
+        restitution: 0.1,
+        density: 920.0
+    son
+son
+
+fonksiyon material_rubber() -> PhysicsMaterial
+yap
+    dön PhysicsMaterial yap
+        friction: 1.2,
+        restitution: 0.9,
+        density: 1100.0
+    son
+son
+
+fonksiyon material_metal() -> PhysicsMaterial
+yap
+    dön PhysicsMaterial yap
+        friction: 0.4,
+        restitution: 0.3,
+        density: 7800.0
+    son
+son
+
+fonksiyon material_wood() -> PhysicsMaterial
+yap
+    dön PhysicsMaterial yap
+        friction: 0.6,
+        restitution: 0.4,
+        density: 700.0
+    son
+son
+
+fonksiyon material_glass() -> PhysicsMaterial
+yap
+    dön PhysicsMaterial yap
+        friction: 0.5,
+        restitution: 0.7,
+        density: 2500.0
+    son
+son
+
+// ============================================================================
+// INTEGRATION METHODS (RK4, Verlet)
+// ============================================================================
+
+// RK4 (Runge-Kutta 4th order) integration
+fonksiyon integrate_rk4(cisim: RigidBody, force: Vec2, dt: ondalık) -> boş
+yap
+    değişken pos = cisim.pozisyon
+    değişken vel = cisim.linear_velocity
+    değişken inv_mass = 1.0 / cisim.mass
+    
+    // k1
+    değişken k1_vel = vec2_carp(force, inv_mass)
+    değişken k1_pos = vel
+    
+    // k2
+    değişken k2_vel = vec2_carp(force, inv_mass)
+    değişken k2_pos = vec2_topla(vel, vec2_carp(k1_vel, dt * 0.5))
+    
+    // k3
+    değişken k3_vel = vec2_carp(force, inv_mass)
+    değişken k3_pos = vec2_topla(vel, vec2_carp(k2_vel, dt * 0.5))
+    
+    // k4
+    değişken k4_vel = vec2_carp(force, inv_mass)
+    değişken k4_pos = vec2_topla(vel, vec2_carp(k3_vel, dt))
+    
+    // Combine
+    değişken vel_change = vec2_carp(vec2_topla(vec2_topla(k1_vel, vec2_carp(vec2_topla(k2_vel, k3_vel), 2.0)), k4_vel), dt / 6.0)
+    değişken pos_change = vec2_carp(vec2_topla(vec2_topla(k1_pos, vec2_carp(vec2_topla(k2_pos, k3_pos), 2.0)), k4_pos), dt / 6.0)
+    
+    cisim.linear_velocity = vec2_topla(vel, vel_change)
+    cisim.pozisyon = vec2_topla(pos, pos_change)
+son
+
+// Verlet integration (daha kararlı)
+fonksiyon integrate_verlet(cisim: RigidBody, force: Vec2, dt: ondalık, previous_pos: Vec2) -> Vec2
+yap
+    değişken acceleration = vec2_carp(force, 1.0 / cisim.mass)
+    
+    // Verlet: x(t+dt) = 2*x(t) - x(t-dt) + a*dt²
+    değişken yeni_pos = vec2_topla(
+        vec2_cikar(vec2_carp(cisim.pozisyon, 2.0), previous_pos),
+        vec2_carp(acceleration, dt * dt)
+    )
+    
+    // Velocity (for damping)
+    cisim.linear_velocity = vec2_carp(vec2_cikar(yeni_pos, cisim.pozisyon), 1.0 / dt)
+    
+    değişken eski_pos = cisim.pozisyon
+    cisim.pozisyon = yeni_pos
+    
+    dön eski_pos
+son
+
+// ============================================================================
+// XPBD (Extended Position Based Dynamics)
+// ============================================================================
+
+// XPBD constraint (daha kararlı constraint çözümü)
+tip XPBDConstraint = yapı yap
+    cisim_a: tamsayı,
+    cisim_b: tamsayı,
+    rest_length: ondalık,
+    compliance: ondalık,  // 0 = rigid, higher = soft
+    lambda: ondalık  // Lagrange multiplier
+son
+
+// XPBD constraint solver
+fonksiyon xpbd_solve_distance_constraint(constraint: XPBDConstraint, 
+                                         cisimler: liste[RigidBody], 
+                                         dt: ondalık) -> boş
+yap
+    değişken a = cisimler[constraint.cisim_a]
+    değişken b = cisimler[constraint.cisim_b]
+    
+    değişken delta = vec2_cikar(b.pozisyon, a.pozisyon)
+    değişken distance = vec2_uzunluk(delta)
+    
+    eğer distance < 0.0001 ise yap
+        dön
+    son
+    
+    değişken C = distance - constraint.rest_length
+    değişken grad = vec2_carp(delta, 1.0 / distance)
+    
+    // Compliance (inverse stiffness)
+    değişken alpha = constraint.compliance / (dt * dt)
+    
+    // Compute lagrange multiplier
+    değişken w_sum = (1.0 / a.mass) + (1.0 / b.mass)
+    değişken delta_lambda = (-C - alpha * constraint.lambda) / (w_sum + alpha)
+    
+    constraint.lambda = constraint.lambda + delta_lambda
+    
+    // Apply position corrections
+    değişken correction = vec2_carp(grad, delta_lambda)
+    
+    eğer a.tipi == "Dynamic" ise yap
+        a.pozisyon = vec2_cikar(a.pozisyon, vec2_carp(correction, 1.0 / a.mass))
+    son
+    
+    eğer b.tipi == "Dynamic" ise yap
+        b.pozisyon = vec2_topla(b.pozisyon, vec2_carp(correction, 1.0 / b.mass))
+    son
+son
+
+// ============================================================================
+// DETERMINISTIC SIMULATION (Multiplayer/Replay)
+// ============================================================================
+
+// Deterministic world (sabit random seed, floating-point consistency)
+tip DeterministicWorld = yapı yap
+    world: PhysicsWorld,
+    random_seed: tamsayı,
+    frame_number: tamsayı,
+    checksum: tamsayı  // State hash
+son
+
+// Deterministic step (guaranteed reproducible)
+fonksiyon deterministic_step(det_world: DeterministicWorld, dt: ondalık) -> boş
+yap
+    // Fixed timestep (önemli!)
+    world_step(det_world.world, dt)
+    
+    det_world.frame_number = det_world.frame_number + 1
+    
+    // Compute checksum
+    det_world.checksum = deterministic_checksum(det_world.world)
+son
+
+// State checksum (hata tespit için)
+fonksiyon deterministic_checksum(world: PhysicsWorld) -> tamsayı
+yap
+    değişken hash = 0
+    
+    her biri cisim içinde world.cisimler yap
+        // Position hash (quantize to avoid floating-point drift)
+        değişken x_int = (cisim.pozisyon.x * 1000.0) as tamsayı
+        değişken y_int = (cisim.pozisyon.y * 1000.0) as tamsayı
+        
+        hash = hash ^ (x_int * 73856093)
+        hash = hash ^ (y_int * 19349663)
+    son
+    
+    dön hash
+son
+
+// ============================================================================
+// BREAKABLE BODIES (Parçalanabilir Objeler)
+// ============================================================================
+
+// Breakable constraint
+tip BreakableConstraint = yapı yap
+    joint: Joint,
+    break_force: ondalık,  // Newton
+    break_torque: ondalık,  // Newton-meter
+    kirildi: mantıksal
+son
+
+// Kırılma kontrolü
+fonksiyon breakable_check(constraint: BreakableConstraint, applied_force: ondalık, applied_torque: ondalık) -> mantıksal
+yap
+    eğer applied_force > constraint.break_force veya applied_torque > constraint.break_torque ise yap
+        constraint.kirildi = doğru
+        dön doğru
+    son
+    dön yanlış
+son
+
+// ============================================================================
+// ROPE/CHAIN SIMULATION (Halat/Zincir Fiziği)
+// ============================================================================
+
+// Rope (distance constraints)
+tip Rope = yapı yap
+    particles: liste[RigidBody],
+    constraints: liste[DistanceConstraint],
+    segment_length: ondalık,
+    stiffness: ondalık
+son
+
+// Rope oluştur
+fonksiyon rope_olustur(baslangic: Vec2, bitis: Vec2, segment_sayisi: tamsayı, 
+                       segment_radius: ondalık = 0.1,
+                       mass_per_segment: ondalık = 1.0) -> Rope
+yap
+    değişken particles = liste_oluştur[RigidBody]()
+    değişken constraints = liste_oluştur[DistanceConstraint]()
+    
+    değişken segment_length = vec2_uzunluk(vec2_cikar(bitis, baslangic)) / segment_sayisi as ondalık
+    değişken direction = vec2_normalize(vec2_cikar(bitis, baslangic))
+    
+    // Create particles
+    her biri i içinde aralık(segment_sayisi + 1) yap
+        değişken pos = vec2_topla(baslangic, vec2_carp(direction, i as ondalık * segment_length))
+        
+        değişken particle = cisim_olustur(pos, Circle[segment_radius], mass_per_segment, "Dynamic")
+        
+        // Pin first particle
+        eğer i == 0 ise yap
+            particle.tipi = "Static"
+        son
+        
+        liste_ekle(particles, particle)
+    son
+    
+    // Create distance constraints
+    her biri i içinde aralık(segment_sayisi) yap
+        liste_ekle(constraints, DistanceConstraint yap
+            cisim_a: i,
+            cisim_b: i + 1,
+            rest_length: segment_length,
+            stiffness: 0.9
+        son)
+    son
+    
+    dön Rope yap
+        particles: particles,
+        constraints: constraints,
+        segment_length: segment_length,
+        stiffness: 0.9
+    son
+son
+
+// Rope simülasyonu
+fonksiyon rope_solve(rope: Rope, iterations: tamsayı = 5) -> boş
+yap
+    her biri _ içinde aralık(iterations) yap
+        her biri constraint içinde rope.constraints yap
+            değişken a = rope.particles[constraint.cisim_a]
+            değişken b = rope.particles[constraint.cisim_b]
+            
+            değişken delta = vec2_cikar(b.pozisyon, a.pozisyon)
+            değişken distance = vec2_uzunluk(delta)
+            
+            eğer distance < 0.0001 ise yap
+                devam et
+            son
+            
+            değişken diff = (distance - constraint.rest_length) / distance
+            değişken correction = vec2_carp(delta, diff * constraint.stiffness * 0.5)
+            
+            eğer a.tipi == "Dynamic" ise yap
+                a.pozisyon = vec2_topla(a.pozisyon, correction)
+            son
+            
+            eğer b.tipi == "Dynamic" ise yap
+                b.pozisyon = vec2_cikar(b.pozisyon, correction)
+            son
+        son
+    son
+son
+
+// ============================================================================
+// WIND ZONES (Bölgesel Rüzgar Kuvveti)
+// ============================================================================
+
+// Wind zone
+tip WindZone = yapı yap
+    min: Vec2,
+    max: Vec2,
+    direction: Vec2,  // Normalized direction
+    strength: ondalık,  // Force magnitude
+    turbulence: ondalık,  // Random variation (0-1)
+    aktif: mantıksal
+son
+
+// Wind force hesapla
+fonksiyon wind_apply(zone: WindZone, cisim: RigidBody, dt: ondalık, random_offset: ondalık) -> Vec2
+yap
+    eğer zone.aktif == yanlış ise yap
+        dön vec2(0.0, 0.0)
+    son
+    
+    // Check if body is in zone
+    eğer cisim.pozisyon.x < zone.min.x veya cisim.pozisyon.x > zone.max.x veya
+       cisim.pozisyon.y < zone.min.y veya cisim.pozisyon.y > zone.max.y ise yap
+        dön vec2(0.0, 0.0)
+    son
+    
+    // Base wind force
+    değişken wind_force = vec2_carp(zone.direction, zone.strength)
+    
+    // Add turbulence (pseudo-random)
+    eğer zone.turbulence > 0.0 ise yap
+        değişken noise_x = math::sin(random_offset * 123.456 + cisim.pozisyon.x * 0.1)
+        değişken noise_y = math::cos(random_offset * 234.567 + cisim.pozisyon.y * 0.1)
+        
+        wind_force.x = wind_force.x + noise_x * zone.strength * zone.turbulence
+        wind_force.y = wind_force.y + noise_y * zone.strength * zone.turbulence
+    son
+    
+    // Drag-based (proportional to surface area)
+    değişken drag_coefficient = 0.5  // Simplified
+    değişken area = cisim_alan_hesapla(cisim)
+    
+    dön vec2_carp(wind_force, drag_coefficient * area)
+son
+
+// Cisim yüzey alanı hesapla
+fonksiyon cisim_alan_hesapla(cisim: RigidBody) -> ondalık
+yap
+    // Simplified area calculation
+    dön 1.0  // Default area
+son
+
+// ============================================================================
+// COLLISION DETECTION SYSTEM (Yeni - v1.7)
+// ============================================================================
+
+// Collision detection algoritmalarının tipinde gelişim tip Collisionnaire Engine = yapı yap
+    dunya: PhysicsWorld,
+    broadphase: BroadphaseAlgo,
+    narrowphase: NarrowphaseAlgo,
+    contact_buffer: liste[Contact],
+    collision_callbacks: liste[CollisionCallback]
+son
+
+tip BroadphaseAlgo = "AABB_Tree" | "SpatialHash" | "SweepAndPrune" | "Grid"
+tip NarrowphaseAlgo = "SAT" | "GJK_EPA" | "Minkowski"
+
+// Collision callback
+tip CollisionCallback = fonksiyon(contact: Contact) -> boş
+
+// Collision engine oluştur
+fonksiyon collision_engine_olustur(dunya: PhysicsWorld) -> CollisionEngine
+yap
+    dön CollisionEngine yap
+        dunya: dunya,
+        broadphase: "AABB_Tree",
+        narrowphase: "SAT",
+        contact_buffer: liste_oluştur[Contact](),
+        collision_callbacks: liste_oluştur[CollisionCallback]()
+    son
+son
+
+// Collision detection çalıştır (broadphase + narrowphase)
+fonksiyon collision_detect(engine: CollisionEngine) -> liste[Contact]
+yap
+    // 1. Broadphase: AABB overlap test
+    değişken potansiyel_ciftler = broadphase_detect(engine.dunya, engine.broadphase)
+    
+    // 2. Narrowphase: Exact collision test
+    değişken contacts = liste_oluştur[Contact]()
+    
+    her biri (cisim_a, cisim_b) içinde potansiyel_ciftler yap
+        değişken contact_opt = narrowphase_test(cisim_a, cisim_b, engine.narrowphase)
+        
+        eğer contact_opt.bazı_mı() ise yap
+            değişken contact = contact_opt.unwrap()
+            contacts.ekle(contact)
+            
+            // Call callbacks
+            her biri callback içinde engine.collision_callbacks yap
+                callback(contact)
+            son
+        son
+    son
+    
+    dön contacts
+son
+
+// Broadphase detection (AABB Tree)
+fonksiyon broadphase_detect(dunya: PhysicsWorld, algo: BroadphaseAlgo) -> liste[(RigidBody, RigidBody)]
+yap
+    seç algo yap
+        durum "AABB_Tree" => dön broadphase_aabb_tree(dunya)
+        durum "SpatialHash" => dön broadphase_spatial_hash(dunya)
+        durum "SweepAndPrune" => dön broadphase_sweep_and_prune(dunya)
+        durum "Grid" => dön broadphase_grid(dunya)
+    son
+son
+
+// AABB Tree broadphase
+fonksiyon broadphase_aabb_tree(dunya: PhysicsWorld) -> liste[(RigidBody, RigidBody)]
+yap
+    değişken pairs = liste_oluştur[(RigidBody, RigidBody)]()
+    değişken bodies = dunya_cisimleri_al(dunya)
+    
+    // Brute force O(n²) (basit implementasyon)
+    değişken i = 0
+    iken i < liste_uzunluk(bodies) yap
+        değişken j = i + 1
+        iken j < liste_uzunluk(bodies) yap
+            değişken a = bodies[i]
+            değişken b = bodies[j]
+            
+            // AABB overlap test
+            değişken aabb_a = cisim_aabb_hesapla(a)
+            değişken aabb_b = cisim_aabb_hesapla(b)
+            
+            eğer aabb_overlap(aabb_a, aabb_b) ise yap
+                pairs.ekle((a, b))
+            son
+            
+            j = j + 1
+        son
+        i = i + 1
+    son
+    
+    dön pairs
+son
+
+// Spatial Hash broadphase (grid-based)
+fonksiyon broadphase_spatial_hash(dunya: PhysicsWorld) -> liste[(RigidBody, RigidBody)]
+yap
+    değişken cell_size = 10.0  // Grid cell boyutu (meter)
+    değişken hash_table = eşleme_oluştur[tamsayı, liste[RigidBody]]()
+    değişken pairs = liste_oluştur[(RigidBody, RigidBody)]()
+    
+    // Hash all bodies into grid cells
+    değişken bodies = dunya_cisimleri_al(dunya)
+    her biri cisim içinde bodies yap
+        değişken cell_x = (cisim.pozisyon.x / cell_size) as tamsayı
+        değişken cell_y = (cisim.pozisyon.y / cell_size) as tamsayı
+        değişken hash = cell_x * 73856093 ^ cell_y * 19349663  // Hash function
+        
+        eğer hash_table.içerir(hash) ise yap
+            hash_table[hash].ekle(cisim)
+        değilse yap
+            değişken cell_list = liste_oluştur[RigidBody]()
+            cell_list.ekle(cisim)
+            hash_table[hash] = cell_list
+        son
+    son
+    
+    // Check collisions within each cell
+    her biri (hash, cell_bodies) içinde hash_table yap
+        değişken i = 0
+        iken i < liste_uzunluk(cell_bodies) yap
+            değişken j = i + 1
+            iken j < liste_uzunluk(cell_bodies) yap
+                pairs.ekle((cell_bodies[i], cell_bodies[j]))
+                j = j + 1
+            son
+            i = i + 1
+        son
+    son
+    
+    dön pairs
+son
+
+// Sweep and Prune broadphase (sort and sweep)
+fonksiyon broadphase_sweep_and_prune(dunya: PhysicsWorld) -> liste[(RigidBody, RigidBody)]
+yap
+    değişken bodies = dunya_cisimleri_al(dunya)
+    değişken pairs = liste_oluştur[(RigidBody, RigidBody)]()
+    
+    // Sort bodies by X coordinate
+    bodies = cisimler_sirala_x(bodies)
+    
+    // Sweep along X axis
+    değişken i = 0
+    iken i < liste_uzunluk(bodies) yap
+        değişken a = bodies[i]
+        değişken aabb_a = cisim_aabb_hesapla(a)
+        
+        değişken j = i + 1
+        iken j < liste_uzunluk(bodies) yap
+            değişken b = bodies[j]
+            değişken aabb_b = cisim_aabb_hesapla(b)
+            
+            // Early exit: bodies are sorted by X
+            eğer aabb_b.min.x > aabb_a.max.x ise yap
+                dur  // No more overlaps possible
+            son
+            
+            // Y axis overlap check
+            eğer aabb_a.min.y <= aabb_b.max.y ve aabb_a.max.y >= aabb_b.min.y ise yap
+                pairs.ekle((a, b))
+            son
+            
+            j = j + 1
+        son
+        i = i + 1
+    son
+    
+    dön pairs
+son
+
+// Grid broadphase
+fonksiyon broadphase_grid(dunya: PhysicsWorld) -> liste[(RigidBody, RigidBody)]
+yap
+    // Basit grid implementation (spatial hash benzeri)
+    dön broadphase_spatial_hash(dunya)
+son
+
+// Narrowphase test (exact collision)
+fonksiyon narrowphase_test(a: RigidBody, b: RigidBody, algo: NarrowphaseAlgo) -> Seçenek[Contact]
+yap
+    seç algo yap
+        durum "SAT" => dön collision_sat(a, b)
+        durum "GJK_EPA" => dön collision_gjk_epa(a, b)
+        durum "Minkowski" => dön collision_minkowski(a, b)
+    son
+son
+
+// SAT (Separating Axis Theorem) collision detection
+fonksiyon collision_sat(a: RigidBody, b: RigidBody) -> Seçenek[Contact]
+yap
+    // Simplified SAT for circle-circle
+    eğer cisim_sekil_tipi(a) == "Circle" ve cisim_sekil_tipi(b) == "Circle" ise yap
+        değişken r_a = cisim_yaricap(a)
+        değişken r_b = cisim_yaricap(b)
+        
+        değişken delta = vec2_cikart(b.pozisyon, a.pozisyon)
+        değişken mesafe = vec2_uzunluk(delta)
+        değişken toplam_yaricap = r_a + r_b
+        
+        eğer mesafe < toplam_yaricap ise yap
+            // Collision!
+            değişken derinlik = toplam_yaricap - mesafe
+            değişken normal = vec2_normalize(delta)
+            değişken contact_point = vec2_topla(a.pozisyon, vec2_carp(normal, r_a))
+            
+            dön Bazı(Contact yap
+                cisim_a: a,
+                cisim_b: b,
+                noktalar: [contact_point],
+                normal: normal,
+                derinlik: derinlik,
+                temas_hizi: 0.0
+            son)
+        son
+    son
+    
+    // Box-Box SAT
+    eğer cisim_sekil_tipi(a) == "Box" ve cisim_sekil_tipi(b) == "Box" ise yap
+        dön collision_sat_box_box(a, b)
+    son
+    
+    // Circle-Box SAT
+    eğer (cisim_sekil_tipi(a) == "Circle" ve cisim_sekil_tipi(b) == "Box") veya
+       (cisim_sekil_tipi(a) == "Box" ve cisim_sekil_tipi(b) == "Circle") ise yap
+        dön collision_sat_circle_box(a, b)
+    son
+    
+    dön Hiç
+son
+
+// SAT: Box-Box collision
+fonksiyon collision_sat_box_box(a: RigidBody, b: RigidBody) -> Seçenek[Contact]
+yap
+    // Get box dimensions
+    değişken half_a = cisim_box_half_size(a)
+    değişken half_b = cisim_box_half_size(b)
+    
+    // Axis-aligned check (simplified for non-rotated boxes)
+    değişken delta = vec2_cikart(b.pozisyon, a.pozisyon)
+    değişken abs_delta = vec2(math::abs(delta.x), math::abs(delta.y))
+    
+    değişken overlap_x = (half_a.x + half_b.x) - abs_delta.x
+    değişken overlap_y = (half_a.y + half_b.y) - abs_delta.y
+    
+    eğer overlap_x > 0.0 ve overlap_y > 0.0 ise yap
+        // Collision!
+        değişken derinlik = math::min(overlap_x, overlap_y)
+        değişken normal: Vec2
+        
+        eğer overlap_x < overlap_y ise yap
+            normal = eğer delta.x > 0.0 ise vec2(1.0, 0.0) değilse vec2(-1.0, 0.0)
+        değilse yap
+            normal = eğer delta.y > 0.0 ise vec2(0.0, 1.0) değilse vec2(0.0, -1.0)
+        son
+        
+        dön Bazı(Contact yap
+            cisim_a: a,
+            cisim_b: b,
+            noktalar: [a.pozisyon],  // Simplified
+            normal: normal,
+            derinlik: derinlik,
+            temas_hizi: 0.0
+        son)
+    son
+    
+    dön Hiç
+son
+
+// SAT: Circle-Box collision
+fonksiyon collision_sat_circle_box(a: RigidBody, b: RigidBody) -> Seçenek[Contact]
+yap
+    // Ensure a is circle, b is box
+    değişken circle: RigidBody
+    değişken box: RigidBody
+    
+    eğer cisim_sekil_tipi(a) == "Circle" ise yap
+        circle = a
+        box = b
+    değilse yap
+        circle = b
+        box = a
+    son
+    
+    // Closest point on box to circle center
+    değişken half = cisim_box_half_size(box)
+    değişken delta = vec2_cikart(circle.pozisyon, box.pozisyon)
+    
+    değişken closest_x = math::clamp(delta.x, -half.x, half.x)
+    değişken closest_y = math::clamp(delta.y, -half.y, half.y)
+    değişken closest = vec2_topla(box.pozisyon, vec2(closest_x, closest_y))
+    
+    // Distance from circle to closest point
+    değişken to_circle = vec2_cikart(circle.pozisyon, closest)
+    değişken mesafe = vec2_uzunluk(to_circle)
+    değişken yaricap = cisim_yaricap(circle)
+    
+    eğer mesafe < yaricap ise yap
+        değişken derinlik = yaricap - mesafe
+        değişken normal = eğer mesafe > 0.0 ise vec2_normalize(to_circle) değilse vec2(1.0, 0.0)
+        
+        dön Bazı(Contact yap
+            cisim_a: circle,
+            cisim_b: box,
+            noktalar: [closest],
+            normal: normal,
+            derinlik: derinlik,
+            temas_hizi: 0.0
+        son)
+    son
+    
+    dön Hiç
+son
+
+// GJK-EPA collision detection (advanced)
+fonksiyon collision_gjk_epa(a: RigidBody, b: RigidBody) -> Seçenek[Contact]
+yap
+    // GJK (Gilbert-Johnson-Keerthi) algorithm
+    // Too complex for simplified implementation
+    // Fallback to SAT
+    dön collision_sat(a, b)
+son
+
+// Minkowski Difference collision
+fonksiyon collision_minkowski(a: RigidBody, b: RigidBody) -> Seçenek[Contact]
+yap
+    // Simplified: fallback to SAT
+    dön collision_sat(a, b)
+son
+
+// Helper: Body shape type
+fonksiyon cisim_sekil_tipi(cisim: RigidBody) -> yazı
+yap
+    // Simplified: assume default shapes
+    dön "Circle"
+son
+
+fonksiyon cisim_yaricap(cisim: RigidBody) -> ondalık
+yap
+    dön 1.0  // Default radius
+son
+
+fonksiyon cisim_box_half_size(cisim: RigidBody) -> Vec2
+yap
+    dön vec2(0.5, 0.5)  // Default half-size
+son
+
+// Helper: Sort bodies by X
+fonksiyon cisimler_sirala_x(bodies: liste[RigidBody]) -> liste[RigidBody]
+yap
+    // Simplified: return unsorted (TODO: implement quick/merge sort)
+    dön bodies
+son
+
+// Helper: Get all bodies from world
+fonksiyon dunya_cisimleri_al(dunya: PhysicsWorld) -> liste[RigidBody]
+yap
+    // Call native to get all bodies
+    dön native_world_get_bodies(dunya.handle)
+son
+
+// AABB overlap test
+fonksiyon aabb_overlap(a: AABB, b: AABB) -> mantıksal
+yap
+    dön a.min.x <= b.max.x ve a.max.x >= b.min.x ve
+         a.min.y <= b.max.y ve a.max.y >= b.min.y
+son
+
+// Callback registration
+fonksiyon collision_callback_ekle(engine: CollisionEngine, callback: CollisionCallback) -> boş
+yap
+    engine.collision_callbacks.ekle(callback)
+son
+
+// Native bindings for collision
+harici fonksiyon native_world_get_bodies(world: tamsayı) -> liste[RigidBody]
+harici fonksiyon native_collision_test(body_a: tamsayı, body_b: tamsayı) -> Seçenek[Contact]
+
+// Performance metrics
+tip CollisionStats = yapı yap
+    broadphase_pairs: tamsayı,
+    narrowphase_tests: tamsayı,
+    actual_collisions: tamsayı,
+    time_ms: ondalık
+son
+
+// Collision stats
+fonksiyon collision_stats(engine: CollisionEngine) -> CollisionStats
+yap
+    dön CollisionStats yap
+        broadphase_pairs: liste_uzunluk(engine.contact_buffer),
+        narrowphase_tests: 0,
+        actual_collisions: 0,
+        time_ms: 0.0
+    son
+son
+
+// Math helpers
+fonksiyon liste_uzunluk[T](liste: liste[T]) -> tamsayı
+yap
+    değişken sayaç = 0
+    her biri _ içinde liste yap
+        sayaç = sayaç + 1
+    son
+    dön sayaç
+son
+
+son  // modül physics2d

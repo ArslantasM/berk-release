@@ -1,0 +1,124 @@
+// Arduino Tone Module for BERK
+// Generate tones and melodies
+//
+// Make your projects sing! 🎵
+
+extern "C" {
+    fn tone_pin(pin: u8, frequency: u32);
+    fn tone_duration(pin: u8, frequency: u32, duration: u32);
+    fn noTone(pin: u8);
+}
+
+// Play tone indefinitely
+pub fn play(pin: u8, frequency: u32) {
+    unsafe { tone_pin(pin, frequency); }
+}
+
+// Play tone for duration
+pub fn play_duration(pin: u8, frequency: u32, duration_ms: u32) {
+    unsafe { tone_duration(pin, frequency, duration_ms); }
+}
+
+// Stop tone
+pub fn stop(pin: u8) {
+    unsafe { noTone(pin); }
+}
+
+// Musical notes (in Hz)
+pub const NOTE_C4: u32 = 262;
+pub const NOTE_D4: u32 = 294;
+pub const NOTE_E4: u32 = 330;
+pub const NOTE_F4: u32 = 349;
+pub const NOTE_G4: u32 = 392;
+pub const NOTE_A4: u32 = 440;
+pub const NOTE_B4: u32 = 494;
+pub const NOTE_C5: u32 = 523;
+
+// 📱 VIRAL EXAMPLE: Police siren
+pub fn example_siren() {
+    use super::time;
+    
+    let buzzer = 8;
+    
+    loop {
+        // Wee-ooo-wee-ooo
+        for freq in (400..=1000).step_by(50) {
+            play(buzzer, freq);
+            time::delay_ms(50);
+        }
+        for freq in (400..=1000).rev().step_by(50) {
+            play(buzzer, freq);
+            time::delay_ms(50);
+        }
+    }
+}
+
+// 🎶 VIRAL EXAMPLE: Happy Birthday melody
+pub fn example_happy_birthday() {
+    use super::time;
+    
+    let buzzer = 8;
+    
+    let melody = [
+        NOTE_C4, NOTE_C4, NOTE_D4, NOTE_C4, NOTE_F4, NOTE_E4,
+        NOTE_C4, NOTE_C4, NOTE_D4, NOTE_C4, NOTE_G4, NOTE_F4,
+    ];
+    
+    let durations = [
+        250, 250, 500, 500, 500, 1000,
+        250, 250, 500, 500, 500, 1000,
+    ];
+    
+    for i in 0..melody.len() {
+        play_duration(buzzer, melody[i], durations[i]);
+        time::delay_ms(durations[i] + 50);
+    }
+    
+    stop(buzzer);
+}
+
+// 🎮 VIRAL EXAMPLE: Retro game sounds
+pub fn example_game_sounds() {
+    use super::time;
+    
+    let buzzer = 8;
+    
+    // Jump sound
+    for freq in (200..=800).step_by(100) {
+        play(buzzer, freq);
+        time::delay_ms(30);
+    }
+    stop(buzzer);
+    time::delay_ms(500);
+    
+    // Coin sound
+    play_duration(buzzer, 988, 100);
+    time::delay_ms(150);
+    play_duration(buzzer, 1319, 400);
+    time::delay_ms(500);
+    
+    // Game over sound
+    for freq in (800..=200).rev().step_by(100) {
+        play(buzzer, freq);
+        time::delay_ms(50);
+    }
+    stop(buzzer);
+}
+
+// 🚨 VIRAL EXAMPLE: Doorbell
+pub fn example_doorbell() {
+    use super::{gpio, time};
+    
+    let button = gpio::pin(2).input_pullup();
+    let buzzer = 8;
+    
+    loop {
+        if button.read() {
+            // Ding-dong
+            play_duration(buzzer, NOTE_E4, 200);
+            time::delay_ms(250);
+            play_duration(buzzer, NOTE_C4, 400);
+            time::delay_ms(500);
+        }
+    }
+}

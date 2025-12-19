@@ -1,0 +1,604 @@
+// ============================================================================
+// BERK SENSOR API - Kalibrasyon Katmanı
+// ============================================================================
+// Sensör = Ölçüm + Kalibrasyon + Zaman + Birim + Güvenilirlik
+// Kalibrasyon sensörün parçası, uygulamanın değil.
+// ============================================================================
+
+modül sensor::calibration
+
+import sensor::measurement::{Measurement, Vector3Measurement, Confidence}
+
+// ============================================================================
+// KALİBRASYON PARAMETRELERİ
+// ============================================================================
+
+/// Tek eksen kalibrasyon parametreleri
+pub tip AxisCalibration = yapı yap
+    /// Offset (sıfır noktası kayması)
+    offset: ondalık,
+    
+    /// Gain (kazanç çarpanı)
+    gain: ondalık,
+    
+    /// Noise floor (gürültü tabanı)
+    noise_floor: ondalık,
+    
+    /// Minimum değer
+    min_value: ondalık,
+    
+    /// Maximum değer
+    max_value: ondalık,
+son
+
+impl AxisCalibration:
+    /// Varsayılan (kalibre edilmemiş)
+    pub fn default() döndür AxisCalibration:
+        döndür AxisCalibration {
+            offset: 0.0,
+            gain: 1.0,
+            noise_floor: 0.0,
+            min_value: -9999999.0,
+            max_value: 9999999.0,
+        }
+    son
+    
+    /// Ham değeri kalibre et
+    pub fn apply(self, raw: ondalık) döndür ondalık:
+        değişken calibrated = (raw - self.offset) * self.gain
+        
+        // Clamp to valid range
+        eğer calibrated < self.min_value:
+            calibrated = self.min_value
+        son
+        eğer calibrated > self.max_value:
+            calibrated = self.max_value
+        son
+        
+        // Gürültü tabanı altındaysa sıfır
+        eğer calibrated.abs() < self.noise_floor:
+            calibrated = 0.0
+        son
+        
+        döndür calibrated
+    son
+    
+    /// Ters kalibrasyon (değerden ham'a)
+    pub fn unapply(self, value: ondalık) döndür ondalık:
+        döndür value / self.gain + self.offset
+    son
+son
+
+/// 3 eksen kalibrasyon (IMU, magnetometre vb.)
+pub tip TriAxisCalibration = yapı yap
+    x: AxisCalibration,
+    y: AxisCalibration,
+    z: AxisCalibration,
+    
+    /// Cross-axis compensation matrix (opsiyonel)
+    cross_axis: Seçenek[Matrix3x3],
+son
+
+impl TriAxisCalibration:
+    pub fn default() döndür TriAxisCalibration:
+        döndür TriAxisCalibration {
+            x: AxisCalibration::default(),
+            y: AxisCalibration::default(),
+            z: AxisCalibration::default(),
+            cross_axis: Hiçbiri,
+        }
+    son
+    
+    /// Vektör kalibre et
+    pub fn apply(self, raw_x: ondalık, raw_y: ondalık, raw_z: ondalık) döndür (ondalık, ondalık, ondalık):
+        değişken x = self.x.apply(raw_x)
+        değişken y = self.y.apply(raw_y)
+        değişken z = self.z.apply(raw_z)
+        
+        // Cross-axis compensation varsa uygula
+        eğer self.cross_axis.is_some():
+            değişken m = self.cross_axis.unwrap()
+            değişken nx = m.m00 * x + m.m01 * y + m.m02 * z
+            değişken ny = m.m10 * x + m.m11 * y + m.m12 * z
+            değişken nz = m.m20 * x + m.m21 * y + m.m22 * z
+            döndür (nx, ny, nz)
+        son
+        
+        döndür (x, y, z)
+    son
+    
+    /// Vector3Measurement kalibre et
+    pub fn apply_vector(self, v: Vector3Measurement) döndür Vector3Measurement:
+        değişken (x, y, z) = self.apply(v.x, v.y, v.z)
+        döndür Vector3Measurement {
+            x: x, y: y, z: z,
+            unit: v.unit,
+            timestamp: v.timestamp,
+            confidence: v.confidence,
+            source: v.source,
+        }
+    son
+son
+
+/// 3x3 Matrix (cross-axis compensation için)
+pub tip Matrix3x3 = yapı yap
+    m00: ondalık, m01: ondalık, m02: ondalık,
+    m10: ondalık, m11: ondalık, m12: ondalık,
+    m20: ondalık, m21: ondalık, m22: ondalık,
+son
+
+impl Matrix3x3:
+    pub fn identity() döndür Matrix3x3:
+        döndür Matrix3x3 {
+            m00: 1.0, m01: 0.0, m02: 0.0,
+            m10: 0.0, m11: 1.0, m12: 0.0,
+            m20: 0.0, m21: 0.0, m22: 1.0,
+        }
+    son
+son
+
+// ============================================================================
+// SICAKLIK KOMPANZASYONU
+// ============================================================================
+
+/// Sıcaklık drift kompanzasyonu
+pub tip TemperatureCompensation = yapı yap
+    /// Referans sıcaklık (°C)
+    reference_temp: ondalık,
+    
+    /// Sıcaklık katsayısı (birim/°C)
+    temp_coefficient: ondalık,
+    
+    /// İkinci derece katsayı (isteğe bağlı)
+    temp_coefficient_sq: ondalık,
+son
+
+impl TemperatureCompensation:
+    pub fn none() döndür TemperatureCompensation:
+        döndür TemperatureCompensation {
+            reference_temp: 25.0,
+            temp_coefficient: 0.0,
+            temp_coefficient_sq: 0.0,
+        }
+    son
+    
+    pub fn linear(ref_temp: ondalık, coeff: ondalık) döndür TemperatureCompensation:
+        döndür TemperatureCompensation {
+            reference_temp: ref_temp,
+            temp_coefficient: coeff,
+            temp_coefficient_sq: 0.0,
+        }
+    son
+    
+    /// Değeri sıcaklık kompanze et
+    pub fn compensate(self, value: ondalık, current_temp: ondalık) döndür ondalık:
+        değişken delta_t = current_temp - self.reference_temp
+        değişken correction = self.temp_coefficient * delta_t + 
+                             self.temp_coefficient_sq * delta_t * delta_t
+        döndür value - correction
+    son
+son
+
+// ============================================================================
+// KALİBRASYON PROFİLİ
+// ============================================================================
+
+/// Kalibrasyon durumu
+pub tip CalibrationStatus = özyinelemeli yap
+    | NotCalibrated           // Kalibre edilmemiş
+    | FactoryCalibrated       // Fabrika kalibrasyonu
+    | UserCalibrated          // Kullanıcı kalibrasyonu
+    | AutoCalibrated          // Otomatik kalibrasyon
+    | Expired                 // Süresi dolmuş
+son
+
+/// Tam kalibrasyon profili
+pub tip CalibrationProfile = yapı yap
+    /// Profil adı
+    name: yazı,
+    
+    /// Kalibrasyon durumu
+    status: CalibrationStatus,
+    
+    /// Kalibrasyon tarihi (timestamp)
+    calibrated_at: sayı,
+    
+    /// Geçerlilik süresi (ms)
+    valid_for_ms: sayı,
+    
+    /// Tek eksen kalibrasyon
+    axis: Seçenek[AxisCalibration],
+    
+    /// Üç eksen kalibrasyon
+    tri_axis: Seçenek[TriAxisCalibration],
+    
+    /// Sıcaklık kompanzasyonu
+    temp_comp: TemperatureCompensation,
+    
+    /// Özel veriler (JSON formatında)
+    custom_data: Seçenek[yazı],
+son
+
+impl CalibrationProfile:
+    /// Boş profil
+    pub fn empty(name: yazı) döndür CalibrationProfile:
+        döndür CalibrationProfile {
+            name: name,
+            status: CalibrationStatus::NotCalibrated,
+            calibrated_at: 0,
+            valid_for_ms: 0,
+            axis: Hiçbiri,
+            tri_axis: Hiçbiri,
+            temp_comp: TemperatureCompensation::none(),
+            custom_data: Hiçbiri,
+        }
+    son
+    
+    /// Tek eksen profili
+    pub fn for_scalar(name: yazı, offset: ondalık, gain: ondalık) döndür CalibrationProfile:
+        döndür CalibrationProfile {
+            name: name,
+            status: CalibrationStatus::UserCalibrated,
+            calibrated_at: 0,  // Timestamp::now()
+            valid_for_ms: 30 * 24 * 60 * 60 * 1000,  // 30 gün
+            axis: Bazı(AxisCalibration {
+                offset: offset,
+                gain: gain,
+                noise_floor: 0.0,
+                min_value: -9999999.0,
+                max_value: 9999999.0,
+            }),
+            tri_axis: Hiçbiri,
+            temp_comp: TemperatureCompensation::none(),
+            custom_data: Hiçbiri,
+        }
+    son
+    
+    /// Profil hala geçerli mi?
+    pub fn is_valid(self) döndür mantıksal:
+        eğer self.valid_for_ms == 0:
+            döndür doğru  // Süresiz geçerli
+        son
+        // Native: current_time - self.calibrated_at < self.valid_for_ms
+        döndür doğru
+    son
+    
+    /// Measurement kalibre et
+    pub fn apply(self, m: Measurement) döndür Measurement:
+        eğer self.axis.is_none():
+            döndür m
+        son
+        
+        değişken cal = self.axis.unwrap()
+        değişken calibrated_value = cal.apply(m.value)
+        
+        // Sıcaklık kompanzasyonu
+        eğer m.metadata.is_some():
+            değişken meta = m.metadata.unwrap()
+            eğer meta.sensor_temp.is_some():
+                calibrated_value = self.temp_comp.compensate(
+                    calibrated_value, 
+                    meta.sensor_temp.unwrap()
+                )
+            son
+        son
+        
+        döndür Measurement {
+            value: calibrated_value,
+            unit: m.unit,
+            timestamp: m.timestamp,
+            confidence: m.confidence,
+            source: m.source,
+            metadata: m.metadata,
+        }
+    son
+    
+    /// Vector kalibre et
+    pub fn apply_vector(self, v: Vector3Measurement) döndür Vector3Measurement:
+        eğer self.tri_axis.is_none():
+            döndür v
+        son
+        döndür self.tri_axis.unwrap().apply_vector(v)
+    son
+    
+    /// JSON'dan yükle
+    pub fn from_json(json: yazı) döndür Seçenek[CalibrationProfile]:
+        // JSON parse implementation
+        döndür Hiçbiri
+    son
+    
+    /// JSON'a kaydet
+    pub fn to_json(self) döndür yazı:
+        // JSON serialize implementation
+        döndür "{}"
+    son
+son
+
+// ============================================================================
+// OTOMATİK KALİBRASYON
+// ============================================================================
+
+/// Otomatik kalibrasyon modu
+pub tip AutoCalibrationMode = özyinelemeli yap
+    | Disabled            // Kapalı
+    | OnStartup           // Başlangıçta
+    | Continuous          // Sürekli
+    | OnDemand            // İstek üzerine
+son
+
+/// Kalibrasyon rutini
+pub tip CalibrationRoutine = özyinelemeli yap
+    | ZeroPoint           // Sıfır noktası (sensör sabit)
+    | TwoPoint            // İki nokta (düşük ve yüksek)
+    | MultiPoint          // Çok nokta
+    | Magnetometer        // Manyetometre (8 şekli)
+    | Accelerometer       // İvmeölçer (6 pozisyon)
+    | Gyroscope           // Jiroskop (sabit bekle)
+son
+
+/// Kalibrasyon yöneticisi
+pub tip CalibrationManager = yapı yap
+    /// Kayıtlı profiller
+    profiles: Harita[yazı, CalibrationProfile],
+    
+    /// Otomatik kalibrasyon modu
+    auto_mode: AutoCalibrationMode,
+    
+    /// Son kalibrasyon sonucu
+    last_result: Seçenek[CalibrationResult],
+son
+
+/// Kalibrasyon sonucu
+pub tip CalibrationResult = yapı yap
+    success: mantıksal,
+    profile: Seçenek[CalibrationProfile],
+    error_message: Seçenek[yazı],
+    samples_collected: sayı,
+    duration_ms: sayı,
+son
+
+impl CalibrationManager:
+    pub fn new() döndür CalibrationManager:
+        döndür CalibrationManager {
+            profiles: Harita::new(),
+            auto_mode: AutoCalibrationMode::Disabled,
+            last_result: Hiçbiri,
+        }
+    son
+    
+    /// Profil kaydet
+    pub fn save_profile(mut self, sensor_id: yazı, profile: CalibrationProfile) döndür void:
+        self.profiles.insert(sensor_id, profile)
+    son
+    
+    /// Profil yükle
+    pub fn load_profile(self, sensor_id: yazı) döndür Seçenek[CalibrationProfile]:
+        döndür self.profiles.get(sensor_id)
+    son
+    
+    /// Profil sil
+    pub fn delete_profile(mut self, sensor_id: yazı) döndür void:
+        self.profiles.remove(sensor_id)
+    son
+    
+    /// Sıfır noktası kalibrasyonu başlat
+    pub fn start_zero_calibration(mut self, sensor_id: yazı, num_samples: sayı) döndür CalibrationRoutineRunner:
+        döndür CalibrationRoutineRunner {
+            sensor_id: sensor_id,
+            routine: CalibrationRoutine::ZeroPoint,
+            num_samples: num_samples,
+            collected_samples: [],
+            state: CalibrationState::Idle,
+        }
+    son
+    
+    /// İki nokta kalibrasyonu başlat
+    pub fn start_two_point_calibration(mut self, sensor_id: yazı, low_ref: ondalık, high_ref: ondalık) döndür TwoPointCalibrationRunner:
+        döndür TwoPointCalibrationRunner {
+            sensor_id: sensor_id,
+            low_reference: low_ref,
+            high_reference: high_ref,
+            low_samples: [],
+            high_samples: [],
+            state: TwoPointState::WaitingLow,
+        }
+    son
+son
+
+/// Kalibrasyon durumu
+pub tip CalibrationState = özyinelemeli yap
+    | Idle
+    | Collecting
+    | Processing
+    | Complete
+    | Failed
+son
+
+/// Kalibrasyon runner
+pub tip CalibrationRoutineRunner = yapı yap
+    sensor_id: yazı,
+    routine: CalibrationRoutine,
+    num_samples: sayı,
+    collected_samples: Liste[ondalık],
+    state: CalibrationState,
+son
+
+impl CalibrationRoutineRunner:
+    /// Örnek ekle
+    pub fn add_sample(mut self, value: ondalık) döndür void:
+        eğer self.state == CalibrationState::Idle:
+            self.state = CalibrationState::Collecting
+        son
+        
+        self.collected_samples.push(value)
+        
+        eğer self.collected_samples.len() >= self.num_samples:
+            self.state = CalibrationState::Processing
+        son
+    son
+    
+    /// Tamamlandı mı?
+    pub fn is_complete(self) döndür mantıksal:
+        döndür self.state == CalibrationState::Complete veya 
+               self.state == CalibrationState::Failed
+    son
+    
+    /// Sonucu hesapla
+    pub fn finish(mut self) döndür CalibrationResult:
+        eğer self.collected_samples.len() < 2:
+            self.state = CalibrationState::Failed
+            döndür CalibrationResult {
+                success: yanlış,
+                profile: Hiçbiri,
+                error_message: Bazı("Yetersiz örnek sayısı"),
+                samples_collected: self.collected_samples.len(),
+                duration_ms: 0,
+            }
+        son
+        
+        // Ortalama hesapla (offset)
+        değişken sum = 0.0
+        döngü s in self.collected_samples:
+            sum = sum + s
+        son
+        değişken offset = sum / self.collected_samples.len()
+        
+        // Standart sapma hesapla (noise floor)
+        değişken variance = 0.0
+        döngü s in self.collected_samples:
+            değişken diff = s - offset
+            variance = variance + diff * diff
+        son
+        variance = variance / self.collected_samples.len()
+        değişken noise_floor = variance.sqrt() * 3.0  // 3-sigma
+        
+        değişken profile = CalibrationProfile {
+            name: self.sensor_id + "_zero",
+            status: CalibrationStatus::UserCalibrated,
+            calibrated_at: 0,
+            valid_for_ms: 30 * 24 * 60 * 60 * 1000,
+            axis: Bazı(AxisCalibration {
+                offset: offset,
+                gain: 1.0,
+                noise_floor: noise_floor,
+                min_value: -9999999.0,
+                max_value: 9999999.0,
+            }),
+            tri_axis: Hiçbiri,
+            temp_comp: TemperatureCompensation::none(),
+            custom_data: Hiçbiri,
+        }
+        
+        self.state = CalibrationState::Complete
+        
+        döndür CalibrationResult {
+            success: doğru,
+            profile: Bazı(profile),
+            error_message: Hiçbiri,
+            samples_collected: self.collected_samples.len(),
+            duration_ms: 0,
+        }
+    son
+son
+
+/// İki nokta kalibrasyon durumu
+pub tip TwoPointState = özyinelemeli yap
+    | WaitingLow
+    | CollectingLow
+    | WaitingHigh
+    | CollectingHigh
+    | Complete
+son
+
+/// İki nokta kalibrasyon runner
+pub tip TwoPointCalibrationRunner = yapı yap
+    sensor_id: yazı,
+    low_reference: ondalık,
+    high_reference: ondalık,
+    low_samples: Liste[ondalık],
+    high_samples: Liste[ondalık],
+    state: TwoPointState,
+son
+
+impl TwoPointCalibrationRunner:
+    /// Düşük nokta toplama başlat
+    pub fn start_low_collection(mut self) döndür void:
+        self.state = TwoPointState::CollectingLow
+    son
+    
+    /// Yüksek nokta toplama başlat
+    pub fn start_high_collection(mut self) döndür void:
+        self.state = TwoPointState::CollectingHigh
+    son
+    
+    /// Örnek ekle
+    pub fn add_sample(mut self, value: ondalık) döndür void:
+        eşleştir self.state:
+            TwoPointState::CollectingLow:
+                self.low_samples.push(value)
+            TwoPointState::CollectingHigh:
+                self.high_samples.push(value)
+            _:
+                // Ignore
+        son
+    son
+    
+    /// Sonucu hesapla
+    pub fn finish(mut self) döndür CalibrationResult:
+        eğer self.low_samples.len() < 2 veya self.high_samples.len() < 2:
+            döndür CalibrationResult {
+                success: yanlış,
+                profile: Hiçbiri,
+                error_message: Bazı("Yetersiz örnek"),
+                samples_collected: self.low_samples.len() + self.high_samples.len(),
+                duration_ms: 0,
+            }
+        son
+        
+        // Ortalamalar
+        değişken low_avg = self.low_samples.iter().sum() / self.low_samples.len()
+        değişken high_avg = self.high_samples.iter().sum() / self.high_samples.len()
+        
+        // Gain ve Offset hesapla
+        // y = gain * x + offset
+        // ref_low = gain * measured_low + offset
+        // ref_high = gain * measured_high + offset
+        değişken gain = (self.high_reference - self.low_reference) / (high_avg - low_avg)
+        değişken offset = low_avg - (self.low_reference / gain)
+        
+        değişken profile = CalibrationProfile::for_scalar(
+            self.sensor_id + "_twopoint",
+            offset,
+            gain
+        )
+        
+        self.state = TwoPointState::Complete
+        
+        döndür CalibrationResult {
+            success: doğru,
+            profile: Bazı(profile),
+            error_message: Hiçbiri,
+            samples_collected: self.low_samples.len() + self.high_samples.len(),
+            duration_ms: 0,
+        }
+    son
+son
+
+// ============================================================================
+// CONVENIENCE FUNCTIONS
+// ============================================================================
+
+/// Basit offset kalibrasyonu
+pub fn calibrate_offset(sensor_id: yazı, offset: ondalık) döndür CalibrationProfile:
+    döndür CalibrationProfile::for_scalar(sensor_id, offset, 1.0)
+son
+
+/// Offset ve gain kalibrasyonu
+pub fn calibrate(sensor_id: yazı, offset: ondalık, gain: ondalık) döndür CalibrationProfile:
+    döndür CalibrationProfile::for_scalar(sensor_id, offset, gain)
+son
+
+/// Kalibrasyonu sıfırla
+pub fn reset_calibration(sensor_id: yazı) döndür CalibrationProfile:
+    döndür CalibrationProfile::empty(sensor_id)
+son

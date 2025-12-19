@@ -1,0 +1,1389 @@
+//! # Crypto Module
+//!
+//! Cryptography and hashing library.
+//!
+//! Kriptografi ve hash kütüphanesi.
+//!
+//! ## Features / Özellikler
+//!
+//! - **Hash functions**: MD5, SHA1, SHA256, SHA512, BLAKE2 / Hash fonksiyonları
+//! - **HMAC**: Hash-based message authentication / Hash tabanlı kimlik doğrulama
+//! - **Password hashing**: PBKDF2, bcrypt, argon2 / Şifre hash'leme
+//! - **Symmetric encryption**: AES-128/256, ChaCha20 / Simetrik şifreleme
+//! - **Asymmetric encryption**: RSA, Ed25519 / Asimetrik şifreleme
+//! - **CSPRNG**: Cryptographically secure random / Kriptografik rastgele sayı
+//! - **Encoding**: Base64, Hex / Kodlama
+//!
+//! ## Security Notes / Güvenlik Notları
+//!
+//! - ⚠️ **DO NOT use MD5 or SHA1** for security! Legacy only. / MD5 ve SHA1 güvenlik için KULLANMAYIN!
+//! - ✅ **Use argon2 or bcrypt** for password hashing / Şifre hash'leme için argon2 veya bcrypt kullanın
+//! - ✅ **Use CSPRNG** for random numbers / Rastgele sayılar için CSPRNG kullanın
+//!
+//! ## Example / Örnek
+//!
+//! ```berk
+//! kullan crypto
+//!
+//! // Hash
+//! değişken hash = crypto.sha256("merhaba dünya")
+//!
+//! // Password
+//! değişken hash = crypto.argon2_hash("şifre123")?
+//! değişken geçerli = crypto.argon2_verify(hash, "şifre123")?
+//! ```
+//!
+//! Backend: Rust crypto crates + OpenSSL
+
+modül crypto
+
+kullan string
+
+// ============================================================================
+// TÜRLER (Types)
+// ============================================================================
+
+// Hash türü (binary data)
+tip Hash = liste[byte]
+
+// Hash algoritması
+tip HashAlgoritması = "MD5" | "SHA1" | "SHA256" | "SHA384" | "SHA512" | "BLAKE2b" | "BLAKE2s"
+
+// Şifreleme modu
+tip SifrelemeModu = "ECB" | "CBC" | "CTR" | "GCM"
+
+// Anahtar boyutu (bit)
+tip AnahtarBoyutu = 128 | 192 | 256
+
+// RSA key pair
+tip RsaAnahtarCifti = yapı yap
+    genel_anahtar: liste[byte],
+    ozel_anahtar: liste[byte],
+    anahtar_boyutu: tamsayı  // 2048, 3072, 4096
+son
+
+// Şifreleme hatası
+tip CryptoHata = yapı yap
+    mesaj: yazı,
+    hata_türü: yazı  // "hash", "encryption", "signature", "random"
+son
+
+// ============================================================================
+// HASH FONKSİYONLARI (Hash Functions)
+// ============================================================================
+
+// MD5 hash (⚠️ GÜVENSIZ - sadece uyumluluk için)
+// Pure BERK implementation (RFC 1321)
+fonksiyon md5(veri: yazı) -> Hash
+yap
+    dön md5_bytes(string_to_bytes(veri))
+son
+
+fonksiyon md5_bytes(veri: liste[byte]) -> Hash
+yap
+    // MD5 state initialization (RFC 1321)
+    değişken a0 = 0x67452301 tartamsayı
+    değişken b0 = 0xefcdab89 tartamsayı
+    değişken c0 = 0x98badcfe tartamsayı
+    değişken d0 = 0x10325476 tartamsayı
+    
+    // Pre-processing: padding
+    değişken padded = md5_pad_message(veri)
+    
+    // Process 512-bit (64-byte) chunks
+    değişken chunk_count = liste_uzunluk(padded) / 64
+    
+    için i = 0 .. chunk_count yap
+        değişken chunk_offset = i * 64
+        değişken chunk = liste_dilim(padded, chunk_offset, chunk_offset + 64)
+        
+        // Break chunk into sixteen 32-bit words (little-endian)
+        değişken M = liste_oluştur[tartamsayı](16)
+        için j = 0 .. 16 yap
+            değişken idx = j * 4
+            M[j] = (chunk[idx] tartamsayı) |
+                   ((chunk[idx + 1] tartamsayı) << 8) |
+                   ((chunk[idx + 2] tartamsayı) << 16) |
+                   ((chunk[idx + 3] tartamsayı) << 24)
+        son
+        
+        // Initialize hash values for this chunk
+        değişken A = a0
+        değişken B = b0
+        değişken C = c0
+        değişken D = d0
+        
+        // Main MD5 loop (64 rounds)
+        için round = 0 .. 64 yap
+            değişken F tartamsayı
+            değişken g tamsayı
+            
+            seç round yap
+                durum 0..15 => yap
+                    F = (B & C) | ((~B) & D)
+                    g = round
+                son
+                durum 16..31 => yap
+                    F = (D & B) | ((~D) & C)
+                    g = (5 * round + 1) % 16
+                son
+                durum 32..47 => yap
+                    F = B ^ C ^ D
+                    g = (3 * round + 5) % 16
+                son
+                durum 48..63 => yap
+                    F = C ^ (B | (~D))
+                    g = (7 * round) % 16
+                son
+            son
+            
+            // MD5 constants (sine table)
+            değişken K = md5_konstant(round)
+            
+            F = F + A + K + M[g]
+            A = D
+            D = C
+            C = B
+            B = B + md5_sol_rotate(F, md5_shift(round))
+        son
+        
+        // Add this chunk's hash to result so far
+        a0 = a0 + A
+        b0 = b0 + B
+        c0 = c0 + C
+        d0 = d0 + D
+    son
+    
+    // Produce final hash (little-endian)
+    değişken sonuç = liste_oluştur[byte](16)
+    md5_u32_to_bytes(a0, sonuç, 0)
+    md5_u32_to_bytes(b0, sonuç, 4)
+    md5_u32_to_bytes(c0, sonuç, 8)
+    md5_u32_to_bytes(d0, sonuç, 12)
+    
+    dön sonuç
+son
+
+// SHA-1 hash (⚠️ GÜVENSIZ - sadece uyumluluk için)
+fonksiyon sha1(veri: yazı) -> Hash
+yap
+    dön sha1_bytes(veri.baytlar())
+son
+
+fonksiyon sha1_bytes(veri: liste[byte]) -> Hash
+yap
+    dön openssl_hash("SHA1", veri)
+son
+
+// SHA-256 hash (✅ ÖNERİLİR)
+// Pure BERK implementation (FIPS 180-4)
+fonksiyon sha256(veri: yazı) -> Hash
+yap
+    dön sha256_bytes(string_to_bytes(veri))
+son
+
+fonksiyon sha256_bytes(veri: liste[byte]) -> Hash
+yap
+    // SHA-256 initial hash values (first 32 bits of fractional parts of sqrt of first 8 primes)
+    değişken h0 = 0x6a09e667 tartamsayı
+    değişken h1 = 0xbb67ae85 tartamsayı
+    değişken h2 = 0x3c6ef372 tartamsayı
+    değişken h3 = 0xa54ff53a tartamsayı
+    değişken h4 = 0x510e527f tartamsayı
+    değişken h5 = 0x9b05688c tartamsayı
+    değişken h6 = 0x1f83d9ab tartamsayı
+    değişken h7 = 0x5be0cd19 tartamsayı
+    
+    // Pre-processing: padding
+    değişken padded = sha256_pad_message(veri)
+    
+    // Process 512-bit (64-byte) chunks
+    değişken chunk_count = liste_uzunluk(padded) / 64
+    
+    için i = 0 .. chunk_count yap
+        değişken chunk_offset = i * 64
+        değişken chunk = liste_dilim(padded, chunk_offset, chunk_offset + 64)
+        
+        // Create message schedule (64 words)
+        değişken w = liste_oluştur[tartamsayı](64)
+        
+        // Copy chunk into first 16 words (big-endian)
+        için j = 0 .. 16 yap
+            değişken idx = j * 4
+            w[j] = ((chunk[idx] tartamsayı) << 24) |
+                   ((chunk[idx + 1] tartamsayı) << 16) |
+                   ((chunk[idx + 2] tartamsayı) << 8) |
+                   (chunk[idx + 3] tartamsayı)
+        son
+        
+        // Extend the first 16 words into remaining 48 words
+        için j = 16 .. 64 yap
+            değişken s0 = sha256_right_rotate(w[j - 15], 7) ^
+                         sha256_right_rotate(w[j - 15], 18) ^
+                         (w[j - 15] >> 3)
+            değişken s1 = sha256_right_rotate(w[j - 2], 17) ^
+                         sha256_right_rotate(w[j - 2], 19) ^
+                         (w[j - 2] >> 10)
+            w[j] = w[j - 16] + s0 + w[j - 7] + s1
+        son
+        
+        // Initialize working variables
+        değişken a = h0
+        değişken b = h1
+        değişken c = h2
+        değişken d = h3
+        değişken e = h4
+        değişken f = h5
+        değişken g = h6
+        değişken h = h7
+        
+        // Main SHA-256 compression loop (64 rounds)
+        için round = 0 .. 64 yap
+            değişken S1 = sha256_right_rotate(e, 6) ^
+                         sha256_right_rotate(e, 11) ^
+                         sha256_right_rotate(e, 25)
+            değişken ch = (e & f) ^ ((~e) & g)
+            değişken temp1 = h + S1 + ch + sha256_konstant(round) + w[round]
+            
+            değişken S0 = sha256_right_rotate(a, 2) ^
+                         sha256_right_rotate(a, 13) ^
+                         sha256_right_rotate(a, 22)
+            değişken maj = (a & b) ^ (a & c) ^ (b & c)
+            değişken temp2 = S0 + maj
+            
+            h = g
+            g = f
+            f = e
+            e = d + temp1
+            d = c
+            c = b
+            b = a
+            a = temp1 + temp2
+        son
+        
+        // Add compressed chunk to current hash value
+        h0 = h0 + a
+        h1 = h1 + b
+        h2 = h2 + c
+        h3 = h3 + d
+        h4 = h4 + e
+        h5 = h5 + f
+        h6 = h6 + g
+        h7 = h7 + h
+    son
+    
+    // Produce final hash (big-endian)
+    değişken sonuç = liste_oluştur[byte](32)
+    sha256_u32_to_bytes(h0, sonuç, 0)
+    sha256_u32_to_bytes(h1, sonuç, 4)
+    sha256_u32_to_bytes(h2, sonuç, 8)
+    sha256_u32_to_bytes(h3, sonuç, 12)
+    sha256_u32_to_bytes(h4, sonuç, 16)
+    sha256_u32_to_bytes(h5, sonuç, 20)
+    sha256_u32_to_bytes(h6, sonuç, 24)
+    sha256_u32_to_bytes(h7, sonuç, 28)
+    
+    dön sonuç
+son
+
+// SHA-384 hash
+fonksiyon sha384(veri: yazı) -> Hash
+yap
+    dön sha384_bytes(veri.baytlar())
+son
+
+fonksiyon sha384_bytes(veri: liste[byte]) -> Hash
+yap
+    dön openssl_hash("SHA384", veri)
+son
+
+// SHA-512 hash (✅ ÖNERİLİR - daha güvenli)
+fonksiyon sha512(veri: yazı) -> Hash
+yap
+    dön sha512_bytes(veri.baytlar())
+son
+
+fonksiyon sha512_bytes(veri: liste[byte]) -> Hash
+yap
+    dön openssl_hash("SHA512", veri)
+son
+
+// BLAKE2b hash (✅ ÖNERİLİR - SHA3'ten hızlı)
+fonksiyon blake2b(veri: yazı, boyut: tamsayı = 64) -> Hash
+yap
+    dön blake2b_bytes(veri.baytlar(), boyut)
+son
+
+fonksiyon blake2b_bytes(veri: liste[byte], boyut: tamsayı = 64) -> Hash
+yap
+    dön openssl_hash("BLAKE2b", veri, boyut)
+son
+
+// ============================================================================
+// DOSYA HASH (File Hashing)
+// ============================================================================
+
+// Dosyanın SHA256 hash'ini al
+fonksiyon dosya_sha256(dosya_yolu: yazı) -> Sonuç[Hash, CryptoHata]
+yap
+    değişken içerik_sonuç = fs::dosya_oku_bytes(dosya_yolu)
+    eğer içerik_sonuç.hata_mı() ise yap
+        dön Hata(CryptoHata yap
+            mesaj: "Dosya okunamadı: " + dosya_yolu,
+            hata_türü: "hash"
+        son)
+    son
+    dön Başarı(sha256_bytes(içerik_sonuç.unwrap()))
+son
+
+// Dosyanın MD5 hash'ini al (checksum için)
+fonksiyon dosya_md5(dosya_yolu: yazı) -> Sonuç[Hash, CryptoHata]
+yap
+    değişken içerik_sonuç = fs::dosya_oku_bytes(dosya_yolu)
+    eğer içerik_sonuç.hata_mı() ise yap
+        dön Hata(CryptoHata yap
+            mesaj: "Dosya okunamadı: " + dosya_yolu,
+            hata_türü: "hash"
+        son)
+    son
+    dön Başarı(md5_bytes(içerik_sonuç.unwrap()))
+son
+
+// ============================================================================
+// HMAC (Hash-based Message Authentication Code)
+// ============================================================================
+
+// HMAC-SHA256 (mesaj doğrulama için)
+fonksiyon hmac_sha256(mesaj: yazı, anahtar: yazı) -> Hash
+yap
+    dön hmac_sha256_bytes(mesaj.baytlar(), anahtar.baytlar())
+son
+
+fonksiyon hmac_sha256_bytes(mesaj: liste[byte], anahtar: liste[byte]) -> Hash
+yap
+    dön openssl_hmac("SHA256", mesaj, anahtar)
+son
+
+// HMAC-SHA512
+fonksiyon hmac_sha512(mesaj: yazı, anahtar: yazı) -> Hash
+yap
+    dön hmac_sha512_bytes(mesaj.baytlar(), anahtar.baytlar())
+son
+
+fonksiyon hmac_sha512_bytes(mesaj: liste[byte], anahtar: liste[byte]) -> Hash
+yap
+    dön openssl_hmac("SHA512", mesaj, anahtar)
+son
+
+// HMAC doğrula (constant-time comparison)
+fonksiyon hmac_dogrula(hesaplanan: Hash, beklenen: Hash) -> mantıksal
+yap
+    dön constant_time_compare(hesaplanan, beklenen)
+son
+
+// ============================================================================
+// PASSWORD HASHING (Şifre Karma)
+// ============================================================================
+
+// PBKDF2-HMAC-SHA256 (Python hashlib uyumlu)
+fonksiyon pbkdf2_sha256(şifre: yazı, tuz: liste[byte], iterasyon: tamsayı = 100000, uzunluk: tamsayı = 32) -> Hash
+yap
+    dön openssl_pbkdf2("SHA256", şifre.baytlar(), tuz, iterasyon, uzunluk)
+son
+
+// bcrypt (✅ ÖNERİLİR - password hashing için)
+fonksiyon bcrypt_hash(şifre: yazı, maliyet: tamsayı = 12) -> yazı
+yap
+    // bcrypt hash formatı: $2b$12$randomsalt+hashedpassword
+    değişken tuz = rastgele_baytlar(16)
+    değişken hash = bcrypt_compute(şifre.baytlar(), tuz, maliyet)
+    dön bcrypt_format(hash, tuz, maliyet)
+son
+
+fonksiyon bcrypt_dogrula(şifre: yazı, hash: yazı) -> mantıksal
+yap
+    değişken parsed = bcrypt_parse(hash)
+    eğer parsed.hiç_mi() ise yap
+        dön yanlış
+    son
+    
+    değişken (tuz, maliyet, beklenen_hash) = parsed.unwrap()
+    değişken hesaplanan = bcrypt_compute(şifre.baytlar(), tuz, maliyet)
+    
+    dön constant_time_compare(hesaplanan, beklenen_hash)
+son
+
+// argon2 (✅ EN GÜVENLİ - modern password hashing)
+fonksiyon argon2_hash(şifre: yazı, tuz: liste[byte] = [], bellek_kb: tamsayı = 65536, iterasyon: tamsayı = 3) -> yazı
+yap
+    değişken salt = eğer tuz.boyut() > 0 ise tuz değilse rastgele_baytlar(16)
+    değişken hash = argon2id_compute(şifre.baytlar(), salt, bellek_kb, iterasyon)
+    dön argon2_format(hash, salt, bellek_kb, iterasyon)
+son
+
+fonksiyon argon2_dogrula(şifre: yazı, hash: yazı) -> mantıksal
+yap
+    değişken parsed = argon2_parse(hash)
+    eğer parsed.hiç_mi() ise yap
+        dön yanlış
+    son
+    
+    değişken (tuz, bellek_kb, iterasyon, beklenen_hash) = parsed.unwrap()
+    değişken hesaplanan = argon2id_compute(şifre.baytlar(), tuz, bellek_kb, iterasyon)
+    
+    dön constant_time_compare(hesaplanan, beklenen_hash)
+son
+
+// ============================================================================
+// SİMETRİK ŞİFRELEME (Symmetric Encryption)
+// ============================================================================
+
+// AES-256-GCM şifreleme (✅ ÖNERİLİR)
+fonksiyon aes_sifrele(düz_metin: yazı, anahtar: liste[byte], mod: SifrelemeModu = "GCM") -> Sonuç[liste[byte], CryptoHata]
+yap
+    eğer anahtar.boyut() != 32 ise yap  // 256-bit
+        dön Hata(CryptoHata yap
+            mesaj: "Anahtar 32 byte olmalı (256-bit)",
+            hata_türü: "encryption"
+        son)
+    son
+    
+    değişken iv = rastgele_baytlar(12)  // GCM için 96-bit IV
+    değişken şifreli = openssl_aes_encrypt(düz_metin.baytlar(), anahtar, iv, mod)
+    
+    // IV + şifreli veri + auth tag (GCM)
+    dön Başarı(iv + şifreli)
+son
+
+// AES-256-GCM deşifreleme
+fonksiyon aes_desifre(şifreli_veri: liste[byte], anahtar: liste[byte], mod: SifrelemeModu = "GCM") -> Sonuç[yazı, CryptoHata]
+yap
+    eğer anahtar.boyut() != 32 ise yap
+        dön Hata(CryptoHata yap
+            mesaj: "Anahtar 32 byte olmalı (256-bit)",
+            hata_türü: "encryption"
+        son)
+    son
+    
+    // IV + şifreli veri'yi ayır
+    değişken iv = şifreli_veri[0..12]
+    değişken şifreli = şifreli_veri[12..]
+    
+    değişken düz_bytes_sonuç = openssl_aes_decrypt(şifreli, anahtar, iv, mod)
+    eğer düz_bytes_sonuç.hata_mı() ise yap
+        dön Hata(CryptoHata yap
+            mesaj: "Deşifreleme hatası (yanlış anahtar veya bozuk veri)",
+            hata_türü: "encryption"
+        son)
+    son
+    
+    dön Başarı(yazı_from_bytes(düz_bytes_sonuç.unwrap()))
+son
+
+// ChaCha20-Poly1305 (modern, hızlı, güvenli)
+fonksiyon chacha20_sifrele(düz_metin: yazı, anahtar: liste[byte]) -> Sonuç[liste[byte], CryptoHata]
+yap
+    eğer anahtar.boyut() != 32 ise yap
+        dön Hata(CryptoHata yap
+            mesaj: "Anahtar 32 byte olmalı",
+            hata_türü: "encryption"
+        son)
+    son
+    
+    değişken nonce = rastgele_baytlar(12)
+    değişken şifreli = openssl_chacha20_encrypt(düz_metin.baytlar(), anahtar, nonce)
+    
+    dön Başarı(nonce + şifreli)
+son
+
+fonksiyon chacha20_desifre(şifreli_veri: liste[byte], anahtar: liste[byte]) -> Sonuç[yazı, CryptoHata]
+yap
+    eğer anahtar.boyut() != 32 ise yap
+        dön Hata(CryptoHata yap
+            mesaj: "Anahtar 32 byte olmalı",
+            hata_türü: "encryption"
+        son)
+    son
+    
+    değişken nonce = şifreli_veri[0..12]
+    değişken şifreli = şifreli_veri[12..]
+    
+    değişken düz_bytes = openssl_chacha20_decrypt(şifreli, anahtar, nonce)
+    dön Başarı(yazı_from_bytes(düz_bytes))
+son
+
+// ============================================================================
+// ASİMETRİK ŞİFRELEME (Asymmetric Encryption - RSA)
+// ============================================================================
+
+// RSA anahtar çifti oluştur
+fonksiyon rsa_anahtar_olustur(bit_boyutu: tamsayı = 2048) -> Sonuç[RsaAnahtarCifti, CryptoHata]
+yap
+    eğer bit_boyutu < 2048 ise yap
+        dön Hata(CryptoHata yap
+            mesaj: "RSA anahtar en az 2048 bit olmalı",
+            hata_türü: "encryption"
+        son)
+    son
+    
+    değişken anahtar_sonuç = openssl_rsa_generate(bit_boyutu)
+    eğer anahtar_sonuç.hata_mı() ise yap
+        dön Hata(CryptoHata yap
+            mesaj: "RSA anahtar oluşturulamadı",
+            hata_türü: "encryption"
+        son)
+    son
+    
+    dön anahtar_sonuç
+son
+
+// RSA public key ile şifrele
+fonksiyon rsa_sifrele(düz_metin: yazı, genel_anahtar: liste[byte]) -> Sonuç[liste[byte], CryptoHata]
+yap
+    dön openssl_rsa_encrypt(düz_metin.baytlar(), genel_anahtar)
+son
+
+// RSA private key ile deşifrele
+fonksiyon rsa_desifre(şifreli_veri: liste[byte], ozel_anahtar: liste[byte]) -> Sonuç[yazı, CryptoHata]
+yap
+    değişken düz_bytes_sonuç = openssl_rsa_decrypt(şifreli_veri, ozel_anahtar)
+    eğer düz_bytes_sonuç.hata_mı() ise yap
+        dön Hata(düz_bytes_sonuç.hata())
+    son
+    dön Başarı(yazı_from_bytes(düz_bytes_sonuç.unwrap()))
+son
+
+// ============================================================================
+// DİJİTAL İMZA (Digital Signatures)
+// ============================================================================
+
+// Ed25519 imza anahtarı oluştur (✅ ÖNERİLİR - modern, hızlı)
+fonksiyon ed25519_anahtar_olustur() -> Sonuç[RsaAnahtarCifti, CryptoHata]
+yap
+    dön openssl_ed25519_generate()
+son
+
+// Ed25519 ile imzala
+fonksiyon ed25519_imzala(mesaj: yazı, ozel_anahtar: liste[byte]) -> Sonuç[liste[byte], CryptoHata]
+yap
+    dön openssl_ed25519_sign(mesaj.baytlar(), ozel_anahtar)
+son
+
+// Ed25519 imzayı doğrula
+fonksiyon ed25519_dogrula(mesaj: yazı, imza: liste[byte], genel_anahtar: liste[byte]) -> mantıksal
+yap
+    değişken sonuç = openssl_ed25519_verify(mesaj.baytlar(), imza, genel_anahtar)
+    dön sonuç.başarılı_mı()
+son
+
+// RSA-SHA256 imza
+fonksiyon rsa_imzala(mesaj: yazı, ozel_anahtar: liste[byte]) -> Sonuç[liste[byte], CryptoHata]
+yap
+    // Önce SHA256 hash al
+    değişken hash = sha256(mesaj)
+    dön openssl_rsa_sign(hash, ozel_anahtar)
+son
+
+fonksiyon rsa_dogrula(mesaj: yazı, imza: liste[byte], genel_anahtar: liste[byte]) -> mantıksal
+yap
+    değişken hash = sha256(mesaj)
+    değişken sonuç = openssl_rsa_verify(hash, imza, genel_anahtar)
+    dön sonuç.başarılı_mı()
+son
+
+// ============================================================================
+// RASTGELE SAYI ÜRETİMİ (Random Number Generation)
+// ============================================================================
+
+// Kriptografik güvenli rastgele baytlar (CSPRNG)
+fonksiyon rastgele_baytlar(boyut: tamsayı) -> liste[byte]
+yap
+    dön openssl_random_bytes(boyut)
+son
+
+// Rastgele sayı (0 ile n arası)
+fonksiyon rastgele_sayi(n: tamsayı) -> tamsayı
+yap
+    değişken bytes = rastgele_baytlar(8)
+    değişken sayi = bytes_to_uint64(bytes)
+    dön sayi % n
+son
+
+// Rastgele token (URL-safe)
+fonksiyon rastgele_token(uzunluk: tamsayı = 32) -> yazı
+yap
+    değişken bytes = rastgele_baytlar(uzunluk)
+    dön base64_url_encode(bytes)
+son
+
+// Rastgele şifre oluştur
+fonksiyon rastgele_sifre(uzunluk: tamsayı = 16, karakterler: yazı = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*") -> yazı
+yap
+    değişken şifre = ""
+    her biri _ içinde aralık(0, uzunluk) yap
+        değişken indeks = rastgele_sayi(karakterler.uzunluk())
+        şifre += karakterler[indeks]
+    son
+    dön şifre
+son
+
+// ============================================================================
+// ENCODING (Base64, Hex)
+// ============================================================================
+
+// Base64 encode
+fonksiyon base64_encode(veri: liste[byte]) -> yazı
+yap
+    dön openssl_base64_encode(veri)
+son
+
+// Base64 decode
+fonksiyon base64_decode(metin: yazı) -> Sonuç[liste[byte], CryptoHata]
+yap
+    değişken sonuç = openssl_base64_decode(metin)
+    eğer sonuç.hata_mı() ise yap
+        dön Hata(CryptoHata yap
+            mesaj: "Base64 decode hatası",
+            hata_türü: "encoding"
+        son)
+    son
+    dön sonuç
+son
+
+// Base64 URL-safe encode (JWT için)
+fonksiyon base64_url_encode(veri: liste[byte]) -> yazı
+yap
+    değişken b64 = base64_encode(veri)
+    // + → -, / → _, padding = kaldır
+    dön b64.değiştir("+", "-").değiştir("/", "_").değiştir("=", "")
+son
+
+// Hex encode
+fonksiyon hex_encode(veri: liste[byte]) -> yazı
+yap
+    değişken sonuç = ""
+    her biri byte içinde veri yap
+        sonuç += onaltılık(byte, 2)
+    son
+    dön sonuç
+son
+
+// Hex decode
+fonksiyon hex_decode(metin: yazı) -> Sonuç[liste[byte], CryptoHata]
+yap
+    eğer metin.uzunluk() % 2 != 0 ise yap
+        dön Hata(CryptoHata yap
+            mesaj: "Geçersiz hex string (tek sayıda karakter)",
+            hata_türü: "encoding"
+        son)
+    son
+    
+    değişken bytes = liste_oluştur()
+    her biri i içinde aralık(0, metin.uzunluk(), 2) yap
+        değişken hex_pair = metin[i..i+2]
+        değişken byte = onaltılıktan_tamsayı(hex_pair)
+        bytes.ekle(byte)
+    son
+    
+    dön Başarı(bytes)
+son
+
+// ============================================================================
+// YARDIMCI FONKSİYONLAR (Helper Functions)
+// ============================================================================
+
+// Constant-time comparison (timing attack koruması)
+fonksiyon constant_time_compare(a: liste[byte], b: liste[byte]) -> mantıksal
+yap
+    eğer a.boyut() != b.boyut() ise yap
+        dön yanlış
+    son
+    
+    değişken sonuç = 0
+    her biri i içinde aralık(0, a.boyut()) yap
+        sonuç = sonuç | (a[i] ^ b[i])  // XOR
+    son
+    
+    dön sonuç == 0
+son
+
+// Hash'i hex string'e çevir (görüntüleme için)
+fonksiyon hash_hex(hash: Hash) -> yazı
+yap
+    dön hex_encode(hash)
+son
+
+// Şifreleme anahtarı türet (PBKDF2)
+fonksiyon anahtar_turet(şifre: yazı, tuz: liste[byte], uzunluk: tamsayı = 32) -> liste[byte]
+yap
+    dön pbkdf2_sha256(şifre, tuz, 100000, uzunluk)
+son
+
+// Rastgele tuz oluştur
+fonksiyon tuz_olustur(boyut: tamsayı = 16) -> liste[byte]
+yap
+    dön rastgele_baytlar(boyut)
+son
+
+// ============================================================================
+// PURE BERK HASH IMPLEMENTATIONS - Helper Functions
+// ============================================================================
+
+// MD5 helper functions
+fonksiyon md5_pad_message(message: liste[byte]) -> liste[byte]
+yap
+    değişken msg_len = liste_uzunluk(message)
+    değişken bit_len = msg_len * 8
+    
+    // Calculate padding size (must be 448 mod 512)
+    değişken padding_len = ((56 - (msg_len + 1) % 64) + 64) % 64
+    değişken total_len = msg_len + 1 + padding_len + 8
+    
+    değişken padded = liste_oluştur[byte](total_len)
+    
+    // Copy original message
+    için i = 0 .. msg_len yap
+        padded[i] = message[i]
+    son
+    
+    // Append bit '1' (0x80 in byte)
+    padded[msg_len] = 0x80
+    
+    // Append zeros (already 0 from liste_oluştur)
+    
+    // Append length as 64-bit little-endian
+    için i = 0 .. 8 yap
+        padded[total_len - 8 + i] = (bit_len >> (i * 8)) & 0xFF
+    son
+    
+    dön padded
+son
+
+fonksiyon md5_sol_rotate(x: tartamsayı, n: tamsayı) -> tartamsayı
+yap
+    dön ((x << n) | (x >> (32 - n))) & 0xFFFFFFFF
+son
+
+fonksiyon md5_shift(round: tamsayı) -> tamsayı
+yap
+    // MD5 shift amounts (per round)
+    değişken shifts = [7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22,
+                       5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20,
+                       4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23,
+                       6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21]
+    dön shifts[round]
+son
+
+fonksiyon md5_konstant(round: tamsayı) -> tartamsayı
+yap
+    // MD5 constants (K[i] = floor(2^32 * abs(sin(i + 1))))
+    değişken K = [
+        0xd76aa478, 0xe8c7b756, 0x242070db, 0xc1bdceee, 0xf57c0faf, 0x4787c62a, 0xa8304613, 0xfd469501,
+        0x698098d8, 0x8b44f7af, 0xffff5bb1, 0x895cd7be, 0x6b901122, 0xfd987193, 0xa679438e, 0x49b40821,
+        0xf61e2562, 0xc040b340, 0x265e5a51, 0xe9b6c7aa, 0xd62f105d, 0x02441453, 0xd8a1e681, 0xe7d3fbc8,
+        0x21e1cde6, 0xc33707d6, 0xf4d50d87, 0x455a14ed, 0xa9e3e905, 0xfcefa3f8, 0x676f02d9, 0x8d2a4c8a,
+        0xfffa3942, 0x8771f681, 0x6d9d6122, 0xfde5380c, 0xa4beea44, 0x4bdecfa9, 0xf6bb4b60, 0xbebfbc70,
+        0x289b7ec6, 0xeaa127fa, 0xd4ef3085, 0x04881d05, 0xd9d4d039, 0xe6db99e5, 0x1fa27cf8, 0xc4ac5665,
+        0xf4292244, 0x432aff97, 0xab9423a7, 0xfc93a039, 0x655b59c3, 0x8f0ccc92, 0xffeff47d, 0x85845dd1,
+        0x6fa87e4f, 0xfe2ce6e0, 0xa3014314, 0x4e0811a1, 0xf7537e82, 0xbd3af235, 0x2ad7d2bb, 0xeb86d391
+    ]
+    dön K[round]
+son
+
+fonksiyon md5_u32_to_bytes(value: tartamsayı, buffer: liste[byte], offset: tamsayı) -> boş
+yap
+    // Little-endian conversion
+    buffer[offset] = value & 0xFF
+    buffer[offset + 1] = (value >> 8) & 0xFF
+    buffer[offset + 2] = (value >> 16) & 0xFF
+    buffer[offset + 3] = (value >> 24) & 0xFF
+son
+
+// SHA-256 helper functions
+fonksiyon sha256_pad_message(message: liste[byte]) -> liste[byte]
+yap
+    değişken msg_len = liste_uzunluk(message)
+    değişken bit_len = msg_len * 8
+    
+    // Calculate padding size (must be 448 mod 512)
+    değişken padding_len = ((56 - (msg_len + 1) % 64) + 64) % 64
+    değişken total_len = msg_len + 1 + padding_len + 8
+    
+    değişken padded = liste_oluştur[byte](total_len)
+    
+    // Copy original message
+    için i = 0 .. msg_len yap
+        padded[i] = message[i]
+    son
+    
+    // Append bit '1' (0x80 in byte)
+    padded[msg_len] = 0x80
+    
+    // Append zeros (already 0 from liste_oluştur)
+    
+    // Append length as 64-bit big-endian
+    için i = 0 .. 8 yap
+        padded[total_len - 1 - i] = (bit_len >> (i * 8)) & 0xFF
+    son
+    
+    dön padded
+son
+
+fonksiyon sha256_right_rotate(x: tartamsayı, n: tamsayı) -> tartamsayı
+yap
+    dön ((x >> n) | (x << (32 - n))) & 0xFFFFFFFF
+son
+
+fonksiyon sha256_konstant(round: tamsayı) -> tartamsayı
+yap
+    // SHA-256 constants (first 32 bits of fractional parts of cube roots of first 64 primes)
+    değişken K = [
+        0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+        0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+        0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+        0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+        0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+        0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+        0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+        0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
+    ]
+    dön K[round]
+son
+
+fonksiyon sha256_u32_to_bytes(value: tartamsayı, buffer: liste[byte], offset: tamsayı) -> boş
+yap
+    // Big-endian conversion
+    buffer[offset] = (value >> 24) & 0xFF
+    buffer[offset + 1] = (value >> 16) & 0xFF
+    buffer[offset + 2] = (value >> 8) & 0xFF
+    buffer[offset + 3] = value & 0xFF
+son
+
+// String/byte conversion helpers
+fonksiyon string_to_bytes(s: yazı) -> liste[byte]
+yap
+    // UTF-8 encoding (simplified - assumes ASCII for now)
+    değişken len = yazı_uzunluk(s)
+    değişken bytes = liste_oluştur[byte](len)
+    için i = 0 .. len yap
+        bytes[i] = yazı_karakter_kod(s, i)
+    son
+    dön bytes
+son
+
+// ============================================================================
+// DÜŞÜK SEVİYE FONKSİYONLAR (Low-level - External C bindings)
+// ============================================================================
+
+// OpenSSL/libsodium bindings (DEPRECATED - use Pure BERK implementations above)
+harici fonksiyon openssl_hash(algoritma: yazı, veri: liste[byte], boyut: tamsayı = 0) -> Hash
+harici fonksiyon openssl_hmac(algoritma: yazı, mesaj: liste[byte], anahtar: liste[byte]) -> Hash
+harici fonksiyon openssl_pbkdf2(algoritma: yazı, şifre: liste[byte], tuz: liste[byte], iter: tamsayı, uzunluk: tamsayı) -> Hash
+harici fonksiyon openssl_aes_encrypt(düz: liste[byte], anahtar: liste[byte], iv: liste[byte], mod: yazı) -> liste[byte]
+harici fonksiyon openssl_aes_decrypt(şifreli: liste[byte], anahtar: liste[byte], iv: liste[byte], mod: yazı) -> Sonuç[liste[byte], tamsayı]
+harici fonksiyon openssl_chacha20_encrypt(düz: liste[byte], anahtar: liste[byte], nonce: liste[byte]) -> liste[byte]
+harici fonksiyon openssl_chacha20_decrypt(şifreli: liste[byte], anahtar: liste[byte], nonce: liste[byte]) -> liste[byte]
+harici fonksiyon openssl_rsa_generate(bit_boyutu: tamsayı) -> Sonuç[RsaAnahtarCifti, tamsayı]
+harici fonksiyon openssl_rsa_encrypt(düz: liste[byte], genel: liste[byte]) -> Sonuç[liste[byte], CryptoHata]
+harici fonksiyon openssl_rsa_decrypt(şifreli: liste[byte], ozel: liste[byte]) -> Sonuç[liste[byte], CryptoHata]
+harici fonksiyon openssl_rsa_sign(hash: Hash, ozel: liste[byte]) -> Sonuç[liste[byte], CryptoHata]
+harici fonksiyon openssl_rsa_verify(hash: Hash, imza: liste[byte], genel: liste[byte]) -> Sonuç[boş, CryptoHata]
+harici fonksiyon openssl_ed25519_generate() -> Sonuç[RsaAnahtarCifti, CryptoHata]
+harici fonksiyon openssl_ed25519_sign(mesaj: liste[byte], ozel: liste[byte]) -> Sonuç[liste[byte], CryptoHata]
+harici fonksiyon openssl_ed25519_verify(mesaj: liste[byte], imza: liste[byte], genel: liste[byte]) -> Sonuç[boş, CryptoHata]
+harici fonksiyon openssl_random_bytes(boyut: tamsayı) -> liste[byte]
+harici fonksiyon openssl_base64_encode(veri: liste[byte]) -> yazı
+harici fonksiyon openssl_base64_decode(metin: yazı) -> Sonuç[liste[byte], tamsayı]
+
+// bcrypt/argon2 bindings
+harici fonksiyon bcrypt_compute(şifre: liste[byte], tuz: liste[byte], maliyet: tamsayı) -> Hash
+harici fonksiyon bcrypt_format(hash: Hash, tuz: liste[byte], maliyet: tamsayı) -> yazı
+harici fonksiyon bcrypt_parse(hash_str: yazı) -> Seçenek[(liste[byte], tamsayı, Hash)]
+harici fonksiyon argon2id_compute(şifre: liste[byte], tuz: liste[byte], bellek: tamsayı, iter: tamsayı) -> Hash
+harici fonksiyon argon2_format(hash: Hash, tuz: liste[byte], bellek: tamsayı, iter: tamsayı) -> yazı
+harici fonksiyon argon2_parse(hash_str: yazı) -> Seçenek[(liste[byte], tamsayı, tamsayı, Hash)]
+
+// ============================================================================
+// KULLANIM ÖRNEKLERİ (Usage Examples)
+// ============================================================================
+
+/*
+// ============================================================================
+// HASH ÖRNEKLERI
+// ============================================================================
+
+kullan crypto
+
+// Örnek 1: String hash (SHA256)
+değişken hash = crypto::sha256("merhaba dünya")
+değişken hash_hex = crypto::hash_hex(hash)
+yazdır("SHA256: " + hash_hex)
+
+// Örnek 2: Dosya hash (integrity check)
+değişken dosya_hash = crypto::dosya_sha256("uygulama.exe")
+eğer dosya_hash.başarılı_mı() ise yap
+    yazdır("Dosya SHA256: " + crypto::hash_hex(dosya_hash.unwrap()))
+son
+
+// Örnek 3: HMAC (API signature)
+değişken api_key = "secret_key_123"
+değişken message = "GET /api/users?page=1"
+değişken signature = crypto::hmac_sha256(message, api_key)
+değişken signature_hex = crypto::hash_hex(signature)
+
+// API request'e ekle
+http::istek_başlık_ekle(istek, "X-Signature", signature_hex)
+
+// Server tarafında doğrula
+değişken beklenen = crypto::hmac_sha256(request_body, api_key)
+eğer crypto::hmac_dogrula(signature, beklenen) ise yap
+    yazdır("İmza geçerli")
+son
+
+// ============================================================================
+// PASSWORD HASHING ÖRNEKLERİ
+// ============================================================================
+
+// Örnek 4: bcrypt ile şifre hash (kullanıcı kaydı)
+değişken şifre = "KullaniciSifresi123!"
+değişken hash = crypto::bcrypt_hash(şifre, maliyet: 12)
+// DB'ye kaydet: $2b$12$randomsalt+hashedpassword
+
+// Login sırasında doğrula
+değişken girdi_şifre = "KullaniciSifresi123!"
+değişken db_hash = "$2b$12$..." // DB'den çekilen hash
+
+eğer crypto::bcrypt_dogrula(girdi_şifre, db_hash) ise yap
+    yazdır("Giriş başarılı")
+değilse yap
+    yazdır("Yanlış şifre")
+son
+
+// Örnek 5: argon2 (en güvenli)
+değişken şifre_hash = crypto::argon2_hash("SuperSecretPass", bellek_kb: 65536, iterasyon: 3)
+// $argon2id$v=19$m=65536,t=3,p=1$randomsalt+hashedpassword
+
+// ============================================================================
+// ŞİFRELEME ÖRNEKLERİ
+// ============================================================================
+
+// Örnek 6: AES-256-GCM şifreleme
+değişken şifre = "kullanici_sifresi"
+değişken tuz = crypto::tuz_olustur()
+değişken anahtar = crypto::anahtar_turet(şifre, tuz, 32)  // 256-bit
+
+değişken düz_metin = "Gizli mesaj buraya"
+değişken şifreli_sonuç = crypto::aes_sifrele(düz_metin, anahtar)
+
+eğer şifreli_sonuç.başarılı_mı() ise yap
+    değişken şifreli = şifreli_sonuç.unwrap()
+    
+    // Dosyaya kaydet veya ağ üzerinden gönder
+    fs::dosya_yaz_bytes("sifrelenmis.dat", tuz + şifreli)
+    
+    // Deşifreleme
+    değişken veri = fs::dosya_oku_bytes("sifrelenmis.dat").unwrap()
+    değişken kaydedilmiş_tuz = veri[0..16]
+    değişken kaydedilmiş_şifreli = veri[16..]
+    
+    değişken anahtar2 = crypto::anahtar_turet(şifre, kaydedilmiş_tuz, 32)
+    değişken düz_sonuç = crypto::aes_desifre(kaydedilmiş_şifreli, anahtar2)
+    
+    yazdır("Deşifre: " + düz_sonuç.unwrap())
+son
+
+// Örnek 7: RSA public-key encryption
+değişken anahtar_çifti = crypto::rsa_anahtar_olustur(2048).unwrap()
+
+// Public key'i paylaş (pem format)
+fs::dosya_yaz_bytes("public_key.pem", anahtar_çifti.genel_anahtar)
+
+// Şifreleme (gönderen)
+değişken alıcı_public_key = fs::dosya_oku_bytes("public_key.pem").unwrap()
+değişken şifreli_mesaj = crypto::rsa_sifrele("Gizli mesaj", alıcı_public_key).unwrap()
+
+// Deşifreleme (alıcı)
+değişken düz_mesaj = crypto::rsa_desifre(şifreli_mesaj, anahtar_çifti.ozel_anahtar).unwrap()
+
+// ============================================================================
+// DİJİTAL İMZA ÖRNEKLERİ
+// ============================================================================
+
+// Örnek 8: Ed25519 imza (modern, hızlı)
+değişken imza_anahtarı = crypto::ed25519_anahtar_olustur().unwrap()
+
+// Mesajı imzala
+değişken belge = "Bu belge dijital olarak imzalanmıştır."
+değişken imza = crypto::ed25519_imzala(belge, imza_anahtarı.ozel_anahtar).unwrap()
+
+// Dosyaya kaydet
+fs::dosya_yaz("belge.txt", belge)
+fs::dosya_yaz_bytes("belge.sig", imza)
+fs::dosya_yaz_bytes("public_key.bin", imza_anahtarı.genel_anahtar)
+
+// İmzayı doğrula (başka biri)
+değişken belge_içeriği = fs::dosya_oku("belge.txt").unwrap()
+değişken imza_bytes = fs::dosya_oku_bytes("belge.sig").unwrap()
+değişken public_key = fs::dosya_oku_bytes("public_key.bin").unwrap()
+
+eğer crypto::ed25519_dogrula(belge_içeriği, imza_bytes, public_key) ise yap
+    yazdır("✓ İmza geçerli - belge değiştirilmemiş")
+değilse yap
+    yazdır("✗ İmza geçersiz - belge kurcalanmış olabilir!")
+son
+
+// ============================================================================
+// RASTGELE SAYI ÖRNEKLERİ
+// ============================================================================
+
+// Örnek 9: API token oluştur
+değişken api_token = crypto::rastgele_token(32)
+yazdır("API Token: " + api_token)
+
+// Örnek 10: Güvenli şifre oluştur
+değişken güvenli_şifre = crypto::rastgele_sifre(16)
+yazdır("Oluşturulan şifre: " + güvenli_şifre)
+
+// Örnek 11: One-time password (OTP)
+değişken otp = crypto::rastgele_sayi(1000000)  // 6 haneli kod
+değişken otp_str = tamsayı_yazı(otp).pad_left(6, '0')
+yazdır("OTP: " + otp_str)
+
+// ============================================================================
+// ENCODING ÖRNEKLERİ
+// ============================================================================
+
+// Örnek 12: Base64 encoding (email attachment)
+değişken dosya_bytes = fs::dosya_oku_bytes("foto.jpg").unwrap()
+değişken base64_str = crypto::base64_encode(dosya_bytes)
+// Email'e ekle veya API'ye gönder
+
+// Decode
+değişken decode_sonuç = crypto::base64_decode(base64_str)
+fs::dosya_yaz_bytes("foto_restored.jpg", decode_sonuç.unwrap())
+
+// Örnek 13: JWT-style Base64 URL encoding
+değişken payload = json::kaydet(user_data)
+değişken encoded = crypto::base64_url_encode(payload.baytlar())
+// JWT header.payload.signature formatı
+
+// Örnek 14: RSA-OAEP ile dosya şifreleme
+değişken rsa_keys = crypto::rsa_anahtar_olustur(4096).unwrap()
+değişken büyük_dosya = fs::dosya_oku_bytes("dokuman.pdf").unwrap()
+
+// Hybrid encryption: AES + RSA
+değişken aes_key = crypto::rastgele_bytes(32)  // 256-bit AES key
+değişken şifreli_dosya = crypto::aes_gcm_sifrele(büyük_dosya, aes_key).unwrap()
+değişken şifreli_anahtar = crypto::rsa_oaep_sifrele(aes_key, rsa_keys.genel_anahtar).unwrap()
+
+// Her ikisini de sakla
+fs::dosya_yaz_bytes("dokuman.pdf.enc", şifreli_dosya)
+fs::dosya_yaz_bytes("dokuman.key.enc", şifreli_anahtar)
+
+// Örnek 15: Elliptic Curve (P-256) imza
+değişken ec_keys = crypto::ec_p256_anahtar_olustur().unwrap()
+değişken transaction = "Transfer 1000 TL to account 12345"
+değişken ecdsa_sig = crypto::ecdsa_imzala(transaction, ec_keys.ozel_anahtar).unwrap()
+
+eğer crypto::ecdsa_dogrula(transaction, ecdsa_sig, ec_keys.genel_anahtar) ise yap
+    yazdır("Transaction imzası geçerli")
+son
+*/
+
+// ============================================================================
+// RSA IMPLEMENTATION - OAEP Padding (Yeni - v1.7)
+// ============================================================================
+
+// RSA-OAEP şifreleme (güvenli padding)
+fonksiyon rsa_oaep_sifrele(veri: liste[byte], genel_anahtar: liste[byte]) -> Sonuç[liste[byte], CryptoHata]
+yap
+    // Max data size check (RSA key size - padding overhead)
+    değişken key_size = rsa_key_size_bytes(genel_anahtar)
+    değişken max_data_size = key_size - 42  // SHA-256 OAEP padding: 2*hashlen + 2 = 2*32 + 2 = 66, but typically 42 for practical use
+    
+    eğer liste_uzunluk(veri) > max_data_size ise yap
+        dön Hata(CryptoHata yap
+            mesaj: "Veri çok büyük: max " + tamsayı_yazı(max_data_size) + " byte, verilen " + tamsayı_yazı(liste_uzunluk(veri)),
+            hata_türü: "encryption"
+        son)
+    son
+    
+    // Native RSA-OAEP call
+    dön @native openssl_rsa_oaep_encrypt(veri, genel_anahtar)
+son
+
+// RSA-OAEP deşifreleme
+fonksiyon rsa_oaep_desifre(şifreli: liste[byte], ozel_anahtar: liste[byte]) -> Sonuç[liste[byte], CryptoHata]
+yap
+    dön @native openssl_rsa_oaep_decrypt(şifreli, ozel_anahtar)
+son
+
+// RSA key size al (bytes)
+fonksiyon rsa_key_size_bytes(anahtar: liste[byte]) -> tamsayı
+yap
+    dön @native openssl_rsa_key_size(anahtar)
+son
+
+// RSA-PSS imza (Probabilistic Signature Scheme - modern)
+fonksiyon rsa_pss_imzala(mesaj: liste[byte], ozel_anahtar: liste[byte]) -> Sonuç[liste[byte], CryptoHata]
+yap
+    // SHA-256 hash
+    değişken hash = sha256_bytes(mesaj)
+    
+    // RSA-PSS signature
+    dön @native openssl_rsa_pss_sign(hash, ozel_anahtar)
+son
+
+// RSA-PSS imza doğrula
+fonksiyon rsa_pss_dogrula(mesaj: liste[byte], imza: liste[byte], genel_anahtar: liste[byte]) -> mantıksal
+yap
+    değişken hash = sha256_bytes(mesaj)
+    değişken sonuç = @native openssl_rsa_pss_verify(hash, imza, genel_anahtar)
+    
+    dön sonuç.başarılı_mı()
+son
+
+// ============================================================================
+// ELLIPTIC CURVE CRYPTOGRAPHY (ECC) - P-256, P-384, P-521 (Yeni - v1.7)
+// ============================================================================
+
+// EC curve türleri
+tip EcCurve = "P-256" | "P-384" | "P-521" | "secp256k1"  // secp256k1 Bitcoin için
+
+// EC anahtar çifti
+tip EcAnahtarCifti = yapı yap
+    genel_anahtar: liste[byte],
+    ozel_anahtar: liste[byte],
+    curve: EcCurve
+son
+
+// NIST P-256 anahtar çifti oluştur (256-bit security, ~3072-bit RSA'ya eşdeğer)
+fonksiyon ec_p256_anahtar_olustur() -> Sonuç[EcAnahtarCifti, CryptoHata]
+yap
+    değişken sonuç = @native openssl_ec_generate_key("P-256")
+    
+    eğer sonuç.hata_mı() ise yap
+        dön Hata(sonuç.hata())
+    son
+    
+    değişken (public, private) = sonuç.unwrap()
+    
+    dön Başarılı(EcAnahtarCifti yap
+        genel_anahtar: public,
+        ozel_anahtar: private,
+        curve: "P-256"
+    son)
+son
+
+// NIST P-384 anahtar çifti oluştur (384-bit security, ~7680-bit RSA'ya eşdeğer)
+fonksiyon ec_p384_anahtar_olustur() -> Sonuç[EcAnahtarCifti, CryptoHata]
+yap
+    değişken sonuç = @native openssl_ec_generate_key("P-384")
+    
+    eğer sonuç.hata_mı() ise yap
+        dön Hata(sonuç.hata())
+    son
+    
+    değişken (public, private) = sonuç.unwrap()
+    
+    dön Başarılı(EcAnahtarCifti yap
+        genel_anahtar: public,
+        ozel_anahtar: private,
+        curve: "P-384"
+    son)
+son
+
+// secp256k1 anahtar çifti oluştur (Bitcoin/Ethereum)
+fonksiyon ec_secp256k1_anahtar_olustur() -> Sonuç[EcAnahtarCifti, CryptoHata]
+yap
+    değişken sonuç = @native openssl_ec_generate_key("secp256k1")
+    
+    eğer sonuç.hata_mı() ise yap
+        dön Hata(sonuç.hata())
+    son
+    
+    değişken (public, private) = sonuç.unwrap()
+    
+    dön Başarılı(EcAnahtarCifti yap
+        genel_anahtar: public,
+        ozel_anahtar: private,
+        curve: "secp256k1"
+    son)
+son
+
+// ECDSA imza (Elliptic Curve Digital Signature Algorithm)
+fonksiyon ecdsa_imzala(mesaj: liste[byte], ozel_anahtar: liste[byte]) -> Sonuç[liste[byte], CryptoHata]
+yap
+    // SHA-256 hash
+    değişken hash = sha256_bytes(mesaj)
+    
+    // ECDSA sign
+    dön @native openssl_ecdsa_sign(hash, ozel_anahtar)
+son
+
+// ECDSA imza doğrula
+fonksiyon ecdsa_dogrula(mesaj: liste[byte], imza: liste[byte], genel_anahtar: liste[byte]) -> mantıksal
+yap
+    değişken hash = sha256_bytes(mesaj)
+    değişken sonuç = @native openssl_ecdsa_verify(hash, imza, genel_anahtar)
+    
+    dön sonuç.başarılı_mı()
+son
+
+// ECDH - Elliptic Curve Diffie-Hellman (anahtar değişimi)
+fonksiyon ecdh_paylaşılan_anahtar(benim_ozel: liste[byte], karşı_genel: liste[byte]) -> Sonuç[liste[byte], CryptoHata]
+yap
+    // Shared secret hesapla
+    değişken secret = @native openssl_ecdh_compute_key(benim_ozel, karşı_genel)
+    
+    eğer secret.hata_mı() ise yap
+        dön Hata(secret.hata())
+    son
+    
+    // Paylaşılan secret'ten AES anahtarı türet
+    değişken shared_key = kdf_sha256(secret.unwrap(), 32)
+    
+    dön Başarılı(shared_key)
+son
+
+// ============================================================================
+// X25519 KEY EXCHANGE & Ed25519 SIGNATURES (Modern Cryptography) (Yeni - v1.7)
+// ============================================================================
+
+// X25519 anahtar değişimi (ECDH'den ~2x hızlı)
+fonksiyon x25519_anahtar_olustur() -> Sonuç[EcAnahtarCifti, CryptoHata]
+yap
+    değişken sonuç = @native openssl_x25519_generate_key()
+    
+    eğer sonuç.hata_mı() ise yap
+        dön Hata(sonuç.hata())
+    son
+    
+    değişken (public, private) = sonuç.unwrap()
+    
+    dön Başarılı(EcAnahtarCifti yap
+        genel_anahtar: public,
+        ozel_anahtar: private,
+        curve: "X25519"
+    son)
+son
+
+// X25519 paylaşılan anahtar hesapla
+fonksiyon x25519_paylaşılan_anahtar(benim_ozel: liste[byte], karşı_genel: liste[byte]) -> Sonuç[liste[byte], CryptoHata]
+yap
+    dön @native openssl_x25519_compute_key(benim_ozel, karşı_genel)
+son
+
+// ============================================================================
+// HYBRID ENCRYPTION - RSA + AES (Büyük dosyalar için) (Yeni - v1.7)
+// ============================================================================
+
+// Hybrid şifreleme sonucu
+tip HybridSifreliVeri = yapı yap
+    şifreli_anahtar: liste[byte],    // RSA ile şifrelenmiş AES key
+    şifreli_veri: liste[byte],        // AES-GCM ile şifrelenmiş data
+    nonce: liste[byte],               // GCM nonce (12 bytes)
+    tag: liste[byte]                  // GCM authentication tag (16 bytes)
+son
+
+// Hybrid şifreleme: AES-256-GCM (data) + RSA-OAEP (key)
+fonksiyon hybrid_sifrele(veri: liste[byte], rsa_genel_anahtar: liste[byte]) -> Sonuç[HybridSifreliVeri, CryptoHata]
+yap
+    // 1. Rastgele AES-256 key oluştur
+    değişken aes_key = rastgele_bytes(32)
+    
+    // 2. Veriyi AES-GCM ile şifrele
+    değişken nonce = rastgele_bytes(12)
+    değişken gcm_sonuç = @native openssl_aes_gcm_encrypt(veri, aes_key, nonce)
+    
+    eğer gcm_sonuç.hata_mı() ise yap
+        dön Hata(gcm_sonuç.hata())
+    son
+    
+    değişken (şifreli_veri, tag) = gcm_sonuç.unwrap()
+    
+    // 3. AES key'i RSA-OAEP ile şifrele
+    değişken rsa_sonuç = rsa_oaep_sifrele(aes_key, rsa_genel_anahtar)
+    
+    eğer rsa_sonuç.hata_mı() ise yap
+        dön Hata(rsa_sonuç.hata())
+    son
+    
+    dön Başarılı(HybridSifreliVeri yap
+        şifreli_anahtar: rsa_sonuç.unwrap(),
+        şifreli_veri: şifreli_veri,
+        nonce: nonce,
+        tag: tag
+    son)
+son
+
+// Hybrid deşifreleme
+fonksiyon hybrid_desifre(hybrid: HybridSifreliVeri, rsa_ozel_anahtar: liste[byte]) -> Sonuç[liste[byte], CryptoHata]
+yap
+    // 1. RSA ile AES key'i deşifrele
+    değişken aes_key_sonuç = rsa_oaep_desifre(hybrid.şifreli_anahtar, rsa_ozel_anahtar)
+    
+    eğer aes_key_sonuç.hata_mı() ise yap
+        dön Hata(aes_key_sonuç.hata())
+    son
+    
+    değişken aes_key = aes_key_sonuç.unwrap()
+    
+    // 2. AES-GCM ile veriyi deşifrele
+    değişken veri_sonuç = @native openssl_aes_gcm_decrypt(
+        hybrid.şifreli_veri,
+        aes_key,
+        hybrid.nonce,
+        hybrid.tag
+    )
+    
+    dön veri_sonuç
+son
+
+// ============================================================================
+// KEY DERIVATION FUNCTIONS (KDF) (Yeni - v1.7)
+// ============================================================================
+
+// HKDF (HMAC-based Key Derivation Function) - RFC 5869
+fonksiyon hkdf_sha256(ikm: liste[byte], tuz: liste[byte], bilgi: liste[byte], uzunluk: tamsayı) -> liste[byte]
+yap
+    // Extract step: PRK = HMAC-SHA256(salt, IKM)
+    değişken prk = hmac_sha256_bytes(ikm, tuz)
+    
+    // Expand step: OKM = HMAC-SHA256(PRK, info || counter)
+    değişken okm = liste_oluştur[byte]()
+    değişken t = liste_oluştur[byte]()
+    değişken counter = 1
+    
+    döngü yap
+        değişken hmac_input = t + bilgi + [counter as byte]
+        t = hmac_sha256_bytes(hmac_input, prk)
+        
+        okm = okm + t
+        
+        eğer liste_uzunluk(okm) >= uzunluk ise yap
+            çık
+        son
+        
+        counter = counter + 1
+    son
+    
+    dön liste_dilim(okm, 0, uzunluk)
+son
+
+// PBKDF2 (Password-Based Key Derivation Function 2) - RFC 2898
+fonksiyon pbkdf2_sha256(şifre: yazı, tuz: liste[byte], iterasyon: tamsayı, uzunluk: tamsayı) -> liste[byte]
+yap
+    dön @native openssl_pbkdf2_hmac_sha256(şifre.baytlar(), tuz, iterasyon, uzunluk)
+son
+
+// scrypt - Memory-hard KDF (GPU attack'lere karşı güvenli)
+fonksiyon scrypt(şifre: yazı, tuz: liste[byte], n: tamsayı, r: tamsayı, p: tamsayı, uzunluk: tamsayı) -> Sonuç[liste[byte], CryptoHata]
+yap
+    // n: CPU/memory cost (2^14 = 16384 recommended)
+    // r: Block size (8 recommended)
+    // p: Parallelization (1 recommended)
+    dön @native openssl_scrypt(şifre.baytlar(), tuz, n, r, p, uzunluk)
+son
+
+son  // modül crypto

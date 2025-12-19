@@ -1,0 +1,358 @@
+// stdlib/ai/gan.berk
+// Generative Models: GAN, VAE, Diffusion
+// 
+// Özellikler:
+// - Generative Adversarial Networks (GAN, DCGAN, StyleGAN)
+// - Variational Autoencoders (VAE, β-VAE)
+// - Diffusion Models (DDPM, DDIM)
+// - Training utilities
+// - Image generation
+
+import "ai/tensor" as tensor
+import "ai/nn" as nn
+
+/// GAN (Generative Adversarial Network)
+pub mod gan {
+    use tensor.Tensor
+    use nn.Module
+    
+    /// GAN configuration
+    pub struct GANConfig {
+        pub latent_dim: u32,
+        pub img_channels: u32,
+        pub img_size: u32,
+        pub generator_lr: f32,
+        pub discriminator_lr: f32,
+        pub beta1: f32,
+        pub beta2: f32,
+    }
+    
+    /// GAN trainer
+    pub struct GAN {
+        config: GANConfig,
+        generator: Module,
+        discriminator: Module,
+    }
+    
+    impl GAN {
+        /// Create simple GAN
+        @native("gan::gan_new")
+        pub fn new(config: GANConfig) -> GAN {}
+        
+        /// Train GAN
+        @native("gan::gan_train")
+        pub fn train(
+            mut self,
+            data: Tensor,
+            epochs: u32,
+            batch_size: u32,
+            save_interval: u32 = 10
+        ) -> (Tensor, Tensor) {
+            // Returns (g_losses, d_losses)
+        }
+        
+        /// Generate images
+        @native("gan::gan_generate")
+        pub fn generate(self, num_samples: u32) -> Tensor {
+            // Returns (num_samples, channels, height, width)
+        }
+        
+        /// Generate from specific noise
+        @native("gan::gan_generate_from_noise")
+        pub fn generate_from_noise(self, z: Tensor) -> Tensor {
+            // z: (batch_size, latent_dim)
+        }
+    }
+}
+
+/// DCGAN (Deep Convolutional GAN)
+pub mod dcgan {
+    use tensor.Tensor
+    use nn.Module
+    
+    /// DCGAN configuration
+    pub struct DCGANConfig {
+        pub latent_dim: u32,
+        pub img_channels: u32,
+        pub img_size: u32,
+        pub n_filters: u32,
+        pub learning_rate: f32,
+    }
+    
+    /// DCGAN trainer
+    pub struct DCGAN {
+        config: DCGANConfig,
+        generator: Module,
+        discriminator: Module,
+    }
+    
+    impl DCGAN {
+        /// Create DCGAN
+        @native("gan::dcgan_new")
+        pub fn new(config: DCGANConfig) -> DCGAN {}
+        
+        /// Train DCGAN
+        @native("gan::dcgan_train")
+        pub fn train(
+            mut self,
+            data: Tensor,
+            epochs: u32,
+            batch_size: u32
+        ) -> (Tensor, Tensor) {}
+        
+        /// Generate images
+        @native("gan::dcgan_generate")
+        pub fn generate(self, num_samples: u32) -> Tensor {}
+    }
+}
+
+/// StyleGAN (Style-based Generator)
+pub mod stylegan {
+    use tensor.Tensor
+    use nn.Module
+    
+    /// StyleGAN configuration
+    pub struct StyleGANConfig {
+        pub latent_dim: u32,
+        pub style_dim: u32,
+        pub img_size: u32,
+        pub img_channels: u32,
+    }
+    
+    /// StyleGAN model
+    pub struct StyleGAN {
+        config: StyleGANConfig,
+        generator: Module,
+        discriminator: Module,
+    }
+    
+    impl StyleGAN {
+        /// Load pretrained StyleGAN
+        @native("gan::stylegan_load")
+        pub fn load(model_path: str) -> StyleGAN {}
+        
+        /// Generate images
+        @native("gan::stylegan_generate")
+        pub fn generate(self, num_samples: u32) -> Tensor {}
+        
+        /// Generate with style mixing
+        @native("gan::stylegan_style_mixing")
+        pub fn style_mixing(self, z1: Tensor, z2: Tensor, crossover_layer: u32) -> Tensor {
+            // Style mixing for diverse outputs
+        }
+        
+        /// Interpolate between two latents
+        @native("gan::stylegan_interpolate")
+        pub fn interpolate(self, z1: Tensor, z2: Tensor, steps: u32) -> Tensor {
+            // Returns (steps, channels, height, width)
+        }
+    }
+}
+
+/// VAE (Variational Autoencoder)
+pub mod vae {
+    use tensor.Tensor
+    use nn.Module
+    
+    /// VAE configuration
+    pub struct VAEConfig {
+        pub input_dim: u32,
+        pub latent_dim: u32,
+        pub hidden_dims: [u32],
+        pub beta: f32,  // β-VAE regularization
+    }
+    
+    /// VAE model
+    pub struct VAE {
+        config: VAEConfig,
+        encoder: Module,
+        decoder: Module,
+    }
+    
+    impl VAE {
+        /// Create VAE
+        @native("gan::vae_new")
+        pub fn new(config: VAEConfig) -> VAE {}
+        
+        /// Train VAE
+        @native("gan::vae_train")
+        pub fn train(
+            mut self,
+            data: Tensor,
+            epochs: u32,
+            batch_size: u32,
+            learning_rate: f32 = 0.001
+        ) -> Tensor {
+            // Returns losses
+        }
+        
+        /// Encode to latent space
+        @native("gan::vae_encode")
+        pub fn encode(self, x: Tensor) -> (Tensor, Tensor) {
+            // Returns (mean, log_var)
+        }
+        
+        /// Decode from latent space
+        @native("gan::vae_decode")
+        pub fn decode(self, z: Tensor) -> Tensor {}
+        
+        /// Generate samples
+        @native("gan::vae_generate")
+        pub fn generate(self, num_samples: u32) -> Tensor {
+            // Sample from prior and decode
+        }
+        
+        /// Reconstruct inputs
+        @native("gan::vae_reconstruct")
+        pub fn reconstruct(self, x: Tensor) -> Tensor {}
+    }
+}
+
+/// Diffusion Models
+pub mod diffusion {
+    use tensor.Tensor
+    use nn.Module
+    
+    /// Diffusion config
+    pub struct DiffusionConfig {
+        pub img_size: u32,
+        pub img_channels: u32,
+        pub timesteps: u32,
+        pub beta_start: f32,
+        pub beta_end: f32,
+    }
+    
+    /// DDPM (Denoising Diffusion Probabilistic Model)
+    pub struct DDPM {
+        config: DiffusionConfig,
+        model: Module,
+        betas: Tensor,
+        alphas: Tensor,
+    }
+    
+    impl DDPM {
+        /// Create DDPM
+        @native("gan::ddpm_new")
+        pub fn new(config: DiffusionConfig) -> DDPM {}
+        
+        /// Train DDPM
+        @native("gan::ddpm_train")
+        pub fn train(
+            mut self,
+            data: Tensor,
+            epochs: u32,
+            batch_size: u32,
+            learning_rate: f32 = 0.0001
+        ) -> Tensor {}
+        
+        /// Generate images
+        @native("gan::ddpm_generate")
+        pub fn generate(self, num_samples: u32, show_progress: bool = true) -> Tensor {
+            // Reverse diffusion process
+        }
+    }
+    
+    /// DDIM (Denoising Diffusion Implicit Model)
+    pub struct DDIM {
+        config: DiffusionConfig,
+        model: Module,
+    }
+    
+    impl DDIM {
+        /// Create DDIM
+        @native("gan::ddim_new")
+        pub fn new(config: DiffusionConfig) -> DDIM {}
+        
+        /// Generate with fewer steps
+        @native("gan::ddim_generate")
+        pub fn generate(self, num_samples: u32, ddim_steps: u32 = 50) -> Tensor {
+            // Faster generation than DDPM
+        }
+    }
+}
+
+/// Training utilities
+pub mod utils {
+    use tensor.Tensor
+    
+    /// Save generated images
+    @native("gan::save_images")
+    pub fn save_images(images: Tensor, path: str, nrow: u32 = 8) {
+        // Save grid of images
+    }
+    
+    /// Inception Score (IS)
+    @native("gan::inception_score")
+    pub fn inception_score(images: Tensor, batch_size: u32 = 32) -> (f32, f32) {
+        // Returns (mean, std)
+    }
+    
+    /// Fréchet Inception Distance (FID)
+    @native("gan::frechet_inception_distance")
+    pub fn fid(real_images: Tensor, fake_images: Tensor, batch_size: u32 = 32) -> f32 {
+        // Lower is better
+    }
+    
+    /// Interpolate in latent space
+    @native("gan::interpolate_latent")
+    pub fn interpolate_latent(z1: Tensor, z2: Tensor, steps: u32) -> Tensor {
+        // Spherical linear interpolation (slerp)
+    }
+}
+
+/// Example usage:
+/// ```berk
+/// import "ai/gan" as gan
+/// import "ai/tensor" as tensor
+/// 
+/// // Train a DCGAN on images
+/// let config = gan.dcgan.DCGANConfig {
+///     latent_dim: 100,
+///     img_channels: 3,
+///     img_size: 64,
+///     n_filters: 64,
+///     learning_rate: 0.0002,
+/// }
+/// 
+/// let mut dcgan = gan.dcgan.DCGAN.new(config)
+/// let train_data = tensor.randn([10000, 3, 64, 64])  // Replace with real data
+/// let (g_losses, d_losses) = dcgan.train(train_data, epochs: 100, batch_size: 64)
+/// 
+/// // Generate new images
+/// let generated = dcgan.generate(num_samples: 64)
+/// gan.utils.save_images(generated, "generated.png", nrow: 8)
+/// 
+/// // Calculate FID score
+/// let real_samples = train_data[0..1000]
+/// let fake_samples = dcgan.generate(1000)
+/// let fid_score = gan.utils.fid(real_samples, fake_samples)
+/// yaz("FID Score: {:.2f}", fid_score)
+/// 
+/// // VAE example
+/// let vae_config = gan.vae.VAEConfig {
+///     input_dim: 784,  // 28x28 images
+///     latent_dim: 20,
+///     hidden_dims: [512, 256],
+///     beta: 1.0,
+/// }
+/// 
+/// let mut vae = gan.vae.VAE.new(vae_config)
+/// let mnist_data = tensor.randn([60000, 784])  // Replace with real MNIST
+/// let losses = vae.train(mnist_data, epochs: 50, batch_size: 128)
+/// 
+/// // Generate new samples
+/// let samples = vae.generate(num_samples: 16)
+/// yaz("Generated {} samples", samples.shape[0])
+/// 
+/// // Diffusion model example
+/// let diff_config = gan.diffusion.DiffusionConfig {
+///     img_size: 32,
+///     img_channels: 3,
+///     timesteps: 1000,
+///     beta_start: 0.0001,
+///     beta_end: 0.02,
+/// }
+/// 
+/// let mut ddpm = gan.diffusion.DDPM.new(diff_config)
+/// let images = ddpm.generate(num_samples: 16, show_progress: true)
+/// ```

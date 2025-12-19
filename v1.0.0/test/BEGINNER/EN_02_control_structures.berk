@@ -1,0 +1,145 @@
+/// ═══════════════════════════════════════════════════════════════════════════
+/// BERK Beginner Demo - Control Structures (English Version)
+/// if/else, loops, match expressions
+/// ═══════════════════════════════════════════════════════════════════════════
+
+use std::io
+
+print("============================================================")
+print("         Beginner Demo: Control Structures                  ")
+print("============================================================")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 1: If/Else Statements
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 1: If/Else Statements ---")
+
+let score = 75
+
+print("   Score: ", score)
+
+if score >= 90 then
+    print("   Result: Excellent!")
+end
+
+if score >= 70 then
+    print("   Result: Passed")
+end
+
+if score < 50 then
+    print("   Result: Failed")
+end
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 2: Comparison Operators
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 2: Comparison Operators ---")
+
+let x = 10
+let y = 20
+
+print("   x = ", x, ", y = ", y)
+
+let is_equal = x == y
+let is_not_equal = x != y
+let is_less = x < y
+let is_greater = x > y
+
+print("   x == y: ", is_equal)
+print("   x != y: ", is_not_equal)
+print("   x < y:  ", is_less)
+print("   x > y:  ", is_greater)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 3: Logical Operators
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 3: Logical Operators ---")
+
+let a = true
+let b = false
+
+print("   a = true, b = false")
+
+let and_result = a and b
+let or_result = a or b
+
+print("   a and b: ", and_result)
+print("   a or b:  ", or_result)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 4: While Loop
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 4: While Loop ---")
+
+print("   Counting from 1 to 5:")
+let counter = 1
+while counter <= 5 do
+    print("   - Number: ", counter)
+    counter = counter + 1
+end
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 5: For Loop
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 5: For Loop ---")
+
+print("   Multiplication Table (5x):")
+let i = 1
+while i <= 5 do
+    let result = 5 * i
+    print("   5 x ", i, " = ", result)
+    i = i + 1
+end
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 6: Nested Conditions
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 6: Nested Conditions ---")
+
+let age = 25
+let has_license = true
+
+print("   Age: ", age)
+print("   Has License: ", has_license)
+
+if age >= 18 then
+    print("   -> Adult")
+    if has_license then
+        print("   -> Can drive")
+    end
+end
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 7: Grade Calculation
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 7: Grade Calculation ---")
+
+fn get_letter_grade(points: int) -> string do
+    if points >= 90 then
+        return "A"
+    end
+    if points >= 80 then
+        return "B"
+    end
+    if points >= 70 then
+        return "C"
+    end
+    if points >= 60 then
+        return "D"
+    end
+    return "F"
+end
+
+print("   95 points: ", get_letter_grade(95))
+print("   85 points: ", get_letter_grade(85))
+print("   72 points: ", get_letter_grade(72))
+print("   55 points: ", get_letter_grade(55))
+
+print("\n[OK] Control Structures demo completed!")

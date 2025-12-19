@@ -1,0 +1,717 @@
+// ============================================================================
+// BERK GUI Framework - Timeline Animation System
+// ============================================================================
+// Synfig tarzı zaman çizelgesi sistemi
+// Video düzenleme ve animasyon yazılımları gibi profesyonel timeline
+// ============================================================================
+
+modül gui::animation::timeline
+
+kullan gui::animation::time::{Time, TimeRange, FrameRate}
+kullan gui::animation::keyframe::{Keyframe, KeyframeAnimation, LoopMode}
+
+// ============================================================================
+// TIMELINE LAYER - Katman
+// ============================================================================
+
+/// Timeline'daki bir katman
+pub tip TimelineLayer = yapı yap
+    /// Benzersiz ID
+    id: sayı,
+    /// Katman ismi
+    name: yazı,
+    /// Görünür mü?
+    visible: mantıksal,
+    /// Kilitli mi?
+    locked: mantıksal,
+    /// Solo mu? (sadece bu oynar)
+    solo: mantıksal,
+    /// Sessize alındı mı?
+    muted: mantıksal,
+    /// Opaklık (blend için)
+    opacity: ondalık,
+    /// Blend modu
+    blend_mode: BlendMode,
+    /// Katmandaki klipler
+    clips: Liste[TimelineClip],
+    /// Renk (UI görselleştirme)
+    color: Color,
+    /// Z-index (sıralama)
+    z_index: sayı,
+son
+
+/// Katman ID sayacı
+değişken layer_id_counter: sayı = 0
+
+/// Blend modu
+pub tip BlendMode = özyinelemeli yap
+    | Normal
+    | Additive
+    | Multiply
+    | Screen
+    | Overlay
+    | Difference
+son
+
+/// UI renk
+pub tip Color = yapı yap
+    r: ondalık,
+    g: ondalık,
+    b: ondalık,
+    a: ondalık,
+son
+
+impl Color:
+    pub fn rgb(r: ondalık, g: ondalık, b: ondalık) döndür Color:
+        döndür Color { r: r, g: g, b: b, a: 1.0 }
+    son
+    
+    pub fn rgba(r: ondalık, g: ondalık, b: ondalık, a: ondalık) döndür Color:
+        döndür Color { r: r, g: g, b: b, a: a }
+    son
+    
+    pub fn lerp(self, other: Color, t: ondalık) döndür Color:
+        döndür Color {
+            r: self.r + (other.r - self.r) * t,
+            g: self.g + (other.g - self.g) * t,
+            b: self.b + (other.b - self.b) * t,
+            a: self.a + (other.a - self.a) * t,
+        }
+    son
+son
+
+impl TimelineLayer:
+    /// Yeni katman
+    pub fn new(name: yazı) döndür TimelineLayer:
+        layer_id_counter = layer_id_counter + 1
+        döndür TimelineLayer {
+            id: layer_id_counter,
+            name: name,
+            visible: doğru,
+            locked: yanlış,
+            solo: yanlış,
+            muted: yanlış,
+            opacity: 1.0,
+            blend_mode: BlendMode::Normal,
+            clips: [],
+            color: Color::rgb(0.3, 0.5, 0.8),
+            z_index: 0,
+        }
+    son
+    
+    /// Z-index ayarla
+    pub fn with_z_index(mut self, z: sayı) döndür TimelineLayer:
+        self.z_index = z
+        döndür self
+    son
+    
+    /// Renk ayarla
+    pub fn with_color(mut self, color: Color) döndür TimelineLayer:
+        self.color = color
+        döndür self
+    son
+    
+    /// Klip ekle
+    pub fn add_clip(mut self, clip: TimelineClip) döndür mantıksal:
+        // Çakışma kontrolü
+        döngü existing in self.clips:
+            eğer clip.overlaps(existing):
+                döndür yanlış
+            son
+        son
+        self.clips.push(clip)
+        döndür doğru
+    son
+    
+    /// Klip sil
+    pub fn remove_clip(mut self, clip_id: sayı) döndür mantıksal:
+        değişken new_clips: Liste[TimelineClip] = []
+        değişken removed = yanlış
+        
+        döngü clip in self.clips:
+            eğer clip.id != clip_id:
+                new_clips.push(clip)
+            yoksa:
+                removed = doğru
+            son
+        son
+        
+        self.clips = new_clips
+        döndür removed
+    son
+    
+    /// Belirli zamandaki klip
+    pub fn get_clip_at(self, time: Time) döndür Seçenek[TimelineClip]:
+        döngü clip in self.clips:
+            eğer clip.contains_time(time):
+                döndür Bazı(clip)
+            son
+        son
+        döndür Hiçbiri
+    son
+    
+    /// Görünürlük kontrolü
+    pub fn should_render(self, has_solo_layer: mantıksal) döndür mantıksal:
+        eğer !self.visible veya self.muted:
+            döndür yanlış
+        son
+        
+        // Solo modu varsa sadece solo katmanlar oynar
+        eğer has_solo_layer && !self.solo:
+            döndür yanlış
+        son
+        
+        döndür doğru
+    son
+son
+
+// ============================================================================
+// TIMELINE CLIP - Klip
+// ============================================================================
+
+/// Timeline'daki bir klip (animasyon parçası)
+pub tip TimelineClip = yapı yap
+    /// Benzersiz ID
+    id: sayı,
+    /// Klip ismi
+    name: yazı,
+    /// Başlangıç zamanı
+    start_time: Time,
+    /// Bitiş zamanı
+    end_time: Time,
+    /// Kaynak başlangıç (trim)
+    source_start: Time,
+    /// Hız çarpanı
+    speed: ondalık,
+    /// İçerik
+    content: ClipContent,
+    /// Fade-in süresi
+    fade_in: Time,
+    /// Fade-out süresi
+    fade_out: Time,
+    /// Etkin mi?
+    enabled: mantıksal,
+son
+
+/// Klip ID sayacı
+değişken clip_id_counter: sayı = 0
+
+/// Klip içerik türü
+pub tip ClipContent = özyinelemeli yap
+    | Animation(KeyframeAnimation)  // Keyframe animasyonu
+    | Reference(sayı)               // Başka bir klibe referans
+    | Empty                         // Boş/placeholder
+son
+
+impl TimelineClip:
+    /// Yeni klip
+    pub fn new(name: yazı, start: Time, end: Time) döndür TimelineClip:
+        clip_id_counter = clip_id_counter + 1
+        döndür TimelineClip {
+            id: clip_id_counter,
+            name: name,
+            start_time: start,
+            end_time: end,
+            source_start: Time::zero(),
+            speed: 1.0,
+            content: ClipContent::Empty,
+            fade_in: Time::zero(),
+            fade_out: Time::zero(),
+            enabled: doğru,
+        }
+    son
+    
+    /// Animasyon içeriği
+    pub fn with_animation(mut self, anim: KeyframeAnimation) döndür TimelineClip:
+        self.content = ClipContent::Animation(anim)
+        döndür self
+    son
+    
+    /// Hız ayarla
+    pub fn with_speed(mut self, speed: ondalık) döndür TimelineClip:
+        self.speed = speed
+        döndür self
+    son
+    
+    /// Fade ayarla
+    pub fn with_fades(mut self, fade_in: Time, fade_out: Time) döndür TimelineClip:
+        self.fade_in = fade_in
+        self.fade_out = fade_out
+        döndür self
+    son
+    
+    /// Süre
+    pub fn duration(self) döndür Time:
+        döndür self.end_time.sub(self.start_time)
+    son
+    
+    /// Zaman içeriyor mu?
+    pub fn contains_time(self, time: Time) döndür mantıksal:
+        döndür time.greater_or_equal(self.start_time) && time.less_than(self.end_time)
+    son
+    
+    /// Çakışma kontrolü
+    pub fn overlaps(self, other: TimelineClip) döndür mantıksal:
+        // A.start < B.end && A.end > B.start
+        döndür self.start_time.less_than(other.end_time) && 
+               self.end_time.greater_than(other.start_time)
+    son
+    
+    /// Lokal zaman (klip içi)
+    pub fn local_time(self, global_time: Time) döndür Time:
+        eğer !self.contains_time(global_time):
+            döndür Time::zero()
+        son
+        
+        değişken offset = global_time.sub(self.start_time)
+        değişken scaled = offset.mul(self.speed)
+        döndür self.source_start.add(scaled)
+    son
+    
+    /// Fade çarpanı
+    pub fn fade_factor(self, time: Time) döndür ondalık:
+        eğer !self.contains_time(time):
+            döndür 0.0
+        son
+        
+        değişken local = time.sub(self.start_time)
+        değişken clip_duration = self.duration()
+        
+        // Fade in
+        eğer local.less_than(self.fade_in):
+            döndür local.seconds() / self.fade_in.seconds()
+        son
+        
+        // Fade out
+        değişken fade_out_start = clip_duration.sub(self.fade_out)
+        eğer local.greater_than(fade_out_start):
+            değişken remaining = clip_duration.sub(local)
+            döndür remaining.seconds() / self.fade_out.seconds()
+        son
+        
+        döndür 1.0
+    son
+    
+    /// Klip taşı
+    pub fn move_to(mut self, new_start: Time) döndür void:
+        değişken dur = self.duration()
+        self.start_time = new_start
+        self.end_time = new_start.add(dur)
+    son
+    
+    /// Başlangıcı trim et
+    pub fn trim_start(mut self, new_start: Time) döndür void:
+        eğer new_start.less_than(self.end_time):
+            değişken diff = new_start.sub(self.start_time)
+            self.source_start = self.source_start.add(diff)
+            self.start_time = new_start
+        son
+    son
+    
+    /// Bitişi trim et
+    pub fn trim_end(mut self, new_end: Time) döndür void:
+        eğer new_end.greater_than(self.start_time):
+            self.end_time = new_end
+        son
+    son
+    
+    /// Klip böl
+    pub fn split_at(self, time: Time) döndür Seçenek[(TimelineClip, TimelineClip)]:
+        eğer !self.contains_time(time) veya time.equals(self.start_time):
+            döndür Hiçbiri
+        son
+        
+        değişken left = TimelineClip {
+            id: self.id,
+            name: self.name + " (L)",
+            start_time: self.start_time,
+            end_time: time,
+            source_start: self.source_start,
+            speed: self.speed,
+            content: self.content.clone(),
+            fade_in: self.fade_in,
+            fade_out: Time::zero(),
+            enabled: self.enabled,
+        }
+        
+        değişken local_split = self.local_time(time)
+        değişken right = TimelineClip {
+            id: clip_id_counter + 1,
+            name: self.name + " (R)",
+            start_time: time,
+            end_time: self.end_time,
+            source_start: local_split,
+            speed: self.speed,
+            content: self.content.clone(),
+            fade_in: Time::zero(),
+            fade_out: self.fade_out,
+            enabled: self.enabled,
+        }
+        clip_id_counter = clip_id_counter + 1
+        
+        döndür Bazı((left, right))
+    son
+son
+
+// ============================================================================
+// TIMELINE - Ana Zaman Çizelgesi
+// ============================================================================
+
+/// Timeline - çoklu katman ve klip yönetimi
+pub tip Timeline = yapı yap
+    /// İsim
+    name: yazı,
+    /// Katmanlar
+    layers: Liste[TimelineLayer],
+    /// Frame rate
+    frame_rate: FrameRate,
+    /// Toplam süre
+    duration: Time,
+    /// Mevcut playhead konumu
+    playhead: Time,
+    /// Seçim aralığı (In/Out)
+    in_point: Seçenek[Time],
+    out_point: Seçenek[Time],
+    /// Markers/Keyframes
+    markers: Liste[Keyframe],
+    /// Çalışma durumu
+    state: PlaybackState,
+    /// Hız
+    speed: ondalık,
+    /// Döngü
+    loop_mode: LoopMode,
+son
+
+/// Oynatma durumu
+pub tip PlaybackState = özyinelemeli yap
+    | Stopped
+    | Playing
+    | Paused
+    | Recording
+son
+
+impl Timeline:
+    /// Yeni timeline
+    pub fn new(name: yazı, duration: Time) döndür Timeline:
+        döndür Timeline {
+            name: name,
+            layers: [],
+            frame_rate: FrameRate::fps_30(),
+            duration: duration,
+            playhead: Time::zero(),
+            in_point: Hiçbiri,
+            out_point: Hiçbiri,
+            markers: [],
+            state: PlaybackState::Stopped,
+            speed: 1.0,
+            loop_mode: LoopMode::None,
+        }
+    son
+    
+    /// Frame rate ayarla
+    pub fn with_frame_rate(mut self, fps: FrameRate) döndür Timeline:
+        self.frame_rate = fps
+        döndür self
+    son
+    
+    /// Katman ekle
+    pub fn add_layer(mut self, layer: TimelineLayer) döndür void:
+        self.layers.push(layer)
+    son
+    
+    /// Katman sil
+    pub fn remove_layer(mut self, layer_id: sayı) döndür mantıksal:
+        değişken new_layers: Liste[TimelineLayer] = []
+        değişken removed = yanlış
+        
+        döngü layer in self.layers:
+            eğer layer.id != layer_id:
+                new_layers.push(layer)
+            yoksa:
+                removed = doğru
+            son
+        son
+        
+        self.layers = new_layers
+        döndür removed
+    son
+    
+    /// Katman al
+    pub fn get_layer(self, layer_id: sayı) döndür Seçenek[TimelineLayer]:
+        döngü layer in self.layers:
+            eğer layer.id == layer_id:
+                döndür Bazı(layer)
+            son
+        son
+        döndür Hiçbiri
+    son
+    
+    /// Katman sırası değiştir
+    pub fn move_layer(mut self, layer_id: sayı, new_z_index: sayı) döndür void:
+        döngü i in 0..self.layers.len():
+            eğer self.layers[i].id == layer_id:
+                self.layers[i].z_index = new_z_index
+                döndür
+            son
+        son
+    son
+    
+    /// Marker ekle
+    pub fn add_marker(mut self, marker: Keyframe) döndür void:
+        self.markers.push(marker)
+    son
+    
+    /// In/Out noktaları
+    pub fn set_in_point(mut self, time: Time) döndür void:
+        self.in_point = Bazı(time)
+    son
+    
+    pub fn set_out_point(mut self, time: Time) döndür void:
+        self.out_point = Bazı(time)
+    son
+    
+    pub fn clear_in_out(mut self) döndür void:
+        self.in_point = Hiçbiri
+        self.out_point = Hiçbiri
+    son
+    
+    /// Çalma aralığı
+    pub fn play_range(self) döndür TimeRange:
+        değişken start = self.in_point.unwrap_or(Time::zero())
+        değişken end = self.out_point.unwrap_or(self.duration)
+        döndür TimeRange::new(start, end)
+    son
+    
+    /// Oynat
+    pub fn play(mut self) döndür void:
+        self.state = PlaybackState::Playing
+    son
+    
+    /// Duraklat
+    pub fn pause(mut self) döndür void:
+        eğer self.state == PlaybackState::Playing:
+            self.state = PlaybackState::Paused
+        son
+    son
+    
+    /// Durdur
+    pub fn stop(mut self) döndür void:
+        self.state = PlaybackState::Stopped
+        self.playhead = self.in_point.unwrap_or(Time::zero())
+    son
+    
+    /// Kayıt
+    pub fn record(mut self) döndür void:
+        self.state = PlaybackState::Recording
+    son
+    
+    /// Playhead konumu
+    pub fn seek(mut self, time: Time) döndür void:
+        self.playhead = time.clamp(Time::zero(), self.duration)
+    son
+    
+    /// Frame'e git
+    pub fn goto_frame(mut self, frame: sayı) döndür void:
+        self.playhead = self.frame_rate.frame_to_time(frame)
+    son
+    
+    /// Sonraki frame
+    pub fn next_frame(mut self) döndür void:
+        değişken current = self.frame_rate.time_to_frame(self.playhead)
+        self.goto_frame(current + 1)
+    son
+    
+    /// Önceki frame
+    pub fn prev_frame(mut self) döndür void:
+        değişken current = self.frame_rate.time_to_frame(self.playhead)
+        eğer current > 0:
+            self.goto_frame(current - 1)
+        son
+    son
+    
+    /// Sonraki marker
+    pub fn next_marker(mut self) döndür void:
+        değişken next: Seçenek[Time] = Hiçbiri
+        
+        döngü marker in self.markers:
+            eğer marker.get_time().greater_than(self.playhead):
+                eğer next.is_none() veya marker.get_time().less_than(next.unwrap()):
+                    next = Bazı(marker.get_time())
+                son
+            son
+        son
+        
+        eğer next.is_some():
+            self.playhead = next.unwrap()
+        son
+    son
+    
+    /// Önceki marker
+    pub fn prev_marker(mut self) döndür void:
+        değişken prev: Seçenek[Time] = Hiçbiri
+        
+        döngü marker in self.markers:
+            eğer marker.get_time().less_than(self.playhead):
+                eğer prev.is_none() veya marker.get_time().greater_than(prev.unwrap()):
+                    prev = Bazı(marker.get_time())
+                son
+            son
+        son
+        
+        eğer prev.is_some():
+            self.playhead = prev.unwrap()
+        son
+    son
+    
+    /// Güncelle
+    pub fn update(mut self, delta: Time) döndür void:
+        eğer self.state != PlaybackState::Playing:
+            döndür
+        son
+        
+        değişken range = self.play_range()
+        self.playhead = self.playhead.add(delta.mul(self.speed))
+        
+        // Aralık kontrolü
+        eğer self.playhead.greater_than(range.end):
+            eşleştir self.loop_mode:
+                LoopMode::None:
+                    self.playhead = range.end
+                    self.state = PlaybackState::Paused
+                
+                LoopMode::Loop:
+                    self.playhead = range.start
+                
+                LoopMode::PingPong:
+                    self.speed = -self.speed
+                    self.playhead = range.end
+            son
+        son
+        
+        eğer self.playhead.less_than(range.start):
+            eşleştir self.loop_mode:
+                LoopMode::PingPong:
+                    self.speed = -self.speed
+                    self.playhead = range.start
+                _:
+                    self.playhead = range.start
+            son
+        son
+    son
+    
+    /// Solo katman var mı?
+    fn has_solo_layer(self) döndür mantıksal:
+        döngü layer in self.layers:
+            eğer layer.solo:
+                döndür doğru
+            son
+        son
+        döndür yanlış
+    son
+    
+    /// Mevcut zamanda tüm aktif klipleri al
+    pub fn get_active_clips(self) döndür Liste[(TimelineLayer, TimelineClip)]:
+        değişken result: Liste[(TimelineLayer, TimelineClip)] = []
+        değişken has_solo = self.has_solo_layer()
+        
+        döngü layer in self.layers:
+            eğer !layer.should_render(has_solo):
+                devam
+            son
+            
+            değişken clip = layer.get_clip_at(self.playhead)
+            eğer clip.is_some():
+                result.push((layer, clip.unwrap()))
+            son
+        son
+        
+        döndür result
+    son
+    
+    /// Mevcut frame
+    pub fn current_frame(self) döndür sayı:
+        döndür self.frame_rate.time_to_frame(self.playhead)
+    son
+    
+    /// Toplam frame sayısı
+    pub fn total_frames(self) döndür sayı:
+        döndür self.frame_rate.time_to_frame(self.duration)
+    son
+    
+    /// Çalışıyor mu?
+    pub fn is_playing(self) döndür mantıksal:
+        döndür self.state == PlaybackState::Playing
+    son
+son
+
+// ============================================================================
+// TIMELINE BUILDER - Kolay Timeline Oluşturma
+// ============================================================================
+
+pub tip TimelineBuilder = yapı yap
+    timeline: Timeline,
+    current_layer: Seçenek[sayı],
+son
+
+impl TimelineBuilder:
+    pub fn new(name: yazı) döndür TimelineBuilder:
+        döndür TimelineBuilder {
+            timeline: Timeline::new(name, Time::from_seconds(60.0)),
+            current_layer: Hiçbiri,
+        }
+    son
+    
+    pub fn duration(mut self, seconds: ondalık) döndür TimelineBuilder:
+        self.timeline.duration = Time::from_seconds(seconds)
+        döndür self
+    son
+    
+    pub fn fps(mut self, fps: ondalık) döndür TimelineBuilder:
+        self.timeline.frame_rate = FrameRate::new(fps)
+        döndür self
+    son
+    
+    pub fn add_layer(mut self, name: yazı) döndür TimelineBuilder:
+        değişken layer = TimelineLayer::new(name)
+        self.current_layer = Bazı(layer.id)
+        self.timeline.add_layer(layer)
+        döndür self
+    son
+    
+    pub fn add_clip(mut self, name: yazı, start_sec: ondalık, end_sec: ondalık) döndür TimelineBuilder:
+        eğer self.current_layer.is_none():
+            döndür self
+        son
+        
+        değişken clip = TimelineClip::new(
+            name,
+            Time::from_seconds(start_sec),
+            Time::from_seconds(end_sec)
+        )
+        
+        değişken layer_id = self.current_layer.unwrap()
+        döngü i in 0..self.timeline.layers.len():
+            eğer self.timeline.layers[i].id == layer_id:
+                self.timeline.layers[i].add_clip(clip)
+                döndür self
+            son
+        son
+        
+        döndür self
+    son
+    
+    pub fn add_marker_at(mut self, time_sec: ondalık, name: yazı) döndür TimelineBuilder:
+        değişken marker = Keyframe::new(Time::from_seconds(time_sec), name)
+        self.timeline.add_marker(marker)
+        döndür self
+    son
+    
+    pub fn loop_mode(mut self, mode: LoopMode) döndür TimelineBuilder:
+        self.timeline.loop_mode = mode
+        döndür self
+    son
+    
+    pub fn build(self) döndür Timeline:
+        döndür self.timeline
+    son
+son

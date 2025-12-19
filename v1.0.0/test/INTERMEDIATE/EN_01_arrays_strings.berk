@@ -1,0 +1,143 @@
+/// ═══════════════════════════════════════════════════════════════════════════
+/// BERK Intermediate Demo - Arrays and Strings (English Version)
+/// Array operations, string methods, type casting
+/// ═══════════════════════════════════════════════════════════════════════════
+
+use std::io
+
+print("============================================================")
+print("         Intermediate Demo: Arrays and Strings              ")
+print("============================================================")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 1: Arrays
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 1: Arrays ---")
+
+let numbers = [10, 20, 30, 40, 50]
+print("   Numbers: ", numbers)
+
+print("   First element: ", numbers[0])
+print("   Third element: ", numbers[2])
+print("   Last element: ", numbers[4])
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 2: Array Operations
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 2: Array Operations ---")
+
+let length = numbers.uzunluk()
+print("   Array length: ", length)
+
+// Calculate sum
+let elem1 = numbers[0]
+let elem2 = numbers[1]
+let elem3 = numbers[2]
+let elem4 = numbers[3]
+let elem5 = numbers[4]
+let sum = elem1 + elem2 + elem3 + elem4 + elem5
+print("   Sum: ", sum)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 3: Strings
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 3: Strings ---")
+
+let greeting = "Hello World"
+print("   Text: ", greeting)
+print("   Length: ", greeting.uzunluk())
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 4: String Operations
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 4: String Operations ---")
+
+let first_name = "John"
+let last_name = "Smith"
+
+print("   First Name: ", first_name)
+print("   Last Name: ", last_name)
+print("   Full Name: ", first_name, " ", last_name)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 5: Type Casting
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 5: Type Casting ---")
+
+let int_val = 42
+let float_val = 3.14
+
+print("   Integer: ", int_val)
+print("   Float: ", float_val)
+
+// Integer to Float
+let int_to_float = int_val * 1.0
+print("   Int to Float: ", int_to_float)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 6: Mixed Arrays
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 6: Different Array Types ---")
+
+let int_array = [1, 2, 3, 4, 5]
+let str_array = ["apple", "pear", "banana"]
+let bool_array = [true, false, true]
+
+print("   Integer Array: ", int_array)
+print("   String Array: ", str_array)
+print("   Boolean Array: ", bool_array)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 7: Array Processing
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 7: Array Processing ---")
+
+fn find_max(arr: array, size: int) -> int do
+    let max_val = arr[0]
+    let i = 1
+    while i < size do
+        if arr[i] > max_val then
+            max_val = arr[i]
+        end
+        i = i + 1
+    end
+    return max_val
+end
+
+let test_array = [23, 45, 12, 67, 34]
+print("   Array: [23, 45, 12, 67, 34]")
+print("   Maximum: ", find_max(test_array, 5))
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 8: Practical Example
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 8: Practical Example ---")
+
+let grades = [85, 90, 78, 92, 88]
+print("   Grades: [85, 90, 78, 92, 88]")
+
+let g1 = grades[0]
+let g2 = grades[1]
+let g3 = grades[2]
+let g4 = grades[3]
+let g5 = grades[4]
+
+let total = g1 + g2 + g3 + g4 + g5
+let average = total / 5
+
+print("   Total: ", total)
+print("   Average: ", average)
+
+if average >= 85 then
+    print("   Result: Honor Roll!")
+end
+
+print("\n[OK] Arrays and Strings demo completed!")

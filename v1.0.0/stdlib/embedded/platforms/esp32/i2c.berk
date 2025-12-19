@@ -1,0 +1,289 @@
+// stdlib/embedded/platforms/esp32/i2c.berk
+// ESP32 I2C HAL Implementation
+// ESP-IDF I2C driver bindings
+
+import "embedded/bal/i2c" as I2C
+
+// ESP-IDF I2C constants
+const I2C_MODE_MASTER: u32 = 1
+const I2C_MODE_SLAVE: u32 = 0
+
+const I2C_MASTER_TX_BUF_DISABLE: u32 = 0
+const I2C_MASTER_RX_BUF_DISABLE: u32 = 0
+
+const I2C_MASTER_FREQ_HZ_STANDARD: u32 = 100_000   // 100kHz
+const I2C_MASTER_FREQ_HZ_FAST: u32 = 400_000       // 400kHz
+const I2C_MASTER_FREQ_HZ_FAST_PLUS: u32 = 1_000_000 // 1MHz
+
+const ACK_CHECK_EN: u8 = 1
+const ACK_CHECK_DIS: u8 = 0
+const ACK_VAL: u8 = 0
+const NACK_VAL: u8 = 1
+
+const ESP_OK: i32 = 0
+const ESP_FAIL: i32 = -1
+const ESP_ERR_TIMEOUT: i32 = 0x107
+
+// ESP-IDF I2C structures (opaque)
+struct i2c_config_t {
+    mode: u32,
+    sda_io_num: i32,
+    scl_io_num: i32,
+    sda_pullup_en: bool,
+    scl_pullup_en: bool,
+    master_clk_speed: u32,
+}
+
+// ESP-IDF I2C functions
+extern "C" {
+    fn i2c_param_config(i2c_num: u32, conf: *i2c_config_t) -> i32
+    fn i2c_driver_install(i2c_num: u32, mode: u32, slv_rx_buf_len: u32, slv_tx_buf_len: u32, intr_alloc_flags: i32) -> i32
+    fn i2c_driver_delete(i2c_num: u32) -> i32
+    fn i2c_master_write_to_device(i2c_num: u32, device_address: u8, write_buffer: *u8, write_size: u32, ticks_to_wait: u32) -> i32
+    fn i2c_master_read_from_device(i2c_num: u32, device_address: u8, read_buffer: *mut u8, read_size: u32, ticks_to_wait: u32) -> i32
+    fn i2c_master_write_read_device(i2c_num: u32, device_address: u8, write_buffer: *u8, write_size: u32, read_buffer: *mut u8, read_size: u32, ticks_to_wait: u32) -> i32
+}
+
+// I2C command link functions (for advanced operations)
+extern "C" {
+    fn i2c_cmd_link_create() -> *mut void
+    fn i2c_cmd_link_delete(cmd_handle: *mut void)
+    fn i2c_master_start(cmd_handle: *mut void) -> i32
+    fn i2c_master_stop(cmd_handle: *mut void) -> i32
+    fn i2c_master_write_byte(cmd_handle: *mut void, data: u8, ack_en: u8) -> i32
+    fn i2c_master_write(cmd_handle: *mut void, data: *u8, data_len: u32, ack_en: u8) -> i32
+    fn i2c_master_read_byte(cmd_handle: *mut void, data: *mut u8, ack: u8) -> i32
+    fn i2c_master_read(cmd_handle: *mut void, data: *mut u8, data_len: u32, ack: u8) -> i32
+    fn i2c_master_cmd_begin(i2c_num: u32, cmd_handle: *mut void, ticks_to_wait: u32) -> i32
+}
+
+// FreeRTOS tick conversion
+extern "C" {
+    fn pdMS_TO_TICKS(ms: u32) -> u32
+}
+
+// ESP32 I2C HAL implementation
+pub struct ESP32_I2C {}
+
+impl I2C.I2C_HAL for ESP32_I2C {
+    fn init(config: I2C.Config) -> I2C.Result<()> {
+        let freq = match config.speed {
+            I2C.Speed.Standard => I2C_MASTER_FREQ_HZ_STANDARD,
+            I2C.Speed.Fast => I2C_MASTER_FREQ_HZ_FAST,
+            I2C.Speed.FastPlus => I2C_MASTER_FREQ_HZ_FAST_PLUS,
+            I2C.Speed.HighSpeed => I2C_MASTER_FREQ_HZ_FAST_PLUS, // ESP32 max
+        }
+        
+        let i2c_conf = i2c_config_t {
+            mode: I2C_MODE_MASTER,
+            sda_io_num: config.sda_pin as i32,
+            scl_io_num: config.scl_pin as i32,
+            sda_pullup_en: true,
+            scl_pullup_en: true,
+            master_clk_speed: freq,
+        }
+        
+        let ret = i2c_param_config(config.bus as u32, &i2c_conf)
+        if ret != ESP_OK {
+            return Err(I2C.Error.BusError)
+        }
+        
+        let ret = i2c_driver_install(
+            config.bus as u32,
+            I2C_MODE_MASTER,
+            I2C_MASTER_RX_BUF_DISABLE,
+            I2C_MASTER_TX_BUF_DISABLE,
+            0
+        )
+        
+        if ret != ESP_OK {
+            return Err(I2C.Error.BusError)
+        }
+        
+        Ok(())
+    }
+    
+    fn deinit(bus: u8) {
+        i2c_driver_delete(bus as u32)
+    }
+    
+    fn scan(bus: u8) -> I2C.Result<[u8]> {
+        let mut devices: [u8] = []
+        
+        for addr in 0x08..0x78 {
+            if ESP32_I2C.probe(bus, addr as u16) {
+                devices.push(addr)
+            }
+        }
+        
+        Ok(devices)
+    }
+    
+    fn write(bus: u8, address: u16, data: &[u8]) -> I2C.Result<()> {
+        let timeout = pdMS_TO_TICKS(1000)
+        
+        let ret = i2c_master_write_to_device(
+            bus as u32,
+            address as u8,
+            data.as_ptr(),
+            data.len() as u32,
+            timeout
+        )
+        
+        if ret == ESP_OK {
+            Ok(())
+        } else if ret == ESP_ERR_TIMEOUT {
+            Err(I2C.Error.Timeout)
+        } else {
+            Err(I2C.Error.AckFailure)
+        }
+    }
+    
+    fn read(bus: u8, address: u16, buffer: &mut [u8]) -> I2C.Result<()> {
+        let timeout = pdMS_TO_TICKS(1000)
+        
+        let ret = i2c_master_read_from_device(
+            bus as u32,
+            address as u8,
+            buffer.as_mut_ptr(),
+            buffer.len() as u32,
+            timeout
+        )
+        
+        if ret == ESP_OK {
+            Ok(())
+        } else if ret == ESP_ERR_TIMEOUT {
+            Err(I2C.Error.Timeout)
+        } else {
+            Err(I2C.Error.DeviceNotFound)
+        }
+    }
+    
+    fn write_read(bus: u8, address: u16, write_data: &[u8], read_buffer: &mut [u8]) -> I2C.Result<()> {
+        let timeout = pdMS_TO_TICKS(1000)
+        
+        let ret = i2c_master_write_read_device(
+            bus as u32,
+            address as u8,
+            write_data.as_ptr(),
+            write_data.len() as u32,
+            read_buffer.as_mut_ptr(),
+            read_buffer.len() as u32,
+            timeout
+        )
+        
+        if ret == ESP_OK {
+            Ok(())
+        } else if ret == ESP_ERR_TIMEOUT {
+            Err(I2C.Error.Timeout)
+        } else {
+            Err(I2C.Error.AckFailure)
+        }
+    }
+    
+    fn write_register(bus: u8, address: u16, register: u8, value: u8) -> I2C.Result<()> {
+        let data: [u8; 2] = [register, value]
+        ESP32_I2C.write(bus, address, &data)
+    }
+    
+    fn read_register(bus: u8, address: u16, register: u8) -> I2C.Result<u8> {
+        let mut buffer: [u8; 1] = [0]
+        ESP32_I2C.write_read(bus, address, &[register], &mut buffer)?
+        Ok(buffer[0])
+    }
+    
+    fn read_registers(bus: u8, address: u16, start_register: u8, buffer: &mut [u8]) -> I2C.Result<()> {
+        ESP32_I2C.write_read(bus, address, &[start_register], buffer)
+    }
+    
+    fn probe(bus: u8, address: u16) -> bool {
+        let cmd = i2c_cmd_link_create()
+        
+        i2c_master_start(cmd)
+        i2c_master_write_byte(cmd, (address as u8) << 1 | 0, ACK_CHECK_EN)
+        i2c_master_stop(cmd)
+        
+        let timeout = pdMS_TO_TICKS(50)
+        let ret = i2c_master_cmd_begin(bus as u32, cmd, timeout)
+        
+        i2c_cmd_link_delete(cmd)
+        
+        ret == ESP_OK
+    }
+    
+    fn set_speed(bus: u8, speed: I2C.Speed) -> I2C.Result<()> {
+        // ESP32 requires reinitializing I2C to change speed
+        // This is a limitation of ESP-IDF
+        Err(I2C.Error.BusError)
+    }
+    
+    fn reset(bus: u8) {
+        // ESP32 I2C reset: delete and reinstall driver
+        i2c_driver_delete(bus as u32)
+        // Note: Need to store config to reinstall
+    }
+}
+
+// ESP32-specific helper functions
+
+/// Get I2C bus status
+pub fn get_bus_status(bus: u8) -> string {
+    // Check if driver is installed by probing
+    let test_addr: u16 = 0x00
+    if ESP32_I2C.probe(bus, test_addr) {
+        "initialized"
+    } else {
+        "not_initialized"
+    }
+}
+
+/// Advanced I2C transaction with custom timing
+pub fn transaction_custom(bus: u8, address: u8, write_data: &[u8], read_data: &mut [u8], timeout_ms: u32) -> I2C.Result<()> {
+    let cmd = i2c_cmd_link_create()
+    
+    // Start condition
+    i2c_master_start(cmd)
+    
+    // Write phase
+    if write_data.len() > 0 {
+        i2c_master_write_byte(cmd, (address << 1) | 0, ACK_CHECK_EN)
+        i2c_master_write(cmd, write_data.as_ptr(), write_data.len() as u32, ACK_CHECK_EN)
+    }
+    
+    // Repeated start + read phase
+    if read_data.len() > 0 {
+        i2c_master_start(cmd)
+        i2c_master_write_byte(cmd, (address << 1) | 1, ACK_CHECK_EN)
+        
+        if read_data.len() > 1 {
+            i2c_master_read(cmd, read_data.as_mut_ptr(), (read_data.len() - 1) as u32, ACK_VAL)
+        }
+        
+        let mut last_byte: u8 = 0
+        i2c_master_read_byte(cmd, &mut last_byte, NACK_VAL)
+        read_data[read_data.len() - 1] = last_byte
+    }
+    
+    // Stop condition
+    i2c_master_stop(cmd)
+    
+    // Execute transaction
+    let timeout = pdMS_TO_TICKS(timeout_ms)
+    let ret = i2c_master_cmd_begin(bus as u32, cmd, timeout)
+    
+    i2c_cmd_link_delete(cmd)
+    
+    if ret == ESP_OK {
+        Ok(())
+    } else {
+        Err(I2C.Error.BusError)
+    }
+}
+
+/// Check I2C bus for stuck condition
+pub fn check_bus_stuck(bus: u8) -> bool {
+    // Try to probe a non-existent address
+    // If timeout occurs, bus might be stuck
+    let result = ESP32_I2C.probe(bus, 0x00)
+    !result
+}

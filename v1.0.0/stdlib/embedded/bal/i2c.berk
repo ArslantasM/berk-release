@@ -1,0 +1,176 @@
+// stdlib/embedded/bal/i2c.berk
+// Backend Abstraction Layer - I2C Interface
+// Platform-independent I2C (Inter-Integrated Circuit) API
+
+import "embedded/bal/time" as time
+
+/// I2C bus speed modes
+pub enum Speed {
+    Standard,       // 100 kHz
+    Fast,           // 400 kHz
+    FastPlus,       // 1 MHz
+    HighSpeed,      // 3.4 MHz
+}
+
+/// I2C addressing mode
+pub enum AddressMode {
+    SevenBit,       // 7-bit address (0x00-0x7F)
+    TenBit,         // 10-bit address (0x000-0x3FF)
+}
+
+/// I2C error types
+pub enum Error {
+    BusError,           // Bus error (SDA/SCL stuck)
+    AckFailure,         // No ACK from device
+    Timeout,            // Operation timeout
+    Overrun,            // Data overrun
+    ArbitrationLost,    // Lost arbitration (multi-master)
+    DeviceNotFound,     // Device not responding
+}
+
+/// I2C result type
+pub type Result<T> = stdlib.result.Result<T, Error>
+
+/// I2C configuration
+pub struct Config {
+    bus: u8,            // Bus number (0, 1, 2, etc.)
+    scl_pin: u8,        // Clock line pin
+    sda_pin: u8,        // Data line pin
+    speed: Speed,       // Bus speed
+    address_mode: AddressMode,
+    timeout_ms: u32,    // Default timeout
+}
+
+/// I2C HAL interface that platforms must implement
+pub interface I2C_HAL {
+    /// Initialize I2C bus
+    fn init(config: Config) -> Result<()>
+    
+    /// Deinitialize I2C bus
+    fn deinit(bus: u8)
+    
+    /// Scan I2C bus for devices (returns list of addresses)
+    fn scan(bus: u8) -> Result<[u8]>
+    
+    /// Write data to I2C device
+    fn write(bus: u8, address: u16, data: &[u8]) -> Result<()>
+    
+    /// Read data from I2C device
+    fn read(bus: u8, address: u16, buffer: &mut [u8]) -> Result<()>
+    
+    /// Write then read (repeated start condition)
+    fn write_read(bus: u8, address: u16, write_data: &[u8], read_buffer: &mut [u8]) -> Result<()>
+    
+    /// Write register value
+    fn write_register(bus: u8, address: u16, register: u8, value: u8) -> Result<()>
+    
+    /// Read register value
+    fn read_register(bus: u8, address: u16, register: u8) -> Result<u8>
+    
+    /// Read multiple registers
+    fn read_registers(bus: u8, address: u16, start_register: u8, buffer: &mut [u8]) -> Result<()>
+    
+    /// Check if device exists on bus
+    fn probe(bus: u8, address: u16) -> bool
+    
+    /// Set bus speed
+    fn set_speed(bus: u8, speed: Speed) -> Result<()>
+    
+    /// Reset I2C bus (recover from stuck condition)
+    fn reset(bus: u8)
+}
+
+// High-level convenience functions
+
+/// Initialize I2C bus with default settings (Fast mode, 7-bit addressing)
+pub fn init_default(bus: u8, scl_pin: u8, sda_pin: u8) -> Result<()> {
+    let config = Config {
+        bus: bus,
+        scl_pin: scl_pin,
+        sda_pin: sda_pin,
+        speed: Speed.Fast,
+        address_mode: AddressMode.SevenBit,
+        timeout_ms: 1000,
+    }
+    I2C_HAL.init(config)
+}
+
+/// Quick device check
+pub fn device_present(bus: u8, address: u8) -> bool {
+    I2C_HAL.probe(bus, address as u16)
+}
+
+/// Read single byte from register
+pub fn read_byte(bus: u8, address: u8, register: u8) -> Result<u8> {
+    I2C_HAL.read_register(bus, address as u16, register)
+}
+
+/// Write single byte to register
+pub fn write_byte(bus: u8, address: u8, register: u8, value: u8) -> Result<()> {
+    I2C_HAL.write_register(bus, address as u16, register, value)
+}
+
+/// Modify register bits (read-modify-write)
+pub fn modify_register(bus: u8, address: u8, register: u8, mask: u8, value: u8) -> Result<()> {
+    let current = I2C_HAL.read_register(bus, address as u16, register)?
+    let new_value = (current & !mask) | (value & mask)
+    I2C_HAL.write_register(bus, address as u16, register, new_value)
+}
+
+/// Read 16-bit value from register (big-endian)
+pub fn read_u16_be(bus: u8, address: u8, register: u8) -> Result<u16> {
+    let mut buffer: [u8; 2] = [0, 0]
+    I2C_HAL.read_registers(bus, address as u16, register, &mut buffer)?
+    Ok((buffer[0] as u16) << 8 | buffer[1] as u16)
+}
+
+/// Read 16-bit value from register (little-endian)
+pub fn read_u16_le(bus: u8, address: u8, register: u8) -> Result<u16> {
+    let mut buffer: [u8; 2] = [0, 0]
+    I2C_HAL.read_registers(bus, address as u16, register, &mut buffer)?
+    Ok(buffer[0] as u16 | (buffer[1] as u16) << 8)
+}
+
+/// Write 16-bit value to register (big-endian)
+pub fn write_u16_be(bus: u8, address: u8, register: u8, value: u16) -> Result<()> {
+    let data: [u8; 3] = [register, (value >> 8) as u8, value as u8]
+    I2C_HAL.write(bus, address as u16, &data)
+}
+
+/// Scan I2C bus and print found devices
+pub fn scan_and_print(bus: u8) {
+    IO.println("Scanning I2C bus...")
+    match I2C_HAL.scan(bus) {
+        Ok(addresses) => {
+            if addresses.len() == 0 {
+                IO.println("No devices found")
+            } else {
+                IO.println("Found " + addresses.len().to_string() + " devices:")
+                for addr in addresses {
+                    IO.println("  0x" + addr.to_hex())
+                }
+            }
+        },
+        Err(e) => {
+            IO.eprintln("Scan failed: " + e.to_string())
+        }
+    }
+}
+
+/// Retry operation with exponential backoff
+pub fn retry<T>(bus: u8, operation: fn() -> Result<T>, max_retries: u8) -> Result<T> {
+    let mut delay_ms: u32 = 10
+    for attempt in 0..max_retries {
+        match operation() {
+            Ok(result) => return Ok(result),
+            Err(e) => {
+                if attempt < max_retries - 1 {
+                    time.sleep_ms(delay_ms)
+                    delay_ms *= 2  // Exponential backoff
+                } else {
+                    return Err(e)
+                }
+            }
+        }
+    }
+}

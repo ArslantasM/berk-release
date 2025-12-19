@@ -1,0 +1,381 @@
+// stdlib/embedded/platforms/stm32f4/spi.berk
+// STM32F4 SPI HAL Implementation
+// STM32 HAL SPI library bindings
+
+import "embedded/bal/spi" as SPI
+
+// STM32 HAL SPI constants
+const SPI_MODE_MASTER: u32 = 0x00000104
+const SPI_MODE_SLAVE: u32 = 0x00000000
+
+const SPI_DIRECTION_2LINES: u32 = 0x00000000
+const SPI_DIRECTION_2LINES_RXONLY: u32 = 0x00000400
+const SPI_DIRECTION_1LINE: u32 = 0x00008000
+
+const SPI_DATASIZE_8BIT: u32 = 0x00000000
+const SPI_DATASIZE_16BIT: u32 = 0x00000800
+
+const SPI_POLARITY_LOW: u32 = 0x00000000
+const SPI_POLARITY_HIGH: u32 = 0x00000002
+
+const SPI_PHASE_1EDGE: u32 = 0x00000000
+const SPI_PHASE_2EDGE: u32 = 0x00000001
+
+const SPI_NSS_SOFT: u32 = 0x00000200
+const SPI_NSS_HARD_INPUT: u32 = 0x00000000
+const SPI_NSS_HARD_OUTPUT: u32 = 0x00040000
+
+const SPI_BAUDRATEPRESCALER_2: u32 = 0x00000000
+const SPI_BAUDRATEPRESCALER_4: u32 = 0x00000008
+const SPI_BAUDRATEPRESCALER_8: u32 = 0x00000010
+const SPI_BAUDRATEPRESCALER_16: u32 = 0x00000018
+const SPI_BAUDRATEPRESCALER_32: u32 = 0x00000020
+const SPI_BAUDRATEPRESCALER_64: u32 = 0x00000028
+const SPI_BAUDRATEPRESCALER_128: u32 = 0x00000030
+const SPI_BAUDRATEPRESCALER_256: u32 = 0x00000038
+
+const SPI_FIRSTBIT_MSB: u32 = 0x00000000
+const SPI_FIRSTBIT_LSB: u32 = 0x00000080
+
+// STM32 HAL SPI structures
+struct SPI_HandleTypeDef {
+    Instance: *mut void,
+    Init: SPI_InitTypeDef,
+    pTxBuffPtr: *u8,
+    TxXferSize: u16,
+    TxXferCount: u16,
+    pRxBuffPtr: *mut u8,
+    RxXferSize: u16,
+    RxXferCount: u16,
+    Lock: u32,
+    State: u32,
+    ErrorCode: u32,
+}
+
+struct SPI_InitTypeDef {
+    Mode: u32,
+    Direction: u32,
+    DataSize: u32,
+    CLKPolarity: u32,
+    CLKPhase: u32,
+    NSS: u32,
+    BaudRatePrescaler: u32,
+    FirstBit: u32,
+    TIMode: u32,
+    CRCCalculation: u32,
+    CRCPolynomial: u32,
+}
+
+// SPI peripheral base addresses
+const SPI1_BASE: u32 = 0x40013000
+const SPI2_BASE: u32 = 0x40003800
+const SPI3_BASE: u32 = 0x40003C00
+
+// STM32 HAL SPI functions
+extern "C" {
+    fn HAL_SPI_Init(hspi: *mut SPI_HandleTypeDef) -> u32
+    fn HAL_SPI_DeInit(hspi: *mut SPI_HandleTypeDef) -> u32
+    fn HAL_SPI_Transmit(hspi: *mut SPI_HandleTypeDef, pData: *u8, Size: u16, Timeout: u32) -> u32
+    fn HAL_SPI_Receive(hspi: *mut SPI_HandleTypeDef, pData: *mut u8, Size: u16, Timeout: u32) -> u32
+    fn HAL_SPI_TransmitReceive(hspi: *mut SPI_HandleTypeDef, pTxData: *u8, pRxData: *mut u8, Size: u16, Timeout: u32) -> u32
+}
+
+const HAL_OK: u32 = 0x00
+const HAL_SPI_TIMEOUT: u32 = 1000
+
+// SPI handle storage
+static mut spi_handles: [SPI_HandleTypeDef; 3] = [SPI_HandleTypeDef::default(); 3]
+static mut spi_initialized: [bool; 3] = [false; 3]
+
+impl SPI_HandleTypeDef {
+    fn default() -> SPI_HandleTypeDef {
+        SPI_HandleTypeDef {
+            Instance: null,
+            Init: SPI_InitTypeDef::default(),
+            pTxBuffPtr: null,
+            TxXferSize: 0,
+            TxXferCount: 0,
+            pRxBuffPtr: null,
+            RxXferSize: 0,
+            RxXferCount: 0,
+            Lock: 0,
+            State: 0,
+            ErrorCode: 0,
+        }
+    }
+}
+
+impl SPI_InitTypeDef {
+    fn default() -> SPI_InitTypeDef {
+        SPI_InitTypeDef {
+            Mode: SPI_MODE_MASTER,
+            Direction: SPI_DIRECTION_2LINES,
+            DataSize: SPI_DATASIZE_8BIT,
+            CLKPolarity: SPI_POLARITY_LOW,
+            CLKPhase: SPI_PHASE_1EDGE,
+            NSS: SPI_NSS_SOFT,
+            BaudRatePrescaler: SPI_BAUDRATEPRESCALER_2,
+            FirstBit: SPI_FIRSTBIT_MSB,
+            TIMode: 0,
+            CRCCalculation: 0,
+            CRCPolynomial: 10,
+        }
+    }
+}
+
+// STM32F4 SPI HAL implementation
+pub struct STM32F4_SPI {}
+
+impl SPI.SPI_HAL for STM32F4_SPI {
+    fn init(config: SPI.Config) -> SPI.Result<()> {
+        if config.bus >= 3 {
+            return Err(SPI.Error.BusError)
+        }
+        
+        unsafe {
+            if spi_initialized[config.bus as usize] {
+                return Err(SPI.Error.BusError)
+            }
+            
+            // Get SPI instance
+            let instance = match config.bus {
+                0 => SPI1_BASE as *mut void,
+                1 => SPI2_BASE as *mut void,
+                2 => SPI3_BASE as *mut void,
+                _ => return Err(SPI.Error.BusError),
+            }
+            
+            // Calculate baud rate prescaler
+            // APB2 clock = 84MHz for SPI1
+            // APB1 clock = 42MHz for SPI2/SPI3
+            let apb_clock = if config.bus == 0 { 84_000_000 } else { 42_000_000 }
+            
+            let prescaler = if config.frequency >= apb_clock / 2 {
+                SPI_BAUDRATEPRESCALER_2
+            } else if config.frequency >= apb_clock / 4 {
+                SPI_BAUDRATEPRESCALER_4
+            } else if config.frequency >= apb_clock / 8 {
+                SPI_BAUDRATEPRESCALER_8
+            } else if config.frequency >= apb_clock / 16 {
+                SPI_BAUDRATEPRESCALER_16
+            } else if config.frequency >= apb_clock / 32 {
+                SPI_BAUDRATEPRESCALER_32
+            } else if config.frequency >= apb_clock / 64 {
+                SPI_BAUDRATEPRESCALER_64
+            } else if config.frequency >= apb_clock / 128 {
+                SPI_BAUDRATEPRESCALER_128
+            } else {
+                SPI_BAUDRATEPRESCALER_256
+            }
+            
+            // Map mode
+            let (polarity, phase) = match config.mode {
+                SPI.Mode.Mode0 => (SPI_POLARITY_LOW, SPI_PHASE_1EDGE),
+                SPI.Mode.Mode1 => (SPI_POLARITY_LOW, SPI_PHASE_2EDGE),
+                SPI.Mode.Mode2 => (SPI_POLARITY_HIGH, SPI_PHASE_1EDGE),
+                SPI.Mode.Mode3 => (SPI_POLARITY_HIGH, SPI_PHASE_2EDGE),
+            }
+            
+            let bit_order = match config.bit_order {
+                SPI.BitOrder.MSBFirst => SPI_FIRSTBIT_MSB,
+                SPI.BitOrder.LSBFirst => SPI_FIRSTBIT_LSB,
+            }
+            
+            let data_size = match config.data_size {
+                SPI.DataSize.Bits8 => SPI_DATASIZE_8BIT,
+                SPI.DataSize.Bits16 => SPI_DATASIZE_16BIT,
+            }
+            
+            // Initialize SPI handle
+            spi_handles[config.bus as usize].Instance = instance
+            spi_handles[config.bus as usize].Init = SPI_InitTypeDef {
+                Mode: SPI_MODE_MASTER,
+                Direction: SPI_DIRECTION_2LINES,
+                DataSize: data_size,
+                CLKPolarity: polarity,
+                CLKPhase: phase,
+                NSS: SPI_NSS_SOFT,
+                BaudRatePrescaler: prescaler,
+                FirstBit: bit_order,
+                TIMode: 0,
+                CRCCalculation: 0,
+                CRCPolynomial: 10,
+            }
+            
+            let ret = HAL_SPI_Init(&mut spi_handles[config.bus as usize])
+            
+            if ret == HAL_OK {
+                spi_initialized[config.bus as usize] = true
+                Ok(())
+            } else {
+                Err(SPI.Error.BusError)
+            }
+        }
+    }
+    
+    fn deinit(bus: u8) {
+        unsafe {
+            if bus < 3 && spi_initialized[bus as usize] {
+                HAL_SPI_DeInit(&mut spi_handles[bus as usize])
+                spi_initialized[bus as usize] = false
+            }
+        }
+    }
+    
+    fn transfer_byte(bus: u8, data: u8) -> SPI.Result<u8> {
+        let mut tx_data: [u8; 1] = [data]
+        let mut rx_data: [u8; 1] = [0]
+        
+        STM32F4_SPI.transfer(bus, &tx_data, &mut rx_data)?
+        Ok(rx_data[0])
+    }
+    
+    fn transfer(bus: u8, write_data: &[u8], read_buffer: &mut [u8]) -> SPI.Result<()> {
+        unsafe {
+            if bus >= 3 || !spi_initialized[bus as usize] {
+                return Err(SPI.Error.BusError)
+            }
+            
+            let length = if write_data.len() < read_buffer.len() {
+                write_data.len()
+            } else {
+                read_buffer.len()
+            }
+            
+            let ret = HAL_SPI_TransmitReceive(
+                &mut spi_handles[bus as usize],
+                write_data.as_ptr(),
+                read_buffer.as_mut_ptr(),
+                length as u16,
+                HAL_SPI_TIMEOUT
+            )
+            
+            if ret == HAL_OK {
+                Ok(())
+            } else {
+                Err(SPI.Error.Timeout)
+            }
+        }
+    }
+    
+    fn write(bus: u8, data: &[u8]) -> SPI.Result<()> {
+        unsafe {
+            if bus >= 3 || !spi_initialized[bus as usize] {
+                return Err(SPI.Error.BusError)
+            }
+            
+            let ret = HAL_SPI_Transmit(
+                &mut spi_handles[bus as usize],
+                data.as_ptr(),
+                data.len() as u16,
+                HAL_SPI_TIMEOUT
+            )
+            
+            if ret == HAL_OK {
+                Ok(())
+            } else {
+                Err(SPI.Error.Timeout)
+            }
+        }
+    }
+    
+    fn read(bus: u8, buffer: &mut [u8]) -> SPI.Result<()> {
+        unsafe {
+            if bus >= 3 || !spi_initialized[bus as usize] {
+                return Err(SPI.Error.BusError)
+            }
+            
+            let ret = HAL_SPI_Receive(
+                &mut spi_handles[bus as usize],
+                buffer.as_mut_ptr(),
+                buffer.len() as u16,
+                HAL_SPI_TIMEOUT
+            )
+            
+            if ret == HAL_OK {
+                Ok(())
+            } else {
+                Err(SPI.Error.Timeout)
+            }
+        }
+    }
+    
+    fn select(bus: u8, cs_pin: u8) {
+        // Software CS control via GPIO
+        // GPIO.set_level(cs_pin, GPIO.Level.Low)
+    }
+    
+    fn deselect(bus: u8, cs_pin: u8) {
+        // Software CS control via GPIO
+        // GPIO.set_level(cs_pin, GPIO.Level.High)
+    }
+    
+    fn set_frequency(bus: u8, frequency: u32) -> SPI.Result<()> {
+        // Requires SPI reinitialization
+        Err(SPI.Error.BusError)
+    }
+    
+    fn set_mode(bus: u8, mode: SPI.Mode) -> SPI.Result<()> {
+        // Requires SPI reinitialization
+        Err(SPI.Error.BusError)
+    }
+}
+
+// STM32F4-specific SPI functions
+
+/// Get actual SPI frequency
+pub fn get_actual_frequency(bus: u8) -> u32 {
+    if bus >= 3 {
+        return 0
+    }
+    
+    unsafe {
+        if !spi_initialized[bus as usize] {
+            return 0
+        }
+        
+        let apb_clock = if bus == 0 { 84_000_000 } else { 42_000_000 }
+        let prescaler = spi_handles[bus as usize].Init.BaudRatePrescaler
+        
+        let divisor = match prescaler {
+            SPI_BAUDRATEPRESCALER_2 => 2,
+            SPI_BAUDRATEPRESCALER_4 => 4,
+            SPI_BAUDRATEPRESCALER_8 => 8,
+            SPI_BAUDRATEPRESCALER_16 => 16,
+            SPI_BAUDRATEPRESCALER_32 => 32,
+            SPI_BAUDRATEPRESCALER_64 => 64,
+            SPI_BAUDRATEPRESCALER_128 => 128,
+            SPI_BAUDRATEPRESCALER_256 => 256,
+            _ => 2,
+        }
+        
+        apb_clock / divisor
+    }
+}
+
+/// Initialize SPI for SD card (high-speed mode)
+pub fn init_sd_card(bus: u8, sck: u8, mosi: u8, miso: u8, cs: u8) -> SPI.Result<()> {
+    let config = SPI.Config {
+        bus: bus,
+        sck_pin: sck,
+        mosi_pin: mosi,
+        miso_pin: miso,
+        cs_pin: cs,
+        frequency: 25_000_000,  // 25 MHz
+        mode: SPI.Mode.Mode0,
+        bit_order: SPI.BitOrder.MSBFirst,
+        data_size: SPI.DataSize.Bits8,
+        cs_active_low: true,
+    }
+    STM32F4_SPI.init(config)
+}
+
+/// Check if SPI is busy
+pub fn is_busy(bus: u8) -> bool {
+    unsafe {
+        if bus >= 3 || !spi_initialized[bus as usize] {
+            return false
+        }
+        spi_handles[bus as usize].State != 0
+    }
+}

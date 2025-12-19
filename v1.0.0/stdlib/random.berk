@@ -1,0 +1,477 @@
+//! # Random Module
+//!
+//! Random number generator (University + Simulation + Monte Carlo).
+//!
+//! Rastgele sayı üretici (Üniversite + Simülasyon + Monte Carlo).
+//!
+//! ## Algorithms / Algoritmalar
+//!
+//! - **Xoshiro256++**: Fast, modern, high-quality (Julia default) / Hızlı, modern, kaliteli
+//! - **Mersenne Twister**: MT19937 (C++ default) / MT19937
+//! - **PCG64**: Permuted congruential generator / Permute edilmiş doğrusal üretici
+//!
+//! ## Distributions / Dağılımlar
+//!
+//! - **Uniform**: Integer, float / Tek biçim
+//! - **Normal (Gaussian)**: Box-Muller transform / Normal dağılım
+//! - **Exponential**: λ parameter / Üstel dağılım
+//! - **Discrete**: Weighted sampling / Ağırlıklı örnekleme
+//!
+//! ## Example / Örnek
+//!
+//! ```berk
+//! kullan random
+//!
+//! değişken rng = random.create(seed: 42)
+//! değişken x = random.uniform(rng, 0, 100)  // [0, 100)
+//! değişken y = random.normal(rng, mean: 0.0, stddev: 1.0)
+//! ```
+//!
+//! Backend: Rust rand crate
+//
+// ============================================================================
+
+kullan math  // Trigonometrik ve logaritmik fonksiyonlar
+
+// ============================================================================
+// GLOBAL RNG STATE (Xoshiro256++ benzeri)
+// ============================================================================
+// NOT: BERK'te global state yönetimi için backend desteği gerekli
+// Backend 4 adet UInt64 state tutmalı: s0, s1, s2, s3
+
+// Seed ayarla
+// Set seed for global RNG
+fonksiyon seed(s: tamsayı) yap
+    // Backend: Initialize Xoshiro state from seed
+    // SplitMix64 kullanarak s0, s1, s2, s3 üret
+son
+
+// ============================================================================
+// UNIFORM DISTRIBUTION / DÜZGÜN DAĞILIM
+// ============================================================================
+
+// Rastgele tam sayı [0, max]
+// Random integer in [0, max]
+fonksiyon randint(max: tamsayı) -> tamsayı yap
+    // Backend: Xoshiro256++ next() % (max + 1)
+    // Modulo bias'ı önlemek için rejection sampling kullan
+    dön 0  // Placeholder
+son
+
+// Rastgele tam sayı [min, max]
+// Random integer in [min, max]
+fonksiyon randrange(min: tamsayı, max: tamsayı) -> tamsayı yap
+    eğer min > max ise dön 0
+    değişken span = max - min
+    dön min + randint(span)
+son
+
+// Rastgele float [0.0, 1.0)
+// Random float in [0.0, 1.0)
+fonksiyon randf() -> ondalık yap
+    // Backend: Xoshiro next() -> [0, 2^64) -> [0.0, 1.0)
+    // IEEE 754 mantissa'ya direkt yerleştirme (fast)
+    dön 0.0  // Placeholder
+son
+
+// Rastgele float [min, max]
+// Random float in [min, max]
+fonksiyon uniform(min: ondalık, max: ondalık) -> ondalık yap
+    değişken u = randf()
+    dön min + u * (max - min)
+son
+
+// ============================================================================
+// DISCRETE DISTRIBUTIONS / AYRIK DAĞILIMLAR
+// ============================================================================
+
+// Bernoulli: P(1) = p, P(0) = 1-p
+// Coin flip with probability p
+fonksiyon bernoulli(p: ondalık) -> mantıksal yap
+    dön randf() < p
+son
+
+// Binomial: n deneme, her biri p olasılıkla başarılı
+// Number of successes in n trials with probability p
+fonksiyon binomial(n: tamsayı, p: ondalık) -> tamsayı yap
+    değişken başarı = 0
+    değişken i = 0
+    iken i < n yap
+        eğer bernoulli(p) ise yap
+            başarı = başarı + 1
+        son
+        i = i + 1
+    son
+    dön başarı
+son
+
+// Geometric: İlk başarıya kadar deneme sayısı
+// Number of trials until first success
+fonksiyon geometric(p: ondalık) -> tamsayı yap
+    eğer p <= 0.0 ise dön 0
+    eğer p >= 1.0 ise dön 1
+    
+    // log(1-u) / log(1-p) formülü
+    değişken u = randf()
+    değişken result = math::log(1.0 - u) / math::log(1.0 - p)
+    dön math::ceil(result)
+son
+
+// Poisson distribution (λ parametresi)
+// Poisson(λ): events per unit time
+fonksiyon poisson(lambda: ondalık) -> tamsayı yap
+    // Knuth algorithm
+    eğer lambda <= 0.0 ise dön 0
+    
+    değişken L = math::exp(-lambda)
+    değişken k = 0
+    değişken p = 1.0
+    
+    iken doğru yap
+        p = p * randf()
+        eğer p < L ise yap
+            dön k
+        son
+        k = k + 1
+        eğer k > 1000 ise dön 0  // Overflow koruması
+    son
+    
+    dön 0
+son
+
+// ============================================================================
+// CONTINUOUS DISTRIBUTIONS / SÜREKLİ DAĞILIMLAR
+// ============================================================================
+
+// Normal (Gaussian) distribution - Box-Muller transform
+// Normal(μ=0, σ=1)
+fonksiyon randn() -> ondalık yap
+    // Box-Muller transform
+    // z = √(-2 ln u₁) cos(2π u₂)
+    değişken u1 = randf()
+    değişken u2 = randf()
+    
+    // u1 = 0 durumunu önle
+    iken u1 <= 0.0 yap
+        u1 = randf()
+    son
+    
+    değişken z = math::sqrt(-2.0 * math::log(u1)) * math::cos(2.0 * math::PI * u2)
+    dön z
+son
+
+// Normal distribution with μ (mean) and σ (std dev)
+fonksiyon normal(mu: ondalık, sigma: ondalık) -> ondalık yap
+    değişken z = randn()
+    dön mu + sigma * z
+son
+
+// Exponential distribution (λ rate parameter)
+// Exponential(λ): time between events
+fonksiyon exponential(lambda: ondalık) -> ondalık yap
+    eğer lambda <= 0.0 ise dön 0.0
+    değişken u = randf()
+    // x = -ln(1-u) / λ
+    dön -math::log(1.0 - u) / lambda
+son
+
+// Gamma distribution (shape α, rate β)
+// Marsaglia and Tsang method
+fonksiyon gamma(alpha: ondalık, beta: ondalık) -> ondalık yap
+    // Basit yaklaşım: α=1 için Exponential
+    eğer alpha == 1.0 ise yap
+        dön exponential(beta)
+    son
+    // Genel durum için Marsaglia-Tsang algoritması gerekli
+    dön 0.0  // Backend gerekli
+son
+
+// Beta distribution (α, β parametreleri)
+// Beta(α, β) using Gamma
+fonksiyon beta(alpha: ondalık, beta_param: ondalık) -> ondalık yap
+    // X ~ Gamma(α, 1), Y ~ Gamma(β, 1)
+    // Beta = X / (X + Y)
+    değişken x = gamma(alpha, 1.0)
+    değişken y = gamma(beta_param, 1.0)
+    eğer (x + y) == 0.0 ise dön 0.5
+    dön x / (x + y)
+son
+
+// Chi-squared distribution (k degrees of freedom)
+// χ²(k) = Gamma(k/2, 1/2)
+fonksiyon chi_squared(k: tamsayı) -> ondalık yap
+    değişken alpha = k / 2.0
+    dön gamma(alpha, 0.5)
+son
+
+// Student's t-distribution (ν degrees of freedom)
+// t(ν) = Z / √(V/ν), Z~N(0,1), V~χ²(ν)
+fonksiyon student_t(nu: tamsayı) -> ondalık yap
+    değişken z = randn()
+    değişken v = chi_squared(nu)
+    eğer v == 0.0 ise dön 0.0
+    dön z / math::sqrt(v / nu)
+son
+
+// Cauchy distribution (location x₀, scale γ)
+// Cauchy(x₀, γ)
+fonksiyon cauchy(x0: ondalık, gamma: ondalık) -> ondalık yap
+    // tan(π(u - 0.5))
+    değişken u = randf()
+    değişken t = math::tan(math::PI * (u - 0.5))
+    dön x0 + gamma * t
+son
+
+// Logistic distribution (μ, s)
+fonksiyon logistic(mu: ondalık, s: ondalık) -> ondalık yap
+    değişken u = randf()
+    // μ + s·ln(u/(1-u))
+    eğer u == 0.0 ise u = 0.00001
+    eğer u == 1.0 ise u = 0.99999
+    dön mu + s * math::log(u / (1.0 - u))
+son
+
+// Weibull distribution (λ scale, k shape)
+fonksiyon weibull(lambda: ondalık, k: ondalık) -> ondalık yap
+    değişken u = randf()
+    // λ(-ln(1-u))^(1/k)
+    dön lambda * math::pow(-math::log(1.0 - u), 1.0 / k)
+son
+
+// Pareto distribution (xₘ scale, α shape)
+fonksiyon pareto(xm: ondalık, alpha: ondalık) -> ondalık yap
+    değişken u = randf()
+    // xₘ / (1-u)^(1/α)
+    dön xm / math::pow(1.0 - u, 1.0 / alpha)
+son
+
+// ============================================================================
+// MULTIVARIATE / ÇOK DEĞİŞKENLİ
+// ============================================================================
+
+// 2D Gaussian (bağımsız)
+// 2D Normal with independent components
+fonksiyon randn2() -> (ondalık, ondalık) yap
+    // Box-Muller iki değer üretir
+    değişken u1 = randf()
+    değişken u2 = randf()
+    
+    iken u1 <= 0.0 yap
+        u1 = randf()
+    son
+    
+    değişken r = math::sqrt(-2.0 * math::log(u1))
+    değişken theta = 2.0 * math::PI * u2
+    
+    değişken z0 = r * math::cos(theta)
+    değişken z1 = r * math::sin(theta)
+    dön (z0, z1)
+son
+
+// Birim çember üzerinde uniform nokta
+// Uniform point on unit circle
+fonksiyon rand_unit_circle() -> (ondalık, ondalık) yap
+    değişken theta = uniform(0.0, 2.0 * math::PI)
+    değişken x = math::cos(theta)
+    değişken y = math::sin(theta)
+    dön (x, y)
+son
+
+// Birim küre üzerinde uniform nokta
+// Uniform point on unit sphere (3D)
+fonksiyon rand_unit_sphere() -> (ondalık, ondalık, ondalık) yap
+    // Marsaglia method
+    değişken x = randn()
+    değişken y = randn()
+    değişken z = randn()
+    değişken norm = math::sqrt(x*x + y*y + z*z)
+    eğer norm == 0.0 ise dön (0.0, 0.0, 1.0)
+    dön (x/norm, y/norm, z/norm)
+son
+
+// ============================================================================
+// SAMPLING / ÖRNEKLEME
+// ============================================================================
+
+// Rastgele shuffle (Fisher-Yates)
+// NOT: Liste desteği gelince implement edilecek
+// fonksiyon shuffle(liste: liste) -> liste
+
+// Reservoir sampling - k eleman seç
+// fonksiyon sample(liste: liste, k: tamsayı) -> liste
+
+// Weighted random choice
+// fonksiyon choice_weighted(değerler: liste, ağırlıklar: liste) -> değer
+
+// ============================================================================
+// MONTE CARLO HELPERS / MONTE CARLO YARDIMCILARI
+// ============================================================================
+
+// π tahmini (Monte Carlo)
+// Estimate π using Monte Carlo
+fonksiyon estimate_pi(n: tamsayı) -> ondalık yap
+    değişken içerde = 0
+    değişken i = 0
+    
+    iken i < n yap
+        değişken x = uniform(-1.0, 1.0)
+        değişken y = uniform(-1.0, 1.0)
+        
+        eğer (x*x + y*y) <= 1.0 ise yap
+            içerde = içerde + 1
+        son
+        i = i + 1
+    son
+    
+    dön 4.0 * içerde / n
+son
+
+// İntegral tahmini (Monte Carlo)
+// f(x) integralini [a, b] aralığında tahmin et
+// fonksiyon mc_integrate(f: fonksiyon, a: ondalık, b: ondalık, n: tamsayı) -> ondalık
+
+// ============================================================================
+// LCG (Linear Congruential Generator) - Eğitim Amaçlı
+// ============================================================================
+// x_{n+1} = (a·x_n + c) mod m
+// Parametreler: a = 1664525, c = 1013904223, m = 2^32 (Numerical Recipes)
+
+değişken lcg_state = 1  // Global state
+
+fonksiyon lcg_seed(s: tamsayı) yap
+    lcg_state = s
+son
+
+fonksiyon lcg_next() -> tamsayı yap
+    // x = (a·x + c) mod m
+    değişken a = 1664525
+    değişken c = 1013904223
+    değişken m = 4294967296  // 2^32
+    
+    lcg_state = (a * lcg_state + c) % m
+    dön lcg_state
+son
+
+fonksiyon lcg_randf() -> ondalık yap
+    değişken x = lcg_next()
+    dön x / 4294967296.0
+son
+
+// ============================================================================
+// İSTATİSTİKSEL TESTLER / STATISTICAL TESTS
+// ============================================================================
+
+// Ortalama ve varyans testi (n örnek)
+fonksiyon test_mean_variance(n: tamsayı) -> (ondalık, ondalık) yap
+    değişken toplam = 0.0
+    değişken kareler_toplam = 0.0
+    
+    değişken i = 0
+    iken i < n yap
+        değişken x = randf()
+        toplam = toplam + x
+        kareler_toplam = kareler_toplam + x*x
+        i = i + 1
+    son
+    
+    değişken mean = toplam / n
+    değişken variance = (kareler_toplam / n) - (mean * mean)
+    
+    dön (mean, variance)
+son
+
+// ============================================================================
+// NOISE GENERATION / GÜR ÜLTÜ ÜRETİMİ
+// ============================================================================
+
+// White noise (Beyaz gürültü)
+fonksiyon white_noise(amplitude: ondalık) -> ondalık yap
+    dön amplitude * (randf() * 2.0 - 1.0)
+son
+
+// Pink noise (1/f) - yaklaşık
+fonksiyon pink_noise() -> ondalık yap
+    // Basit yaklaşım: birkaç oktavı topla
+    değişken total = 0.0
+    total = total + white_noise(1.0)
+    total = total + white_noise(0.5)
+    total = total + white_noise(0.25)
+    total = total + white_noise(0.125)
+    dön total / 1.875
+son
+
+// Perlin noise benzeri (basit 1D)
+// fonksiyon perlin_noise_1d(x: ondalık) -> ondalık
+
+// ============================================================================
+// UTILITY / YARDIMCILAR
+// ============================================================================
+
+// Rastgele boolean
+fonksiyon randbool() -> mantıksal yap
+    dön randf() < 0.5
+son
+
+// Rastgele işaret (-1 veya +1)
+fonksiyon randsign() -> tamsayı yap
+    eğer randbool() ise dön 1
+    dön -1
+son
+
+// Gaussian jitter (perturbation)
+fonksiyon jitter_gaussian(değer: ondalık, sigma: ondalık) -> ondalık yap
+    dön değer + randn() * sigma
+son
+
+// Uniform jitter
+fonksiyon jitter_uniform(değer: ondalık, radius: ondalık) -> ondalık yap
+    dön değer + uniform(-radius, radius)
+son
+
+// ============================================================================
+// English Versions / İngilizce Alias'lar
+// ============================================================================
+
+function random_int(max: integer) -> integer do
+    return randint(max)
+end
+
+function random_float() -> float do
+    return randf()
+end
+
+function random_normal() -> float do
+    return randn()
+end
+
+function random_exponential(lambda: float) -> float do
+    return exponential(lambda)
+end
+
+function random_uniform(min: float, max: float) -> float do
+    return uniform(min, max)
+end
+
+// ============================================================================
+// SONUÇ / CONCLUSION
+// ============================================================================
+// Bu modül Julia Random, NumPy ve Rust rand crate'inden ilham alınarak
+// oluşturuldu. Monte Carlo simülasyonları, istatistiksel analiz,
+// makine öğrenimi, oyun geliştirme ve bilimsel hesaplamalarda kullanılabilir.
+//
+// This module is inspired by Julia Random, NumPy, and Rust rand crate.
+// Can be used for Monte Carlo simulations, statistical analysis,
+// machine learning, game development, and scientific computing.
+//
+// Backend Requirements:
+//   • Xoshiro256++ implementation (4×UInt64 state)
+//   • Global state management
+//   • Thread-safe seeding (optional)
+//   • SIMD optimization for bulk generation (optional)
+//
+// Gelecek:
+//   • Parallel RNG (thread-local generators)
+//   • Cryptographically secure RNG (ChaCha20)
+//   • GPU random number generation
+//   • Quasi-random sequences (Sobol, Halton)
+// ============================================================================

@@ -1,0 +1,610 @@
+// ============================================================================
+// BERK SENSOR API - Olay Tabanlı Sensörler
+// ============================================================================
+// PIR, Kapı sensörü, Hall effect, Button, Touch
+// sensor::on_event("motion", fonksiyon { ... })
+// ============================================================================
+
+modül sensor::event
+
+import sensor::measurement::{Timestamp, Confidence}
+
+// ============================================================================
+// OLAY TÜRLERİ
+// ============================================================================
+
+/// Olay türü
+pub tip EventType = özyinelemeli yap
+    | Rising           // Yükselen kenar (0 → 1)
+    | Falling          // Düşen kenar (1 → 0)
+    | Both             // Her iki kenar
+    | Level            // Seviye değişimi
+    | Threshold        // Eşik aşımı
+    | Timeout          // Zaman aşımı
+son
+
+/// Sensör olayı
+pub tip SensorEvent = yapı yap
+    /// Kaynak sensör ID
+    source: yazı,
+    
+    /// Olay türü
+    event_type: EventType,
+    
+    /// Olay değeri (opsiyonel)
+    value: Seçenek[ondalık],
+    
+    /// Önceki değer (opsiyonel)
+    previous_value: Seçenek[ondalık],
+    
+    /// Zaman damgası
+    timestamp: Timestamp,
+    
+    /// Olay sayacı
+    event_count: sayı,
+    
+    /// Özel veri
+    data: Seçenek[yazı],
+son
+
+impl SensorEvent:
+    pub fn new(source: yazı, event_type: EventType) döndür SensorEvent:
+        döndür SensorEvent {
+            source: source,
+            event_type: event_type,
+            value: Hiçbiri,
+            previous_value: Hiçbiri,
+            timestamp: Timestamp::now(),
+            event_count: 1,
+            data: Hiçbiri,
+        }
+    son
+    
+    pub fn with_value(mut self, value: ondalık) döndür SensorEvent:
+        self.value = Bazı(value)
+        döndür self
+    son
+    
+    pub fn with_previous(mut self, value: ondalık) döndür SensorEvent:
+        self.previous_value = Bazı(value)
+        döndür self
+    son
+    
+    pub fn is_rising(self) döndür mantıksal:
+        döndür self.event_type == EventType::Rising
+    son
+    
+    pub fn is_falling(self) döndür mantıksal:
+        döndür self.event_type == EventType::Falling
+    son
+    
+    pub fn get_source(self) döndür yazı:
+        döndür self.source.clone()
+    son
+son
+
+/// Olay callback türü
+pub tip EventCallback = fn(SensorEvent) döndür void
+
+// ============================================================================
+// OLAY TABANLI SENSÖR
+// ============================================================================
+
+/// Olay durumu
+pub tip EventSensorState = özyinelemeli yap
+    | Idle
+    | Active
+    | Triggered
+    | Cooldown
+son
+
+/// Olay tabanlı sensör
+pub tip EventSensor = yapı yap
+    /// ID
+    id: yazı,
+    
+    /// Pin numarası
+    pin: sayı,
+    
+    /// Olay türü (hangi kenarı dinle)
+    trigger: EventType,
+    
+    /// Durum
+    state: EventSensorState,
+    
+    /// Son değer
+    last_value: mantıksal,
+    
+    /// Olay sayacı
+    event_count: sayı,
+    
+    /// Son olay zamanı
+    last_event_time: sayı,
+    
+    /// Debounce süresi (ms)
+    debounce_ms: sayı,
+    
+    /// Cooldown süresi (ms)
+    cooldown_ms: sayı,
+    
+    /// Callback
+    callback: Seçenek[EventCallback],
+    
+    /// Native handle
+    _handle: sayı,
+son
+
+impl EventSensor:
+    /// Yeni olay sensörü oluştur
+    pub fn new(id: yazı, pin: sayı) döndür EventSensor:
+        döndür EventSensor {
+            id: id,
+            pin: pin,
+            trigger: EventType::Both,
+            state: EventSensorState::Idle,
+            last_value: yanlış,
+            event_count: 0,
+            last_event_time: 0,
+            debounce_ms: 50,
+            cooldown_ms: 0,
+            callback: Hiçbiri,
+            _handle: 0,
+        }
+    son
+    
+    /// Tetikleme türü ayarla
+    pub fn on_trigger(mut self, trigger: EventType) döndür EventSensor:
+        self.trigger = trigger
+        döndür self
+    son
+    
+    /// Yükselen kenarda tetikle
+    pub fn on_rising(mut self) döndür EventSensor:
+        self.trigger = EventType::Rising
+        döndür self
+    son
+    
+    /// Düşen kenarda tetikle
+    pub fn on_falling(mut self) döndür EventSensor:
+        self.trigger = EventType::Falling
+        döndür self
+    son
+    
+    /// Her iki kenarda tetikle
+    pub fn on_both(mut self) döndür EventSensor:
+        self.trigger = EventType::Both
+        döndür self
+    son
+    
+    /// Debounce ayarla
+    pub fn with_debounce(mut self, ms: sayı) döndür EventSensor:
+        self.debounce_ms = ms
+        döndür self
+    son
+    
+    /// Cooldown ayarla
+    pub fn with_cooldown(mut self, ms: sayı) döndür EventSensor:
+        self.cooldown_ms = ms
+        döndür self
+    son
+    
+    /// Başlat
+    pub fn init(mut self) döndür Sonuç[void, yazı]:
+        // Native: gpio_setup_interrupt(self.pin, self.trigger, &self._handle)
+        self.state = EventSensorState::Active
+        döndür Tamam(())
+    son
+    
+    /// Kapat
+    pub fn close(mut self) döndür void:
+        // Native: gpio_disable_interrupt(self._handle)
+        self.state = EventSensorState::Idle
+    son
+    
+    /// Callback ayarla
+    pub fn on_event(mut self, callback: EventCallback) döndür void:
+        self.callback = Bazı(callback)
+    son
+    
+    /// Mevcut değeri oku
+    pub fn read(mut self) döndür mantıksal:
+        // Native: gpio_read(self.pin)
+        döndür self.last_value
+    son
+    
+    /// Olay bekle (blocking)
+    pub fn wait_for_event(mut self) döndür SensorEvent:
+        // Native: gpio_wait_interrupt(self._handle)
+        self.event_count = self.event_count + 1
+        döndür SensorEvent::new(self.id.clone(), self.trigger)
+    son
+    
+    /// Olay bekle (timeout ile)
+    pub fn wait_for_event_timeout(mut self, timeout_ms: sayı) döndür Seçenek[SensorEvent]:
+        // Native: gpio_wait_interrupt_timeout(self._handle, timeout_ms)
+        döndür Bazı(SensorEvent::new(self.id.clone(), self.trigger))
+    son
+son
+
+// ============================================================================
+// ÖZEL OLAY SENSÖRLERİ
+// ============================================================================
+
+/// PIR hareket sensörü
+pub tip MotionSensor = yapı yap
+    sensor: EventSensor,
+    /// Hareket algılandı mı?
+    motion_detected: mantıksal,
+    /// Son hareket zamanı
+    last_motion_time: sayı,
+son
+
+impl MotionSensor:
+    pub fn new(pin: sayı) döndür MotionSensor:
+        döndür MotionSensor {
+            sensor: EventSensor::new("pir", pin)
+                .on_rising()
+                .with_debounce(100)
+                .with_cooldown(2000),
+            motion_detected: yanlış,
+            last_motion_time: 0,
+        }
+    son
+    
+    pub fn init(mut self) döndür Sonuç[void, yazı]:
+        döndür self.sensor.init()
+    son
+    
+    /// Hareket callback'i
+    pub fn on_motion(mut self, callback: fn() döndür void) döndür void:
+        self.sensor.on_event(fn(event: SensorEvent) döndür void {
+            callback()
+        })
+    son
+    
+    /// Hareket var mı?
+    pub fn is_motion_detected(self) döndür mantıksal:
+        döndür self.motion_detected
+    son
+    
+    /// Son hareket ne zaman? (ms)
+    pub fn time_since_last_motion(self) döndür sayı:
+        döndür Timestamp::now().monotonic - self.last_motion_time
+    son
+son
+
+/// Yakınlık sensörü
+pub tip ProximitySensor = yapı yap
+    sensor: EventSensor,
+    /// Eşik mesafesi
+    threshold_cm: ondalık,
+    /// Nesne algılandı mı?
+    object_detected: mantıksal,
+son
+
+impl ProximitySensor:
+    pub fn new(pin: sayı) döndür ProximitySensor:
+        döndür ProximitySensor {
+            sensor: EventSensor::new("proximity", pin)
+                .on_both()
+                .with_debounce(20),
+            threshold_cm: 10.0,
+            object_detected: yanlış,
+        }
+    son
+    
+    pub fn with_threshold(mut self, cm: ondalık) döndür ProximitySensor:
+        self.threshold_cm = cm
+        döndür self
+    son
+    
+    pub fn init(mut self) döndür Sonuç[void, yazı]:
+        döndür self.sensor.init()
+    son
+    
+    pub fn on_detect(mut self, callback: fn(mantıksal) döndür void) döndür void:
+        self.sensor.on_event(fn(event: SensorEvent) döndür void {
+            callback(event.is_rising())
+        })
+    son
+    
+    pub fn is_detected(self) döndür mantıksal:
+        döndür self.object_detected
+    son
+son
+
+/// Dokunmatik sensör
+pub tip TouchSensor = yapı yap
+    sensor: EventSensor,
+    /// Dokunma eşiği
+    threshold: sayı,
+    /// Dokunuluyor mu?
+    is_touched: mantıksal,
+son
+
+impl TouchSensor:
+    pub fn new(pin: sayı) döndür TouchSensor:
+        döndür TouchSensor {
+            sensor: EventSensor::new("touch", pin)
+                .on_both()
+                .with_debounce(30),
+            threshold: 40,
+            is_touched: yanlış,
+        }
+    son
+    
+    pub fn with_threshold(mut self, threshold: sayı) döndür TouchSensor:
+        self.threshold = threshold
+        döndür self
+    son
+    
+    pub fn init(mut self) döndür Sonuç[void, yazı]:
+        döndür self.sensor.init()
+    son
+    
+    pub fn on_touch(mut self, callback: fn() döndür void) döndür void:
+        self.sensor.on_event(fn(event: SensorEvent) döndür void {
+            eğer event.is_rising():
+                callback()
+            son
+        })
+    son
+    
+    pub fn on_release(mut self, callback: fn() döndür void) döndür void:
+        self.sensor.on_event(fn(event: SensorEvent) döndür void {
+            eğer event.is_falling():
+                callback()
+            son
+        })
+    son
+    
+    pub fn touched(self) döndür mantıksal:
+        döndür self.is_touched
+    son
+son
+
+/// Button sensörü
+pub tip ButtonSensor = yapı yap
+    sensor: EventSensor,
+    /// Aktif düşük mü? (pull-up)
+    active_low: mantıksal,
+    /// Basılı mı?
+    is_pressed: mantıksal,
+    /// Basılma sayısı
+    press_count: sayı,
+    /// Son basılma süresi (ms)
+    last_press_duration: sayı,
+    /// Basılma başlangıç zamanı
+    press_start_time: sayı,
+son
+
+impl ButtonSensor:
+    pub fn new(pin: sayı) döndür ButtonSensor:
+        döndür ButtonSensor {
+            sensor: EventSensor::new("button", pin)
+                .on_both()
+                .with_debounce(50),
+            active_low: doğru,
+            is_pressed: yanlış,
+            press_count: 0,
+            last_press_duration: 0,
+            press_start_time: 0,
+        }
+    son
+    
+    /// Aktif yüksek (pull-down)
+    pub fn active_high(mut self) döndür ButtonSensor:
+        self.active_low = yanlış
+        döndür self
+    son
+    
+    /// Aktif düşük (pull-up)
+    pub fn active_low(mut self) döndür ButtonSensor:
+        self.active_low = doğru
+        döndür self
+    son
+    
+    pub fn init(mut self) döndür Sonuç[void, yazı]:
+        döndür self.sensor.init()
+    son
+    
+    /// Basıldığında
+    pub fn on_press(mut self, callback: fn() döndür void) döndür void:
+        self.sensor.on_event(fn(event: SensorEvent) döndür void {
+            değişken is_press = eğer self.active_low:
+                event.is_falling()
+            yoksa:
+                event.is_rising()
+            son
+            
+            eğer is_press:
+                callback()
+            son
+        })
+    son
+    
+    /// Bırakıldığında
+    pub fn on_release(mut self, callback: fn() döndür void) döndür void:
+        self.sensor.on_event(fn(event: SensorEvent) döndür void {
+            değişken is_release = eğer self.active_low:
+                event.is_rising()
+            yoksa:
+                event.is_falling()
+            son
+            
+            eğer is_release:
+                callback()
+            son
+        })
+    son
+    
+    /// Uzun basma (duration_ms sonra)
+    pub fn on_long_press(mut self, duration_ms: sayı, callback: fn() döndür void) döndür void:
+        // Long press detection logic
+    son
+    
+    /// Çift tıklama
+    pub fn on_double_click(mut self, max_interval_ms: sayı, callback: fn() döndür void) döndür void:
+        // Double click detection logic
+    son
+    
+    pub fn is_pressed(self) döndür mantıksal:
+        döndür self.is_pressed
+    son
+    
+    pub fn get_press_count(self) döndür sayı:
+        döndür self.press_count
+    son
+son
+
+/// Hall effect sensörü
+pub tip HallSensor = yapı yap
+    sensor: EventSensor,
+    /// Manyetik alan algılandı mı?
+    magnet_detected: mantıksal,
+    /// Sayaç (encoder için)
+    count: sayı,
+son
+
+impl HallSensor:
+    pub fn new(pin: sayı) döndür HallSensor:
+        döndür HallSensor {
+            sensor: EventSensor::new("hall", pin)
+                .on_both()
+                .with_debounce(5),
+            magnet_detected: yanlış,
+            count: 0,
+        }
+    son
+    
+    pub fn init(mut self) döndür Sonuç[void, yazı]:
+        döndür self.sensor.init()
+    son
+    
+    /// Mıknatıs algılandığında
+    pub fn on_magnet(mut self, callback: fn(mantıksal) döndür void) döndür void:
+        self.sensor.on_event(fn(event: SensorEvent) döndür void {
+            callback(event.is_rising())
+        })
+    son
+    
+    /// Her pulse'da (encoder için)
+    pub fn on_pulse(mut self, callback: fn(sayı) döndür void) döndür void:
+        self.sensor.on_event(fn(event: SensorEvent) döndür void {
+            eğer event.is_rising():
+                self.count = self.count + 1
+                callback(self.count)
+            son
+        })
+    son
+    
+    /// Sayacı sıfırla
+    pub fn reset_count(mut self) döndür void:
+        self.count = 0
+    son
+    
+    /// Sayacı al
+    pub fn get_count(self) döndür sayı:
+        döndür self.count
+    son
+    
+    /// RPM hesapla (pulses_per_rev ile)
+    pub fn calculate_rpm(self, pulses_per_rev: sayı, time_interval_ms: sayı) döndür ondalık:
+        // RPM = (count / pulses_per_rev) * (60000 / time_interval_ms)
+        döndür (self.count / pulses_per_rev) * (60000.0 / time_interval_ms)
+    son
+son
+
+/// Switch sensörü (kapı, pencere vb.)
+pub tip SwitchSensor = yapı yap
+    sensor: EventSensor,
+    /// Normally Open (NO) veya Normally Closed (NC)
+    normally_open: mantıksal,
+    /// Açık mı?
+    is_open: mantıksal,
+son
+
+impl SwitchSensor:
+    pub fn new(pin: sayı) döndür SwitchSensor:
+        döndür SwitchSensor {
+            sensor: EventSensor::new("switch", pin)
+                .on_both()
+                .with_debounce(100),
+            normally_open: doğru,
+            is_open: doğru,
+        }
+    son
+    
+    /// Normally Closed olarak ayarla
+    pub fn normally_closed(mut self) döndür SwitchSensor:
+        self.normally_open = yanlış
+        döndür self
+    son
+    
+    pub fn init(mut self) döndür Sonuç[void, yazı]:
+        döndür self.sensor.init()
+    son
+    
+    /// Açıldığında
+    pub fn on_open(mut self, callback: fn() döndür void) döndür void:
+        self.sensor.on_event(fn(event: SensorEvent) döndür void {
+            // Logic based on normally_open
+            callback()
+        })
+    son
+    
+    /// Kapandığında
+    pub fn on_close(mut self, callback: fn() döndür void) döndür void:
+        self.sensor.on_event(fn(event: SensorEvent) döndür void {
+            // Logic based on normally_open
+            callback()
+        })
+    son
+    
+    pub fn is_open(self) döndür mantıksal:
+        döndür self.is_open
+    son
+    
+    pub fn is_closed(self) döndür mantıksal:
+        döndür !self.is_open
+    son
+son
+
+// ============================================================================
+// CONVENIENCE FUNCTIONS
+// ============================================================================
+
+/// Olay sensörü oluştur
+pub fn event_sensor(id: yazı, pin: sayı) döndür EventSensor:
+    döndür EventSensor::new(id, pin)
+son
+
+/// Hareket sensörü
+pub fn motion(pin: sayı) döndür MotionSensor:
+    döndür MotionSensor::new(pin)
+son
+
+/// Dokunmatik sensör
+pub fn touch(pin: sayı) döndür TouchSensor:
+    döndür TouchSensor::new(pin)
+son
+
+/// Button
+pub fn button(pin: sayı) döndür ButtonSensor:
+    döndür ButtonSensor::new(pin)
+son
+
+/// Hall effect
+pub fn hall(pin: sayı) döndür HallSensor:
+    döndür HallSensor::new(pin)
+son
+
+/// Switch (kapı/pencere)
+pub fn door(pin: sayı) döndür SwitchSensor:
+    döndür SwitchSensor::new(pin)
+son
+
+/// Global olay dinleyici
+pub fn on_event(sensor_id: yazı, callback: EventCallback) döndür void:
+    // Global event registry'ye ekle
+son

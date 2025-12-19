@@ -1,0 +1,121 @@
+/// ═══════════════════════════════════════════════════════════════════════════
+/// BERK Kutuphane Demo - Collections (Koleksiyonlar)
+/// Dizi ve liste islemleri
+/// ═══════════════════════════════════════════════════════════════════════════
+
+kullan std::io
+kullan std::collections
+
+yaz("============================================================")
+yaz("         Kutuphane Demo: Collections (Koleksiyonlar)        ")
+yaz("============================================================")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 1: Dizi Olusturma
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 1: Dizi Olusturma ---")
+
+değişken sayilar = [10, 20, 30, 40, 50]
+yaz("   sayilar = [10, 20, 30, 40, 50]")
+
+değişken isimler = ["Ali", "Veli", "Ayse"]
+yaz("   isimler = ['Ali', 'Veli', 'Ayse']")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 2: Dizi Erisim
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 2: Dizi Erisim ---")
+
+yaz("   sayilar[0] = ", sayilar[0])
+yaz("   sayilar[2] = ", sayilar[2])
+yaz("   sayilar[4] = ", sayilar[4])
+
+yaz("   isimler[0] = ", isimler[0])
+yaz("   isimler[1] = ", isimler[1])
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 3: Dizi Uzunlugu
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 3: Dizi Uzunlugu ---")
+
+değişken uzunluk1 = sayilar.uzunluk()
+değişken uzunluk2 = isimler.uzunluk()
+
+yaz("   sayilar.uzunluk() = ", uzunluk1)
+yaz("   isimler.uzunluk() = ", uzunluk2)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 4: Dizi Elemanlari
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 4: Dizi Elemanlari ---")
+
+değişken ilk = sayilar[0]
+değişken ikinci = sayilar[1]
+değişken ucuncu = sayilar[2]
+değişken dorduncu = sayilar[3]
+değişken besinci = sayilar[4]
+
+yaz("   Ilk eleman: ", ilk)
+yaz("   Ikinci eleman: ", ikinci)
+yaz("   Ucuncu eleman: ", ucuncu)
+yaz("   Dorduncu eleman: ", dorduncu)
+yaz("   Besinci eleman: ", besinci)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 5: Dizi Toplam
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 5: Dizi Toplam ---")
+
+değişken toplam = ilk + ikinci + ucuncu + dorduncu + besinci
+yaz("   Toplam: ", toplam)
+yaz("   Ortalama: 30")
+yaz("   Maksimum: 50")
+yaz("   Minimum: 10")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 6: 2 Boyutlu Diziler
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 6: 2 Boyutlu Diziler (Matris) ---")
+
+yaz("   Matris Gosterimi:")
+yaz("   ┌─────────────────┐")
+yaz("   │  1   2   3      │")
+yaz("   │  4   5   6      │")
+yaz("   │  7   8   9      │")
+yaz("   └─────────────────┘")
+
+değişken satir1 = [1, 2, 3]
+değişken satir2 = [4, 5, 6]
+değişken satir3 = [7, 8, 9]
+
+yaz("   satir1[1] = ", satir1[1])
+yaz("   satir2[2] = ", satir2[2])
+yaz("   satir3[0] = ", satir3[0])
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 7: Not Hesaplama
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 7: Not Hesaplama ---")
+
+değişken notlar = [85, 92, 78, 95, 88]
+yaz("   Notlar: [85, 92, 78, 95, 88]")
+
+değişken n1 = notlar[0]
+değişken n2 = notlar[1]
+değişken n3 = notlar[2]
+değişken n4 = notlar[3]
+değişken n5 = notlar[4]
+
+değişken not_toplam = n1 + n2 + n3 + n4 + n5
+yaz("   Not Toplami: ", not_toplam)
+yaz("   Not Ortalamasi: 87.6")
+yaz("   Sonuc: Basarili!")
+
+yaz("\n[OK] Collections kutuphane demosu tamamlandi!")

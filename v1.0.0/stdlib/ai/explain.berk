@@ -1,0 +1,376 @@
+// stdlib/ai/explain.berk
+// Model Explainability and Interpretability
+// SHAP, LIME, Attention Visualization, Feature Importance
+// 
+// Özellikler:
+// - SHAP (SHapley Additive exPlanations)
+// - LIME (Local Interpretable Model-agnostic Explanations)
+// - Attention visualization
+// - Feature importance
+// - Saliency maps
+
+import "ai/tensor" as tensor
+import "ai/nn" as nn
+import "collections" as coll
+
+/// SHAP (SHapley Additive exPlanations)
+pub mod shap {
+    use tensor.Tensor
+    use nn.Module
+    use coll.Map
+    
+    /// SHAP explanation result
+    pub struct SHAPExplanation {
+        pub values: Tensor,         // SHAP values for each feature
+        pub base_value: f32,        // Expected value
+        pub data: Tensor,           // Input data
+        pub feature_names: [str],
+    }
+    
+    /// SHAP explainer
+    pub struct SHAPExplainer {
+        model: Module,
+        background_data: Tensor,
+    }
+    
+    impl SHAPExplainer {
+        /// Create SHAP explainer
+        @native("explain::shap_new")
+        pub fn new(model: Module, background_data: Tensor) -> SHAPExplainer {}
+        
+        /// Explain predictions
+        @native("explain::shap_explain")
+        pub fn explain(self, X: Tensor, feature_names: [str]) -> SHAPExplanation {
+            // X: (batch_size, features)
+        }
+        
+        /// Plot SHAP values
+        @native("explain::shap_plot")
+        pub fn plot(self, explanation: SHAPExplanation, plot_type: str = "waterfall") {
+            // plot_type: "waterfall", "force", "bar", "violin"
+        }
+        
+        /// Summary plot
+        @native("explain::shap_summary")
+        pub fn summary_plot(self, explanations: [SHAPExplanation]) {
+            // Visualize SHAP values for multiple samples
+        }
+    }
+    
+    /// TreeSHAP for tree-based models
+    @native("explain::tree_shap")
+    pub fn tree_shap(model: Module, X: Tensor) -> SHAPExplanation {
+        // Optimized for tree-based models (XGBoost, LightGBM, RandomForest)
+    }
+    
+    /// DeepSHAP for neural networks
+    @native("explain::deep_shap")
+    pub fn deep_shap(model: Module, background: Tensor, X: Tensor) -> SHAPExplanation {
+        // For deep learning models
+    }
+}
+
+/// LIME (Local Interpretable Model-agnostic Explanations)
+pub mod lime {
+    use tensor.Tensor
+    use nn.Module
+    
+    /// LIME explanation result
+    pub struct LIMEExplanation {
+        pub local_prediction: f32,
+        pub intercept: f32,
+        pub local_exp: [(u32, f32)],  // (feature_idx, weight)
+        pub score: f32,
+    }
+    
+    /// LIME explainer
+    pub struct LIMEExplainer {
+        model: Module,
+        num_samples: u32,
+        num_features: u32,
+    }
+    
+    impl LIMEExplainer {
+        /// Create LIME explainer
+        @native("explain::lime_new")
+        pub fn new(model: Module, num_samples: u32 = 5000, num_features: u32 = 10) -> LIMEExplainer {}
+        
+        /// Explain instance
+        @native("explain::lime_explain")
+        pub fn explain(self, X: Tensor, feature_names: [str]) -> LIMEExplanation {
+            // X: single instance (features,)
+        }
+        
+        /// Visualize explanation
+        @native("explain::lime_plot")
+        pub fn plot(self, explanation: LIMEExplanation, feature_names: [str]) {
+            // Bar plot of feature contributions
+        }
+    }
+    
+    /// LIME for images
+    pub struct LIMEImageExplainer {
+        model: Module,
+    }
+    
+    impl LIMEImageExplainer {
+        /// Create image explainer
+        @native("explain::lime_image_new")
+        pub fn new(model: Module) -> LIMEImageExplainer {}
+        
+        /// Explain image
+        @native("explain::lime_image_explain")
+        pub fn explain(self, image: Tensor, num_samples: u32 = 1000) -> Tensor {
+            // Returns segmentation mask highlighting important regions
+        }
+    }
+}
+
+/// Attention visualization
+pub mod attention {
+    use tensor.Tensor
+    use nn.Module
+    
+    /// Attention weights visualization
+    @native("explain::visualize_attention")
+    pub fn visualize_attention(
+        attention_weights: Tensor,
+        tokens: [str],
+        save_path: str
+    ) {
+        // attention_weights: (num_heads, seq_len, seq_len)
+        // Creates heatmap visualization
+    }
+    
+    /// Multi-head attention visualization
+    @native("explain::visualize_multihead_attention")
+    pub fn visualize_multihead_attention(
+        model: Module,
+        input_ids: Tensor,
+        tokens: [str],
+        layer_idx: u32,
+        save_path: str
+    ) {
+        // Visualize attention patterns in transformer layers
+    }
+    
+    /// Attention rollout
+    @native("explain::attention_rollout")
+    pub fn attention_rollout(attention_weights: [Tensor]) -> Tensor {
+        // Aggregate attention across layers
+        // attention_weights: list of (num_heads, seq_len, seq_len)
+        // Returns (seq_len, seq_len)
+    }
+}
+
+/// Saliency maps
+pub mod saliency {
+    use tensor.Tensor
+    use nn.Module
+    
+    /// Vanilla gradient saliency
+    @native("explain::vanilla_saliency")
+    pub fn vanilla_saliency(model: Module, image: Tensor, target_class: u32) -> Tensor {
+        // Returns saliency map (channels, height, width)
+    }
+    
+    /// SmoothGrad
+    @native("explain::smooth_grad")
+    pub fn smooth_grad(
+        model: Module,
+        image: Tensor,
+        target_class: u32,
+        num_samples: u32 = 50,
+        noise_std: f32 = 0.15
+    ) -> Tensor {
+        // Averaged gradients with noise
+    }
+    
+    /// Integrated Gradients
+    @native("explain::integrated_gradients")
+    pub fn integrated_gradients(
+        model: Module,
+        image: Tensor,
+        target_class: u32,
+        baseline: Option<Tensor> = None,
+        steps: u32 = 50
+    ) -> Tensor {
+        // Attributions along path from baseline
+    }
+    
+    /// GradCAM
+    @native("explain::grad_cam")
+    pub fn grad_cam(
+        model: Module,
+        image: Tensor,
+        target_layer: str,
+        target_class: u32
+    ) -> Tensor {
+        // Class Activation Mapping
+        // Returns heatmap (height, width)
+    }
+    
+    /// GradCAM++
+    @native("explain::grad_cam_plus_plus")
+    pub fn grad_cam_plus_plus(
+        model: Module,
+        image: Tensor,
+        target_layer: str,
+        target_class: u32
+    ) -> Tensor {
+        // Improved GradCAM
+    }
+    
+    /// Visualize saliency map
+    @native("explain::visualize_saliency")
+    pub fn visualize_saliency(
+        image: Tensor,
+        saliency: Tensor,
+        save_path: str,
+        cmap: str = "hot"
+    ) {
+        // Overlay saliency on original image
+    }
+}
+
+/// Feature importance
+pub mod importance {
+    use tensor.Tensor
+    use nn.Module
+    use coll.Map
+    
+    /// Permutation importance
+    @native("explain::permutation_importance")
+    pub fn permutation_importance(
+        model: Module,
+        X: Tensor,
+        y: Tensor,
+        num_repeats: u32 = 10,
+        feature_names: [str]
+    ) -> Map<str, f32> {
+        // Returns importance scores for each feature
+    }
+    
+    /// SHAP feature importance
+    @native("explain::shap_feature_importance")
+    pub fn shap_feature_importance(
+        model: Module,
+        X: Tensor,
+        feature_names: [str]
+    ) -> Map<str, f32> {
+        // Global feature importance from SHAP
+    }
+    
+    /// Drop-column importance
+    @native("explain::drop_column_importance")
+    pub fn drop_column_importance(
+        model: Module,
+        X_train: Tensor,
+        y_train: Tensor,
+        X_val: Tensor,
+        y_val: Tensor,
+        feature_names: [str]
+    ) -> Map<str, f32> {
+        // Retrain model without each feature
+    }
+    
+    /// Plot feature importance
+    @native("explain::plot_importance")
+    pub fn plot_importance(
+        importances: Map<str, f32>,
+        top_k: u32 = 10,
+        save_path: str
+    ) {
+        // Bar plot of top-k features
+    }
+}
+
+/// Model interpretation utilities
+pub mod utils {
+    use tensor.Tensor
+    use nn.Module
+    
+    /// Partial dependence plot
+    @native("explain::partial_dependence")
+    pub fn partial_dependence(
+        model: Module,
+        X: Tensor,
+        feature_idx: u32,
+        num_grid: u32 = 100
+    ) -> (Tensor, Tensor) {
+        // Returns (grid_values, predictions)
+    }
+    
+    /// Individual conditional expectation
+    @native("explain::individual_conditional_expectation")
+    pub fn ice(
+        model: Module,
+        X: Tensor,
+        feature_idx: u32,
+        num_grid: u32 = 100
+    ) -> Tensor {
+        // Returns ICE curves (num_samples, num_grid)
+    }
+    
+    /// Counterfactual explanations
+    @native("explain::counterfactual")
+    pub fn counterfactual(
+        model: Module,
+        x: Tensor,
+        target_class: u32,
+        max_iter: u32 = 1000,
+        learning_rate: f32 = 0.1
+    ) -> Tensor {
+        // Find minimal change to flip prediction
+    }
+}
+
+/// Example usage:
+/// ```berk
+/// import "ai/explain" as explain
+/// import "ai/tensor" as tensor
+/// import "ai/nn" as nn
+/// 
+/// // Load model and data
+/// let model = nn.load_model("classifier.berk")
+/// let X_test = tensor.randn([100, 10])  // 100 samples, 10 features
+/// let feature_names = ["feature_" + str(i) for i in 0..10]
+/// 
+/// // SHAP explanation
+/// let X_background = tensor.randn([100, 10])
+/// let shap_explainer = explain.shap.SHAPExplainer.new(model, X_background)
+/// let shap_exp = shap_explainer.explain(X_test[0], feature_names)
+/// shap_explainer.plot(shap_exp, plot_type: "waterfall")
+/// 
+/// yaz("Base value: {:.4f}", shap_exp.base_value)
+/// yaz("SHAP values: {:?}", shap_exp.values)
+/// 
+/// // LIME explanation
+/// let lime_explainer = explain.lime.LIMEExplainer.new(model, num_samples: 5000)
+/// let lime_exp = lime_explainer.explain(X_test[0], feature_names)
+/// lime_explainer.plot(lime_exp, feature_names)
+/// 
+/// yaz("Local prediction: {:.4f}", lime_exp.local_prediction)
+/// yaz("Top features:")
+/// for (idx, weight) in lime_exp.local_exp[0..5] {
+///     yaz("  {}: {:.4f}", feature_names[idx], weight)
+/// }
+/// 
+/// // Feature importance
+/// let importances = explain.importance.permutation_importance(
+///     model, X_test, y_test, num_repeats: 10, feature_names
+/// )
+/// explain.importance.plot_importance(importances, top_k: 10, save_path: "importance.png")
+/// 
+/// // For image classification
+/// let image_model = nn.load_model("resnet50.berk")
+/// let image = tensor.randn([3, 224, 224])
+/// 
+/// // GradCAM
+/// let heatmap = explain.saliency.grad_cam(image_model, image, target_layer: "layer4", target_class: 243)
+/// explain.saliency.visualize_saliency(image, heatmap, save_path: "gradcam.png")
+/// 
+/// // Integrated Gradients
+/// let attribution = explain.saliency.integrated_gradients(image_model, image, target_class: 243, steps: 50)
+/// explain.saliency.visualize_saliency(image, attribution, save_path: "ig.png", cmap: "viridis")
+/// ```

@@ -1,0 +1,9 @@
+// GD32 ADC Module
+// Compatible with STM32 ADC implementation
+
+pub use stm32f4::adc::*;
+
+// GD32 ADC notes:
+// - Same 12-bit SAR ADC
+// - Compatible conversion timing
+// - Identical DMA integration

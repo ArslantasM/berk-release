@@ -1,0 +1,195 @@
+// =============================================================================
+// BERK Hardware Bridge - Modbus RTU Demo
+// Endüstriyel PLC ve sensör iletişimi
+// =============================================================================
+
+kullan std::modbus
+
+yazdır("=== BERK Modbus RTU Demo ===\n")
+
+// -----------------------------------------------------------------------------
+// Modbus Temelleri
+// -----------------------------------------------------------------------------
+
+yazdır("🏭 Modbus RTU Protokolü")
+yazdır("-" * 40)
+
+yazdır("""
+Modbus, endüstriyel otomasyon için standart protokoldür.
+PLC, sensör, motor sürücü gibi cihazlarla haberleşmeyi sağlar.
+
+Veri Tipleri:
+  • Coil         - Dijital çıkış (1 bit, R/W)
+  • Discrete     - Dijital giriş (1 bit, R)
+  • Holding Reg  - 16-bit register (R/W)
+  • Input Reg    - 16-bit register (R)
+""")
+
+// -----------------------------------------------------------------------------
+// Bağlantı Örneği
+// -----------------------------------------------------------------------------
+
+yazdır("\n🔌 Bağlantı Kurma:")
+yazdır("-" * 40)
+
+yazdır("""
+kullan std::modbus
+
+// Basit bağlantı (RTU modu, varsayılan ayarlar)
+olsun plc = modbus::connect("COM4", 9600, 1)
+//                          ^port   ^baud ^slave_id
+
+// Gelişmiş bağlantı
+olsun plc = modbus::connect_advanced(
+    "COM4",     // Port
+    1,          // Slave ID
+    "rtu",      // Mod: "rtu" veya "ascii"
+    9600,       // Baud rate
+    8,          // Data bits
+    "none",     // Parity: "none", "even", "odd"
+    1           // Stop bits
+)
+
+// Bağlantı kontrolü
+eğer modbus::is_connected(plc) ise
+    yazdır("PLC bağlı!")
+son
+""")
+
+// -----------------------------------------------------------------------------
+// Coil Okuma/Yazma (Dijital I/O)
+// -----------------------------------------------------------------------------
+
+yazdır("\n💡 Coil (Dijital Çıkış) İşlemleri:")
+yazdır("-" * 40)
+
+yazdır("""
+// Tek coil oku (adres 0)
+olsun durum = modbus::read_coils(plc, 0, 1)
+yazdır("Coil 0: {}", durum[0])
+
+// 8 coil oku
+olsun durumlar = modbus::read_coils(plc, 0, 8)
+yazdır("Coil'ler: {:?}", durumlar)
+
+// Tek coil yaz
+modbus::write_coil(plc, 0, doğru)   // Aç
+modbus::write_coil(plc, 0, yanlış)  // Kapat
+
+// Çoklu coil yaz
+modbus::write_coils(plc, 0, [doğru, yanlış, doğru, doğru])
+""")
+
+// -----------------------------------------------------------------------------
+// Register Okuma/Yazma
+// -----------------------------------------------------------------------------
+
+yazdır("\n📊 Register İşlemleri:")
+yazdır("-" * 40)
+
+yazdır("""
+// Holding Register oku (adres 100, 4 adet)
+olsun degerler = modbus::read_holding_registers(plc, 100, 4)
+yazdır("Değerler: {:?}", degerler)
+
+// Input Register oku (salt okunur)
+olsun sensorler = modbus::read_input_registers(plc, 0, 8)
+
+// Tek register yaz
+modbus::write_register(plc, 100, 1000)
+
+// Çoklu register yaz
+modbus::write_registers(plc, 100, [1000, 2000, 3000, 4000])
+""")
+
+// -----------------------------------------------------------------------------
+// Özel Veri Tipleri
+// -----------------------------------------------------------------------------
+
+yazdır("\n🔢 Özel Veri Tipleri:")
+yazdır("-" * 40)
+
+yazdır("""
+// 16-bit signed integer
+olsun sicaklik = modbus::read_int16(plc, 100)
+yazdır("Sıcaklık: {}°C", sicaklik / 10.0)
+
+// 32-bit signed integer (2 register)
+olsun sayac = modbus::read_int32(plc, 200)
+yazdır("Sayaç: {}", sayac)
+
+// IEEE 754 Float (2 register)
+olsun basinc = modbus::read_float(plc, 300)
+yazdır("Basınç: {:.2f} bar", basinc)
+
+// Float yaz
+modbus::write_float(plc, 300, 25.5)
+
+// 32-bit integer yaz
+modbus::write_int32(plc, 200, 123456)
+""")
+
+// -----------------------------------------------------------------------------
+// Cihaz Tarama
+// -----------------------------------------------------------------------------
+
+yazdır("\n🔍 Modbus Ağı Tarama:")
+yazdır("-" * 40)
+
+yazdır("""
+// Slave ID 1-10 arasını tara
+olsun cihazlar = modbus::scan(plc, 1, 10)
+
+her cihaz için cihazlar yap
+    yazdır("Cihaz bulundu - ID: {}", cihaz)
+son
+
+// Aktif slave ID değiştir
+modbus::set_slave_id(plc, 2)
+""")
+
+// -----------------------------------------------------------------------------
+// Sıcaklık Okuma Örneği
+// -----------------------------------------------------------------------------
+
+yazdır("\n🌡️  Tam Örnek: Sıcaklık Monitörü")
+yazdır("-" * 40)
+
+yazdır("""
+kullan std::modbus
+kullan std::time
+
+// Sensöre bağlan
+olsun sensor = modbus::connect("COM4", 9600, 1)
+
+// Timeout ayarla
+modbus::set_timeout(sensor, 1000)
+
+yazdır("Sıcaklık izleme başladı...")
+yazdır("Çıkmak için Ctrl+C")
+
+döngü yap
+    dene yap
+        // Register 0'dan sıcaklık oku (x10 format)
+        olsun raw = modbus::read_holding_registers(sensor, 0, 1)
+        olsun sicaklik = raw[0] / 10.0
+        
+        // Zaman damgası
+        olsun simdi = time::now()
+        yazdır("[{}] Sıcaklık: {:.1f}°C", simdi, sicaklik)
+        
+        // Alarm kontrolü
+        eğer sicaklik > 30.0 ise
+            yazdır("⚠️  UYARI: Yüksek sıcaklık!")
+        son
+    yakala hata yap
+        yazdır("❌ Okuma hatası: {}", hata)
+    son
+    
+    bekle(1000)
+son
+
+modbus::disconnect(sensor)
+""")
+
+yazdır("\n✅ Modbus demo tamamlandı!")

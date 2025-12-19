@@ -1,0 +1,225 @@
+// stdlib/embedded/platforms/riscv_fe310/uart.berk
+// SiFive FE310 UART Implementation
+
+kullan "embedded/bal/uart" olarak UART_BAL
+
+// FE310 has 2 UART peripherals
+açık enum UartPort yap
+    UART0 = 0,  // Console (connected to USB on HiFive1)
+    UART1 = 1,  // General purpose
+son
+
+// UART base addresses
+sabit UART0_BASE: u32 = 0x10013000
+sabit UART1_BASE: u32 = 0x10023000
+
+// UART register offsets
+sabit UART_TXDATA: u32 = 0x00    // Transmit data
+sabit UART_RXDATA: u32 = 0x04    // Receive data
+sabit UART_TXCTRL: u32 = 0x08    // Transmit control
+sabit UART_RXCTRL: u32 = 0x0C    // Receive control
+sabit UART_IE: u32 = 0x10        // Interrupt enable
+sabit UART_IP: u32 = 0x14        // Interrupt pending
+sabit UART_DIV: u32 = 0x18       // Baud rate divisor
+
+// TXDATA/RXDATA bits
+sabit UART_DATA_MASK: u32 = 0xFF
+sabit UART_TXDATA_FULL: u32 = 0x80000000
+sabit UART_RXDATA_EMPTY: u32 = 0x80000000
+
+// TXCTRL/RXCTRL bits
+sabit UART_TXEN: u32 = 0x1       // Transmit enable
+sabit UART_RXEN: u32 = 0x1       // Receive enable
+sabit UART_TXCNT_MASK: u32 = 0x70000  // TX watermark
+sabit UART_RXCNT_MASK: u32 = 0x70000  // RX watermark
+
+// Common baud rates
+açık sabit BAUD_9600: u32 = 9600
+açık sabit BAUD_19200: u32 = 19200
+açık sabit BAUD_38400: u32 = 38400
+açık sabit BAUD_57600: u32 = 57600
+açık sabit BAUD_115200: u32 = 115200
+açık sabit BAUD_230400: u32 = 230400
+açık sabit BAUD_460800: u32 = 460800
+açık sabit BAUD_921600: u32 = 921600
+
+// Default clock (can be configured)
+sabit UART_CLOCK_HZ: u32 = 16000000  // 16 MHz
+
+harici "C" yap
+    fonksiyon volatile_read_u32(addr: *sabit u32) -> u32
+    fonksiyon volatile_write_u32(addr: *değiştir u32, value: u32)
+son
+
+fonksiyon uart_base_address(port: UartPort) -> u32 yap
+    seç port yap
+        durum UartPort::UART0 => dön UART0_BASE,
+        durum UartPort::UART1 => dön UART1_BASE,
+    son
+son
+
+fonksiyon uart_read_reg(port: UartPort, offset: u32) -> u32 yap
+    değişken addr = (uart_base_address(port) + offset) olarak *sabit u32
+    dön volatile_read_u32(addr)
+son
+
+fonksiyon uart_write_reg(port: UartPort, offset: u32, value: u32) yap
+    değişken addr = (uart_base_address(port) + offset) olarak *değiştir u32
+    volatile_write_u32(addr, value)
+son
+
+yapı FE310_UART_HAL yap
+    port: UartPort,
+    baud_rate: u32,
+    initialized: bool,
+son
+
+uygula FE310_UART_HAL yap
+    açık fonksiyon yeni(port: UartPort, baud_rate: u32) -> FE310_UART_HAL yap
+        // Calculate baud rate divisor
+        // divisor = (clock_freq / baud_rate) - 1
+        değişken divisor = (UART_CLOCK_HZ / baud_rate) - 1
+        
+        // Set baud rate
+        uart_write_reg(port, UART_DIV, divisor)
+        
+        // Enable transmit and receive
+        uart_write_reg(port, UART_TXCTRL, UART_TXEN)
+        uart_write_reg(port, UART_RXCTRL, UART_RXEN)
+        
+        dön FE310_UART_HAL yap
+            port: port,
+            baud_rate: baud_rate,
+            initialized: doğru,
+        son
+    son
+    
+    açık fonksiyon write_byte(&kendim, byte: u8) yap
+        // Wait for TX FIFO not full
+        döngü yap
+            değişken txdata = uart_read_reg(kendim.port, UART_TXDATA)
+            eğer (txdata & UART_TXDATA_FULL) == 0 yap
+                kır
+            son
+        son
+        
+        // Write byte
+        uart_write_reg(kendim.port, UART_TXDATA, byte olarak u32)
+    son
+    
+    açık fonksiyon write(&kendim, data: &[u8]) yap
+        için byte içinde data yap
+            kendim.write_byte(*byte)
+        son
+    son
+    
+    açık fonksiyon write_str(&kendim, s: &str) yap
+        değişken bytes = s.as_bytes()
+        kendim.write(bytes)
+    son
+    
+    açık fonksiyon read_byte(&kendim) -> Seçenek<u8> yap
+        değişken rxdata = uart_read_reg(kendim.port, UART_RXDATA)
+        
+        eğer (rxdata & UART_RXDATA_EMPTY) == 0 yap
+            dön Bazı((rxdata & UART_DATA_MASK) olarak u8)
+        son değilse yap
+            dön Hiçbiri
+        son
+    son
+    
+    açık fonksiyon available(&kendim) -> bool yap
+        değişken rxdata = uart_read_reg(kendim.port, UART_RXDATA)
+        dön (rxdata & UART_RXDATA_EMPTY) == 0
+    son
+    
+    açık fonksiyon println(&kendim, s: &str) yap
+        kendim.write_str(s)
+        kendim.write_str("\r\n")
+    son
+    
+    açık fonksiyon print(&kendim, s: &str) yap
+        kendim.write_str(s)
+    son
+    
+    // Read with timeout
+    açık fonksiyon read_byte_timeout(&kendim, timeout_ms: u32) -> Seçenek<u8> yap
+        kullan crate::time::*
+        
+        değişken timeout = Timeout::yeni(timeout_ms)
+        
+        döngü yap
+            eğer let Bazı(byte) = kendim.read_byte() yap
+                dön Bazı(byte)
+            son
+            
+            eğer timeout.expired() yap
+                dön Hiçbiri
+            son
+        son
+    son
+    
+    // Read line (until \n or buffer full)
+    açık fonksiyon read_line(&kendim, buffer: &değiştir [u8], max_len: usize) -> usize yap
+        değişken mut count: usize = 0
+        
+        döngü yap
+            eğer count >= max_len yap
+                kır
+            son
+            
+            eğer let Bazı(byte) = kendim.read_byte() yap
+                buffer[count] = byte
+                count += 1
+                
+                // Stop at newline
+                eğer byte == b'\n' || byte == b'\r' yap
+                    kır
+                son
+            son
+        son
+        
+        dön count
+    son
+    
+    // Flush TX buffer (wait for transmission complete)
+    açık fonksiyon flush(&kendim) yap
+        // FE310 UART doesn't have explicit flush, just wait a bit
+        kullan crate::time::delay_us
+        delay_us(100)
+    son
+son
+
+uygula UART_BAL::UartHAL için FE310_UART_HAL yap
+    fonksiyon write_byte(&kendim, byte: u8) yap
+        kendim.write_byte(byte)
+    son
+    
+    fonksiyon read_byte(&kendim) -> Seçenek<u8> yap
+        dön kendim.read_byte()
+    son
+    
+    fonksiyon available(&kendim) -> bool yap
+        dön kendim.available()
+    son
+son
+
+açık tip UART_HAL = FE310_UART_HAL
+
+// Default console UART (UART0 at 115200)
+açık fonksiyon init_console() -> UART_HAL yap
+    dön UART_HAL::yeni(UartPort::UART0, BAUD_115200)
+son
+
+// Printf-style formatting helper
+açık fonksiyon uart_printf(uart: &UART_HAL, format: &str, args: &[&str]) yap
+    // Simple string interpolation
+    değişken mut result = format.to_string()
+    
+    için (i, arg) içinde args.iter().enumerate() yap
+        değişken placeholder = format!("{{{}}}", i)
+        result = result.replace(&placeholder, arg)
+    son
+    
+    uart.write_str(&result)
+son

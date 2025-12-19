@@ -1,0 +1,643 @@
+// ============================================================================
+// BERK SENSOR API - Sensör Grubu ve Data Fusion
+// ============================================================================
+// Birden fazla sensörü grupla, senkronize oku, füzyon yap
+// Edge analytics için hazırlık
+// ============================================================================
+
+modül sensor::fusion
+
+import sensor::measurement::{Measurement, Vector3Measurement, Unit, Timestamp, Confidence}
+import sensor::component::{Sensor, SensorError}
+import sensor::filter::{KalmanFilter, ComplementaryFilter, FilterChain}
+
+// ============================================================================
+// SENSÖR GRUBU
+// ============================================================================
+
+/// Sensör grubu
+pub tip SensorGroup = yapı yap
+    /// Grup adı
+    name: yazı,
+    
+    /// Sensör ID'leri
+    sensor_ids: Liste[yazı],
+    
+    /// Sensör referansları
+    sensors: Harita[yazı, Sensor],
+    
+    /// Son okumalar
+    readings: Harita[yazı, Measurement],
+    
+    /// Son okuma zamanı
+    last_read_time: sayı,
+    
+    /// Okuma sayacı
+    read_count: sayı,
+son
+
+impl SensorGroup:
+    /// Yeni grup oluştur
+    pub fn new(name: yazı) döndür SensorGroup:
+        döndür SensorGroup {
+            name: name,
+            sensor_ids: [],
+            sensors: Harita::new(),
+            readings: Harita::new(),
+            last_read_time: 0,
+            read_count: 0,
+        }
+    son
+    
+    /// Sensör ekle (ID ile)
+    pub fn add(mut self, sensor_id: yazı) döndür SensorGroup:
+        self.sensor_ids.push(sensor_id)
+        döndür self
+    son
+    
+    /// Sensör ekle (referans ile)
+    pub fn add_sensor(mut self, sensor: Sensor) döndür SensorGroup:
+        değişken id = sensor.get_id()
+        self.sensor_ids.push(id.clone())
+        self.sensors.insert(id, sensor)
+        döndür self
+    son
+    
+    /// Tüm sensörleri oku
+    pub fn read_all(mut self) döndür Sonuç[Harita[yazı, Measurement], SensorError]:
+        self.readings.clear()
+        
+        döngü id in self.sensor_ids.clone():
+            eğer self.sensors.contains_key(id.clone()):
+                değişken sensor = self.sensors.get(id.clone()).unwrap()
+                değişken m = sensor.read()?
+                self.readings.insert(id, m)
+            son
+        son
+        
+        self.last_read_time = Timestamp::now().monotonic
+        self.read_count = self.read_count + 1
+        
+        döndür Tamam(self.readings.clone())
+    son
+    
+    /// Belirli sensörü oku
+    pub fn read(mut self, sensor_id: yazı) döndür Sonuç[Measurement, SensorError]:
+        eğer !self.sensors.contains_key(sensor_id.clone()):
+            döndür Hata(SensorError::NotInitialized)
+        son
+        
+        değişken sensor = self.sensors.get(sensor_id.clone()).unwrap()
+        değişken m = sensor.read()?
+        self.readings.insert(sensor_id, m.clone())
+        
+        döndür Tamam(m)
+    son
+    
+    /// Son okumaları al
+    pub fn get_readings(self) döndür Harita[yazı, Measurement]:
+        döndür self.readings.clone()
+    son
+    
+    /// Grup adı
+    pub fn get_name(self) döndür yazı:
+        döndür self.name.clone()
+    son
+    
+    /// Sensör sayısı
+    pub fn count(self) döndür sayı:
+        döndür self.sensor_ids.len()
+    son
+    
+    /// JSON formatında tüm okumalar
+    pub fn to_json(self) döndür yazı:
+        değişken json = "{"
+        değişken first = doğru
+        
+        döngü (id, m) in self.readings:
+            eğer !first:
+                json = json + ","
+            son
+            json = json + "\"" + id + "\":" + m.to_json()
+            first = yanlış
+        son
+        
+        json = json + "}"
+        döndür json
+    son
+son
+
+// ============================================================================
+// ENVIRONMENT PACK (Çevre Sensörleri)
+// ============================================================================
+
+/// Çevre sensör paketi (sıcaklık + nem + basınç)
+pub tip EnvironmentPack = yapı yap
+    group: SensorGroup,
+son
+
+impl EnvironmentPack:
+    pub fn new() döndür EnvironmentPack:
+        döndür EnvironmentPack {
+            group: SensorGroup::new("environment")
+                .add("temperature")
+                .add("humidity")
+                .add("pressure"),
+        }
+    son
+    
+    pub fn read_all(mut self) döndür Sonuç[EnvironmentData, SensorError]:
+        değişken readings = self.group.read_all()?
+        
+        döndür Tamam(EnvironmentData {
+            temperature: readings.get("temperature"),
+            humidity: readings.get("humidity"),
+            pressure: readings.get("pressure"),
+            timestamp: Timestamp::now(),
+        })
+    son
+son
+
+/// Çevre verileri
+pub tip EnvironmentData = yapı yap
+    temperature: Seçenek[Measurement],
+    humidity: Seçenek[Measurement],
+    pressure: Seçenek[Measurement],
+    timestamp: Timestamp,
+son
+
+impl EnvironmentData:
+    pub fn get_temperature(self) döndür Seçenek[ondalık]:
+        eğer self.temperature.is_some():
+            döndür Bazı(self.temperature.unwrap().value)
+        son
+        döndür Hiçbiri
+    son
+    
+    pub fn get_humidity(self) döndür Seçenek[ondalık]:
+        eğer self.humidity.is_some():
+            döndür Bazı(self.humidity.unwrap().value)
+        son
+        döndür Hiçbiri
+    son
+    
+    pub fn get_pressure(self) döndür Seçenek[ondalık]:
+        eğer self.pressure.is_some():
+            döndür Bazı(self.pressure.unwrap().value)
+        son
+        döndür Hiçbiri
+    son
+    
+    /// Hissedilen sıcaklık (Heat Index)
+    pub fn feels_like(self) döndür Seçenek[ondalık]:
+        eğer self.temperature.is_none() || self.humidity.is_none():
+            döndür Hiçbiri
+        son
+        
+        değişken t = self.temperature.unwrap().value
+        değişken h = self.humidity.unwrap().value
+        
+        // Basit heat index formülü
+        değişken hi = 0.5 * (t + 61.0 + ((t - 68.0) * 1.2) + (h * 0.094))
+        
+        döndür Bazı(hi)
+    son
+    
+    /// Çiğ noktası
+    pub fn dew_point(self) döndür Seçenek[ondalık]:
+        eğer self.temperature.is_none() || self.humidity.is_none():
+            döndür Hiçbiri
+        son
+        
+        değişken t = self.temperature.unwrap().value
+        değişken rh = self.humidity.unwrap().value
+        
+        // Magnus formülü
+        değişken a = 17.27
+        değişken b = 237.7
+        değişken alpha = ((a * t) / (b + t)) + (rh / 100.0).ln()
+        değişken dp = (b * alpha) / (a - alpha)
+        
+        döndür Bazı(dp)
+    son
+    
+    /// Yükseklik tahmini
+    pub fn altitude(self, sea_level_pressure: ondalık) döndür Seçenek[ondalık]:
+        eğer self.pressure.is_none():
+            döndür Hiçbiri
+        son
+        
+        değişken p = self.pressure.unwrap().value
+        değişken alt = 44330.0 * (1.0 - (p / sea_level_pressure).pow(0.1903))
+        
+        döndür Bazı(alt)
+    son
+    
+    pub fn to_json(self) döndür yazı:
+        döndür "{" +
+            "\"temperature\":" + self.get_temperature().unwrap_or(0.0).to_string() + "," +
+            "\"humidity\":" + self.get_humidity().unwrap_or(0.0).to_string() + "," +
+            "\"pressure\":" + self.get_pressure().unwrap_or(0.0).to_string() +
+        "}"
+    son
+son
+
+// ============================================================================
+// IMU FUSION (Sensör Füzyonu)
+// ============================================================================
+
+/// IMU füzyon modu
+pub tip FusionMode = özyinelemeli yap
+    | Complementary       // Complementary filter
+    | Kalman             // Kalman filter
+    | Madgwick           // Madgwick AHRS
+    | Mahony             // Mahony AHRS
+son
+
+/// IMU sensör füzyonu
+pub tip IMUFusion = yapı yap
+    /// Füzyon modu
+    mode: FusionMode,
+    
+    /// Complementary filter (pitch)
+    comp_pitch: ComplementaryFilter,
+    
+    /// Complementary filter (roll)
+    comp_roll: ComplementaryFilter,
+    
+    /// Son açılar (derece)
+    pitch: ondalık,
+    roll: ondalık,
+    yaw: ondalık,
+    
+    /// Beta (Madgwick için)
+    beta: ondalık,
+    
+    /// Son güncelleme zamanı
+    last_update_ms: sayı,
+    
+    /// Quaternion (iç temsil)
+    q0: ondalık, q1: ondalık, q2: ondalık, q3: ondalık,
+son
+
+impl IMUFusion:
+    /// Yeni IMU fusion oluştur
+    pub fn new(mode: FusionMode) döndür IMUFusion:
+        döndür IMUFusion {
+            mode: mode,
+            comp_pitch: ComplementaryFilter::standard(),
+            comp_roll: ComplementaryFilter::standard(),
+            pitch: 0.0,
+            roll: 0.0,
+            yaw: 0.0,
+            beta: 0.1,
+            last_update_ms: 0,
+            q0: 1.0, q1: 0.0, q2: 0.0, q3: 0.0,
+        }
+    son
+    
+    /// Complementary filter ile oluştur
+    pub fn complementary() döndür IMUFusion:
+        döndür IMUFusion::new(FusionMode::Complementary)
+    son
+    
+    /// Madgwick filter ile oluştur
+    pub fn madgwick(beta: ondalık) döndür IMUFusion:
+        değişken mut fusion = IMUFusion::new(FusionMode::Madgwick)
+        fusion.beta = beta
+        döndür fusion
+    son
+    
+    /// Güncelle (6-DOF: accel + gyro)
+    pub fn update_6dof(mut self, 
+                       ax: ondalık, ay: ondalık, az: ondalık,
+                       gx: ondalık, gy: ondalık, gz: ondalık,
+                       current_time_ms: sayı) döndür void:
+        
+        eşleştir self.mode:
+            FusionMode::Complementary:
+                self.update_complementary(ax, ay, az, gx, gy, gz, current_time_ms)
+            FusionMode::Madgwick:
+                self.update_madgwick_6dof(ax, ay, az, gx, gy, gz, current_time_ms)
+            _:
+                self.update_complementary(ax, ay, az, gx, gy, gz, current_time_ms)
+        son
+    son
+    
+    /// Güncelle (9-DOF: accel + gyro + mag)
+    pub fn update_9dof(mut self,
+                       ax: ondalık, ay: ondalık, az: ondalık,
+                       gx: ondalık, gy: ondalık, gz: ondalık,
+                       mx: ondalık, my: ondalık, mz: ondalık,
+                       current_time_ms: sayı) döndür void:
+        
+        // 9-DOF fusion (yaw için manyetometre kullan)
+        self.update_6dof(ax, ay, az, gx, gy, gz, current_time_ms)
+        
+        // Yaw'ı manyetometreden hesapla
+        değişken heading = my.atan2(mx) * 180.0 / 3.14159265359
+        self.yaw = heading
+    son
+    
+    /// Complementary filter güncelleme
+    fn update_complementary(mut self,
+                            ax: ondalık, ay: ondalık, az: ondalık,
+                            gx: ondalık, gy: ondalık, gz: ondalık,
+                            current_time_ms: sayı) döndür void:
+        
+        // İvmeölçerden açı hesapla
+        değişken accel_pitch = ax.atan2((ay * ay + az * az).sqrt()) * 180.0 / 3.14159265359
+        değişken accel_roll = ay.atan2(az) * 180.0 / 3.14159265359
+        
+        // Complementary filter uygula
+        self.pitch = self.comp_pitch.update(gx, accel_pitch, current_time_ms)
+        self.roll = self.comp_roll.update(gy, accel_roll, current_time_ms)
+        
+        // Yaw sadece gyro ile (drift var)
+        değişken dt = (current_time_ms - self.last_update_ms) / 1000.0
+        self.yaw = self.yaw + gz * dt
+        
+        self.last_update_ms = current_time_ms
+    son
+    
+    /// Madgwick AHRS (6-DOF)
+    fn update_madgwick_6dof(mut self,
+                            ax: ondalık, ay: ondalık, az: ondalık,
+                            gx: ondalık, gy: ondalık, gz: ondalık,
+                            current_time_ms: sayı) döndür void:
+        
+        değişken dt = (current_time_ms - self.last_update_ms) / 1000.0
+        eğer dt <= 0.0:
+            dt = 0.01
+        son
+        
+        // Gyro derece/s → rad/s
+        değişken gx_rad = gx * 3.14159265359 / 180.0
+        değişken gy_rad = gy * 3.14159265359 / 180.0
+        değişken gz_rad = gz * 3.14159265359 / 180.0
+        
+        // Quaternion rate from gyro
+        değişken qDot1 = 0.5 * (-self.q1 * gx_rad - self.q2 * gy_rad - self.q3 * gz_rad)
+        değişken qDot2 = 0.5 * (self.q0 * gx_rad + self.q2 * gz_rad - self.q3 * gy_rad)
+        değişken qDot3 = 0.5 * (self.q0 * gy_rad - self.q1 * gz_rad + self.q3 * gx_rad)
+        değişken qDot4 = 0.5 * (self.q0 * gz_rad + self.q1 * gy_rad - self.q2 * gx_rad)
+        
+        // Normalize accelerometer
+        değişken accel_norm = (ax * ax + ay * ay + az * az).sqrt()
+        eğer accel_norm > 0.0:
+            değişken ax_n = ax / accel_norm
+            değişken ay_n = ay / accel_norm
+            değişken az_n = az / accel_norm
+            
+            // Gradient descent step
+            değişken s0 = 2.0 * (self.q1 * self.q3 - self.q0 * self.q2) - ax_n
+            değişken s1 = 2.0 * (self.q0 * self.q1 + self.q2 * self.q3) - ay_n
+            değişken s2 = 1.0 - 2.0 * (self.q1 * self.q1 + self.q2 * self.q2) - az_n
+            
+            // Apply feedback
+            qDot1 = qDot1 - self.beta * s0
+            qDot2 = qDot2 - self.beta * s1
+            qDot3 = qDot3 - self.beta * s2
+        son
+        
+        // Integrate
+        self.q0 = self.q0 + qDot1 * dt
+        self.q1 = self.q1 + qDot2 * dt
+        self.q2 = self.q2 + qDot3 * dt
+        self.q3 = self.q3 + qDot4 * dt
+        
+        // Normalize quaternion
+        değişken q_norm = (self.q0 * self.q0 + self.q1 * self.q1 + 
+                          self.q2 * self.q2 + self.q3 * self.q3).sqrt()
+        self.q0 = self.q0 / q_norm
+        self.q1 = self.q1 / q_norm
+        self.q2 = self.q2 / q_norm
+        self.q3 = self.q3 / q_norm
+        
+        // Quaternion → Euler
+        self.pitch = (2.0 * (self.q0 * self.q1 + self.q2 * self.q3))
+            .atan2(1.0 - 2.0 * (self.q1 * self.q1 + self.q2 * self.q2)) * 180.0 / 3.14159265359
+        
+        self.roll = (2.0 * (self.q0 * self.q2 - self.q3 * self.q1)).asin() * 180.0 / 3.14159265359
+        
+        self.yaw = (2.0 * (self.q0 * self.q3 + self.q1 * self.q2))
+            .atan2(1.0 - 2.0 * (self.q2 * self.q2 + self.q3 * self.q3)) * 180.0 / 3.14159265359
+        
+        self.last_update_ms = current_time_ms
+    son
+    
+    /// Pitch açısını al (derece)
+    pub fn get_pitch(self) döndür ondalık:
+        döndür self.pitch
+    son
+    
+    /// Roll açısını al (derece)
+    pub fn get_roll(self) döndür ondalık:
+        döndür self.roll
+    son
+    
+    /// Yaw açısını al (derece)
+    pub fn get_yaw(self) döndür ondalık:
+        döndür self.yaw
+    son
+    
+    /// Tüm açıları al
+    pub fn get_euler(self) döndür (ondalık, ondalık, ondalık):
+        döndür (self.pitch, self.roll, self.yaw)
+    son
+    
+    /// Quaternion al
+    pub fn get_quaternion(self) döndür (ondalık, ondalık, ondalık, ondalık):
+        döndür (self.q0, self.q1, self.q2, self.q3)
+    son
+    
+    /// Reset
+    pub fn reset(mut self) döndür void:
+        self.pitch = 0.0
+        self.roll = 0.0
+        self.yaw = 0.0
+        self.q0 = 1.0
+        self.q1 = 0.0
+        self.q2 = 0.0
+        self.q3 = 0.0
+        self.comp_pitch.reset()
+        self.comp_roll.reset()
+    son
+son
+
+// ============================================================================
+// SENSOR FUSION (GENEL)
+// ============================================================================
+
+/// Sensör füzyon stratejisi
+pub tip FusionStrategy = özyinelemeli yap
+    | Average           // Ortalama
+    | WeightedAverage   // Ağırlıklı ortalama
+    | Median            // Ortanca
+    | HighestConfidence // En yüksek güven
+    | Kalman            // Kalman fusion
+son
+
+/// Çoklu sensör füzyonu
+pub tip MultiSensorFusion = yapı yap
+    /// Strateji
+    strategy: FusionStrategy,
+    
+    /// Ağırlıklar (sensör ID → ağırlık)
+    weights: Harita[yazı, ondalık],
+    
+    /// Kalman filter
+    kalman: Seçenek[KalmanFilter],
+son
+
+impl MultiSensorFusion:
+    /// Yeni fusion oluştur
+    pub fn new(strategy: FusionStrategy) döndür MultiSensorFusion:
+        döndür MultiSensorFusion {
+            strategy: strategy,
+            weights: Harita::new(),
+            kalman: Hiçbiri,
+        }
+    son
+    
+    /// Ortalama ile
+    pub fn average() döndür MultiSensorFusion:
+        döndür MultiSensorFusion::new(FusionStrategy::Average)
+    son
+    
+    /// Ağırlıklı ortalama ile
+    pub fn weighted() döndür MultiSensorFusion:
+        döndür MultiSensorFusion::new(FusionStrategy::WeightedAverage)
+    son
+    
+    /// Ağırlık ekle
+    pub fn with_weight(mut self, sensor_id: yazı, weight: ondalık) döndür MultiSensorFusion:
+        self.weights.insert(sensor_id, weight)
+        döndür self
+    son
+    
+    /// Ölçümleri birleştir
+    pub fn fuse(self, measurements: Liste[Measurement]) döndür Measurement:
+        eğer measurements.len() == 0:
+            döndür Measurement::new(0.0, Unit::Raw, "fusion")
+        son
+        
+        eğer measurements.len() == 1:
+            döndür measurements[0].clone()
+        son
+        
+        eşleştir self.strategy:
+            FusionStrategy::Average:
+                self.fuse_average(measurements)
+            FusionStrategy::WeightedAverage:
+                self.fuse_weighted(measurements)
+            FusionStrategy::Median:
+                self.fuse_median(measurements)
+            FusionStrategy::HighestConfidence:
+                self.fuse_highest_confidence(measurements)
+            _:
+                self.fuse_average(measurements)
+        son
+    son
+    
+    /// Ortalama füzyon
+    fn fuse_average(self, measurements: Liste[Measurement]) döndür Measurement:
+        değişken sum = 0.0
+        döngü m in measurements.clone():
+            sum = sum + m.value
+        son
+        
+        değişken avg = sum / measurements.len()
+        değişken first = measurements[0].clone()
+        
+        döndür Measurement {
+            value: avg,
+            unit: first.unit,
+            timestamp: Timestamp::now(),
+            confidence: first.confidence,
+            source: "fusion",
+            metadata: Hiçbiri,
+        }
+    son
+    
+    /// Ağırlıklı ortalama füzyon
+    fn fuse_weighted(self, measurements: Liste[Measurement]) döndür Measurement:
+        değişken weighted_sum = 0.0
+        değişken weight_sum = 0.0
+        
+        döngü m in measurements.clone():
+            değişken w = self.weights.get(m.source).unwrap_or(1.0)
+            weighted_sum = weighted_sum + m.value * w
+            weight_sum = weight_sum + w
+        son
+        
+        değişken avg = weighted_sum / weight_sum
+        değişken first = measurements[0].clone()
+        
+        döndür Measurement {
+            value: avg,
+            unit: first.unit,
+            timestamp: Timestamp::now(),
+            confidence: first.confidence,
+            source: "fusion",
+            metadata: Hiçbiri,
+        }
+    son
+    
+    /// Median füzyon
+    fn fuse_median(self, measurements: Liste[Measurement]) döndür Measurement:
+        değişken values: Liste[ondalık] = []
+        döngü m in measurements.clone():
+            values.push(m.value)
+        son
+        values.sort()
+        
+        değişken mid = values.len() / 2
+        değişken median = values[mid]
+        değişken first = measurements[0].clone()
+        
+        döndür Measurement {
+            value: median,
+            unit: first.unit,
+            timestamp: Timestamp::now(),
+            confidence: Confidence::high(),
+            source: "fusion",
+            metadata: Hiçbiri,
+        }
+    son
+    
+    /// En yüksek güvenli ölçümü seç
+    fn fuse_highest_confidence(self, measurements: Liste[Measurement]) döndür Measurement:
+        değişken best = measurements[0].clone()
+        döngü m in measurements:
+            eğer m.confidence > best.confidence:
+                best = m
+            son
+        son
+        döndür best
+    son
+son
+
+// ============================================================================
+// CONVENIENCE FUNCTIONS
+// ============================================================================
+
+/// Sensör grubu oluştur
+pub fn group(name: yazı) döndür SensorGroup:
+    döndür SensorGroup::new(name)
+son
+
+/// Çevre paketi oluştur
+pub fn environment() döndür EnvironmentPack:
+    döndür EnvironmentPack::new()
+son
+
+/// IMU füzyon oluştur
+pub fn imu_fusion() döndür IMUFusion:
+    döndür IMUFusion::complementary()
+son
+
+/// Çoklu sensör füzyonu oluştur
+pub fn multi_fusion(strategy: FusionStrategy) döndür MultiSensorFusion:
+    döndür MultiSensorFusion::new(strategy)
+son

@@ -1,0 +1,675 @@
+// ============================================================================
+// BERK SENSOR API - Streaming Sensörler
+// ============================================================================
+// Mikrofon, Radar, LIDAR, EEG/EMG
+// sensor::stream("mic", fonksiyon(sample) { ... })
+// ============================================================================
+
+modül sensor::stream
+
+import sensor::measurement::{Timestamp, Confidence, Unit}
+import sensor::filter::{Filter, FilterChain}
+
+// ============================================================================
+// STREAM TÜRLERİ
+// ============================================================================
+
+/// Stream veri formatı
+pub tip SampleFormat = özyinelemeli yap
+    | Int8           // 8-bit signed
+    | Int16          // 16-bit signed
+    | Int32          // 32-bit signed
+    | Float32        // 32-bit float
+    | Float64        // 64-bit float
+son
+
+impl SampleFormat:
+    pub fn bytes_per_sample(self) döndür sayı:
+        eşleştir self:
+            SampleFormat::Int8: 1
+            SampleFormat::Int16: 2
+            SampleFormat::Int32: 4
+            SampleFormat::Float32: 4
+            SampleFormat::Float64: 8
+        son
+    son
+son
+
+/// Stream konfigürasyonu
+pub tip StreamConfig = yapı yap
+    /// Örnekleme hızı (Hz)
+    sample_rate: sayı,
+    /// Kanal sayısı
+    channels: sayı,
+    /// Örnek formatı
+    format: SampleFormat,
+    /// Buffer boyutu (samples)
+    buffer_size: sayı,
+son
+
+impl StreamConfig:
+    /// Mono, 16kHz preset
+    pub fn mono_16k() döndür StreamConfig:
+        döndür StreamConfig {
+            sample_rate: 16000,
+            channels: 1,
+            format: SampleFormat::Int16,
+            buffer_size: 512,
+        }
+    son
+    
+    /// Mono, 44.1kHz preset (CD kalitesi)
+    pub fn mono_44k() döndür StreamConfig:
+        döndür StreamConfig {
+            sample_rate: 44100,
+            channels: 1,
+            format: SampleFormat::Int16,
+            buffer_size: 1024,
+        }
+    son
+    
+    /// Stereo, 44.1kHz preset
+    pub fn stereo_44k() döndür StreamConfig:
+        döndür StreamConfig {
+            sample_rate: 44100,
+            channels: 2,
+            format: SampleFormat::Int16,
+            buffer_size: 1024,
+        }
+    son
+    
+    /// Stereo, 48kHz preset
+    pub fn stereo_48k() döndür StreamConfig:
+        döndür StreamConfig {
+            sample_rate: 48000,
+            channels: 2,
+            format: SampleFormat::Int16,
+            buffer_size: 1024,
+        }
+    son
+    
+    /// Düşük güç (IoT) preset
+    pub fn low_power() döndür StreamConfig:
+        döndür StreamConfig {
+            sample_rate: 8000,
+            channels: 1,
+            format: SampleFormat::Int16,
+            buffer_size: 256,
+        }
+    son
+son
+
+// ============================================================================
+// AUDIO FRAME
+// ============================================================================
+
+/// Ses çerçevesi
+pub tip AudioFrame = yapı yap
+    /// Ham örnek verileri
+    samples: Liste[ondalık],
+    /// Kanal sayısı
+    channels: sayı,
+    /// Örnek sayısı (kanal başına)
+    samples_per_channel: sayı,
+    /// Zaman damgası
+    timestamp: Timestamp,
+    /// Çerçeve numarası
+    frame_number: sayı,
+son
+
+impl AudioFrame:
+    pub fn new(samples: Liste[ondalık], channels: sayı) döndür AudioFrame:
+        döndür AudioFrame {
+            samples: samples.clone(),
+            channels: channels,
+            samples_per_channel: samples.len() / channels,
+            timestamp: Timestamp::now(),
+            frame_number: 0,
+        }
+    son
+    
+    /// RMS (Root Mean Square) - ses seviyesi
+    pub fn rms(self) döndür ondalık:
+        değişken sum = 0.0
+        döngü s in self.samples:
+            sum = sum + s * s
+        son
+        döndür (sum / self.samples.len()).sqrt()
+    son
+    
+    /// dB olarak ses seviyesi
+    pub fn level_db(self) döndür ondalık:
+        değişken rms = self.rms()
+        eğer rms < 0.000001:
+            döndür -120.0
+        son
+        döndür 20.0 * rms.log10()
+    son
+    
+    /// Peak değer
+    pub fn peak(self) döndür ondalık:
+        değişken max_val = 0.0
+        döngü s in self.samples:
+            eğer s.abs() > max_val:
+                max_val = s.abs()
+            son
+        son
+        döndür max_val
+    son
+    
+    /// Zero-crossing rate
+    pub fn zero_crossing_rate(self) döndür ondalık:
+        değişken crossings = 0
+        döngü i in 1..self.samples.len():
+            eğer (self.samples[i-1] >= 0.0 && self.samples[i] < 0.0) ||
+               (self.samples[i-1] < 0.0 && self.samples[i] >= 0.0):
+                crossings = crossings + 1
+            son
+        son
+        döndür crossings / (self.samples.len() - 1)
+    son
+    
+    /// Belirli kanalı al
+    pub fn get_channel(self, channel: sayı) döndür Liste[ondalık]:
+        değişken result: Liste[ondalık] = []
+        döngü i in 0..self.samples_per_channel:
+            result.push(self.samples[i * self.channels + channel])
+        son
+        döndür result
+    son
+    
+    /// Mono'ya dönüştür (ortalama)
+    pub fn to_mono(self) döndür AudioFrame:
+        eğer self.channels == 1:
+            döndür self
+        son
+        
+        değişken mono: Liste[ondalık] = []
+        döngü i in 0..self.samples_per_channel:
+            değişken sum = 0.0
+            döngü ch in 0..self.channels:
+                sum = sum + self.samples[i * self.channels + ch]
+            son
+            mono.push(sum / self.channels)
+        son
+        
+        döndür AudioFrame::new(mono, 1)
+    son
+son
+
+// ============================================================================
+// STREAM CALLBACK
+// ============================================================================
+
+/// Audio callback
+pub tip AudioCallback = fn(AudioFrame) döndür void
+
+/// Raw data callback
+pub tip RawDataCallback = fn(Liste[sayı]) döndür void
+
+// ============================================================================
+// STREAMING SENSÖR
+// ============================================================================
+
+/// Stream durumu
+pub tip StreamState = özyinelemeli yap
+    | Stopped
+    | Starting
+    | Running
+    | Paused
+    | Error(yazı)
+son
+
+/// Streaming sensör
+pub tip StreamSensor = yapı yap
+    /// ID
+    id: yazı,
+    
+    /// Konfigürasyon
+    config: StreamConfig,
+    
+    /// Durum
+    state: StreamState,
+    
+    /// Toplam örnek sayısı
+    total_samples: sayı,
+    
+    /// Toplam frame sayısı
+    total_frames: sayı,
+    
+    /// Audio callback
+    audio_callback: Seçenek[AudioCallback],
+    
+    /// Raw callback
+    raw_callback: Seçenek[RawDataCallback],
+    
+    /// Filtre zinciri
+    filter: Seçenek[FilterChain],
+    
+    /// Native handle
+    _handle: sayı,
+son
+
+impl StreamSensor:
+    /// Yeni stream sensör oluştur
+    pub fn new(id: yazı, config: StreamConfig) döndür StreamSensor:
+        döndür StreamSensor {
+            id: id,
+            config: config,
+            state: StreamState::Stopped,
+            total_samples: 0,
+            total_frames: 0,
+            audio_callback: Hiçbiri,
+            raw_callback: Hiçbiri,
+            filter: Hiçbiri,
+            _handle: 0,
+        }
+    son
+    
+    /// Filtre ekle
+    pub fn with_filter(mut self, chain: FilterChain) döndür StreamSensor:
+        self.filter = Bazı(chain)
+        döndür self
+    son
+    
+    /// Başlat
+    pub fn start(mut self) döndür Sonuç[void, yazı]:
+        eğer self.state == StreamState::Running:
+            döndür Tamam(())
+        son
+        
+        self.state = StreamState::Starting
+        
+        // Native: stream_start(self.config, &self._handle)
+        
+        self.state = StreamState::Running
+        döndür Tamam(())
+    son
+    
+    /// Durdur
+    pub fn stop(mut self) döndür void:
+        // Native: stream_stop(self._handle)
+        self.state = StreamState::Stopped
+    son
+    
+    /// Duraklat
+    pub fn pause(mut self) döndür void:
+        // Native: stream_pause(self._handle)
+        self.state = StreamState::Paused
+    son
+    
+    /// Devam
+    pub fn resume(mut self) döndür void:
+        // Native: stream_resume(self._handle)
+        self.state = StreamState::Running
+    son
+    
+    /// Audio callback ayarla
+    pub fn on_audio(mut self, callback: AudioCallback) döndür void:
+        self.audio_callback = Bazı(callback)
+    son
+    
+    /// Raw data callback ayarla
+    pub fn on_data(mut self, callback: RawDataCallback) döndür void:
+        self.raw_callback = Bazı(callback)
+    son
+    
+    /// Çalışıyor mu?
+    pub fn is_running(self) döndür mantıksal:
+        döndür self.state == StreamState::Running
+    son
+    
+    /// Süre (saniye)
+    pub fn elapsed_seconds(self) döndür ondalık:
+        döndür self.total_samples / self.config.sample_rate
+    son
+son
+
+// ============================================================================
+// MİKROFON
+// ============================================================================
+
+/// Mikrofon sensörü
+pub tip Microphone = yapı yap
+    stream: StreamSensor,
+    /// Ses eşiği (dB)
+    threshold_db: ondalık,
+    /// Ses algılandı mı?
+    sound_detected: mantıksal,
+son
+
+impl Microphone:
+    /// Varsayılan mikrofon
+    pub fn default() döndür Microphone:
+        döndür Microphone {
+            stream: StreamSensor::new("mic", StreamConfig::mono_16k()),
+            threshold_db: -30.0,
+            sound_detected: yanlış,
+        }
+    son
+    
+    /// Özel konfigürasyonla
+    pub fn with_config(config: StreamConfig) döndür Microphone:
+        döndür Microphone {
+            stream: StreamSensor::new("mic", config),
+            threshold_db: -30.0,
+            sound_detected: yanlış,
+        }
+    son
+    
+    /// Ses eşiği ayarla
+    pub fn with_threshold(mut self, db: ondalık) döndür Microphone:
+        self.threshold_db = db
+        döndür self
+    son
+    
+    /// Başlat
+    pub fn start(mut self) döndür Sonuç[void, yazı]:
+        döndür self.stream.start()
+    son
+    
+    /// Durdur
+    pub fn stop(mut self) döndür void:
+        self.stream.stop()
+    son
+    
+    /// Audio callback
+    pub fn on_audio(mut self, callback: AudioCallback) döndür void:
+        self.stream.on_audio(callback)
+    son
+    
+    /// Ses algılandığında
+    pub fn on_sound(mut self, callback: fn(ondalık) döndür void) döndür void:
+        self.stream.on_audio(fn(frame: AudioFrame) döndür void {
+            değişken db = frame.level_db()
+            eğer db > self.threshold_db:
+                callback(db)
+            son
+        })
+    son
+    
+    /// Anlık ses seviyesi oku
+    pub fn read_level(mut self) döndür ondalık:
+        // Placeholder
+        döndür -60.0
+    son
+son
+
+// ============================================================================
+// RADAR SENSÖR
+// ============================================================================
+
+/// Radar hedefi
+pub tip RadarTarget = yapı yap
+    /// Mesafe (metre)
+    distance: ondalık,
+    /// Hız (m/s, pozitif = yaklaşıyor)
+    velocity: ondalık,
+    /// Açı (derece)
+    angle: ondalık,
+    /// Sinyal gücü
+    amplitude: ondalık,
+son
+
+/// Radar sensörü
+pub tip RadarSensor = yapı yap
+    /// ID
+    id: yazı,
+    
+    /// Durum
+    state: StreamState,
+    
+    /// Maksimum menzil (metre)
+    max_range: ondalık,
+    
+    /// Minimum hız eşiği (m/s)
+    min_velocity: ondalık,
+    
+    /// Algılanan hedefler
+    targets: Liste[RadarTarget],
+    
+    /// Callback
+    on_target: Seçenek[fn(Liste[RadarTarget]) döndür void],
+    
+    /// Native handle
+    _handle: sayı,
+son
+
+impl RadarSensor:
+    pub fn new() döndür RadarSensor:
+        döndür RadarSensor {
+            id: "radar",
+            state: StreamState::Stopped,
+            max_range: 10.0,
+            min_velocity: 0.1,
+            targets: [],
+            on_target: Hiçbiri,
+            _handle: 0,
+        }
+    son
+    
+    /// Menzil ayarla
+    pub fn with_range(mut self, meters: ondalık) döndür RadarSensor:
+        self.max_range = meters
+        döndür self
+    son
+    
+    /// Minimum hız eşiği
+    pub fn with_min_velocity(mut self, mps: ondalık) döndür RadarSensor:
+        self.min_velocity = mps
+        döndür self
+    son
+    
+    /// Başlat
+    pub fn start(mut self) döndür Sonuç[void, yazı]:
+        self.state = StreamState::Running
+        döndür Tamam(())
+    son
+    
+    /// Durdur
+    pub fn stop(mut self) döndür void:
+        self.state = StreamState::Stopped
+    son
+    
+    /// Hedef callback
+    pub fn on_targets(mut self, callback: fn(Liste[RadarTarget]) döndür void) döndür void:
+        self.on_target = Bazı(callback)
+    son
+    
+    /// Mevcut hedefleri al
+    pub fn get_targets(self) döndür Liste[RadarTarget]:
+        döndür self.targets.clone()
+    son
+    
+    /// En yakın hedef
+    pub fn nearest_target(self) döndür Seçenek[RadarTarget]:
+        eğer self.targets.len() == 0:
+            döndür Hiçbiri
+        son
+        
+        değişken nearest = self.targets[0]
+        döngü t in self.targets:
+            eğer t.distance < nearest.distance:
+                nearest = t
+            son
+        son
+        döndür Bazı(nearest)
+    son
+    
+    /// Hareket var mı?
+    pub fn has_motion(self) döndür mantıksal:
+        döngü t in self.targets:
+            eğer t.velocity.abs() > self.min_velocity:
+                döndür doğru
+            son
+        son
+        döndür yanlış
+    son
+son
+
+// ============================================================================
+// LIDAR SENSÖR
+// ============================================================================
+
+/// LIDAR noktası
+pub tip LidarPoint = yapı yap
+    /// Mesafe (metre)
+    distance: ondalık,
+    /// Açı (derece)
+    angle: ondalık,
+    /// Yoğunluk
+    intensity: sayı,
+    /// Kalite (0-100)
+    quality: sayı,
+son
+
+/// LIDAR tarama
+pub tip LidarScan = yapı yap
+    /// Noktalar
+    points: Liste[LidarPoint],
+    /// Zaman damgası
+    timestamp: Timestamp,
+    /// Tarama açısı başlangıç
+    start_angle: ondalık,
+    /// Tarama açısı bitiş
+    end_angle: ondalık,
+    /// Tarama süresi (ms)
+    scan_time_ms: sayı,
+son
+
+impl LidarScan:
+    /// Minimum mesafe
+    pub fn min_distance(self) döndür ondalık:
+        değişken min = 999999.0
+        döngü p in self.points:
+            eğer p.distance < min && p.distance > 0.0:
+                min = p.distance
+            son
+        son
+        döndür min
+    son
+    
+    /// Maksimum mesafe
+    pub fn max_distance(self) döndür ondalık:
+        değişken max = 0.0
+        döngü p in self.points:
+            eğer p.distance > max:
+                max = p.distance
+            son
+        son
+        döndür max
+    son
+    
+    /// Belirli açı aralığındaki noktalar
+    pub fn points_in_range(self, min_angle: ondalık, max_angle: ondalık) döndür Liste[LidarPoint]:
+        değişken result: Liste[LidarPoint] = []
+        döngü p in self.points:
+            eğer p.angle >= min_angle && p.angle <= max_angle:
+                result.push(p)
+            son
+        son
+        döndür result
+    son
+    
+    /// Engel var mı? (mesafe eşiği altında)
+    pub fn has_obstacle(self, max_distance: ondalık) döndür mantıksal:
+        döngü p in self.points:
+            eğer p.distance > 0.0 && p.distance < max_distance:
+                döndür doğru
+            son
+        son
+        döndür yanlış
+    son
+son
+
+/// LIDAR sensörü
+pub tip LidarSensor = yapı yap
+    /// ID
+    id: yazı,
+    
+    /// Durum
+    state: StreamState,
+    
+    /// RPM
+    rpm: sayı,
+    
+    /// Son tarama
+    last_scan: Seçenek[LidarScan],
+    
+    /// Callback
+    on_scan: Seçenek[fn(LidarScan) döndür void],
+    
+    /// Native handle
+    _handle: sayı,
+son
+
+impl LidarSensor:
+    pub fn new(id: yazı) döndür LidarSensor:
+        döndür LidarSensor {
+            id: id,
+            state: StreamState::Stopped,
+            rpm: 300,
+            last_scan: Hiçbiri,
+            on_scan: Hiçbiri,
+            _handle: 0,
+        }
+    son
+    
+    /// RPLIDAR A1 preset
+    pub fn rplidar_a1() döndür LidarSensor:
+        döndür LidarSensor::new("rplidar_a1")
+    son
+    
+    /// RPM ayarla
+    pub fn with_rpm(mut self, rpm: sayı) döndür LidarSensor:
+        self.rpm = rpm
+        döndür self
+    son
+    
+    /// Başlat
+    pub fn start(mut self) döndür Sonuç[void, yazı]:
+        self.state = StreamState::Running
+        döndür Tamam(())
+    son
+    
+    /// Durdur
+    pub fn stop(mut self) döndür void:
+        self.state = StreamState::Stopped
+    son
+    
+    /// Tarama callback
+    pub fn on_scan(mut self, callback: fn(LidarScan) döndür void) döndür void:
+        self.on_scan = Bazı(callback)
+    son
+    
+    /// Son taramayı al
+    pub fn get_last_scan(self) döndür Seçenek[LidarScan]:
+        döndür self.last_scan
+    son
+son
+
+// ============================================================================
+// CONVENIENCE FUNCTIONS
+// ============================================================================
+
+/// Stream başlat
+pub fn stream(id: yazı, callback: AudioCallback) döndür StreamSensor:
+    değişken sensor = StreamSensor::new(id, StreamConfig::mono_16k())
+    sensor.on_audio(callback)
+    döndür sensor
+son
+
+/// Mikrofon
+pub fn microphone() döndür Microphone:
+    döndür Microphone::default()
+son
+
+/// Radar
+pub fn radar() döndür RadarSensor:
+    döndür RadarSensor::new()
+son
+
+/// LIDAR
+pub fn lidar() döndür LidarSensor:
+    döndür LidarSensor::new("lidar")
+son

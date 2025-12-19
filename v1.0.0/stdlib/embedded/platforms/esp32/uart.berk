@@ -1,0 +1,316 @@
+// stdlib/embedded/platforms/esp32/uart.berk
+// ESP32 UART HAL Implementation
+// ESP-IDF UART driver bindings
+
+import "embedded/bal/uart" as UART
+
+// ESP-IDF UART constants
+const UART_NUM_0: u32 = 0
+const UART_NUM_1: u32 = 1
+const UART_NUM_2: u32 = 2
+
+const UART_PIN_NO_CHANGE: i32 = -1
+
+const UART_PARITY_DISABLE: u32 = 0
+const UART_PARITY_EVEN: u32 = 2
+const UART_PARITY_ODD: u32 = 3
+
+const UART_STOP_BITS_1: u32 = 1
+const UART_STOP_BITS_1_5: u32 = 2
+const UART_STOP_BITS_2: u32 = 3
+
+const UART_DATA_5_BITS: u32 = 0
+const UART_DATA_6_BITS: u32 = 1
+const UART_DATA_7_BITS: u32 = 2
+const UART_DATA_8_BITS: u32 = 3
+
+const UART_HW_FLOWCTRL_DISABLE: u32 = 0
+const UART_HW_FLOWCTRL_RTS: u32 = 1
+const UART_HW_FLOWCTRL_CTS: u32 = 2
+const UART_HW_FLOWCTRL_CTS_RTS: u32 = 3
+
+// ESP-IDF UART configuration structure
+struct uart_config_t {
+    baud_rate: i32,
+    data_bits: u32,
+    parity: u32,
+    stop_bits: u32,
+    flow_ctrl: u32,
+    rx_flow_ctrl_thresh: u8,
+    source_clk: u32,
+}
+
+// ESP-IDF UART functions
+extern "C" {
+    fn uart_param_config(uart_num: u32, uart_config: *uart_config_t) -> i32
+    fn uart_set_pin(uart_num: u32, tx_io_num: i32, rx_io_num: i32, rts_io_num: i32, cts_io_num: i32) -> i32
+    fn uart_driver_install(uart_num: u32, rx_buffer_size: i32, tx_buffer_size: i32, queue_size: i32, uart_queue: *mut void, intr_alloc_flags: i32) -> i32
+    fn uart_driver_delete(uart_num: u32) -> i32
+    fn uart_write_bytes(uart_num: u32, src: *u8, size: u32) -> i32
+    fn uart_read_bytes(uart_num: u32, buf: *mut u8, length: u32, ticks_to_wait: u32) -> i32
+    fn uart_get_buffered_data_len(uart_num: u32, size: *mut u32) -> i32
+    fn uart_flush(uart_num: u32) -> i32
+    fn uart_flush_input(uart_num: u32) -> i32
+    fn uart_wait_tx_done(uart_num: u32, ticks_to_wait: u32) -> i32
+    fn uart_set_baudrate(uart_num: u32, baudrate: u32) -> i32
+}
+
+extern "C" {
+    fn pdMS_TO_TICKS(ms: u32) -> u32
+}
+
+const ESP_OK: i32 = 0
+const ESP_FAIL: i32 = -1
+
+// ESP32 UART HAL implementation
+pub struct ESP32_UART {}
+
+impl UART.UART_HAL for ESP32_UART {
+    fn init(config: UART.Config) -> UART.Result<()> {
+        // Convert baud rate
+        let baud = match config.baud_rate {
+            UART.BaudRate.Baud9600 => 9600,
+            UART.BaudRate.Baud19200 => 19200,
+            UART.BaudRate.Baud38400 => 38400,
+            UART.BaudRate.Baud57600 => 57600,
+            UART.BaudRate.Baud115200 => 115200,
+            UART.BaudRate.Baud230400 => 230400,
+            UART.BaudRate.Baud460800 => 460800,
+            UART.BaudRate.Baud921600 => 921600,
+            UART.BaudRate.Custom(rate) => rate as i32,
+        }
+        
+        // Convert data bits
+        let data_bits = match config.data_bits {
+            UART.DataBits.Bits5 => UART_DATA_5_BITS,
+            UART.DataBits.Bits6 => UART_DATA_6_BITS,
+            UART.DataBits.Bits7 => UART_DATA_7_BITS,
+            UART.DataBits.Bits8 => UART_DATA_8_BITS,
+            UART.DataBits.Bits9 => UART_DATA_8_BITS, // ESP32 doesn't support 9-bit
+        }
+        
+        // Convert parity
+        let parity = match config.parity {
+            UART.Parity.None => UART_PARITY_DISABLE,
+            UART.Parity.Even => UART_PARITY_EVEN,
+            UART.Parity.Odd => UART_PARITY_ODD,
+        }
+        
+        // Convert stop bits
+        let stop_bits = match config.stop_bits {
+            UART.StopBits.One => UART_STOP_BITS_1,
+            UART.StopBits.OneAndHalf => UART_STOP_BITS_1_5,
+            UART.StopBits.Two => UART_STOP_BITS_2,
+        }
+        
+        // Convert flow control
+        let flow_ctrl = match config.flow_control {
+            UART.FlowControl.None => UART_HW_FLOWCTRL_DISABLE,
+            UART.FlowControl.RTS_CTS => UART_HW_FLOWCTRL_CTS_RTS,
+            UART.FlowControl.XON_XOFF => UART_HW_FLOWCTRL_DISABLE, // Software flow control handled separately
+        }
+        
+        // Create UART config
+        let uart_conf = uart_config_t {
+            baud_rate: baud,
+            data_bits: data_bits,
+            parity: parity,
+            stop_bits: stop_bits,
+            flow_ctrl: flow_ctrl,
+            rx_flow_ctrl_thresh: 122,
+            source_clk: 0, // Use default APB clock
+        }
+        
+        // Configure UART
+        let ret = uart_param_config(config.uart as u32, &uart_conf)
+        if ret != ESP_OK {
+            return Err(UART.Error.FrameError)
+        }
+        
+        // Set pins
+        let ret = uart_set_pin(
+            config.uart as u32,
+            config.tx_pin as i32,
+            config.rx_pin as i32,
+            UART_PIN_NO_CHANGE,
+            UART_PIN_NO_CHANGE
+        )
+        if ret != ESP_OK {
+            return Err(UART.Error.FrameError)
+        }
+        
+        // Install driver
+        let ret = uart_driver_install(
+            config.uart as u32,
+            config.rx_buffer_size as i32,
+            config.tx_buffer_size as i32,
+            0,  // No event queue
+            null,
+            0
+        )
+        
+        if ret != ESP_OK {
+            return Err(UART.Error.FrameError)
+        }
+        
+        Ok(())
+    }
+    
+    fn deinit(uart: u8) {
+        uart_driver_delete(uart as u32)
+    }
+    
+    fn write_byte(uart: u8, data: u8) -> UART.Result<()> {
+        let buffer: [u8; 1] = [data]
+        let ret = uart_write_bytes(uart as u32, buffer.as_ptr(), 1)
+        
+        if ret >= 0 {
+            Ok(())
+        } else {
+            Err(UART.Error.Timeout)
+        }
+    }
+    
+    fn write(uart: u8, data: &[u8]) -> UART.Result<u32> {
+        let ret = uart_write_bytes(uart as u32, data.as_ptr(), data.len() as u32)
+        
+        if ret >= 0 {
+            Ok(ret as u32)
+        } else {
+            Err(UART.Error.Timeout)
+        }
+    }
+    
+    fn write_string(uart: u8, text: &str) -> UART.Result<()> {
+        let bytes = text.as_bytes()
+        let ret = uart_write_bytes(uart as u32, bytes.as_ptr(), bytes.len() as u32)
+        
+        if ret >= 0 {
+            Ok(())
+        } else {
+            Err(UART.Error.Timeout)
+        }
+    }
+    
+    fn read_byte(uart: u8, timeout_ms: u32) -> UART.Result<u8> {
+        let mut buffer: [u8; 1] = [0]
+        let timeout = pdMS_TO_TICKS(timeout_ms)
+        
+        let ret = uart_read_bytes(uart as u32, buffer.as_mut_ptr(), 1, timeout)
+        
+        if ret > 0 {
+            Ok(buffer[0])
+        } else {
+            Err(UART.Error.Timeout)
+        }
+    }
+    
+    fn read(uart: u8, buffer: &mut [u8], timeout_ms: u32) -> UART.Result<u32> {
+        let timeout = pdMS_TO_TICKS(timeout_ms)
+        
+        let ret = uart_read_bytes(
+            uart as u32,
+            buffer.as_mut_ptr(),
+            buffer.len() as u32,
+            timeout
+        )
+        
+        if ret >= 0 {
+            Ok(ret as u32)
+        } else {
+            Err(UART.Error.Timeout)
+        }
+    }
+    
+    fn available(uart: u8) -> u32 {
+        let mut size: u32 = 0
+        uart_get_buffered_data_len(uart as u32, &mut size)
+        size
+    }
+    
+    fn peek(uart: u8) -> UART.Result<u8> {
+        // ESP-IDF doesn't support peek directly
+        // Would need to implement with a separate buffer
+        Err(UART.Error.NoiseError)
+    }
+    
+    fn flush_rx(uart: u8) {
+        uart_flush_input(uart as u32)
+    }
+    
+    fn flush_tx(uart: u8) {
+        uart_wait_tx_done(uart as u32, pdMS_TO_TICKS(1000))
+    }
+    
+    fn set_baud_rate(uart: u8, baud_rate: UART.BaudRate) -> UART.Result<()> {
+        let baud = match baud_rate {
+            UART.BaudRate.Baud9600 => 9600,
+            UART.BaudRate.Baud19200 => 19200,
+            UART.BaudRate.Baud38400 => 38400,
+            UART.BaudRate.Baud57600 => 57600,
+            UART.BaudRate.Baud115200 => 115200,
+            UART.BaudRate.Baud230400 => 230400,
+            UART.BaudRate.Baud460800 => 460800,
+            UART.BaudRate.Baud921600 => 921600,
+            UART.BaudRate.Custom(rate) => rate,
+        }
+        
+        let ret = uart_set_baudrate(uart as u32, baud)
+        
+        if ret == ESP_OK {
+            Ok(())
+        } else {
+            Err(UART.Error.FrameError)
+        }
+    }
+    
+    fn set_rx_interrupt(uart: u8, enabled: bool) {
+        // ESP-IDF handles interrupts internally
+        // User doesn't need to manage them directly
+    }
+    
+    fn on_receive(uart: u8, handler: fn(data: u8)) {
+        // Would require event queue implementation
+        // For now, polling is the recommended approach
+    }
+}
+
+// ESP32-specific helper functions
+
+/// Get UART hardware flow control thresholds
+pub fn get_hw_flow_ctrl_thresh(uart: u8) -> u8 {
+    122  // Default ESP32 threshold
+}
+
+/// Enable UART pattern detection (for AT commands)
+pub fn enable_pattern_detect(uart: u8, pattern_char: u8, chr_num: u8, chr_tout: u32, post_idle: u32, pre_idle: u32) {
+    extern "C" {
+        fn uart_enable_pattern_det_baud_intr(uart_num: u32, pattern_char: u8, chr_num: u8, chr_tout: u32, post_idle: u32, pre_idle: u32) -> i32
+    }
+    
+    uart_enable_pattern_det_baud_intr(uart as u32, pattern_char, chr_num, chr_tout, post_idle, pre_idle)
+}
+
+/// Wait for UART RX FIFO to have data
+pub fn wait_for_data(uart: u8, min_bytes: u32, timeout_ms: u32) -> bool {
+    let start = time.millis()
+    
+    loop {
+        let available = ESP32_UART.available(uart)
+        if available >= min_bytes {
+            return true
+        }
+        
+        if time.millis() - start > timeout_ms {
+            return false
+        }
+        
+        time.delay_us(100)
+    }
+}
+
+/// Get UART TX buffer free space
+pub fn get_tx_buffer_free(uart: u8) -> u32 {
+    // Would need ESP-IDF function to get TX buffer status
+    0
+}

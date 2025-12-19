@@ -1,0 +1,284 @@
+// stdlib/embedded/platforms/riscv_gd32vf103/i2c.berk
+// GD32VF103 I2C Implementation
+// 2 I2C masters (I2C0, I2C1)
+
+kullan "embedded/bal/i2c" olarak I2C_BAL
+
+// I2C port enumeration
+açık enum I2cPort yap
+    I2C0 = 0,
+    I2C1 = 1,
+son
+
+// I2C base addresses
+sabit I2C0_BASE: u32 = 0x40005400
+sabit I2C1_BASE: u32 = 0x40005800
+
+// I2C register offsets
+sabit I2C_CTL0: u32 = 0x00      // Control register 0
+sabit I2C_CTL1: u32 = 0x04      // Control register 1
+sabit I2C_SADDR0: u32 = 0x08    // Slave address register 0
+sabit I2C_SADDR1: u32 = 0x0C    // Slave address register 1
+sabit I2C_DATA: u32 = 0x10      // Transfer buffer register
+sabit I2C_STAT0: u32 = 0x14     // Status register 0
+sabit I2C_STAT1: u32 = 0x18     // Status register 1
+sabit I2C_CKCFG: u32 = 0x1C     // Clock configuration register
+sabit I2C_RT: u32 = 0x20        // Rise time register
+
+// CTL0 bits
+sabit I2C_CTL0_I2CEN: u32 = 1 << 0      // I2C enable
+sabit I2C_CTL0_START: u32 = 1 << 8      // Start condition
+sabit I2C_CTL0_STOP: u32 = 1 << 9       // Stop condition
+sabit I2C_CTL0_ACKEN: u32 = 1 << 10     // ACK enable
+
+// STAT0 bits
+sabit I2C_STAT0_SBSEND: u32 = 1 << 0    // Start condition sent
+sabit I2C_STAT0_ADDSEND: u32 = 1 << 1   // Address sent
+sabit I2C_STAT0_BTC: u32 = 1 << 2       // Byte transfer complete
+sabit I2C_STAT0_ADD10SEND: u32 = 1 << 3 // 10-bit address sent
+sabit I2C_STAT0_STPDET: u32 = 1 << 4    // Stop detected
+sabit I2C_STAT0_RBNE: u32 = 1 << 6      // Receive buffer not empty
+sabit I2C_STAT0_TBE: u32 = 1 << 7       // Transmit buffer empty
+sabit I2C_STAT0_BERR: u32 = 1 << 8      // Bus error
+sabit I2C_STAT0_AERR: u32 = 1 << 10     // Acknowledge error
+
+// Common I2C speeds
+açık sabit I2C_SPEED_STANDARD: u32 = 100000    // 100 kHz
+açık sabit I2C_SPEED_FAST: u32 = 400000         // 400 kHz
+
+harici "C" yap
+    // GD32VF103 I2C firmware library
+    fonksiyon i2c_clock_enable(i2c_periph: u32)
+    fonksiyon i2c_deinit(i2c_periph: u32)
+    fonksiyon i2c_mode_addr_config(i2c_periph: u32, mode: u32, speed: u32, addformat: u32)
+    fonksiyon i2c_enable(i2c_periph: u32)
+    fonksiyon i2c_disable(i2c_periph: u32)
+    fonksiyon i2c_start_on_bus(i2c_periph: u32)
+    fonksiyon i2c_stop_on_bus(i2c_periph: u32)
+    fonksiyon i2c_data_transmit(i2c_periph: u32, data: u8)
+    fonksiyon i2c_data_receive(i2c_periph: u32) -> u8
+    fonksiyon i2c_flag_get(i2c_periph: u32, flag: u32) -> u32
+    fonksiyon i2c_flag_clear(i2c_periph: u32, flag: u32)
+    fonksiyon i2c_ack_config(i2c_periph: u32, ack: u32)
+    
+    fonksiyon volatile_read_u32(addr: *sabit u32) -> u32
+    fonksiyon volatile_write_u32(addr: *değiştir u32, value: u32)
+son
+
+// I2C mode
+sabit I2C_MODE_MASTER: u32 = 0
+
+// Flags
+sabit I2C_FLAG_SBSEND: u32 = I2C_STAT0_SBSEND
+sabit I2C_FLAG_ADDSEND: u32 = I2C_STAT0_ADDSEND
+sabit I2C_FLAG_BTC: u32 = I2C_STAT0_BTC
+sabit I2C_FLAG_TBE: u32 = I2C_STAT0_TBE
+sabit I2C_FLAG_RBNE: u32 = I2C_STAT0_RBNE
+sabit I2C_FLAG_AERR: u32 = I2C_STAT0_AERR
+
+sabit I2C_ACK_ENABLE: u32 = 1
+sabit I2C_ACK_DISABLE: u32 = 0
+
+fonksiyon i2c_base_address(port: I2cPort) -> u32 yap
+    seç port yap
+        durum I2cPort::I2C0 => dön I2C0_BASE,
+        durum I2cPort::I2C1 => dön I2C1_BASE,
+    son
+son
+
+açık enum I2cError yap
+    NACK,
+    TIMEOUT,
+    BUS_ERROR,
+son
+
+fonksiyon i2c_wait_flag(i2c_periph: u32, flag: u32, timeout_ms: u32) -> Sonuç<(), I2cError> yap
+    kulun crate::time::*
+    
+    değişken timeout = Timeout::yeni(timeout_ms)
+    
+    döngü yap
+        eğer i2c_flag_get(i2c_periph, flag) != 0 yap
+            dön Tamam(())
+        son
+        
+        eğer timeout.expired() yap
+            dön Hata(I2cError::TIMEOUT)
+        son
+    son
+son
+
+yapı GD32VF103_I2C_HAL yap
+    port: I2cPort,
+    base_addr: u32,
+    frequency: u32,
+    initialized: bool,
+son
+
+uygula GD32VF103_I2C_HAL yap
+    açık fonksiyon yeni(port: I2cPort, frequency: u32) -> GD32VF103_I2C_HAL yap
+        değişken base_addr = i2c_base_address(port)
+        
+        // Enable I2C clock
+        i2c_clock_enable(base_addr)
+        
+        // Configure I2C
+        i2c_deinit(base_addr)
+        i2c_mode_addr_config(base_addr, I2C_MODE_MASTER, frequency, 0)
+        i2c_enable(base_addr)
+        
+        // Enable ACK
+        i2c_ack_config(base_addr, I2C_ACK_ENABLE)
+        
+        dön GD32VF103_I2C_HAL yap
+            port: port,
+            base_addr: base_addr,
+            frequency: frequency,
+            initialized: doğru,
+        son
+    son
+    
+    açık fonksiyon write_to(
+        &kendim,
+        slave_addr: u8,
+        data: &[u8]
+    ) -> Sonuç<(), I2cError> yap
+        // Generate START
+        i2c_start_on_bus(kendim.base_addr)
+        i2c_wait_flag(kendim.base_addr, I2C_FLAG_SBSEND, 100)?
+        
+        // Send slave address (write mode)
+        i2c_data_transmit(kendim.base_addr, (slave_addr << 1) & 0xFE)
+        i2c_wait_flag(kendim.base_addr, I2C_FLAG_ADDSEND, 100)?
+        
+        // Clear ADDSEND flag
+        i2c_flag_clear(kendim.base_addr, I2C_FLAG_ADDSEND)
+        
+        // Send data
+        için byte içinde data yap
+            i2c_wait_flag(kendim.base_addr, I2C_FLAG_TBE, 100)?
+            i2c_data_transmit(kendim.base_addr, *byte)
+        son
+        
+        // Wait for byte transfer complete
+        i2c_wait_flag(kendim.base_addr, I2C_FLAG_BTC, 100)?
+        
+        // Generate STOP
+        i2c_stop_on_bus(kendim.base_addr)
+        
+        // Check for errors
+        eğer i2c_flag_get(kendim.base_addr, I2C_FLAG_AERR) != 0 yap
+            i2c_flag_clear(kendim.base_addr, I2C_FLAG_AERR)
+            dön Hata(I2cError::NACK)
+        son
+        
+        dön Tamam(())
+    son
+    
+    açık fonksiyon read_from(
+        &kendim,
+        slave_addr: u8,
+        buffer: &değiştir [u8]
+    ) -> Sonuç<(), I2cError> yap
+        eğer buffer.len() == 0 yap
+            dön Tamam(())
+        son
+        
+        // Enable ACK
+        i2c_ack_config(kendim.base_addr, I2C_ACK_ENABLE)
+        
+        // Generate START
+        i2c_start_on_bus(kendim.base_addr)
+        i2c_wait_flag(kendim.base_addr, I2C_FLAG_SBSEND, 100)?
+        
+        // Send slave address (read mode)
+        i2c_data_transmit(kendim.base_addr, (slave_addr << 1) | 0x01)
+        i2c_wait_flag(kendim.base_addr, I2C_FLAG_ADDSEND, 100)?
+        
+        // Clear ADDSEND flag
+        i2c_flag_clear(kendim.base_addr, I2C_FLAG_ADDSEND)
+        
+        // Read data
+        için i içinde 0..buffer.len() yap
+            // Disable ACK before last byte
+            eğer i == buffer.len() - 1 yap
+                i2c_ack_config(kendim.base_addr, I2C_ACK_DISABLE)
+            son
+            
+            i2c_wait_flag(kendim.base_addr, I2C_FLAG_RBNE, 100)?
+            buffer[i] = i2c_data_receive(kendim.base_addr)
+        son
+        
+        // Generate STOP
+        i2c_stop_on_bus(kendim.base_addr)
+        
+        dön Tamam(())
+    son
+    
+    açık fonksiyon write_read(
+        &kendim,
+        slave_addr: u8,
+        tx_data: &[u8],
+        rx_buffer: &değiştir [u8]
+    ) -> Sonuç<(), I2cError> yap
+        // Write phase
+        i2c_start_on_bus(kendim.base_addr)
+        i2c_wait_flag(kendim.base_addr, I2C_FLAG_SBSEND, 100)?
+        
+        i2c_data_transmit(kendim.base_addr, (slave_addr << 1) & 0xFE)
+        i2c_wait_flag(kendim.base_addr, I2C_FLAG_ADDSEND, 100)?
+        i2c_flag_clear(kendim.base_addr, I2C_FLAG_ADDSEND)
+        
+        için byte içinde tx_data yap
+            i2c_wait_flag(kendim.base_addr, I2C_FLAG_TBE, 100)?
+            i2c_data_transmit(kendim.base_addr, *byte)
+        son
+        
+        i2c_wait_flag(kendim.base_addr, I2C_FLAG_BTC, 100)?
+        
+        // Read phase with repeated START
+        kendim.read_from(slave_addr, rx_buffer)
+    son
+    
+    // High-level register operations
+    açık fonksiyon write_reg(
+        &kendim,
+        slave_addr: u8,
+        reg_addr: u8,
+        value: u8
+    ) -> Sonuç<(), I2cError> yap
+        değişken data = [reg_addr, value]
+        dön kendim.write_to(slave_addr, &data)
+    son
+    
+    açık fonksiyon read_reg(
+        &kendim,
+        slave_addr: u8,
+        reg_addr: u8
+    ) -> Sonuç<u8, I2cError> yap
+        değişken mut buffer = [0u8; 1]
+        kendim.write_read(slave_addr, &[reg_addr], &mut buffer)?
+        dön Tamam(buffer[0])
+    son
+    
+    açık fonksiyon read_regs(
+        &kendim,
+        slave_addr: u8,
+        reg_addr: u8,
+        buffer: &değiştir [u8]
+    ) -> Sonuç<(), I2cError> yap
+        dön kendim.write_read(slave_addr, &[reg_addr], buffer)
+    son
+son
+
+uygula I2C_BAL::I2cHAL için GD32VF103_I2C_HAL yap
+    fonksiyon write(&kendim, slave_addr: u8, data: &[u8]) -> Sonuç<(), ()> yap
+        kendim.write_to(slave_addr, data).map_err(|_| ())
+    son
+    
+    fonksiyon read(&kendim, slave_addr: u8, buffer: &değiştir [u8]) -> Sonuç<(), ()> yap
+        kendim.read_from(slave_addr, buffer).map_err(|_| ())
+    son
+son
+
+açık tip I2C_HAL = GD32VF103_I2C_HAL

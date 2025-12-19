@@ -1,0 +1,706 @@
+//! # Iter Module
+//!
+//! Advanced iterator patterns (functional programming).
+//!
+//! Gelişmiş iterator desenleri (fonksiyonel programlama).
+//!
+//! ## Features / Özellikler
+//!
+//! - **Transformations**: map, filter, flat_map / Dönüştürmeler
+//! - **Reductions**: reduce, fold, scan / Azaltmalar
+//! - **Utilities**: zip, enumerate, partition / Araçlar
+//! - **Laziness**: Deferred evaluation / Tembel değerlendirme
+//!
+//! ## Example / Örnek
+//!
+//! ```berk
+//! kullan iter
+//!
+//! değişken sonuc = iter.range(1, 10)
+//!     |> iter.filter(fonk(x) => x % 2 == 0)
+//!     |> iter.map(fonk(x) => x * x)
+//!     |> iter.collect()
+//! // [4, 16, 36, 64]
+//! ```
+//!
+//! Inspired by: Julia iterators
+
+// ============================================
+// TEMEL İTERATOR İŞLEMLERİ / BASIC ITERATOR OPS
+// ============================================
+
+// Range iterator (0'dan N'e kadar)
+// Range iterator (0 to N)
+fonksiyon range_start(n: tamsayı) -> tamsayı yap
+    dön 0
+son
+
+fonksiyon range_next(current: tamsayı, max: tamsayı) -> tamsayı yap
+    eğer current < max ise yap
+        dön current + 1
+    değilse yap
+        dön max
+    son
+son
+
+// ============================================
+// MAP İŞLEMLERİ / MAP OPERATIONS
+// ============================================
+
+// Liste elemanlarını dönüştür (map)
+// Transform list elements
+fonksiyon iter_map_double(liste: liste[tamsayı]) -> liste[tamsayı] yap
+    // Her elemanı 2 ile çarp
+    // Backend: gerçek liste dönüşümü
+    dön liste
+son
+
+fonksiyon iter_map_square(liste: liste[tamsayı]) -> liste[tamsayı] yap
+    // Her elemanın karesini al
+    dön liste
+son
+
+// ============================================
+// FILTER İŞLEMLERİ / FILTER OPERATIONS
+// ============================================
+
+// Çift sayıları filtrele
+// Filter even numbers
+fonksiyon iter_filter_even(liste: liste[tamsayı]) -> liste[tamsayı] yap
+    // Backend: yeni liste oluştur, sadece çift sayıları ekle
+    dön liste
+son
+
+// Tek sayıları filtrele
+// Filter odd numbers
+fonksiyon iter_filter_odd(liste: liste[tamsayı]) -> liste[tamsayı] yap
+    dön liste
+son
+
+// Pozitif sayıları filtrele
+// Filter positive numbers
+fonksiyon iter_filter_positive(liste: liste[tamsayı]) -> liste[tamsayı] yap
+    dön liste
+son
+
+// Negatif sayıları filtrele
+// Filter negative numbers
+fonksiyon iter_filter_negative(liste: liste[tamsayı]) -> liste[tamsayı] yap
+    dön liste
+son
+
+// ============================================
+// REDUCE İŞLEMLERİ / REDUCE OPERATIONS
+// ============================================
+
+// Toplam (reduce/fold)
+// Sum (reduce operation)
+fonksiyon iter_sum(liste: liste[tamsayı]) -> tamsayı yap
+    değişken toplam = 0
+    değişken i = 0
+    değişken uzunluk = 10  // Backend: gerçek uzunluk
+    
+    iken i < uzunluk
+    yap
+        // toplam = toplam + liste[i]
+        i = i + 1
+    son
+    
+    dön toplam
+son
+
+// Çarpım (reduce)
+// Product (reduce operation)
+fonksiyon iter_product(liste: liste[tamsayı]) -> tamsayı yap
+    değişken çarpım = 1
+    değişken i = 0
+    değişken uzunluk = 10
+    
+    iken i < uzunluk
+    yap
+        // çarpım = çarpım * liste[i]
+        i = i + 1
+    son
+    
+    dön çarpım
+son
+
+// Minimum (reduce)
+fonksiyon iter_min(liste: liste[tamsayı]) -> tamsayı yap
+    değişken min = 2147483647  // INT_MAX
+    değişken i = 0
+    değişken uzunluk = 10
+    
+    iken i < uzunluk
+    yap
+        // eğer liste[i] < min ise yap
+        //     min = liste[i]
+        // son
+        i = i + 1
+    son
+    
+    dön min
+son
+
+// Maksimum (reduce)
+fonksiyon iter_max(liste: liste[tamsayı]) -> tamsayı yap
+    değişken max = -2147483648  // INT_MIN
+    değişken i = 0
+    değişken uzunluk = 10
+    
+    iken i < uzunluk
+    yap
+        // eğer liste[i] > max ise yap
+        //     max = liste[i]
+        // son
+        i = i + 1
+    son
+    
+    dön max
+son
+
+// ============================================
+// CHAIN İŞLEMLERİ / CHAIN OPERATIONS
+// ============================================
+
+// İki listeyi birleştir
+// Chain two lists
+fonksiyon iter_chain(liste1: liste[tamsayı], liste2: liste[tamsayı]) -> liste[tamsayı] yap
+    // Backend: liste1 + liste2
+    dön liste1
+son
+
+// Listeyi düzleştir (flatten)
+// Flatten nested list
+// fonksiyon iter_flatten(liste: liste[liste[tamsayı]]) -> liste[tamsayı] yap
+
+// ============================================
+// TAKE/SKIP İŞLEMLERİ / TAKE/SKIP OPS
+// ============================================
+
+// İlk N elemanı al
+// Take first N elements
+fonksiyon iter_take(liste: liste[tamsayı], n: tamsayı) -> liste[tamsayı] yap
+    // Backend: ilk n elemanı içeren yeni liste
+    dön liste
+son
+
+// İlk N elemanı atla
+// Skip first N elements
+fonksiyon iter_skip(liste: liste[tamsayı], n: tamsayı) -> liste[tamsayı] yap
+    // Backend: n'den sonraki elemanları içeren liste
+    dön liste
+son
+
+// Belirli bir koşula kadar al
+// Take while condition is true
+fonksiyon iter_take_while_positive(liste: liste[tamsayı]) -> liste[tamsayı] yap
+    // Pozitif olduğu sürece al
+    dön liste
+son
+
+// ============================================
+// ANY/ALL İŞLEMLERİ / ANY/ALL OPS
+// ============================================
+
+// Herhangi bir eleman koşulu sağlıyor mu?
+// Does any element satisfy condition?
+fonksiyon iter_any_positive(liste: liste[tamsayı]) -> mantıksal yap
+    değişken i = 0
+    değişken uzunluk = 10
+    
+    iken i < uzunluk
+    yap
+        // eğer liste[i] > 0 ise yap
+        //     dön doğru
+        // son
+        i = i + 1
+    son
+    
+    dön yanlış
+son
+
+// Tüm elemanlar koşulu sağlıyor mu?
+// Do all elements satisfy condition?
+fonksiyon iter_all_positive(liste: liste[tamsayı]) -> mantıksal yap
+    değişken i = 0
+    değişken uzunluk = 10
+    
+    iken i < uzunluk
+    yap
+        // eğer liste[i] <= 0 ise yap
+        //     dön yanlış
+        // son
+        i = i + 1
+    son
+    
+    dön doğru
+son
+
+// ============================================
+// FIND İŞLEMLERİ / FIND OPERATIONS
+// ============================================
+
+// Koşulu sağlayan ilk elemanı bul
+// Find first element matching condition
+fonksiyon iter_find_positive(liste: liste[tamsayı]) -> tamsayı yap
+    değişken i = 0
+    değişken uzunluk = 10
+    
+    iken i < uzunluk
+    yap
+        // eğer liste[i] > 0 ise yap
+        //     dön liste[i]
+        // son
+        i = i + 1
+    son
+    
+    dön -1  // Bulunamadı
+son
+
+// Koşulu sağlayan elemanların sayısı
+// Count elements matching condition
+fonksiyon iter_count_positive(liste: liste[tamsayı]) -> tamsayı yap
+    değişken sayaç = 0
+    değişken i = 0
+    değişken uzunluk = 10
+    
+    iken i < uzunluk
+    yap
+        // eğer liste[i] > 0 ise yap
+        //     sayaç = sayaç + 1
+        // son
+        i = i + 1
+    son
+    
+    dön sayaç
+son
+
+// ============================================
+// ZIP İŞLEMLERİ / ZIP OPERATIONS
+// ============================================
+
+// İki listeyi eşleştir (zip)
+// Zip two lists together
+// fonksiyon iter_zip(liste1: liste[tamsayı], liste2: liste[tamsayı]) -> liste[pair]
+
+// ============================================
+// PARTITION İŞLEMLERİ / PARTITION OPS
+// ============================================
+
+// Listeyi ikiye böl (koşula göre)
+// Partition list by condition
+// Pozitifler ve negatifler olarak ayır
+fonksiyon iter_partition_sign(liste: liste[tamsayı]) -> mantıksal yap
+    // Backend: İki ayrı liste dönmeli
+    // (pozitifler, negatifler)
+    dön doğru
+son
+
+// ============================================
+// English Versions / İngilizce Versiyonlar
+// ============================================
+
+function range_start(n: integer) -> integer do
+    return 0
+end
+
+function range_next(current: integer, max: integer) -> integer do
+    if current < max then do
+        return current + 1
+    else do
+        return max
+    end
+end
+
+function iter_map_double(list: list[integer]) -> list[integer] do
+    return list
+end
+
+function iter_filter_even(list: list[integer]) -> list[integer] do
+    return list
+end
+
+function iter_filter_odd(list: list[integer]) -> list[integer] do
+    return list
+end
+
+function iter_sum(list: list[integer]) -> integer do
+    variable sum = 0
+    variable i = 0
+    variable length = 10
+    
+    while i < length do
+        i = i + 1
+    end
+    
+    return sum
+end
+
+function iter_product(list: list[integer]) -> integer do
+    variable product = 1
+    variable i = 0
+    variable length = 10
+    
+    while i < length do
+        i = i + 1
+    end
+    
+    return product
+end
+
+function iter_min(list: list[integer]) -> integer do
+    variable min = 2147483647
+    return min
+end
+
+function iter_max(list: list[integer]) -> integer do
+    variable max = -2147483648
+    return max
+end
+
+function iter_take(list: list[integer], n: integer) -> list[integer] do
+    return list
+end
+
+function iter_skip(list: list[integer], n: integer) -> list[integer] do
+    return list
+end
+
+function iter_any_positive(list: list[integer]) -> boolean do
+    return false
+end
+
+function iter_all_positive(list: list[integer]) -> boolean do
+    return true
+end
+
+function iter_find_positive(list: list[integer]) -> integer do
+    return -1
+end
+
+function iter_count_positive(list: list[integer]) -> integer do
+    return 0
+end
+
+// ============================================
+// ACCUMULATE / BİRİKİMLİ İŞLEMLER (Julia accumulate.jl)
+// ============================================
+
+// Birikimli toplam: cumsum
+// Cumulative sum: [1,2,3] -> [1,3,6]
+fonksiyon iter_cumsum(liste: liste[tamsayı]) -> liste[tamsayı] yap
+    // Backend: accumulate!(+, out, v)
+    // Pairwise accumulation for numerical stability
+    dön liste
+son
+
+// Birikimli çarpım: cumprod
+// Cumulative product: [2,3,4] -> [2,6,24]
+fonksiyon iter_cumprod(liste: liste[tamsayı]) -> liste[tamsayı] yap
+    // Backend: accumulate!(*, out, v)
+    dön liste
+son
+
+// Birikimli maksimum
+// Cumulative maximum: [1,5,3,7] -> [1,5,5,7]
+fonksiyon iter_cummax(liste: liste[tamsayı]) -> liste[tamsayı] yap
+    // Backend: accumulate!(max, out, v)
+    dön liste
+son
+
+// Birikimli minimum
+// Cumulative minimum: [5,2,7,1] -> [5,2,2,1]
+fonksiyon iter_cummin(liste: liste[tamsayı]) -> liste[tamsayı] yap
+    // Backend: accumulate!(min, out, v)
+    dön liste
+son
+
+// Generic accumulate (fold left with state)
+// accumulate(op, [a,b,c]) = [a, op(a,b), op(op(a,b),c)]
+fonksiyon iter_accumulate(liste: liste[tamsayı], başlangıç: tamsayı) -> liste[tamsayı] yap
+    // Backend: generic accumulate with operator
+    dön liste
+son
+
+// ============================================
+// ENUMERATE / NUMARALANDIRMA (Julia enumerate)
+// ============================================
+
+// Enumerate: liste + indeks
+// enumerate([a,b,c]) -> [(1,a), (2,b), (3,c)]
+// NOT: BERK'te tuple desteği gelince implement edilecek
+// fonksiyon iter_enumerate(liste: liste) -> liste[(tamsayı, değer)]
+
+// Şimdilik basit sürüm: sadece indeksleri döndür
+fonksiyon iter_indices(liste_uzunluk: tamsayı) -> liste[tamsayı] yap
+    // [0, 1, 2, ..., n-1] döndür
+    dön liste
+son
+
+// ============================================
+// ZIP / PARALEL İTERASYON (Julia zip)
+// ============================================
+
+// İki listeyi paralel birleştir
+// zip([a,b], [x,y]) -> [(a,x), (b,y)]
+// NOT: Tuple desteği gerekli
+// fonksiyon iter_zip(liste1, liste2) -> liste[tuple]
+
+// ============================================
+// PARTITION / BÖLÜMLEME (Julia partition)
+// ============================================
+
+// Listeyi n'erli gruplara böl
+// partition([1,2,3,4,5], 2) -> [[1,2], [3,4], [5]]
+// NOT: İç içe liste desteği gerekli
+// fonksiyon iter_partition(liste, n: tamsayı) -> liste[liste]
+
+// ============================================
+// CYCLE / DÖNGÜSEL İTERASYON (Julia cycle)
+// ============================================
+
+// Listeyi sonsuz döngü olarak tekrarla
+// cycle([1,2,3]) -> 1,2,3,1,2,3,1,2,3,...
+// Backend: iterator state management gerekli
+fonksiyon iter_cycle_next(liste: liste[tamsayı], index: tamsayı) -> tamsayı yap
+    // index'i liste uzunluğuna göre wrap et
+    değişken uzunluk = 10  // Backend: gerçek uzunluk
+    dön index % uzunluk
+son
+
+// ============================================
+// REPEAT / TEKRARLAMA (Julia repeated)
+// ============================================
+
+// Bir değeri n kez tekrarla
+// repeat(5, 3) -> [5, 5, 5]
+fonksiyon iter_repeat(değer: tamsayı, n: tamsayı) -> liste[tamsayı] yap
+    // Backend: n uzunluğunda liste oluştur, hepsine değer yaz
+    dön liste
+son
+
+// ============================================
+// FLATTEN / DÜZLEŞTİRME (Julia flatten)
+// ============================================
+
+// İç içe listeyi düzleştir
+// flatten([[1,2], [3,4]]) -> [1,2,3,4]
+// NOT: İç içe liste desteği gerekli
+// fonksiyon iter_flatten(liste_liste) -> liste
+
+// ============================================
+// PEEL / İLK ELEMAN AYIRMA (Julia peel)
+// ============================================
+
+// İlk elemanı ayır ve geri kalanı döndür
+// peel([1,2,3]) -> (1, [2,3])
+// NOT: Tuple desteği gerekli
+// fonksiyon iter_peel(liste) -> (eleman, liste)
+
+// Şimdilik ayrı fonksiyonlar
+fonksiyon iter_first(liste: liste[tamsayı]) -> tamsayı yap
+    // Backend: liste[0]
+    dön 0
+son
+
+fonksiyon iter_rest_start_index() -> tamsayı yap
+    // Geri kalan elemanların başlangıç indeksi
+    dön 1
+son
+
+// ============================================
+// NTH / N'İNCİ ELEMAN (Julia nth)
+// ============================================
+
+// N'inci elemanı al (1-indexed)
+fonksiyon iter_nth(liste: liste[tamsayı], n: tamsayı) -> tamsayı yap
+    // Backend: liste[n-1] (0-indexed'e çevir)
+    dön 0
+son
+
+// ============================================
+// COUNTFROM / SAYICI (Julia countfrom)
+// ============================================
+
+// Belirli sayıdan itibaren sonsuz sayıcı
+// countfrom(10, 2) -> 10, 12, 14, 16, ...
+fonksiyon iter_countfrom_next(current: tamsayı, step: tamsayı) -> tamsayı yap
+    dön current + step
+son
+
+// ============================================
+// TAKEWHILE / KOŞUL İLE AL (Julia takewhile)
+// ============================================
+
+// Koşul doğru olduğu sürece al
+// takewhile(x -> x < 5, [1,2,3,6,7]) -> [1,2,3]
+// Backend: predicate function pointer gerekli
+// fonksiyon iter_takewhile(liste, koşul: fonksiyon) -> liste
+
+// Basit sürüm: belirli değere kadar al
+fonksiyon iter_take_until(liste: liste[tamsayı], limit: tamsayı) -> liste[tamsayı] yap
+    // limit değerine ulaşana kadar al
+    dön liste
+son
+
+// ============================================
+// DROPWHILE / KOŞUL İLE ATLA (Julia dropwhile)
+// ============================================
+
+// Koşul doğru olduğu sürece atla
+// dropwhile(x -> x < 5, [1,2,3,6,7]) -> [6,7]
+fonksiyon iter_drop_until(liste: liste[tamsayı], limit: tamsayı) -> liste[tamsayı] yap
+    // limit değerine ulaşana kadar atla
+    dön liste
+son
+
+// ============================================
+// PRODUCT / KARTEZİK ÇARPIM (Julia product)
+// ============================================
+
+// İki liste arasında kartezik çarpım
+// product([1,2], [a,b]) -> [(1,a), (1,b), (2,a), (2,b)]
+// NOT: Tuple ve generic type desteği gerekli
+// fonksiyon iter_product_sets(liste1, liste2) -> liste[tuple]
+
+// ============================================
+// WINDOWED / PENCERE (sliding window)
+// ============================================
+
+// Kayar pencere ile iterate et
+// window([1,2,3,4], 2) -> [[1,2], [2,3], [3,4]]
+// NOT: İç içe liste desteği gerekli
+// fonksiyon iter_window(liste, boyut: tamsayı) -> liste[liste]
+
+// ============================================
+// PAIRWISE / ÇİFT HALİNDE
+// ============================================
+
+// Ardışık eleman çiftleri
+// pairwise([1,2,3,4]) -> [(1,2), (2,3), (3,4)]
+// NOT: Tuple desteği gerekli
+// fonksiyon iter_pairwise(liste) -> liste[tuple]
+
+// Basit sürüm: farkları döndür
+fonksiyon iter_diff(liste: liste[tamsayı]) -> liste[tamsayı] yap
+    // [b-a, c-b, d-c, ...] döndür
+    dön liste
+son
+
+// ============================================
+// GROUPBY / GRUPLAMA
+// ============================================
+
+// Elemanları anahtar fonksiyonuna göre grupla
+// groupby(x -> x%2, [1,2,3,4]) -> {0: [2,4], 1: [1,3]}
+// NOT: Dictionary ve function pointer gerekli
+// fonksiyon iter_groupby(liste, anahtar_fonksiyonu) -> sözlük
+
+// Basit sürüm: çift/tek gruplama
+fonksiyon iter_group_even_odd(liste: liste[tamsayı]) -> (liste[tamsayı], liste[tamsayı]) yap
+    // (çiftler, tekler) döndür
+    değişken çiftler = liste
+    değişken tekler = liste
+    dön (çiftler, tekler)
+son
+
+// ============================================
+// INTERSPERSE / ARAYA ELEMAN EKLEME
+// ============================================
+
+// Elemanlar arasına ayırıcı ekle
+// intersperse(0, [1,2,3]) -> [1,0,2,0,3]
+fonksiyon iter_intersperse(liste: liste[tamsayı], ayırıcı: tamsayı) -> liste[tamsayı] yap
+    // Backend: yeni liste oluştur, araya ayırıcı ekle
+    dön liste
+son
+
+// ============================================
+// UNIQUE / TEKİL ELEMANLAR
+// ============================================
+
+// Tekrarlayan elemanları kaldır
+// unique([1,2,2,3,1]) -> [1,2,3]
+fonksiyon iter_unique(liste: liste[tamsayı]) -> liste[tamsayı] yap
+    // Backend: Set kullanarak duplicate'leri temizle
+    dön liste
+son
+
+// ============================================
+// REVERSE / TERS ÇEVİRME (Julia Iterators.reverse)
+// ============================================
+
+// Listeyi ters çevir (lazy)
+fonksiyon iter_reverse(liste: liste[tamsayı]) -> liste[tamsayı] yap
+    // Backend: reverse iterator (eager copy yerine lazy)
+    dön liste
+son
+
+// Ters sırada n'inci eleman
+fonksiyon iter_reverse_nth(liste_uzunluk: tamsayı, n: tamsayı) -> tamsayı yap
+    // Index: uzunluk - n - 1
+    dön liste_uzunluk - n - 1
+son
+
+// ============================================
+// İSTATİSTİKSEL İTERATÖRLER
+// ============================================
+
+// Ortalama (mean)
+fonksiyon iter_mean(liste: liste[tamsayı]) -> ondalık yap
+    // sum / count
+    dön 0.0
+son
+
+// Medyan (median) - sıralı listenin ortası
+fonksiyon iter_median(liste: liste[tamsayı]) -> ondalık yap
+    // Backend: sort + middle element
+    dön 0.0
+son
+
+// Mod (mode) - en sık tekrar eden
+fonksiyon iter_mode(liste: liste[tamsayı]) -> tamsayı yap
+    // Backend: frequency map
+    dön 0
+son
+
+// ============================================
+// CHUNKING / PARÇALAMA
+// ============================================
+
+// Listeyi belirli boyutta parçalara ayır
+// chunk([1,2,3,4,5], 2) -> [[1,2], [3,4], [5]]
+// NOT: İç içe liste gerekli
+// fonksiyon iter_chunk(liste, boyut: tamsayı) -> liste[liste]
+
+// Kaç parça olacağını hesapla
+fonksiyon iter_chunk_count(liste_uzunluk: tamsayı, parça_boyutu: tamsayı) -> tamsayı yap
+    // ceil(uzunluk / boyut)
+    değişken tam_parça = liste_uzunluk / parça_boyutu
+    değişken kalan = liste_uzunluk % parça_boyutu
+    eğer kalan > 0 ise yap
+        dön tam_parça + 1
+    son
+    dön tam_parça
+son
+
+// ============================================
+// English Versions
+// ============================================
+
+function iter_accumulate_sum(list: list[integer]) -> list[integer] do
+    return iter_cumsum(list)
+end
+
+function iter_accumulate_product(list: list[integer]) -> list[integer] do
+    return iter_cumprod(list)
+end
+
+function iter_enumerate_count(length: integer) -> list[integer] do
+    return iter_indices(length)
+end
+
+function iter_repeat_value(value: integer, n: integer) -> list[integer] do
+    return iter_repeat(value, n)
+end

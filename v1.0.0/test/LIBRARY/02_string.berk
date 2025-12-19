@@ -1,0 +1,114 @@
+/// ═══════════════════════════════════════════════════════════════════════════
+/// BERK Kutuphane Demo - String Modulu
+/// Metin islemleri
+/// ═══════════════════════════════════════════════════════════════════════════
+
+kullan std::io
+kullan std::string
+
+yaz("============================================================")
+yaz("         Kutuphane Demo: String Islemleri                   ")
+yaz("============================================================")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 1: Temel String Islemleri
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 1: Temel String Islemleri ---")
+
+değişken metin = "Merhaba Dunya"
+yaz("   Orijinal: ", metin)
+
+değişken uzunluk = metin.uzunluk()
+yaz("   Uzunluk: ", uzunluk)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 2: String Birlestirme
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 2: String Birlestirme ---")
+
+değişken isim = "BERK"
+değişken versiyon = "1.0"
+yaz("   Isim: ", isim)
+yaz("   Versiyon: ", versiyon)
+yaz("   Birlesik: ", isim, " v", versiyon)
+
+değişken cumle1 = "Turkce "
+değişken cumle2 = "programlama "
+değişken cumle3 = "dili"
+yaz("   Cumle: ", cumle1, cumle2, cumle3)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 3: String Karsilastirma
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 3: String Karsilastirma ---")
+
+değişken s1 = "abc"
+değişken s2 = "abc"
+değişken s3 = "xyz"
+
+değişken esit1 = s1 == s2
+değişken esit2 = s1 == s3
+
+yaz("   '", s1, "' == '", s2, "' : ", esit1)
+yaz("   '", s1, "' == '", s3, "' : ", esit2)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 4: Karakter Islemleri
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 4: ASCII Kodlari ---")
+
+yaz("   Buyuk harfler: A=65, B=66, ... Z=90")
+yaz("   Kucuk harfler: a=97, b=98, ... z=122")
+yaz("   Rakamlar: 0=48, 1=49, ... 9=57")
+yaz("   Ozel: bosluk=32, !=33, ?=63")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 5: Format Ornekleri
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 5: Format Ornekleri ---")
+
+değişken sayi = 42
+değişken ondalik = 3.14159
+değişken mantik = doğru
+
+yaz("   Tamsayi: ", sayi)
+yaz("   Ondalik: ", ondalik)
+yaz("   Boolean: ", mantik)
+
+// Farkli format stilleri
+yaz("\n   Cikti Formatlari:")
+yaz("   - Virgul ile: ", sayi, ", ", ondalik, ", ", mantik)
+yaz("   - Parantez: (", sayi, ")")
+yaz("   - Koseli: [", ondalik, "]")
+yaz("   - Tirnak: '", isim, "'")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 6: Pratik Ornekler
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 6: Pratik Ornekler ---")
+
+// Selam mesaji olusturma
+fonksiyon selamla(ad: metin) -> metin yap
+    dön "Merhaba, " + ad + "!"
+son
+
+yaz("   ", selamla("Ahmet"))
+yaz("   ", selamla("Ayse"))
+
+// Basit sablonlar
+yaz("\n   Tablo Formati:")
+yaz("   ┌──────────────┬──────────┐")
+yaz("   │ Ogrenci      │ Not      │")
+yaz("   ├──────────────┼──────────┤")
+yaz("   │ Ali          │ 85       │")
+yaz("   │ Veli         │ 92       │")
+yaz("   │ Zeynep       │ 78       │")
+yaz("   └──────────────┴──────────┘")
+
+yaz("\n[OK] String kutuphane demosu tamamlandi!")

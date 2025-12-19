@@ -1,0 +1,389 @@
+// nRF52 GPIO Module
+// Hardware Abstraction Layer for nRF52 series GPIO
+// 
+// nRF52 GPIO Features:
+// - 32 GPIOs (P0.00-P0.31) on nRF52832
+// - 48 GPIOs (P0.00-P0.31, P1.00-P1.15) on nRF52840
+// - Configurable drive strength (S0S1, H0S1, etc.)
+// - Input sensing for low-power wake-up
+// - GPIOTE (GPIO Tasks and Events) for interrupts
+// - PPI (Programmable Peripheral Interconnect) support
+//
+// nRF5 SDK: nrf_gpio.h, nrf_gpiote.h
+
+extern "C" {
+    // GPIO Functions
+    fn nrf_gpio_cfg_output(pin: u32);
+    fn nrf_gpio_cfg_input(pin: u32, pull: u32);
+    fn nrf_gpio_cfg(pin: u32, dir: u32, input: u32, pull: u32, drive: u32, sense: u32);
+    fn nrf_gpio_pin_set(pin: u32);
+    fn nrf_gpio_pin_clear(pin: u32);
+    fn nrf_gpio_pin_toggle(pin: u32);
+    fn nrf_gpio_pin_write(pin: u32, value: u32);
+    fn nrf_gpio_pin_read(pin: u32) -> u32;
+    fn nrf_gpio_port_out_read(port: u32) -> u32;
+    fn nrf_gpio_port_out_write(port: u32, value: u32);
+    
+    // GPIOTE Functions (GPIO Tasks and Events)
+    fn nrf_gpiote_event_configure(idx: u32, pin: u32, polarity: u32);
+    fn nrf_gpiote_event_enable(idx: u32);
+    fn nrf_gpiote_event_disable(idx: u32);
+    fn nrf_gpiote_int_enable(mask: u32);
+    fn nrf_gpiote_int_disable(mask: u32);
+    fn nrf_gpiote_event_is_set(idx: u32) -> bool;
+    fn nrf_gpiote_event_clear(idx: u32);
+}
+
+// GPIO ports
+const GPIO_PORT_0: u32 = 0;
+const GPIO_PORT_1: u32 = 1;
+
+// GPIO direction
+const GPIO_DIR_INPUT: u32 = 0;
+const GPIO_DIR_OUTPUT: u32 = 1;
+
+// GPIO pull configuration
+const GPIO_PULL_DISABLED: u32 = 0;
+const GPIO_PULL_DOWN: u32 = 1;
+const GPIO_PULL_UP: u32 = 3;
+
+// GPIO drive strength
+const GPIO_DRIVE_S0S1: u32 = 0;  // Standard '0', standard '1'
+const GPIO_DRIVE_H0S1: u32 = 1;  // High-drive '0', standard '1'
+const GPIO_DRIVE_S0H1: u32 = 2;  // Standard '0', high-drive '1'
+const GPIO_DRIVE_H0H1: u32 = 3;  // High-drive '0', high-drive '1'
+
+// GPIO sense (for low-power wake-up)
+const GPIO_SENSE_DISABLED: u32 = 0;
+const GPIO_SENSE_HIGH: u32 = 2;
+const GPIO_SENSE_LOW: u32 = 3;
+
+// GPIOTE polarity
+const GPIOTE_POLARITY_LOTOHI: u32 = 1;  // Rising edge
+const GPIOTE_POLARITY_HITOLO: u32 = 2;  // Falling edge
+const GPIOTE_POLARITY_TOGGLE: u32 = 3;  // Any edge
+
+// GPIOTE channels (8 available)
+const GPIOTE_CHANNELS: u32 = 8;
+
+pub struct GPIO {
+    pin: u32,
+    port: u32,
+}
+
+impl GPIO {
+    // Create GPIO pin (P0.xx or P1.xx)
+    pub fn new(port: u32, pin: u32) -> GPIO {
+        GPIO {
+            pin: if port == 0 { pin } else { 32 + pin },
+            port,
+        }
+    }
+    
+    // Create P0.xx pin (most common)
+    pub fn new_p0(pin: u32) -> GPIO {
+        Self::new(0, pin)
+    }
+    
+    // Create P1.xx pin (nRF52840 only)
+    pub fn new_p1(pin: u32) -> GPIO {
+        Self::new(1, pin)
+    }
+    
+    // Configure as output
+    pub fn set_output(&self) {
+        unsafe {
+            nrf_gpio_cfg_output(self.pin);
+        }
+    }
+    
+    // Configure as input with pull resistor
+    pub fn set_input(&self, pull: u32) {
+        unsafe {
+            nrf_gpio_cfg_input(self.pin, pull);
+        }
+    }
+    
+    // Configure with full options
+    pub fn configure(&self, dir: u32, pull: u32, drive: u32, sense: u32) {
+        unsafe {
+            nrf_gpio_cfg(
+                self.pin,
+                dir,
+                if dir == GPIO_DIR_INPUT { 1 } else { 0 },
+                pull,
+                drive,
+                sense
+            );
+        }
+    }
+    
+    // Set pin HIGH
+    pub fn set_high(&self) {
+        unsafe {
+            nrf_gpio_pin_set(self.pin);
+        }
+    }
+    
+    // Set pin LOW
+    pub fn set_low(&self) {
+        unsafe {
+            nrf_gpio_pin_clear(self.pin);
+        }
+    }
+    
+    // Toggle pin state
+    pub fn toggle(&self) {
+        unsafe {
+            nrf_gpio_pin_toggle(self.pin);
+        }
+    }
+    
+    // Write digital value (0 or 1)
+    pub fn write(&self, value: bool) {
+        unsafe {
+            nrf_gpio_pin_write(self.pin, if value { 1 } else { 0 });
+        }
+    }
+    
+    // Read digital value
+    pub fn read(&self) -> bool {
+        unsafe {
+            nrf_gpio_pin_read(self.pin) != 0
+        }
+    }
+    
+    // Configure with sense for low-power wake-up
+    pub fn set_sense(&self, sense: u32) {
+        self.configure(GPIO_DIR_INPUT, GPIO_PULL_DISABLED, GPIO_DRIVE_S0S1, sense);
+    }
+}
+
+// GPIOTE interrupt handler
+pub struct GPIOInterrupt {
+    channel: u32,
+    pin: u32,
+}
+
+impl GPIOInterrupt {
+    // Configure GPIOTE channel for interrupt
+    pub fn new(channel: u32, pin: u32, polarity: u32) -> Result<GPIOInterrupt, &'static str> {
+        if channel >= GPIOTE_CHANNELS {
+            return Err("Invalid GPIOTE channel (0-7)");
+        }
+        
+        unsafe {
+            nrf_gpiote_event_configure(channel, pin, polarity);
+            nrf_gpiote_event_enable(channel);
+            nrf_gpiote_int_enable(1 << channel);
+        }
+        
+        Ok(GPIOInterrupt { channel, pin })
+    }
+    
+    // Check if interrupt occurred
+    pub fn is_pending(&self) -> bool {
+        unsafe {
+            nrf_gpiote_event_is_set(self.channel)
+        }
+    }
+    
+    // Clear interrupt flag
+    pub fn clear(&self) {
+        unsafe {
+            nrf_gpiote_event_clear(self.channel);
+        }
+    }
+    
+    // Disable interrupt
+    pub fn disable(&self) {
+        unsafe {
+            nrf_gpiote_int_disable(1 << self.channel);
+            nrf_gpiote_event_disable(self.channel);
+        }
+    }
+}
+
+// Helper: LED control (common on dev boards)
+pub struct LED {
+    gpio: GPIO,
+    active_low: bool,
+}
+
+impl LED {
+    // Create LED on pin (active low for most dev boards)
+    pub fn new(pin: u32, active_low: bool) -> LED {
+        let gpio = GPIO::new_p0(pin);
+        gpio.set_output();
+        
+        let led = LED { gpio, active_low };
+        led.off();
+        led
+    }
+    
+    pub fn on(&self) {
+        if self.active_low {
+            self.gpio.set_low();
+        } else {
+            self.gpio.set_high();
+        }
+    }
+    
+    pub fn off(&self) {
+        if self.active_low {
+            self.gpio.set_high();
+        } else {
+            self.gpio.set_low();
+        }
+    }
+    
+    pub fn toggle(&self) {
+        self.gpio.toggle();
+    }
+    
+    pub fn is_on(&self) -> bool {
+        let state = self.gpio.read();
+        if self.active_low { !state } else { state }
+    }
+}
+
+// Helper: Button with debouncing
+pub struct Button {
+    gpio: GPIO,
+    active_low: bool,
+}
+
+impl Button {
+    // Create button on pin
+    pub fn new(pin: u32, active_low: bool) -> Button {
+        let gpio = GPIO::new_p0(pin);
+        gpio.set_input(if active_low { GPIO_PULL_UP } else { GPIO_PULL_DOWN });
+        
+        Button { gpio, active_low }
+    }
+    
+    pub fn is_pressed(&self) -> bool {
+        let state = self.gpio.read();
+        if self.active_low { !state } else { state }
+    }
+    
+    pub fn wait_for_press(&self) {
+        while !self.is_pressed() {
+            // Wait
+        }
+    }
+    
+    pub fn wait_for_release(&self) {
+        while self.is_pressed() {
+            // Wait
+        }
+    }
+}
+
+// nRF52 DK Board helpers (standard pins)
+pub mod board {
+    use super::*;
+    
+    // nRF52 DK LED pins (active low)
+    pub const LED1_PIN: u32 = 17;
+    pub const LED2_PIN: u32 = 18;
+    pub const LED3_PIN: u32 = 19;
+    pub const LED4_PIN: u32 = 20;
+    
+    // nRF52 DK Button pins (active low)
+    pub const BUTTON1_PIN: u32 = 13;
+    pub const BUTTON2_PIN: u32 = 14;
+    pub const BUTTON3_PIN: u32 = 15;
+    pub const BUTTON4_PIN: u32 = 16;
+    
+    pub fn led1() -> LED { LED::new(LED1_PIN, true) }
+    pub fn led2() -> LED { LED::new(LED2_PIN, true) }
+    pub fn led3() -> LED { LED::new(LED3_PIN, true) }
+    pub fn led4() -> LED { LED::new(LED4_PIN, true) }
+    
+    pub fn button1() -> Button { Button::new(BUTTON1_PIN, true) }
+    pub fn button2() -> Button { Button::new(BUTTON2_PIN, true) }
+    pub fn button3() -> Button { Button::new(BUTTON3_PIN, true) }
+    pub fn button4() -> Button { Button::new(BUTTON4_PIN, true) }
+}
+
+// Example: Blink LED
+pub fn example_blink() {
+    let led = board::led1();
+    
+    loop {
+        led.on();
+        sleep_ms(500);
+        led.off();
+        sleep_ms(500);
+    }
+}
+
+// Example: Button control LED
+pub fn example_button_led() {
+    let button = board::button1();
+    let led = board::led1();
+    
+    loop {
+        if button.is_pressed() {
+            led.on();
+        } else {
+            led.off();
+        }
+    }
+}
+
+// Example: Button interrupt
+pub fn example_button_interrupt() {
+    let button = board::button1();
+    let led = board::led1();
+    
+    // Configure interrupt on button press (falling edge for active-low)
+    let interrupt = GPIOInterrupt::new(0, board::BUTTON1_PIN, GPIOTE_POLARITY_HITOLO)
+        .expect("Failed to configure interrupt");
+    
+    loop {
+        if interrupt.is_pending() {
+            interrupt.clear();
+            led.toggle();
+        }
+        
+        // Enter low-power mode (would use WFI instruction)
+    }
+}
+
+// Example: Port sensing for ultra-low power
+pub fn example_port_sensing() {
+    let button = GPIO::new_p0(13);
+    
+    // Configure sense on low (button press with pull-up)
+    button.set_sense(GPIO_SENSE_LOW);
+    
+    // Enter System OFF mode - wakes on button press
+    // (actual implementation would use power management API)
+}
+
+// Example: High-drive output (for LED strips, etc.)
+pub fn example_high_drive() {
+    let led_strip = GPIO::new_p0(25);
+    
+    // Configure with high-drive strength
+    led_strip.configure(
+        GPIO_DIR_OUTPUT,
+        GPIO_PULL_DISABLED,
+        GPIO_DRIVE_H0H1,  // High-drive both levels
+        GPIO_SENSE_DISABLED
+    );
+    
+    loop {
+        led_strip.set_high();
+        sleep_ms(100);
+        led_strip.set_low();
+        sleep_ms(100);
+    }
+}
+
+// Helper: Sleep function (would use Nordic SDK)
+fn sleep_ms(ms: u32) {
+    // Placeholder - actual implementation uses nrf_delay_ms
+}

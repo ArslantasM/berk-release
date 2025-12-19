@@ -1,0 +1,429 @@
+/// ═══════════════════════════════════════════════════════════════════════════
+/// BERK HAL - Display Interface Demo
+/// LCD, OLED, TFT Ekran Kontrolleri
+/// ═══════════════════════════════════════════════════════════════════════════
+
+kullan std::io
+kullan std::hal
+
+yaz("============================================================")
+yaz("         HAL Demo: Display Interfaces                       ")
+yaz("         LCD, OLED, TFT Ekran Suruculeri                    ")
+yaz("============================================================")
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BOLUM 1: HD44780 Karakter LCD (16x2, 20x4)
+// ═══════════════════════════════════════════════════════════════════════════
+
+yaz("\n--- BOLUM 1: HD44780 LCD ---")
+
+// 4-bit mod pin tanimlari
+değişken LCD_RS = 2
+değişken LCD_EN = 3
+değişken LCD_D4 = 4
+değişken LCD_D5 = 5
+değişken LCD_D6 = 6
+değişken LCD_D7 = 7
+
+yaz("\n   HD44780 4-bit Mod Baglantisi:")
+yaz("   ┌─────────────────────────────────────┐")
+yaz("   │         16x2 Character LCD          │")
+yaz("   ├─────────────────────────────────────┤")
+yaz("   │ RS  ──── Pin ", LCD_RS, "                   │")
+yaz("   │ EN  ──── Pin ", LCD_EN, "                   │")
+yaz("   │ D4  ──── Pin ", LCD_D4, "                   │")
+yaz("   │ D5  ──── Pin ", LCD_D5, "                   │")
+yaz("   │ D6  ──── Pin ", LCD_D6, "                   │")
+yaz("   │ D7  ──── Pin ", LCD_D7, "                   │")
+yaz("   │ R/W ──── GND (Sadece yazma)         │")
+yaz("   │ V0  ──── 10K Pot (Kontrast)         │")
+yaz("   └─────────────────────────────────────┘")
+
+// LCD komutlari
+değişken LCD_CLEAR = 0x01
+değişken LCD_HOME = 0x02
+değişken LCD_ENTRY_MODE = 0x06
+değişken LCD_DISPLAY_ON = 0x0C
+değişken LCD_CURSOR_ON = 0x0E
+değişken LCD_BLINK_ON = 0x0F
+değişken LCD_4BIT_2LINE = 0x28
+
+fonksiyon lcd_komut(cmd: tamsayı) yap
+    // RS = LOW, komut modu
+    yaz("   LCD CMD: 0x", cmd)
+son
+
+fonksiyon lcd_veri(karakter: tamsayı) yap
+    // RS = HIGH, veri modu
+    yaz("   LCD DATA: ", karakter)
+son
+
+fonksiyon lcd_baslat() yap
+    yaz("   LCD Baslatiliyor...")
+    lcd_komut(0x33)  // 8-bit mod
+    lcd_komut(0x32)  // 4-bit moda gec
+    lcd_komut(LCD_4BIT_2LINE)  // 2 satir, 5x8 font
+    lcd_komut(LCD_DISPLAY_ON)  // Ekran ac, cursor kapat
+    lcd_komut(LCD_ENTRY_MODE)  // Sol -> Sag
+    lcd_komut(LCD_CLEAR)       // Ekrani temizle
+    yaz("   LCD Hazir!")
+son
+
+fonksiyon lcd_pozisyon(satir: tamsayı, sutun: tamsayı) yap
+    olsun adres = sutun
+    eğer satir == 1 ise
+        adres = adres + 0x40
+    son
+    lcd_komut(0x80 + adres)
+    yaz("   LCD Cursor: Satir ", satir, ", Sutun ", sutun)
+son
+
+fonksiyon lcd_yaz(metin: metin) yap
+    yaz("   LCD Yaz: '", metin, "'")
+son
+
+fonksiyon lcd_temizle() yap
+    lcd_komut(LCD_CLEAR)
+    yaz("   LCD Temizlendi")
+son
+
+// Ozel karakter tanimlama
+yaz("\n   Ozel Karakter Tanimlama (CGRAM):")
+yaz("   ┌─────────────────────────────────────┐")
+yaz("   │ Byte 0: █ █ █ █ █  -> 0b11111       │")
+yaz("   │ Byte 1: █ . . . █  -> 0b10001       │")
+yaz("   │ Byte 2: █ . . . █  -> 0b10001       │")
+yaz("   │ Byte 3: █ . . . █  -> 0b10001       │")
+yaz("   │ Byte 4: █ . . . █  -> 0b10001       │")
+yaz("   │ Byte 5: █ . . . █  -> 0b10001       │")
+yaz("   │ Byte 6: █ . . . █  -> 0b10001       │")
+yaz("   │ Byte 7: █ █ █ █ █  -> 0b11111       │")
+yaz("   └─────────────────────────────────────┘")
+
+// LCD Test
+yaz("\n   LCD Test:")
+lcd_baslat()
+lcd_pozisyon(0, 0)
+lcd_yaz("Merhaba BERK!")
+lcd_pozisyon(1, 0)
+lcd_yaz("Sicaklik: 25.5C")
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BOLUM 2: I2C LCD (PCF8574 Expander)
+// ═══════════════════════════════════════════════════════════════════════════
+
+yaz("\n--- BOLUM 2: I2C LCD (PCF8574) ---")
+
+değişken LCD_I2C_ADDR = 0x27
+
+yaz("\n   I2C LCD Avantajlari:")
+yaz("   - Sadece 2 pin (SDA, SCL)")
+yaz("   - Dahili backlight kontrolu")
+yaz("   - Kolay baglanti")
+
+yaz("\n   PCF8574 Bit Haritalamasi:")
+yaz("   ┌─────┬────────────────────┐")
+yaz("   │ Bit │ Fonksiyon          │")
+yaz("   ├─────┼────────────────────┤")
+yaz("   │ 0   │ RS                 │")
+yaz("   │ 1   │ R/W                │")
+yaz("   │ 2   │ EN                 │")
+yaz("   │ 3   │ Backlight          │")
+yaz("   │ 4-7 │ D4-D7              │")
+yaz("   └─────┴────────────────────┘")
+
+fonksiyon i2c_lcd_baslat(adres: tamsayı) yap
+    yaz("   I2C LCD @ 0x", adres, " baslatildi")
+son
+
+fonksiyon i2c_lcd_backlight(acik: doğruyanlış) yap
+    eğer acik ise
+        yaz("   Backlight: ACIK")
+    değilse
+        yaz("   Backlight: KAPALI")
+    son
+son
+
+i2c_lcd_baslat(LCD_I2C_ADDR)
+i2c_lcd_backlight(doğru)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BOLUM 3: SSD1306 OLED Display (I2C)
+// ═══════════════════════════════════════════════════════════════════════════
+
+yaz("\n--- BOLUM 3: SSD1306 OLED Display ---")
+
+değişken OLED_ADDR = 0x3C
+değişken OLED_WIDTH = 128
+değişken OLED_HEIGHT = 64
+değişken OLED_PAGES = 8   // 64 / 8 = 8 sayfa
+
+yaz("\n   SSD1306 Ozellikleri:")
+yaz("   - Cozunurluk: ", OLED_WIDTH, "x", OLED_HEIGHT)
+yaz("   - Arayuz: I2C (0x3C veya 0x3D)")
+yaz("   - Renkler: Monochrome")
+yaz("   - Bellek: ", (OLED_WIDTH * OLED_HEIGHT) / 8, " bytes GDDRAM")
+
+yaz("\n   SSD1306 Bellek Organizasyonu:")
+yaz("   ┌──────────────────────────────────────┐")
+yaz("   │ Page 0 (Row 0-7)    128 bytes        │")
+yaz("   │ Page 1 (Row 8-15)   128 bytes        │")
+yaz("   │ Page 2 (Row 16-23)  128 bytes        │")
+yaz("   │ ...                                  │")
+yaz("   │ Page 7 (Row 56-63)  128 bytes        │")
+yaz("   └──────────────────────────────────────┘")
+
+// Frame buffer (128 * 64 / 8 = 1024 bytes)
+olsun BUFFER_SIZE = OLED_WIDTH * OLED_PAGES
+yaz("   Frame Buffer: ", BUFFER_SIZE, " bytes")
+
+// OLED komutlari
+fonksiyon oled_komut(cmd: tamsayı) yap
+    // I2C yaz: 0x00 (command prefix), cmd
+    yaz("   OLED CMD: 0x", cmd)
+son
+
+fonksiyon oled_veri(veri: tamsayı) yap
+    // I2C yaz: 0x40 (data prefix), data
+son
+
+fonksiyon oled_baslat() yap
+    yaz("   OLED Baslatiliyor...")
+    oled_komut(0xAE)  // Display OFF
+    oled_komut(0xD5)  // Clock div
+    oled_komut(0x80)
+    oled_komut(0xA8)  // Multiplex
+    oled_komut(63)
+    oled_komut(0xD3)  // Display offset
+    oled_komut(0x00)
+    oled_komut(0x40)  // Start line
+    oled_komut(0x8D)  // Charge pump
+    oled_komut(0x14)
+    oled_komut(0x20)  // Memory mode
+    oled_komut(0x00)  // Horizontal
+    oled_komut(0xA1)  // Segment remap
+    oled_komut(0xC8)  // COM scan direction
+    oled_komut(0xA6)  // Normal display
+    oled_komut(0xAF)  // Display ON
+    yaz("   OLED Hazir!")
+son
+
+// Grafik fonksiyonlari
+fonksiyon oled_piksel(x: tamsayı, y: tamsayı, renk: tamsayı) yap
+    eğer x >= 0 ise
+        eğer x < OLED_WIDTH ise
+            eğer y >= 0 ise
+                eğer y < OLED_HEIGHT ise
+                    olsun page = y / 8
+                    olsun bit = y % 8
+                    olsun index = x + page * OLED_WIDTH
+                    // buffer[index] |= (1 << bit) veya &= ~(1 << bit)
+                son
+            son
+        son
+    son
+son
+
+fonksiyon oled_cizgi(x0: tamsayı, y0: tamsayı, x1: tamsayı, y1: tamsayı) yap
+    yaz("   OLED Cizgi: (", x0, ",", y0, ") -> (", x1, ",", y1, ")")
+    // Bresenham algoritması kullan
+son
+
+fonksiyon oled_dikdortgen(x: tamsayı, y: tamsayı, w: tamsayı, h: tamsayı, dolu: doğruyanlış) yap
+    eğer dolu ise
+        yaz("   OLED Dolu Dikdortgen: ", x, ",", y, " ", w, "x", h)
+    değilse
+        yaz("   OLED Dikdortgen: ", x, ",", y, " ", w, "x", h)
+    son
+son
+
+fonksiyon oled_daire(cx: tamsayı, cy: tamsayı, r: tamsayı) yap
+    yaz("   OLED Daire: merkez(", cx, ",", cy, ") r=", r)
+son
+
+fonksiyon oled_metin(x: tamsayı, y: tamsayı, metin: metin, boyut: tamsayı) yap
+    yaz("   OLED Metin @ (", x, ",", y, "): '", metin, "' boyut=", boyut)
+son
+
+fonksiyon oled_guncelle() yap
+    yaz("   OLED Buffer -> Display transfer")
+son
+
+// OLED Test
+yaz("\n   OLED Test:")
+oled_baslat()
+oled_dikdortgen(0, 0, 127, 63, yanlış)  // Cerceve
+oled_metin(10, 10, "BERK OS", 2)
+oled_metin(10, 35, "HAL Demo", 1)
+oled_cizgi(0, 50, 127, 50)
+oled_guncelle()
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BOLUM 4: TFT Display (ILI9341 - SPI)
+// ═══════════════════════════════════════════════════════════════════════════
+
+yaz("\n--- BOLUM 4: ILI9341 TFT Display ---")
+
+değişken TFT_WIDTH = 240
+değişken TFT_HEIGHT = 320
+değişken TFT_CS = 10
+değişken TFT_DC = 9
+değişken TFT_RST = 8
+
+yaz("\n   ILI9341 Ozellikleri:")
+yaz("   - Cozunurluk: ", TFT_WIDTH, "x", TFT_HEIGHT)
+yaz("   - Renkler: 262K (18-bit) veya 65K (16-bit)")
+yaz("   - Arayuz: SPI (up to 10 MHz)")
+yaz("   - Bellek: 172,800 bytes (320x240x18bit)")
+
+yaz("\n   TFT Pin Baglantilari:")
+yaz("   ┌─────────────────────────────────────┐")
+yaz("   │ CS   ──── Pin ", TFT_CS, "                  │")
+yaz("   │ DC   ──── Pin ", TFT_DC, "  (Data/Command)   │")
+yaz("   │ RST  ──── Pin ", TFT_RST, "                   │")
+yaz("   │ SCK  ──── Pin 13 (SPI Clock)        │")
+yaz("   │ MOSI ──── Pin 11 (SPI Data)         │")
+yaz("   └─────────────────────────────────────┘")
+
+// 16-bit Renk kodlama (RGB565)
+yaz("\n   RGB565 Renk Formati:")
+yaz("   ┌─────────────────────────────────────┐")
+yaz("   │ Bit:  15-11  | 10-5  | 4-0         │")
+yaz("   │ Renk: R(5b)  | G(6b) | B(5b)       │")
+yaz("   └─────────────────────────────────────┘")
+
+fonksiyon rgb565(r: tamsayı, g: tamsayı, b: tamsayı) -> tamsayı yap
+    olsun renk = ((r / 8) * 2048) + ((g / 4) * 32) + (b / 8)
+    dön renk
+son
+
+// Yaygin renkler
+olsun SIYAH = 0x0000
+olsun BEYAZ = 0xFFFF
+olsun KIRMIZI = 0xF800
+olsun YESIL = 0x07E0
+olsun MAVI = 0x001F
+olsun SARI = 0xFFE0
+olsun CYAN = 0x07FF
+olsun MAGENTA = 0xF81F
+
+yaz("\n   Tanimli Renkler (RGB565):")
+yaz("   - KIRMIZI: 0x", KIRMIZI)
+yaz("   - YESIL:   0x", YESIL)
+yaz("   - MAVI:    0x", MAVI)
+yaz("   - BEYAZ:   0x", BEYAZ)
+
+fonksiyon tft_komut(cmd: tamsayı) yap
+    // DC = LOW, CS = LOW, SPI transfer, CS = HIGH
+    yaz("   TFT CMD: 0x", cmd)
+son
+
+fonksiyon tft_veri(veri: tamsayı) yap
+    // DC = HIGH, CS = LOW, SPI transfer, CS = HIGH
+son
+
+fonksiyon tft_baslat() yap
+    yaz("   TFT Baslatiliyor...")
+    // Reset sequence
+    // Init commands
+    yaz("   TFT Hazir!")
+son
+
+fonksiyon tft_pencere_ayarla(x0: tamsayı, y0: tamsayı, x1: tamsayı, y1: tamsayı) yap
+    yaz("   TFT Pencere: (", x0, ",", y0, ") - (", x1, ",", y1, ")")
+    // Column Address Set (0x2A)
+    // Row Address Set (0x2B)
+    // Memory Write (0x2C)
+son
+
+fonksiyon tft_doldur(renk: tamsayı) yap
+    yaz("   TFT Doldur: 0x", renk)
+    tft_pencere_ayarla(0, 0, TFT_WIDTH - 1, TFT_HEIGHT - 1)
+    // Send TFT_WIDTH * TFT_HEIGHT * 2 bytes
+son
+
+fonksiyon tft_piksel(x: tamsayı, y: tamsayı, renk: tamsayı) yap
+    tft_pencere_ayarla(x, y, x, y)
+    // Send 2 bytes (RGB565)
+son
+
+fonksiyon tft_dikdortgen_dolu(x: tamsayı, y: tamsayı, w: tamsayı, h: tamsayı, renk: tamsayı) yap
+    yaz("   TFT Dolu Rect: ", x, ",", y, " ", w, "x", h, " renk=0x", renk)
+son
+
+fonksiyon tft_resim(x: tamsayı, y: tamsayı, w: tamsayı, h: tamsayı) yap
+    yaz("   TFT Resim yukleniyor: ", w, "x", h)
+son
+
+// TFT Test
+yaz("\n   TFT Test:")
+tft_baslat()
+tft_doldur(SIYAH)
+tft_dikdortgen_dolu(20, 20, 200, 50, KIRMIZI)
+tft_dikdortgen_dolu(20, 80, 200, 50, YESIL)
+tft_dikdortgen_dolu(20, 140, 200, 50, MAVI)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BOLUM 5: GUI Widget Sistemi
+// ═══════════════════════════════════════════════════════════════════════════
+
+yaz("\n--- BOLUM 5: GUI Widget Sistemi ---")
+
+yaz("\n   Widget Turleri:")
+yaz("   ┌────────────────┬────────────────────────────┐")
+yaz("   │ Widget         │ Aciklama                   │")
+yaz("   ├────────────────┼────────────────────────────┤")
+yaz("   │ Button         │ Tiklanabilir buton         │")
+yaz("   │ Label          │ Metin etiketi              │")
+yaz("   │ ProgressBar    │ Ilerleme cubugu            │")
+yaz("   │ Slider         │ Kaydirici                  │")
+yaz("   │ Gauge          │ Gosterge (hiz, sicaklik)   │")
+yaz("   │ Graph          │ Canli grafik               │")
+yaz("   └────────────────┴────────────────────────────┘")
+
+fonksiyon widget_buton(x: tamsayı, y: tamsayı, w: tamsayı, h: tamsayı, metin: metin) yap
+    yaz("   [BUTON] '", metin, "' @ (", x, ",", y, ") ", w, "x", h)
+son
+
+fonksiyon widget_progress(x: tamsayı, y: tamsayı, w: tamsayı, h: tamsayı, deger: tamsayı) yap
+    yaz("   [PROGRESS] ", deger, "% @ (", x, ",", y, ")")
+son
+
+fonksiyon widget_gauge(cx: tamsayı, cy: tamsayı, r: tamsayı, deger: tamsayı, max: tamsayı) yap
+    yaz("   [GAUGE] ", deger, "/", max, " @ (", cx, ",", cy, ") r=", r)
+son
+
+// GUI ornegi
+yaz("\n   Ornek Dashboard:")
+widget_buton(10, 10, 80, 30, "START")
+widget_buton(100, 10, 80, 30, "STOP")
+widget_progress(10, 60, 170, 20, 75)
+widget_gauge(95, 180, 60, 85, 100)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BOLUM 6: Font Sistemi
+// ═══════════════════════════════════════════════════════════════════════════
+
+yaz("\n--- BOLUM 6: Font Sistemi ---")
+
+yaz("\n   Font Turleri:")
+yaz("   - Bitmap Font: Her karakter piksel dizisi")
+yaz("   - Monospace: Sabit genislik (8x8, 8x16)")
+yaz("   - Proportional: Degisken genislik")
+
+yaz("\n   5x7 Font 'A' Karakteri:")
+yaz("   . . █ . .   -> 0x04")
+yaz("   . █ . █ .   -> 0x0A")
+yaz("   █ . . . █   -> 0x11")
+yaz("   █ █ █ █ █   -> 0x1F")
+yaz("   █ . . . █   -> 0x11")
+yaz("   █ . . . █   -> 0x11")
+yaz("   █ . . . █   -> 0x11")
+
+yaz("\n   Turkce Karakter Destegi:")
+yaz("   - Ç, ğ, ı, İ, ö, ş, ü")
+yaz("   - Extended ASCII veya UTF-8 lookup table")
+
+yaz("\n============================================================")
+yaz("         HAL Display Interface Demo Tamamlandi              ")
+yaz("============================================================")

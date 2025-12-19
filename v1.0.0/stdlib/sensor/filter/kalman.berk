@@ -1,0 +1,343 @@
+// ============================================================================
+// BERK SENSOR API - Kalman Filtresi (Opsiyonel)
+// ============================================================================
+// 
+// ⚠️ UYARI: Bu modül çoğu durumda GEREKLİ DEĞİL!
+// 
+// Kalman şu durumlarda kullanılmalı:
+// - Aerospace seviyesi gereksinim
+// - Akademik/araştırma
+// - Full state estimation gerekli
+// - Hesaplama maliyeti önemsiz
+// - Gaussian gürültü garantisi var
+// 
+// Diğer durumlarda: Alpha-Beta, Complementary, Madgwick kullan!
+//
+// ============================================================================
+
+modül sensor::filter::kalman
+
+import math::{sqrt}
+
+// ============================================================================
+// BASİT KALMAN (1D)
+// ============================================================================
+
+/// 1-Boyutlu Kalman Filtresi
+/// Scalar state estimation için
+pub tip KalmanFilter1D = yapı yap
+    /// State estimate
+    x: ondalık,
+    /// Error covariance
+    p: ondalık,
+    /// Process noise
+    q: ondalık,
+    /// Measurement noise
+    r: ondalık,
+    /// Başlatıldı mı?
+    initialized: mantıksal,
+son
+
+impl KalmanFilter1D:
+    /// Yeni 1D Kalman filtre
+    /// q: Process noise variance
+    /// r: Measurement noise variance
+    pub fn new(q: ondalık, r: ondalık) döndür KalmanFilter1D:
+        döndür KalmanFilter1D {
+            x: 0.0,
+            p: 1.0,
+            q: q.max(0.0001),
+            r: r.max(0.0001),
+            initialized: yanlış,
+        }
+    son
+    
+    /// Preset: Sıcaklık sensörü
+    pub fn for_temperature() döndür KalmanFilter1D:
+        döndür KalmanFilter1D::new(0.01, 0.1)
+    son
+    
+    /// Preset: IMU
+    pub fn for_imu() döndür KalmanFilter1D:
+        döndür KalmanFilter1D::new(0.1, 1.0)
+    son
+    
+    /// Güncelle (predict + update)
+    pub fn update(mut self, measurement: ondalık) döndür ondalık:
+        eğer !self.initialized:
+            self.x = measurement
+            self.p = 1.0
+            self.initialized = doğru
+            döndür measurement
+        son
+        
+        // Predict
+        // x = x (constant model)
+        // p = p + q
+        self.p = self.p + self.q
+        
+        // Update
+        // k = p / (p + r)
+        değişken k = self.p / (self.p + self.r)
+        
+        // x = x + k * (z - x)
+        self.x = self.x + k * (measurement - self.x)
+        
+        // p = (1 - k) * p
+        self.p = (1.0 - k) * self.p
+        
+        döndür self.x
+    son
+    
+    /// Kalman gain'i al
+    pub fn get_gain(self) döndür ondalık:
+        döndür self.p / (self.p + self.r)
+    son
+    
+    /// State estimate al
+    pub fn get_state(self) döndür ondalık:
+        döndür self.x
+    son
+    
+    /// Error covariance al
+    pub fn get_error_covariance(self) döndür ondalık:
+        döndür self.p
+    son
+    
+    /// Reset
+    pub fn reset(mut self) döndür void:
+        self.x = 0.0
+        self.p = 1.0
+        self.initialized = yanlış
+    son
+son
+
+// ============================================================================
+// KALMAN FİLTRE (2x2 - Position + Velocity)
+// ============================================================================
+
+/// 2x2 Kalman Filtresi (pozisyon + hız tahmini)
+/// State: [position, velocity]
+pub tip KalmanFilter = yapı yap
+    // State vector [position, velocity]
+    x0: ondalık,  // position
+    x1: ondalık,  // velocity
+    
+    // Error covariance matrix (2x2, symmetric)
+    p00: ondalık, p01: ondalık,
+    p10: ondalık, p11: ondalık,
+    
+    // Process noise covariance
+    q_pos: ondalık,
+    q_vel: ondalık,
+    
+    // Measurement noise
+    r: ondalık,
+    
+    // Time step
+    dt: ondalık,
+    
+    initialized: mantıksal,
+son
+
+impl KalmanFilter:
+    /// Yeni Kalman filtre
+    pub fn new(q_pos: ondalık, q_vel: ondalık, r: ondalık, dt: ondalık) döndür KalmanFilter:
+        döndür KalmanFilter {
+            x0: 0.0,
+            x1: 0.0,
+            p00: 1.0, p01: 0.0,
+            p10: 0.0, p11: 1.0,
+            q_pos: q_pos,
+            q_vel: q_vel,
+            r: r,
+            dt: dt,
+            initialized: yanlış,
+        }
+    son
+    
+    /// Preset: Genel amaçlı
+    pub fn standard() döndür KalmanFilter:
+        döndür KalmanFilter::new(0.01, 0.1, 1.0, 0.01)
+    son
+    
+    /// Preset: Tracking (hızlı hareket)
+    pub fn for_tracking() döndür KalmanFilter:
+        döndür KalmanFilter::new(0.1, 0.5, 0.5, 0.01)
+    son
+    
+    /// Time step güncelle
+    pub fn set_dt(mut self, dt: ondalık) döndür void:
+        self.dt = dt
+    son
+    
+    /// Predict adımı
+    pub fn predict(mut self) döndür void:
+        değişken dt = self.dt
+        
+        // State prediction: x = F * x
+        // F = [1, dt]
+        //     [0,  1]
+        değişken new_x0 = self.x0 + self.x1 * dt
+        // x1 stays same (constant velocity model)
+        self.x0 = new_x0
+        
+        // Covariance prediction: P = F * P * F' + Q
+        değişken new_p00 = self.p00 + dt * (self.p10 + self.p01) + dt * dt * self.p11 + self.q_pos
+        değişken new_p01 = self.p01 + dt * self.p11
+        değişken new_p10 = self.p10 + dt * self.p11
+        değişken new_p11 = self.p11 + self.q_vel
+        
+        self.p00 = new_p00
+        self.p01 = new_p01
+        self.p10 = new_p10
+        self.p11 = new_p11
+    son
+    
+    /// Update adımı (ölçüm ile)
+    pub fn update_position(mut self, measurement: ondalık) döndür void:
+        // Measurement model: H = [1, 0]
+        // Innovation: y = z - H * x
+        değişken y = measurement - self.x0
+        
+        // Innovation covariance: S = H * P * H' + R
+        değişken s = self.p00 + self.r
+        
+        // Kalman gain: K = P * H' / S
+        değişken k0 = self.p00 / s
+        değişken k1 = self.p10 / s
+        
+        // State update: x = x + K * y
+        self.x0 = self.x0 + k0 * y
+        self.x1 = self.x1 + k1 * y
+        
+        // Covariance update: P = (I - K * H) * P
+        değişken new_p00 = self.p00 - k0 * self.p00
+        değişken new_p01 = self.p01 - k0 * self.p01
+        değişken new_p10 = self.p10 - k1 * self.p00
+        değişken new_p11 = self.p11 - k1 * self.p01
+        
+        self.p00 = new_p00
+        self.p01 = new_p01
+        self.p10 = new_p10
+        self.p11 = new_p11
+    son
+    
+    /// Tek adımda predict + update
+    pub fn apply(mut self, measurement: ondalık) döndür ondalık:
+        eğer !self.initialized:
+            self.x0 = measurement
+            self.x1 = 0.0
+            self.initialized = doğru
+            döndür measurement
+        son
+        
+        self.predict()
+        self.update_position(measurement)
+        
+        döndür self.x0
+    son
+    
+    /// Pozisyon tahmini
+    pub fn get_position(self) döndür ondalık:
+        döndür self.x0
+    son
+    
+    /// Hız tahmini
+    pub fn get_velocity(self) döndür ondalık:
+        döndür self.x1
+    son
+    
+    /// Reset
+    pub fn reset(mut self) döndür void:
+        self.x0 = 0.0
+        self.x1 = 0.0
+        self.p00 = 1.0
+        self.p01 = 0.0
+        self.p10 = 0.0
+        self.p11 = 1.0
+        self.initialized = yanlış
+    son
+son
+
+// ============================================================================
+// EXTENDED KALMAN FİLTRE (EKF) - Placeholder
+// ============================================================================
+
+/// Extended Kalman Filter (non-linear systems)
+/// NOT: Bu gerçek EKF değil, sadece interface
+/// Gerçek implementasyon problem-specific olmalı
+pub tip ExtendedKalmanFilter = yapı yap
+    /// İç Kalman
+    inner: KalmanFilter,
+    /// Linearization point
+    linearization_point: ondalık,
+son
+
+impl ExtendedKalmanFilter:
+    pub fn new(q_pos: ondalık, q_vel: ondalık, r: ondalık, dt: ondalık) döndür ExtendedKalmanFilter:
+        döndür ExtendedKalmanFilter {
+            inner: KalmanFilter::new(q_pos, q_vel, r, dt),
+            linearization_point: 0.0,
+        }
+    son
+    
+    /// Bu basitleştirilmiş versiyon
+    /// Gerçek EKF için problem-specific Jacobian gerekli
+    pub fn apply(mut self, measurement: ondalık) döndür ondalık:
+        döndür self.inner.apply(measurement)
+    son
+    
+    pub fn get_state(self) döndür (ondalık, ondalık):
+        döndür (self.inner.get_position(), self.inner.get_velocity())
+    son
+son
+
+// ============================================================================
+// CONVENIENCE FUNCTIONS
+// ============================================================================
+
+/// 1D Kalman oluştur
+pub fn kalman_1d(q: ondalık, r: ondalık) döndür KalmanFilter1D:
+    döndür KalmanFilter1D::new(q, r)
+son
+
+/// 2D Kalman oluştur
+pub fn kalman(q_pos: ondalık, q_vel: ondalık, r: ondalık, dt: ondalık) döndür KalmanFilter:
+    döndür KalmanFilter::new(q_pos, q_vel, r, dt)
+son
+
+// ============================================================================
+// KALMAN NEDEN SON SEÇENEĞİNİZ OLMALI
+// ============================================================================
+//
+// 1. HESAPLAMA MALİYETİ
+//    - 2x2 Kalman: ~1000 cycles (ARM Cortex-M4)
+//    - Alpha-Beta: ~80 cycles (12× daha hızlı)
+//    - EMA: ~20 cycles (50× daha hızlı)
+//
+// 2. RAM KULLANIMI
+//    - 2x2 Kalman: ~100 bytes
+//    - 6x6 Kalman: ~500+ bytes
+//    - Alpha-Beta: ~24 bytes
+//
+// 3. TUNING ZORLUĞU
+//    - Q, R matrisleri doğru seçilmeli
+//    - Yanlış tune = kötü sonuç
+//    - Alpha-Beta: 2 parametre, sezgisel
+//
+// 4. MODEL BAĞIMLILIĞI
+//    - Kalman: Doğru model şart
+//    - Gerçek dünya: Model genellikle yanlış
+//    - Adaptif filtreler: Model yok
+//
+// 5. GAUSS VARSAYIMI
+//    - Kalman: Gürültü Gaussian olmalı
+//    - Gerçek dünya: Impulse noise, outlier, drift
+//    - Hampel/Median: Outlier'a dayanıklı
+//
+// SONUÇ:
+// - Kalman = %5 case için
+// - Diğer %95: Alpha-Beta, Complementary, Adaptive
+//
+// ============================================================================

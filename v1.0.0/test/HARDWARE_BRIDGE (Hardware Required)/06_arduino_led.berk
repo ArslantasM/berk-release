@@ -1,0 +1,83 @@
+// =============================================================================
+// BERK Hardware Bridge - Arduino LED Kontrolü
+// Tam çalışan örnek (gerçek donanım gerektirir)
+// =============================================================================
+
+kullan std::firmata
+kullan std::time
+
+yazdır("=== Arduino LED Kontrolü ===\n")
+
+// -----------------------------------------------------------------------------
+// Yapılandırma
+// -----------------------------------------------------------------------------
+
+sabit PORT = "COM3"        // Arduino port (değiştirin!)
+sabit LED_PIN = 13         // Dahili LED
+sabit BLINK_COUNT = 10     // Yanıp sönme sayısı
+sabit BLINK_DELAY = 250    // Milisaniye
+
+// -----------------------------------------------------------------------------
+// Ana Program
+// -----------------------------------------------------------------------------
+
+yazdır("🔌 Arduino'ya bağlanılıyor...")
+yazdır("   Port: {}", PORT)
+
+dene yap
+    // Arduino'ya bağlan
+    olsun arduino = firmata::connect(PORT)
+    yazdır("✓ Bağlantı başarılı!")
+    
+    // Versiyon bilgisi
+    olsun versiyon = firmata::get_version(arduino)
+    yazdır("   Firmata: v{}", versiyon)
+    
+    // 2 saniye bekle (Arduino reset)
+    yazdır("   Arduino hazırlanıyor...")
+    bekle(2000)
+    
+    // LED pinini çıkış yap
+    yazdır("\n💡 LED pini yapılandırılıyor (pin {})...", LED_PIN)
+    firmata::pin_mode(arduino, LED_PIN, "output")
+    yazdır("✓ Pin {} çıkış olarak ayarlandı", LED_PIN)
+    
+    // LED'i yakıp söndür
+    yazdır("\n🔄 LED {} kez yanıp sönecek:\n", BLINK_COUNT)
+    
+    döngü i için 1..BLINK_COUNT+1 yap
+        // LED aç
+        firmata::digital_write(arduino, LED_PIN, 1)
+        olsun zaman = time::now_formatted("%H:%M:%S")
+        yazdır("   [{}] LED AÇIK  █████", zaman)
+        bekle(BLINK_DELAY)
+        
+        // LED kapat
+        firmata::digital_write(arduino, LED_PIN, 0)
+        olsun zaman = time::now_formatted("%H:%M:%S")
+        yazdır("   [{}] LED KAPALI ░░░░░", zaman)
+        bekle(BLINK_DELAY)
+    son
+    
+    // Temizlik
+    yazdır("\n🔌 Bağlantı kapatılıyor...")
+    firmata::disconnect(arduino)
+    yazdır("✓ Bağlantı kapatıldı.")
+    
+    yazdır("\n✅ Demo başarıyla tamamlandı!")
+    
+yakala hata yap
+    yazdır("\n❌ HATA: {}", hata)
+    yazdır("")
+    yazdır("Olası sebepler:")
+    yazdır("  1. Arduino bağlı değil")
+    yazdır("  2. Yanlış port ({} doğru mu?)", PORT)
+    yazdır("  3. StandardFirmata yüklü değil")
+    yazdır("  4. Port başka program tarafından kullanılıyor")
+    yazdır("")
+    yazdır("Çözüm önerileri:")
+    yazdır("  - Arduino IDE'de doğru portu kontrol edin")
+    yazdır("  - StandardFirmata yükleyin:")
+    yazdır("    File → Examples → Firmata → StandardFirmata")
+    yazdır("  - Serial Monitor'ü kapatın")
+son

@@ -1,0 +1,475 @@
+//! # Regex Module
+//!
+//! Regular expression engine (PCRE-compatible).
+//!
+//! Düzenli ifade motoru (PCRE uyumlu).
+//!
+//! ## Features / Özellikler
+//!
+//! - **Pattern compilation**: Compile and cache / Derleme ve önbellekleme
+//! - **Match operations**: Match, find, replace / Eşleştirme işlemleri
+//! - **Capture groups**: Named & numbered / İsimlendirilmiş ve numaralı gruplar
+//! - **Unicode support**: Categories, scripts / Unicode desteği
+//! - **Character classes**: [a-z], \d, \w, \s / Karakter sınıfları
+//! - **Quantifiers**: *, +, ?, {n,m} / Niceleyiciler
+//! - **Lookahead/lookbehind**: Positive/negative / İleriye/geriye bakış
+//!
+//! ## Example / Örnek
+//!
+//! ```berk
+//! kullan regex
+//!
+//! değişken pattern = regex.compile("[0-9]+")?
+//! değişken eşleşme = regex.find(pattern, "abc123def")
+//! // Bazı(Match(start: 3, end: 6, text: "123"))
+//! ```
+//!
+//! Backend: Rust regex crate
+
+modül regex
+
+kullan result
+
+// ============================================================================
+// REGEX TYPES
+// ============================================================================
+
+tip Regex = yapı yap
+    handle: tamsayı,
+    pattern: yazı,
+    flags: RegexFlags
+son
+
+tip RegexFlags = yapı yap
+    case_insensitive: mantıksal,
+    multi_line: mantıksal,
+    dot_matches_newline: mantıksal,
+    unicode: mantıksal,
+    ignore_whitespace: mantıksal
+son
+
+tip Match = yapı yap
+    text: yazı,
+    start: tamsayı,
+    end: tamsayı,
+    captures: liste[Seçenek[yazı]]
+son
+
+tip Captures = yapı yap
+    matches: liste[Seçenek[yazı]],
+    named: liste[(yazı, yazı)]
+son
+
+// ============================================================================
+// REGEX COMPILATION
+// ============================================================================
+
+// Compile regex pattern
+@native
+fonksiyon compile(pattern: yazı) -> Sonuç[Regex, yazı]
+
+// Compile with flags
+@native
+fonksiyon compile_with_flags(pattern: yazı, flags: RegexFlags) -> Sonuç[Regex, yazı]
+
+// Compile case-insensitive
+fonksiyon compile_case_insensitive(pattern: yazı) -> Sonuç[Regex, yazı]
+yap
+    değişken flags = RegexFlags {
+        case_insensitive: doğru,
+        multi_line: yanlış,
+        dot_matches_newline: yanlış,
+        unicode: doğru,
+        ignore_whitespace: yanlış
+    }
+    dön compile_with_flags(pattern, flags)
+son
+
+// Check if pattern is valid
+@native
+fonksiyon is_valid(pattern: yazı) -> mantıksal
+
+// ============================================================================
+// MATCHING
+// ============================================================================
+
+// Check if text matches regex (full match)
+@native
+fonksiyon is_match(re: Regex, text: yazı) -> mantıksal
+
+// Find first match
+@native
+fonksiyon find(re: Regex, text: yazı) -> Seçenek[Match]
+
+// Find all matches
+@native
+fonksiyon find_all(re: Regex, text: yazı) -> liste[Match]
+
+// Find first match at position
+@native
+fonksiyon find_at(re: Regex, text: yazı, start: tamsayı) -> Seçenek[Match]
+
+// ============================================================================
+// CAPTURES
+// ============================================================================
+
+// Capture groups from first match
+@native
+fonksiyon captures(re: Regex, text: yazı) -> Seçenek[Captures]
+
+// Get all captures
+@native
+fonksiyon captures_all(re: Regex, text: yazı) -> liste[Captures]
+
+// Get specific capture group (by index)
+fonksiyon capture_get(captures: Captures, index: tamsayı) -> Seçenek[yazı]
+yap
+    eğer index < 0 veya index >= liste_uzunluk(captures.matches) yap
+        dön Hiçbiri
+    son
+    dön liste_al(captures.matches, index)
+son
+
+// Get named capture group
+fonksiyon capture_get_named(captures: Captures, name: yazı) -> Seçenek[yazı]
+yap
+    için pair içinde captures.named yap
+        eğer pair.0 == name yap
+            dön Bazı(pair.1)
+        son
+    son
+    dön Hiçbiri
+son
+
+// ============================================================================
+// REPLACEMENT
+// ============================================================================
+
+// Replace first match
+@native
+fonksiyon replace(re: Regex, text: yazı, replacement: yazı) -> yazı
+
+// Replace all matches
+@native
+fonksiyon replace_all(re: Regex, text: yazı, replacement: yazı) -> yazı
+
+// Replace with function (callback for each match)
+@native
+fonksiyon replace_fn(re: Regex, text: yazı, replacer: fonksiyon(Match) -> yazı) -> yazı
+
+// Replace all with function
+@native
+fonksiyon replace_all_fn(re: Regex, text: yazı, replacer: fonksiyon(Match) -> yazı) -> yazı
+
+// ============================================================================
+// SPLITTING
+// ============================================================================
+
+// Split text by regex
+@native
+fonksiyon split(re: Regex, text: yazı) -> liste[yazı]
+
+// Split with limit
+@native
+fonksiyon split_n(re: Regex, text: yazı, limit: tamsayı) -> liste[yazı]
+
+// ============================================================================
+// COMMON PATTERNS
+// ============================================================================
+
+// Email validation
+fonksiyon email_pattern() -> yazı
+yap
+    dön "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$"
+son
+
+// URL validation
+fonksiyon url_pattern() -> yazı
+yap
+    dön "^https?://[a-zA-Z0-9.-]+(:[0-9]+)?(/.*)?$"
+son
+
+// IPv4 address
+fonksiyon ipv4_pattern() -> yazı
+yap
+    dön "^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$"
+son
+
+// Phone number (US format)
+fonksiyon phone_pattern() -> yazı
+yap
+    dön "^\\+?1?[-.]?\\(?([0-9]{3})\\)?[-.]?([0-9]{3})[-.]?([0-9]{4})$"
+son
+
+// Hexadecimal color
+fonksiyon hex_color_pattern() -> yazı
+yap
+    dön "^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$"
+son
+
+// Date (YYYY-MM-DD)
+fonksiyon date_pattern() -> yazı
+yap
+    dön "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+son
+
+// Time (HH:MM:SS)
+fonksiyon time_pattern() -> yazı
+yap
+    dön "^[0-9]{2}:[0-9]{2}:[0-9]{2}$"
+son
+
+// ============================================================================
+// VALIDATION HELPERS
+// ============================================================================
+
+// Validate email
+fonksiyon is_valid_email(email: yazı) -> mantıksal
+yap
+    değişken re = compile(email_pattern()).unwrap()
+    dön is_match(re, email)
+son
+
+// Validate URL
+fonksiyon is_valid_url(url: yazı) -> mantıksal
+yap
+    değişken re = compile(url_pattern()).unwrap()
+    dön is_match(re, url)
+son
+
+// Validate IPv4
+fonksiyon is_valid_ipv4(ip: yazı) -> mantıksal
+yap
+    değişken re = compile(ipv4_pattern()).unwrap()
+    dön is_match(re, ip)
+son
+
+// Validate hex color
+fonksiyon is_valid_hex_color(color: yazı) -> mantıksal
+yap
+    değişken re = compile(hex_color_pattern()).unwrap()
+    dön is_match(re, color)
+son
+
+// ============================================================================
+// EXTRACTION HELPERS
+// ============================================================================
+
+// Extract all emails from text
+fonksiyon extract_emails(text: yazı) -> liste[yazı]
+yap
+    değişken re = compile(email_pattern()).unwrap()
+    değişken matches = find_all(re, text)
+    değişken result: liste[yazı] = []
+    
+    için match içinde matches yap
+        liste_ekle(result, match.text)
+    son
+    
+    dön result
+son
+
+// Extract all URLs from text
+fonksiyon extract_urls(text: yazı) -> liste[yazı]
+yap
+    değişken re = compile(url_pattern()).unwrap()
+    değişken matches = find_all(re, text)
+    değişken result: liste[yazı] = []
+    
+    için match içinde matches yap
+        liste_ekle(result, match.text)
+    son
+    
+    dön result
+son
+
+// Extract numbers from text
+fonksiyon extract_numbers(text: yazı) -> liste[yazı]
+yap
+    değişken re = compile("-?[0-9]+\\.?[0-9]*").unwrap()
+    değişken matches = find_all(re, text)
+    değişken result: liste[yazı] = []
+    
+    için match içinde matches yap
+        liste_ekle(result, match.text)
+    son
+    
+    dön result
+son
+
+// ============================================================================
+// ESCAPE & QUOTE
+// ============================================================================
+
+// Escape special regex characters
+@native
+fonksiyon escape(text: yazı) -> yazı
+
+// Quote string for literal matching
+@native
+fonksiyon quote(text: yazı) -> yazı
+
+// ============================================================================
+// REGEX BUILDER
+// ============================================================================
+
+tip RegexBuilder = yapı yap
+    pattern: yazı,
+    flags: RegexFlags
+son
+
+// Create builder
+fonksiyon builder() -> RegexBuilder
+yap
+    dön RegexBuilder {
+        pattern: "",
+        flags: RegexFlags {
+            case_insensitive: yanlış,
+            multi_line: yanlış,
+            dot_matches_newline: yanlış,
+            unicode: doğru,
+            ignore_whitespace: yanlış
+        }
+    }
+son
+
+// Add pattern
+fonksiyon builder_pattern(builder: RegexBuilder, pattern: yazı) -> RegexBuilder
+yap
+    dön RegexBuilder {
+        pattern: pattern,
+        flags: builder.flags
+    }
+son
+
+// Set case insensitive
+fonksiyon builder_case_insensitive(builder: RegexBuilder) -> RegexBuilder
+yap
+    değişken flags = builder.flags
+    flags.case_insensitive = doğru
+    dön RegexBuilder { pattern: builder.pattern, flags: flags }
+son
+
+// Set multiline
+fonksiyon builder_multiline(builder: RegexBuilder) -> RegexBuilder
+yap
+    değişken flags = builder.flags
+    flags.multi_line = doğru
+    dön RegexBuilder { pattern: builder.pattern, flags: flags }
+son
+
+// Build regex
+fonksiyon builder_build(builder: RegexBuilder) -> Sonuç[Regex, yazı]
+yap
+    dön compile_with_flags(builder.pattern, builder.flags)
+son
+
+// ============================================================================
+// REGEX SET (Multiple Patterns)
+// ============================================================================
+
+tip RegexSet = yapı yap
+    handle: tamsayı,
+    patterns: liste[yazı]
+son
+
+// Create regex set
+@native
+fonksiyon set_new(patterns: liste[yazı]) -> Sonuç[RegexSet, yazı]
+
+// Check if any pattern matches
+@native
+fonksiyon set_is_match(set: RegexSet, text: yazı) -> mantıksal
+
+// Get indices of matching patterns
+@native
+fonksiyon set_matches(set: RegexSet, text: yazı) -> liste[tamsayı]
+
+// ============================================================================
+// UNICODE SUPPORT
+// ============================================================================
+
+// Match by Unicode category
+fonksiyon unicode_letter_pattern() -> yazı
+yap
+    dön "\\p{L}"
+son
+
+fonksiyon unicode_digit_pattern() -> yazı
+yap
+    dön "\\p{N}"
+son
+
+fonksiyon unicode_whitespace_pattern() -> yazı
+yap
+    dön "\\p{Z}"
+son
+
+// Match by script (Arabic, Cyrillic, etc.)
+fonksiyon unicode_script_pattern(script: yazı) -> yazı
+yap
+    dön string::format("\\p{{Script={}}}", [script])
+son
+
+// ============================================================================
+// PERFORMANCE
+// ============================================================================
+
+// Compile and cache regex
+@native
+fonksiyon compile_cached(pattern: yazı) -> Sonuç[Regex, yazı]
+
+// Clear regex cache
+@native
+fonksiyon clear_cache() -> boş
+
+// ============================================================================
+// TURKISH ALIASES
+// ============================================================================
+
+fonksiyon derle(örüntü: yazı) -> Sonuç[Regex, yazı]
+yap
+    dön compile(örüntü)
+son
+
+fonksiyon eşleşiyor_mu(re: Regex, metin: yazı) -> mantıksal
+yap
+    dön is_match(re, metin)
+son
+
+fonksiyon bul(re: Regex, metin: yazı) -> Seçenek[Match]
+yap
+    dön find(re, metin)
+son
+
+fonksiyon tümünü_bul(re: Regex, metin: yazı) -> liste[Match]
+yap
+    dön find_all(re, metin)
+son
+
+fonksiyon değiştir(re: Regex, metin: yazı, yeni: yazı) -> yazı
+yap
+    dön replace(re, metin, yeni)
+son
+
+fonksiyon tümünü_değiştir(re: Regex, metin: yazı, yeni: yazı) -> yazı
+yap
+    dön replace_all(re, metin, yeni)
+son
+
+fonksiyon böl(re: Regex, metin: yazı) -> liste[yazı]
+yap
+    dön split(re, metin)
+son
+
+fonksiyon geçerli_eposta_mı(eposta: yazı) -> mantıksal
+yap
+    dön is_valid_email(eposta)
+son
+
+fonksiyon epostaları_çıkar(metin: yazı) -> liste[yazı]
+yap
+    dön extract_emails(metin)
+son
+
+son  // modül regex

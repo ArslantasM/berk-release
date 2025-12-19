@@ -1,0 +1,208 @@
+// stdlib/embedded/bal/pwm.berk
+// Backend Abstraction Layer - PWM Interface
+// Platform-independent PWM (Pulse Width Modulation) API
+
+/// PWM polarity
+pub enum Polarity {
+    Normal,     // High pulse is active
+    Inverted,   // Low pulse is active
+}
+
+/// PWM alignment mode
+pub enum Alignment {
+    Edge,       // Edge-aligned (most common)
+    Center,     // Center-aligned (for motor control)
+}
+
+/// PWM error types
+pub enum Error {
+    InvalidFrequency,   // Frequency out of range
+    InvalidDutyCycle,   // Duty cycle out of range
+    ChannelBusy,        // Channel already in use
+    TimerError,         // Timer configuration error
+}
+
+pub type Result<T> = stdlib.result.Result<T, Error>
+
+/// PWM configuration
+pub struct Config {
+    channel: u8,        // PWM channel (0-15)
+    pin: u8,            // Output pin
+    frequency: u32,     // Frequency in Hz
+    duty_cycle: f32,    // Duty cycle 0.0-100.0 (percentage)
+    polarity: Polarity,
+    alignment: Alignment,
+}
+
+/// PWM HAL interface that platforms must implement
+pub interface PWM_HAL {
+    /// Initialize PWM channel
+    fn init(config: Config) -> Result<()>
+    
+    /// Deinitialize PWM channel
+    fn deinit(channel: u8)
+    
+    /// Start PWM output
+    fn start(channel: u8)
+    
+    /// Stop PWM output
+    fn stop(channel: u8)
+    
+    /// Set PWM frequency (Hz)
+    fn set_frequency(channel: u8, frequency: u32) -> Result<()>
+    
+    /// Set duty cycle (0.0-100.0 percentage)
+    fn set_duty_cycle(channel: u8, duty_cycle: f32) -> Result<()>
+    
+    /// Set duty cycle (raw timer value)
+    fn set_duty_raw(channel: u8, value: u32) -> Result<()>
+    
+    /// Get current duty cycle
+    fn get_duty_cycle(channel: u8) -> f32
+    
+    /// Set polarity
+    fn set_polarity(channel: u8, polarity: Polarity)
+    
+    /// Enable/disable PWM output
+    fn set_enabled(channel: u8, enabled: bool)
+}
+
+// High-level convenience functions
+
+/// Initialize PWM with default settings (1kHz, 50% duty cycle)
+pub fn init_default(channel: u8, pin: u8) -> Result<()> {
+    let config = Config {
+        channel: channel,
+        pin: pin,
+        frequency: 1000,        // 1 kHz
+        duty_cycle: 50.0,       // 50%
+        polarity: Polarity.Normal,
+        alignment: Alignment.Edge,
+    }
+    PWM_HAL.init(config)
+}
+
+/// Set duty cycle and start PWM
+pub fn set_and_start(channel: u8, duty_cycle: f32) -> Result<()> {
+    PWM_HAL.set_duty_cycle(channel, duty_cycle)?
+    PWM_HAL.start(channel)
+    Ok(())
+}
+
+/// Fade PWM from start to end duty cycle
+pub fn fade(channel: u8, start_duty: f32, end_duty: f32, duration_ms: u32, steps: u32) -> Result<()> {
+    PWM_HAL.set_duty_cycle(channel, start_duty)?
+    PWM_HAL.start(channel)
+    
+    let step_duration = duration_ms / steps
+    let duty_step = (end_duty - start_duty) / steps as f32
+    
+    for i in 1..=steps {
+        let current_duty = start_duty + duty_step * i as f32
+        PWM_HAL.set_duty_cycle(channel, current_duty)?
+        time.sleep_ms(step_duration)
+    }
+    
+    Ok(())
+}
+
+/// Fade in (0% to target duty cycle)
+pub fn fade_in(channel: u8, target_duty: f32, duration_ms: u32) -> Result<()> {
+    fade(channel, 0.0, target_duty, duration_ms, 50)
+}
+
+/// Fade out (current to 0%)
+pub fn fade_out(channel: u8, duration_ms: u32) -> Result<()> {
+    let current_duty = PWM_HAL.get_duty_cycle(channel)
+    fade(channel, current_duty, 0.0, duration_ms, 50)
+}
+
+/// Breathe effect (fade in then fade out, loop)
+pub fn breathe(channel: u8, max_duty: f32, period_ms: u32) {
+    loop {
+        let _ = fade_in(channel, max_duty, period_ms / 2)
+        let _ = fade_out(channel, period_ms / 2)
+    }
+}
+
+/// Set servo angle (0-180 degrees, 50Hz PWM)
+pub fn set_servo_angle(channel: u8, angle: f32) -> Result<()> {
+    // Servo: 1ms = 0°, 1.5ms = 90°, 2ms = 180°
+    // 50Hz = 20ms period
+    if angle < 0.0 || angle > 180.0 {
+        return Err(Error.InvalidDutyCycle)
+    }
+    
+    PWM_HAL.set_frequency(channel, 50)?  // 50 Hz for servo
+    
+    // Calculate duty cycle: 5% (1ms) to 10% (2ms)
+    let duty = 5.0 + (angle / 180.0) * 5.0
+    PWM_HAL.set_duty_cycle(channel, duty)?
+    PWM_HAL.start(channel)
+    
+    Ok(())
+}
+
+/// Control DC motor speed (0-100%)
+pub fn set_motor_speed(channel: u8, speed: f32) -> Result<()> {
+    if speed < 0.0 || speed > 100.0 {
+        return Err(Error.InvalidDutyCycle)
+    }
+    
+    PWM_HAL.set_frequency(channel, 20_000)?  // 20 kHz (ultrasonic, quiet)
+    PWM_HAL.set_duty_cycle(channel, speed)?
+    PWM_HAL.start(channel)
+    
+    Ok(())
+}
+
+/// Control LED brightness (0-100%)
+pub fn set_led_brightness(channel: u8, brightness: f32) -> Result<()> {
+    if brightness < 0.0 || brightness > 100.0 {
+        return Err(Error.InvalidDutyCycle)
+    }
+    
+    PWM_HAL.set_frequency(channel, 1000)?  // 1 kHz (no flicker)
+    PWM_HAL.set_duty_cycle(channel, brightness)?
+    PWM_HAL.start(channel)
+    
+    Ok(())
+}
+
+/// Generate tone (frequency in Hz)
+pub fn tone(channel: u8, frequency: u32, duration_ms: u32) -> Result<()> {
+    PWM_HAL.set_frequency(channel, frequency)?
+    PWM_HAL.set_duty_cycle(channel, 50.0)?  // Square wave
+    PWM_HAL.start(channel)
+    
+    time.sleep_ms(duration_ms)
+    
+    PWM_HAL.stop(channel)
+    Ok(())
+}
+
+/// Play melody (array of frequencies and durations)
+pub fn play_melody(channel: u8, notes: &[(u32, u32)]) -> Result<()> {
+    for note in notes {
+        let (freq, duration) = *note
+        if freq == 0 {
+            PWM_HAL.stop(channel)
+            time.sleep_ms(duration)
+        } else {
+            tone(channel, freq, duration)?
+        }
+    }
+    Ok(())
+}
+
+/// Beep (1kHz, 100ms)
+pub fn beep(channel: u8) -> Result<()> {
+    tone(channel, 1000, 100)
+}
+
+/// Two-tone beep (for alerts)
+pub fn beep_alert(channel: u8) -> Result<()> {
+    tone(channel, 800, 100)?
+    time.sleep_ms(50)
+    tone(channel, 1200, 100)
+}

@@ -1,0 +1,111 @@
+/// ═══════════════════════════════════════════════════════════════════════════
+/// BERK Programlama Dili - Kontrol Yapilari
+/// Seviye: Baslangic (Beginner)
+/// ═══════════════════════════════════════════════════════════════════════════
+
+kullan std::io
+
+yaz("============================================================")
+yaz("       Kontrol Yapilari / Control Structures                ")
+yaz("============================================================")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 1: Basit Kosul
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 1: Basit Kosul ---")
+
+değişken puan = 85
+
+yaz("\n   puan = ", puan)
+
+eğer puan >= 80
+    yaz("   [OK] Puan 80 ve ustu - Basarili!")
+son
+
+eğer puan < 60
+    yaz("   [X] Puan 60 alti - Basarisiz")
+son
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 2: If-Else
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 2: If-Else ---")
+
+değişken sayi = 15
+değişken kalan = sayi % 2
+
+eğer kalan == 0
+    yaz("   ", sayi, " cift sayidir")
+yoksa
+    yaz("   ", sayi, " tek sayidir")
+son
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 3: For Dongusu
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 3: For Dongusu ---")
+
+yaz("\n   1'den 5'e kadar sayilar:")
+için i içinde 1..6 yap
+    yaz("   ", i)
+son
+
+yaz("\n   Dizi uzerinde dongu:")
+değişken meyveler = ["elma", "armut", "kiraz"]
+için meyve in meyveler yap
+    yaz("   - ", meyve)
+son
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 4: Ic Ice Dongu
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 4: Ic Ice Dongu ---")
+
+yaz("\n   Carpim Tablosu (3x3):")
+için i içinde 1..4 yap
+    için j içinde 1..4 yap
+        değişken sonuc = i * j
+        yaz("   ", i, " x ", j, " = ", sonuc)
+    son
+son
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 5: Match/Sec Ifadesi
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 5: Match/Sec Ifadesi ---")
+
+değişken gun = 3
+yaz("\n   gun = ", gun)
+
+seç gun yap
+    durum 1 => yaz("   Pazartesi")
+    durum 2 => yaz("   Sali")
+    durum 3 => yaz("   Carsamba")
+    durum 4 => yaz("   Persembe")
+    durum 5 => yaz("   Cuma")
+    varsayılan => yaz("   Hafta sonu")
+son
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 6: Karsilastirma Operatorleri
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 6: Karsilastirma Operatorleri ---")
+
+değişken a = 10
+değişken b = 20
+
+yaz("\n   a = ", a, ", b = ", b)
+yaz("   a < b : ", a < b)
+yaz("   a > b : ", a > b)
+yaz("   a == b : ", a == b)
+yaz("   a != b : ", a != b)
+yaz("   a <= b : ", a <= b)
+yaz("   a >= b : ", a >= b)
+
+yaz("\n[OK] Kontrol yapilari demosu tamamlandi!")

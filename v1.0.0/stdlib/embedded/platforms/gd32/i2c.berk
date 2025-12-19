@@ -1,0 +1,10 @@
+// GD32 I2C Module
+// Compatible with STM32 I2C implementation
+// GD32 uses same I2C peripheral design
+
+pub use stm32f4::i2c::*;
+
+// GD32-specific notes:
+// - Same register layout as STM32
+// - Compatible clock configuration
+// - No major differences in operation

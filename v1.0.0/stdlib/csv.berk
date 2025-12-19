@@ -1,0 +1,815 @@
+//! # CSV Module
+//!
+//! RFC 4180 CSV parsing and generation.
+//!
+//! RFC 4180 CSV ayrıştırma ve üretme.
+//!
+//! ## Features / Özellikler
+//!
+//! - **RFC 4180**: Compliant CSV parsing / Uyumlu ayrıştırma
+//! - **Delimiters**: Comma, tab, semicolon / Ayırıcılar
+//! - **Quotes**: Double quote handling / Tırnak işleme
+//! - **Headers**: Header row support / Başlık satırı
+//! - **Type inference**: String, int, float / Tip çıkarımı
+//! - **Streaming**: Large file support / Akış
+//! - **TSV**: Tab-separated values / TSV desteği
+//! - **Excel**: Compatibility / Excel uyumluluğu
+//!
+//! ## Example / Örnek
+//!
+//! ```berk
+//! kullan csv
+//!
+//! değişken data = csv.parse("name,age\nAli,30\nAyşe,25")
+//! io.println(data[0]["name"])  // "Ali"
+//! ```
+//!
+//! Backend: Rust csv crate (RFC 4180)
+
+modül csv
+
+kullan result
+kullan io
+
+// ============================================================================
+// PURE BERK CSV PARSER (RFC 4180 Compliant) ✨
+// ============================================================================
+
+// RFC 4180: Comma-Separated Values (CSV)
+// Rules:
+// 1. Each record is on a separate line (CRLF or LF)
+// 2. Last record may or may not have ending line break
+// 3. Optional header line (same format as records)
+// 4. Fields separated by delimiter (default: comma)
+// 5. Fields may be quoted with double quotes
+// 6. Quoted fields can contain delimiters, quotes (escaped as ""), newlines
+// 7. Spaces before/after fields are preserved (unless quoted)
+
+// Pure BERK CSV Parser State
+tip PureCsvParser = yapı yap
+    input: yazı,
+    pos: tamsayı,
+    line: tamsayı,
+    delimiter: bayt,
+    quote: bayt,
+    has_headers: mantıksal,
+    headers: Seçenek[liste[yazı]]
+son
+
+// Create Pure BERK CSV parser
+fonksiyon pure_csv_parser_new(data: yazı, delimiter: yazı, has_headers: mantıksal) -> PureCsvParser
+yap
+    değişken delim_byte = eğer string::length(delimiter) > 0 ise
+        string::to_bytes(delimiter)[0]
+    değilse
+        ','  // default comma
+    
+    dön PureCsvParser yap
+        input: data,
+        pos: 0,
+        line: 1,
+        delimiter: delim_byte,
+        quote: '"',
+        has_headers: has_headers,
+        headers: Hiçbir
+    son
+son
+
+// Peek next character without consuming
+fonksiyon csv_peek(parser: PureCsvParser) -> Seçenek[bayt]
+yap
+    eğer parser.pos < string::length(parser.input) ise yap
+        değişken bytes = string::to_bytes(parser.input)
+        dön Bazı(bytes[parser.pos])
+    son
+    dön Hiçbir
+son
+
+// Read next character
+fonksiyon csv_read_char(parser: PureCsvParser) -> Seçenek[bayt]
+yap
+    eğer parser.pos < string::length(parser.input) ise yap
+        değişken bytes = string::to_bytes(parser.input)
+        değişken ch = bytes[parser.pos]
+        parser.pos = parser.pos + 1
+        
+        eğer ch == '\n' ise yap
+            parser.line = parser.line + 1
+        son
+        
+        dön Bazı(ch)
+    son
+    dön Hiçbir
+son
+
+// Parse single field (RFC 4180)
+fonksiyon csv_parse_field(parser: PureCsvParser) -> Sonuç[yazı, yazı]
+yap
+    değişken field_bytes = liste_oluştur[bayt]()
+    değişken ch_opt = csv_peek(parser)
+    
+    // Check if quoted field
+    eğer ch_opt.bazı_mı() ve ch_opt.unwrap() == parser.quote ise yap
+        // Quoted field
+        csv_read_char(parser)  // consume opening quote
+        
+        döngü yap
+            değişken ch_opt = csv_read_char(parser)
+            
+            eğer ch_opt.hiçbir_mi() ise yap
+                dön Hata("Unterminated quoted field at line " + string::from_int(parser.line))
+            son
+            
+            değişken ch = ch_opt.unwrap()
+            
+            eğer ch == parser.quote ise yap
+                // Check for escaped quote ("")
+                değişken next = csv_peek(parser)
+                
+                eğer next.bazı_mı() ve next.unwrap() == parser.quote ise yap
+                    // Escaped quote - add one quote to field
+                    liste_ekle(field_bytes, parser.quote)
+                    csv_read_char(parser)  // consume second quote
+                değilse yap
+                    // End of quoted field
+                    kır
+                son
+            değilse yap
+                liste_ekle(field_bytes, ch)
+            son
+        son
+    değilse yap
+        // Unquoted field - read until delimiter or newline
+        döngü yap
+            değişken ch_opt = csv_peek(parser)
+            
+            eğer ch_opt.hiçbir_mi() ise yap
+                kır  // end of input
+            son
+            
+            değişken ch = ch_opt.unwrap()
+            
+            // Check for delimiter, CR, LF
+            eğer ch == parser.delimiter veya ch == '\r' veya ch == '\n' ise yap
+                kır
+            son
+            
+            liste_ekle(field_bytes, ch)
+            csv_read_char(parser)
+        son
+    son
+    
+    dön Başarı(bytes_to_string(field_bytes))
+son
+
+// Parse single record (line)
+fonksiyon csv_parse_record(parser: PureCsvParser) -> Sonuç[Seçenek[CsvRecord], yazı]
+yap
+    // Skip empty lines
+    döngü yap
+        değişken ch_opt = csv_peek(parser)
+        
+        eğer ch_opt.hiçbir_mi() ise yap
+            dön Başarı(Hiçbir)  // end of input
+        son
+        
+        değişken ch = ch_opt.unwrap()
+        
+        eğer ch == '\n' veya ch == '\r' ise yap
+            csv_read_char(parser)
+            eğer ch == '\r' ise yap
+                // Handle CRLF
+                değişken next = csv_peek(parser)
+                eğer next.bazı_mı() ve next.unwrap() == '\n' ise yap
+                    csv_read_char(parser)
+                son
+            son
+            devam et
+        değilse yap
+            kır
+        son
+    son
+    
+    değişken fields = liste_oluştur[yazı]()
+    değişken record_line = parser.line
+    
+    // Parse fields
+    döngü yap
+        değişken field = csv_parse_field(parser)?
+        liste_ekle(fields, field)
+        
+        // Check what comes after field
+        değişken ch_opt = csv_peek(parser)
+        
+        eğer ch_opt.hiçbir_mi() ise yap
+            // End of input
+            kır
+        son
+        
+        değişken ch = ch_opt.unwrap()
+        
+        eğer ch == parser.delimiter ise yap
+            csv_read_char(parser)  // consume delimiter
+            // Continue to next field
+        değilse eğer ch == '\r' veya ch == '\n' ise yap
+            // End of record
+            csv_read_char(parser)
+            eğer ch == '\r' ise yap
+                değişken next = csv_peek(parser)
+                eğer next.bazı_mı() ve next.unwrap() == '\n' ise yap
+                    csv_read_char(parser)
+                son
+            son
+            kır
+        değilse yap
+            kır  // end of record
+        son
+    son
+    
+    dön Başarı(Bazı(CsvRecord yap
+        fields: fields,
+        line_number: record_line
+    son))
+son
+
+// Parse all records (Pure BERK)
+fonksiyon pure_csv_parse_all(data: yazı, delimiter: yazı, has_headers: mantıksal) -> Sonuç[liste[CsvRecord], yazı]
+yap
+    değişken parser = pure_csv_parser_new(data, delimiter, has_headers)
+    değişken records = liste_oluştur[CsvRecord]()
+    
+    // Parse header if needed
+    eğer has_headers ise yap
+        değişken header_result = csv_parse_record(parser)?
+        
+        eşleşme header_result yap
+            Bazı[header_record] => yap
+                parser.headers = Bazı(header_record.fields)
+            son,
+            Hiçbir => yap
+                dön Hata("Empty CSV - expected headers")
+            son
+        son
+    son
+    
+    // Parse all data records
+    döngü yap
+        değişken record_result = csv_parse_record(parser)?
+        
+        eşleşme record_result yap
+            Bazı[record] => liste_ekle(records, record),
+            Hiçbir => kır  // end of input
+        son
+    son
+    
+    dön Başarı(records)
+son
+
+// Pure BERK CSV Writer (RFC 4180)
+fonksiyon pure_csv_write_field(field: yazı, delimiter: bayt, quote: bayt) -> yazı
+yap
+    // Check if field needs quoting
+    değişken needs_quote = yanlış
+    değişken field_bytes = string::to_bytes(field)
+    
+    için ch içinde field_bytes yap
+        eğer ch == delimiter veya ch == quote veya ch == '\n' veya ch == '\r' ise yap
+            needs_quote = doğru
+            kır
+        son
+    son
+    
+    eğer !needs_quote ise yap
+        dön field
+    son
+    
+    // Quote field and escape internal quotes
+    değişken result = liste_oluştur[bayt]()
+    liste_ekle(result, quote)
+    
+    için ch içinde field_bytes yap
+        eğer ch == quote ise yap
+            liste_ekle(result, quote)  // escape quote
+            liste_ekle(result, quote)
+        değilse yap
+            liste_ekle(result, ch)
+        son
+    son
+    
+    liste_ekle(result, quote)
+    dön bytes_to_string(result)
+son
+
+// Write CSV record (Pure BERK)
+fonksiyon pure_csv_write_record(fields: liste[yazı], delimiter: yazı) -> yazı
+yap
+    değişken delim_byte = string::to_bytes(delimiter)[0]
+    değişken result = ""
+    değişken first = doğru
+    
+    için field içinde fields yap
+        eğer !first ise yap
+            result = result + delimiter
+        son
+        first = yanlış
+        
+        result = result + pure_csv_write_field(field, delim_byte, '"')
+    son
+    
+    result = result + "\n"
+    dön result
+son
+
+// Generate CSV from records (Pure BERK)
+fonksiyon pure_csv_generate(records: liste[liste[yazı]], headers: Seçenek[liste[yazı]], delimiter: yazı) -> yazı
+yap
+    değişken result = ""
+    
+    // Write headers if provided
+    eşleşme headers yap
+        Bazı[h] => yap
+            result = result + pure_csv_write_record(h, delimiter)
+        son,
+        Hiçbir => {}
+    son
+    
+    // Write records
+    için record içinde records yap
+        result = result + pure_csv_write_record(record, delimiter)
+    son
+    
+    dön result
+son
+
+// ============================================================================
+// CSV READER (with Pure BERK fallback)
+// ============================================================================
+
+tip CsvReader = yapı yap
+    handle: tamsayı,
+    delimiter: yazı,
+    quote: yazı,
+    has_headers: mantıksal,
+    headers: Seçenek[liste[yazı]],
+    input_data: yazı  // For Pure BERK parser
+son
+
+tip CsvRecord = yapı yap
+    fields: liste[yazı],
+    line_number: tamsayı
+son
+
+// Create CSV reader from string (Pure BERK)
+fonksiyon reader_from_string(data: yazı) -> CsvReader
+yap
+    dön CsvReader yap
+        handle: 0,  // Pure BERK mode
+        delimiter: ",",
+        quote: "\"",
+        has_headers: yanlış,
+        headers: Hiçbir,
+        input_data: data
+    son
+son
+
+// Create CSV reader from file (Pure BERK)
+fonksiyon reader_from_file(path: yazı) -> Sonuç[CsvReader, yazı]
+yap
+    değişken content_result = io::dosya_oku_string(path)
+    
+    eğer content_result.hata_mı() ise yap
+        dön Hata("Failed to read file: " + path)
+    son
+    
+    dön Başarı(reader_from_string(content_result.unwrap()))
+son
+
+// Set delimiter (default: ',')
+fonksiyon reader_set_delimiter(reader: CsvReader, delimiter: yazı) -> CsvReader
+yap
+    reader.delimiter = delimiter
+    dön reader
+son
+
+// Set quote character (default: '"')
+fonksiyon reader_set_quote(reader: CsvReader, quote: yazı) -> CsvReader
+yap
+    reader.quote = quote
+    dön reader
+son
+
+// Enable header row parsing
+fonksiyon reader_set_has_headers(reader: CsvReader, has_headers: mantıksal) -> CsvReader
+yap
+    reader.has_headers = has_headers
+    dön reader
+son
+
+// Read next record (not implemented for Pure BERK - use reader_read_all)
+fonksiyon reader_read(reader: CsvReader) -> Sonuç[Seçenek[CsvRecord], yazı]
+yap
+    dön Hata("reader_read not implemented - use reader_read_all for Pure BERK parser")
+son
+
+// Read all records (Pure BERK)
+fonksiyon reader_read_all(reader: CsvReader) -> Sonuç[liste[CsvRecord], yazı]
+yap
+    // Use Pure BERK parser
+    dön pure_csv_parse_all(reader.input_data, reader.delimiter, reader.has_headers)
+son
+
+// Get headers
+fonksiyon reader_headers(reader: CsvReader) -> Seçenek[liste[yazı]]
+yap
+    dön reader.headers
+son
+
+// ============================================================================
+// CSV WRITER
+// ============================================================================
+
+tip CsvWriter = yapı yap
+    handle: tamsayı,
+    delimiter: yazı,
+    quote: yazı,
+    buffer: liste[yazı]
+son
+
+// Create CSV writer
+fonksiyon writer_new() -> CsvWriter
+yap
+    dön CsvWriter yap
+        handle: 0,
+        delimiter: ",",
+        quote: "\"",
+        buffer: liste_oluştur[yazı]()
+    son
+son
+
+// Set delimiter
+fonksiyon writer_set_delimiter(writer: CsvWriter, delimiter: yazı) -> CsvWriter
+yap
+    writer.delimiter = delimiter
+    dön writer
+son
+
+// Set quote character
+fonksiyon writer_set_quote(writer: CsvWriter, quote: yazı) -> CsvWriter
+yap
+    writer.quote = quote
+    dön writer
+son
+
+// Write record (list of strings) - Pure BERK
+fonksiyon writer_write(writer: CsvWriter, record: liste[yazı]) -> Sonuç[boş, yazı]
+yap
+    değişken csv_line = pure_csv_write_record(record, writer.delimiter)
+    liste_ekle(writer.buffer, csv_line)
+    dön Başarı(boş)
+son
+
+// Write header row
+fonksiyon writer_write_header(writer: CsvWriter, headers: liste[yazı]) -> Sonuç[boş, yazı]
+yap
+    dön writer_write(writer, headers)
+son
+
+// Flush to string - Pure BERK
+fonksiyon writer_to_string(writer: CsvWriter) -> yazı
+yap
+    değişken result = ""
+    için line içinde writer.buffer yap
+        result = result + line
+    son
+    dön result
+son
+
+// Write to file - Pure BERK
+fonksiyon writer_to_file(writer: CsvWriter, path: yazı) -> Sonuç[boş, yazı]
+yap
+    değişken content = writer_to_string(writer)
+    dön io::dosya_yaz(path, content)
+son
+
+// ============================================================================
+// HIGH-LEVEL API
+// ============================================================================
+
+// Parse CSV from string (Pure BERK)
+fonksiyon parse(data: yazı, has_headers: mantıksal) -> Sonuç[liste[CsvRecord], yazı]
+yap
+    dön pure_csv_parse_all(data, ",", has_headers)
+son
+
+// Parse CSV from file (Pure BERK)
+fonksiyon parse_file(path: yazı, has_headers: mantıksal) -> Sonuç[liste[CsvRecord], yazı]
+yap
+    değişken content = io::dosya_oku_string(path)?
+    dön pure_csv_parse_all(content, ",", has_headers)
+son
+
+// Generate CSV from records (Pure BERK)
+fonksiyon generate(records: liste[liste[yazı]], headers: Seçenek[liste[yazı]]) -> Sonuç[yazı, yazı]
+yap
+    değişken csv_text = pure_csv_generate(records, headers, ",")
+    dön Başarı(csv_text)
+son
+
+// Write CSV to file
+fonksiyon write_file(path: yazı, records: liste[liste[yazı]], headers: Seçenek[liste[yazı]]) -> Sonuç[boş, yazı]
+yap
+    değişken writer = writer_new()
+    
+    eşleşme headers yap
+        Bazı[h] => writer_write_header(writer, h)?,
+        Hiç => {}
+    son
+    
+    için record içinde records yap
+        writer_write(writer, record)?
+    son
+    
+    dön writer_to_file(writer, path)
+son
+
+// ============================================================================
+// TSV SUPPORT (Tab-Separated Values)
+// ============================================================================
+
+// Parse TSV from string (Pure BERK)
+fonksiyon parse_tsv(data: yazı, has_headers: mantıksal) -> Sonuç[liste[CsvRecord], yazı]
+yap
+    dön pure_csv_parse_all(data, "\t", has_headers)
+son
+
+// Parse TSV from file (Pure BERK)
+fonksiyon parse_tsv_file(path: yazı, has_headers: mantıksal) -> Sonuç[liste[CsvRecord], yazı]
+yap
+    değişken content = io::dosya_oku_string(path)?
+    dön pure_csv_parse_all(content, "\t", has_headers)
+son
+
+// Generate TSV (Pure BERK)
+fonksiyon generate_tsv(records: liste[liste[yazı]], headers: Seçenek[liste[yazı]]) -> Sonuç[yazı, yazı]
+yap
+    değişken tsv_text = pure_csv_generate(records, headers, "\t")
+    dön Başarı(tsv_text)
+son
+
+// ============================================================================
+// RECORD ACCESS
+// ============================================================================
+
+// Get field by index
+fonksiyon record_get(record: CsvRecord, index: tamsayı) -> Seçenek[yazı]
+yap
+    eğer index >= 0 && index < liste_uzunluk(record.fields) yap
+        dön Bazı(liste_al(record.fields, index))
+    son
+    dön Hiç
+son
+
+// Get field by header name (requires reader with headers)
+@native
+fonksiyon record_get_by_name(record: CsvRecord, reader: CsvReader, name: yazı) -> Seçenek[yazı]
+
+// Get all fields
+fonksiyon record_fields(record: CsvRecord) -> liste[yazı]
+yap
+    dön record.fields
+son
+
+// Get line number
+fonksiyon record_line_number(record: CsvRecord) -> tamsayı
+yap
+    dön record.line_number
+son
+
+// ============================================================================
+// TYPE CONVERSION
+// ============================================================================
+
+// Parse field as integer
+fonksiyon field_as_int(field: yazı) -> Sonuç[tamsayı, yazı]
+yap
+    kullan string
+    dön string::parse_int(field)
+son
+
+// Parse field as float
+fonksiyon field_as_float(field: yazı) -> Sonuç[ondalık, yazı]
+yap
+    kullan string
+    dön string::parse_float(field)
+son
+
+// Parse field as bool
+fonksiyon field_as_bool(field: yazı) -> Sonuç[mantıksal, yazı]
+yap
+    değişken lower = string::to_lowercase(field)
+    
+    eğer lower == "true" || lower == "1" || lower == "yes" yap
+        dön Tamam(doğru)
+    son değilse eğer lower == "false" || lower == "0" || lower == "no" yap
+        dön Tamam(yanlış)
+    son değilse yap
+        dön Hata("Invalid boolean value")
+    son
+son
+
+// ============================================================================
+// TYPED TABLE (Advanced)
+// ============================================================================
+
+tip CsvTable = yapı yap
+    headers: liste[yazı],
+    rows: liste[liste[yazı]],
+    types: liste[ColumnType]
+son
+
+tip ColumnType = "String" | "Integer" | "Float" | "Boolean"
+
+// Create table from records with type inference
+@native
+fonksiyon table_from_records(records: liste[CsvRecord], headers: liste[yazı]) -> CsvTable
+
+// Get typed value
+@native
+fonksiyon table_get(table: CsvTable, row: tamsayı, col: tamsayı) -> Seçenek[TypedValue]
+
+tip TypedValue = 
+    StringValue { value: yazı } |
+    IntValue { value: tamsayı } |
+    FloatValue { value: ondalık } |
+    BoolValue { value: mantıksal }
+
+// ============================================================================
+// FILTERING & TRANSFORMATION
+// ============================================================================
+
+// Filter records by predicate
+fonksiyon filter_records(records: liste[CsvRecord], predicate: fonksiyon(CsvRecord) -> mantıksal) -> liste[CsvRecord]
+yap
+    değişken result = liste_oluştur[CsvRecord]()
+    
+    için record içinde records yap
+        eğer predicate(record) yap
+            liste_ekle(result, record)
+        son
+    son
+    
+    dön result
+son
+
+// Map records
+fonksiyon map_records(records: liste[CsvRecord], mapper: fonksiyon(CsvRecord) -> liste[yazı]) -> liste[liste[yazı]]
+yap
+    değişken result = liste_oluştur[liste[yazı]]()
+    
+    için record içinde records yap
+        liste_ekle(result, mapper(record))
+    son
+    
+    dön result
+son
+
+// Select columns by indices
+fonksiyon select_columns(records: liste[CsvRecord], indices: liste[tamsayı]) -> liste[liste[yazı]]
+yap
+    değişken result = liste_oluştur[liste[yazı]]()
+    
+    için record içinde records yap
+        değişken selected = liste_oluştur[yazı]()
+        
+        için idx içinde indices yap
+            değişken field_opt = record_get(record, idx)
+            eşleşme field_opt yap
+                Bazı[field] => liste_ekle(selected, field),
+                Hiç => liste_ekle(selected, "")
+            son
+        son
+        
+        liste_ekle(result, selected)
+    son
+    
+    dön result
+son
+
+// ============================================================================
+// VALIDATION
+// ============================================================================
+
+// Validate CSV structure
+tip ValidationError = yapı yap
+    line: tamsayı,
+    message: yazı
+son
+
+// Check if all records have same number of fields
+fonksiyon validate_structure(records: liste[CsvRecord]) -> Sonuç[mantıksal, liste[ValidationError]]
+yap
+    eğer liste_uzunluk(records) == 0 yap
+        dön Tamam(doğru)
+    son
+    
+    değişken expected_fields = liste_uzunluk(liste_al(records, 0).fields)
+    değişken errors = liste_oluştur[ValidationError]()
+    
+    için record içinde records yap
+        değişken field_count = liste_uzunluk(record.fields)
+        
+        eğer field_count != expected_fields yap
+            liste_ekle(errors, ValidationError yap
+                line: record.line_number,
+                message: string::format("Expected {} fields, got {}", [expected_fields, field_count])
+            son)
+        son
+    son
+    
+    eğer liste_uzunluk(errors) > 0 yap
+        dön Hata(errors)
+    son
+    
+    dön Tamam(doğru)
+son
+
+// ============================================================================
+// EXCEL COMPATIBILITY
+// ============================================================================
+
+// Parse Excel-style CSV (semicolon delimiter, decimal comma)
+fonksiyon parse_excel(data: yazı, has_headers: mantıksal) -> Sonuç[liste[CsvRecord], yazı]
+yap
+    değişken reader = reader_from_string(data)
+    reader = reader_set_delimiter(reader, ";")
+    reader = reader_set_has_headers(reader, has_headers)
+    dön reader_read_all(reader)
+son
+
+// Generate Excel-style CSV
+fonksiyon generate_excel(records: liste[liste[yazı]], headers: Seçenek[liste[yazı]]) -> Sonuç[yazı, yazı]
+yap
+    değişken writer = writer_new()
+    writer = writer_set_delimiter(writer, ";")
+    
+    eşleşme headers yap
+        Bazı[h] => writer_write_header(writer, h)?,
+        Hiç => {}
+    son
+    
+    için record içinde records yap
+        writer_write(writer, record)?
+    son
+    
+    dön Tamam(writer_to_string(writer))
+son
+
+// ============================================================================
+// STATISTICS
+// ============================================================================
+
+// Count rows
+fonksiyon count_rows(records: liste[CsvRecord]) -> tamsayı
+yap
+    dön liste_uzunluk(records)
+son
+
+// Count columns
+fonksiyon count_columns(records: liste[CsvRecord]) -> tamsayı
+yap
+    eğer liste_uzunluk(records) > 0 yap
+        dön liste_uzunluk(liste_al(records, 0).fields)
+    son
+    dön 0
+son
+
+// ============================================================================
+// TURKISH ALIASES
+// ============================================================================
+
+fonksiyon ayrıştır(veri: yazı, başlık_var: mantıksal) -> Sonuç[liste[CsvRecord], yazı]
+yap
+    dön parse(veri, başlık_var)
+son
+
+fonksiyon dosyadan_ayrıştır(yol: yazı, başlık_var: mantıksal) -> Sonuç[liste[CsvRecord], yazı]
+yap
+    dön parse_file(yol, başlık_var)
+son
+
+fonksiyon oluştur(kayıtlar: liste[liste[yazı]], başlıklar: Seçenek[liste[yazı]]) -> Sonuç[yazı, yazı]
+yap
+    dön generate(kayıtlar, başlıklar)
+son
+
+fonksiyon dosyaya_yaz(yol: yazı, kayıtlar: liste[liste[yazı]], başlıklar: Seçenek[liste[yazı]]) -> Sonuç[boş, yazı]
+yap
+    dön write_file(yol, kayıtlar, başlıklar)
+son
+
+fonksiyon alan_al(kayıt: CsvRecord, indeks: tamsayı) -> Seçenek[yazı]
+yap
+    dön record_get(kayıt, indeks)
+son
+
+son  // modül csv

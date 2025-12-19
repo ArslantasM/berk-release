@@ -1,0 +1,157 @@
+/// ═══════════════════════════════════════════════════════════════════════════
+/// BERK Kutuphane Demo - Time Modulu
+/// Zaman islemleri
+/// ═══════════════════════════════════════════════════════════════════════════
+
+kullan std::io
+kullan std::time
+
+yaz("============================================================")
+yaz("         Kutuphane Demo: Time (Zaman) Modulu                ")
+yaz("============================================================")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 1: Zaman Birimleri
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 1: Zaman Birimleri ---")
+
+değişken MS_PER_SECOND = 1000
+değişken MS_PER_MINUTE = 60000
+değişken MS_PER_HOUR = 3600000
+değişken MS_PER_DAY = 86400000
+
+yaz("   1 saniye = ", MS_PER_SECOND, " ms")
+yaz("   1 dakika = ", MS_PER_MINUTE, " ms")
+yaz("   1 saat   = ", MS_PER_HOUR, " ms")
+yaz("   1 gun    = ", MS_PER_DAY, " ms")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 2: Zaman Donusumleri
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 2: Zaman Donusumleri ---")
+
+fonksiyon ms_to_saniye(ms: tamsayı) -> tamsayı yap
+    dön ms / 1000
+son
+
+fonksiyon saniye_to_dakika(s: tamsayı) -> tamsayı yap
+    dön s / 60
+son
+
+fonksiyon dakika_to_saat(d: tamsayı) -> tamsayı yap
+    dön d / 60
+son
+
+değişken milisaniye = 7200000
+değişken saniye = ms_to_saniye(milisaniye)
+değişken dakika = saniye_to_dakika(saniye)
+değişken saat = dakika_to_saat(dakika)
+
+yaz("   ", milisaniye, " ms = ", saniye, " saniye")
+yaz("   ", saniye, " saniye = ", dakika, " dakika")
+yaz("   ", dakika, " dakika = ", saat, " saat")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 3: Gecen Sure Hesaplama
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 3: Gecen Sure Hesaplama ---")
+
+fonksiyon sure_formatla(toplam_saniye: tamsayı) yap
+    değişken saat = toplam_saniye / 3600
+    değişken kalan = toplam_saniye % 3600
+    değişken dakika = kalan / 60
+    değişken saniye = kalan % 60
+    yaz("   ", toplam_saniye, " saniye = ", saat, "s ", dakika, "dk ", saniye, "sn")
+son
+
+sure_formatla(3661)
+sure_formatla(7322)
+sure_formatla(86400)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 4: Tarih Yapisi
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 4: Tarih Yapisi ---")
+
+yaz("   Tarih Formatlari:")
+yaz("   - ISO 8601: 2024-12-15T14:30:00Z")
+yaz("   - Turkce:   15.12.2024 14:30:00")
+yaz("   - Kisa:     15/12/2024")
+
+// Tarih komponetleri
+değişken gun = 15
+değişken ay = 12
+değişken yil = 2024
+
+yaz("\n   Tarih: ", gun, ".", ay, ".", yil)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 5: Gun Hesaplamalari
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 5: Gun Hesaplamalari ---")
+
+fonksiyon artik_yil_mi(yil: tamsayı) -> boolean yap
+    değişken mod4 = yil % 4
+    değişken mod100 = yil % 100
+    değişken mod400 = yil % 400
+    
+    eğer mod4 == 0 ise
+        eğer mod100 == 0 ise
+            eğer mod400 == 0 ise
+                dön doğru
+            son
+            dön yanlış
+        son
+        dön doğru
+    son
+    dön yanlış
+son
+
+yaz("   2020 artik yil mi? ", artik_yil_mi(2020))
+yaz("   2023 artik yil mi? ", artik_yil_mi(2023))
+yaz("   2024 artik yil mi? ", artik_yil_mi(2024))
+yaz("   2100 artik yil mi? ", artik_yil_mi(2100))
+
+// Aydaki gun sayisi
+fonksiyon aydaki_gun(ay: tamsayı, artik: boolean) -> tamsayı yap
+    eğer ay == 2 ise
+        eğer artik ise
+            dön 29
+        son
+        dön 28
+    son
+    
+    eğer ay == 4 ise dön 30 son
+    eğer ay == 6 ise dön 30 son
+    eğer ay == 9 ise dön 30 son
+    eğer ay == 11 ise dön 30 son
+    
+    dön 31
+son
+
+yaz("\n   Aydaki Gun Sayilari (2024):")
+yaz("   Ocak: ", aydaki_gun(1, doğru))
+yaz("   Subat: ", aydaki_gun(2, doğru))
+yaz("   Mart: ", aydaki_gun(3, doğru))
+yaz("   Nisan: ", aydaki_gun(4, doğru))
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 6: Kronometre Simulasyonu
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 6: Kronometre Simulasyonu ---")
+
+yaz("   [BASLAT] 00:00:00.000")
+yaz("   [LAP 1]  00:01:23.456")
+yaz("   [LAP 2]  00:02:45.789")
+yaz("   [LAP 3]  00:04:12.345")
+yaz("   [DUR]    00:05:30.123")
+
+yaz("\n   Toplam Sure: 5 dakika 30 saniye 123 ms")
+
+yaz("\n[OK] Time kutuphane demosu tamamlandi!")

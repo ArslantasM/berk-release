@@ -1,0 +1,1670 @@
+//! # Audio Module
+//!
+//! Audio and music system (cross-platform).
+//!
+//! Ses ve müzik sistemi (çapraz platform).
+//!
+//! ## Features / Özellikler
+//!
+//! - **Formats**: WAV, MP3, OGG, FLAC / Formatlar
+//! - **3D audio**: Positional spatial sound / 3B ses
+//! - **Effects**: Reverb, echo, pitch shift / Efektler
+//! - **Filters**: Low-pass, high-pass, bandpass / Filtreler
+//! - **Mixing**: Multiple sounds simultaneously / Karıştırma
+//! - **Streaming**: Memory-efficient large files / Akış
+//! - **Recording**: Microphone input / Kayıt
+//! - **Synthesis**: Real-time wave generators / Sentez
+//!
+//! ## Example / Örnek
+//!
+//! ```berk
+//! kullan audio
+//!
+//! değişken device = audio.create_device()?
+//! değişken sound = audio.load("music.mp3")?
+//! audio.play(device, sound)
+//! ```
+//!
+//! Backend: miniaudio (cross-platform)
+
+modül audio
+
+kullan string
+kullan io
+
+// ============================================================================
+// TÜRLER (Types)
+// ============================================================================
+
+// Audio Device (çıkış/giriş cihazı)
+tip AudioCihaz = yapı yap
+    isim: yazı,
+    sample_rate: tamsayı,     // Hz (44100, 48000)
+    kanal_sayisi: tamsayı,    // 1=mono, 2=stereo, 6=5.1
+    buffer_boyutu: tamsayı,   // samples
+    backend: AudioBackend,
+    handle: tamsayı
+son
+
+tip AudioBackend = "Auto" | "WASAPI" | "DirectSound" | "CoreAudio" | "ALSA" | "PulseAudio" | "WebAudio"
+
+// Sound (ses dosyası/buffer)
+tip Sound = yapı yap
+    dosya_yolu: yazı,
+    sure: ondalık,            // saniye
+    sample_rate: tamsayı,
+    kanal_sayisi: tamsayı,
+    format: AudioFormat,
+    streaming: mantıksal,     // Streaming mi, tam yüklü mü?
+    handle: tamsayı
+son
+
+tip AudioFormat = "WAV" | "MP3" | "OGG" | "FLAC" | "AAC" | "RAW"
+
+// Sound Instance (çalan ses)
+tip SoundInstance = yapı yap
+    ses: Sound,
+    pozisyon: ondalık,        // Oynatma pozisyonu (saniye)
+    ses_seviyesi: ondalık,    // 0.0-1.0
+    pitch: ondalık,           // 0.5-2.0 (1.0=normal)
+    pan: ondalık,             // -1.0 (sol) ~ 0.0 (merkez) ~ 1.0 (sağ)
+    loop: mantıksal,
+    oynatiliyor: mantıksal,
+    handle: tamsayı
+son
+
+// 3D Audio için pozisyon
+tip AudioPozisyon3D = yapı yap
+    x: ondalık,
+    y: ondalık,
+    z: ondalık
+son
+
+// 3D Audio listener (dinleyici)
+tip AudioListener = yapı yap
+    pozisyon: AudioPozisyon3D,
+    yon: AudioPozisyon3D,     // Forward vector
+    yukari: AudioPozisyon3D,  // Up vector
+    hiz: AudioPozisyon3D      // Velocity (Doppler effect)
+son
+
+// 3D Sound Source
+tip Sound3D = yapı yap
+    instance: SoundInstance,
+    pozisyon: AudioPozisyon3D,
+    hiz: AudioPozisyon3D,
+    min_mesafe: ondalık,      // Ses tam seviyede duyulduğu mesafe
+    max_mesafe: ondalık,      // Sesin tamamen kaybolduğu mesafe
+    attenuation: ondalık      // Uzaklıkla zayıflama faktörü
+son
+
+// Audio Effect (ses efekti)
+tip AudioEffect = yapı yap
+    tür: EffectTürü,
+    parametreler: liste[(yazı, ondalık)],
+    etkin: mantıksal,
+    handle: tamsayı
+son
+
+tip EffectTürü = "Reverb" | "Echo" | "Delay" | "Distortion" | "Chorus" | 
+                 "Flanger" | "Phaser" | "Compressor" | "Limiter" | 
+                 "LowPass" | "HighPass" | "BandPass" | "Equalizer"
+
+// Wave Generator (dalga üretici)
+tip WaveGenerator = yapı yap
+    dalga_tipi: DalgaTipi,
+    frekans: ondalık,         // Hz
+    genlik: ondalık,          // 0.0-1.0
+    faz: ondalık,             // 0.0-1.0
+    handle: tamsayı
+son
+
+tip DalgaTipi = "Sine" | "Square" | "Triangle" | "Sawtooth" | "Noise"
+
+// Audio Mixer (ses karıştırıcı)
+tip AudioMixer = yapı yap
+    kanallar: liste[MixerKanal],
+    master_volume: ondalık,
+    handle: tamsayı
+son
+
+tip MixerKanal = yapı yap
+    isim: yazı,
+    ses_seviyesi: ondalık,
+    mute: mantıksal,
+    solo: mantıksal,
+    efektler: liste[AudioEffect]
+son
+
+// Audio Recorder (ses kaydedici)
+tip AudioRecorder = yapı yap
+    kayit_aktif: mantıksal,
+    buffer: liste[ondalık],
+    sample_rate: tamsayı,
+    kanal_sayisi: tamsayı,
+    handle: tamsayı
+son
+
+// ============================================================================
+// CİHAZ YÖNETİMİ (Device Management)
+// ============================================================================
+
+// Audio cihazı oluştur (default output)
+fonksiyon cihaz_olustur(sample_rate: tamsayı = 44100, kanal_sayisi: tamsayı = 2, backend: AudioBackend = "Auto") -> Sonuç[AudioCihaz, AudioHata]
+yap
+    değişken handle = native_device_init(sample_rate, kanal_sayisi, backend)
+    
+    eğer handle < 0 ise yap
+        dön Hata(AudioHata yap
+            mesaj: "Audio cihazı başlatılamadı",
+            hata_türü: "device"
+        son)
+    son
+    
+    dön Başarı(AudioCihaz yap
+        isim: native_device_get_name(handle),
+        sample_rate: sample_rate,
+        kanal_sayisi: kanal_sayisi,
+        buffer_boyutu: 4096,
+        backend: backend,
+        handle: handle
+    son)
+son
+
+// Cihazı kapat
+fonksiyon cihaz_kapat(cihaz: AudioCihaz) -> boş
+yap
+    native_device_uninit(cihaz.handle)
+son
+
+// Mevcut cihazları listele
+fonksiyon cihaz_listesi() -> liste[yazı]
+yap
+    dön native_device_enum()
+son
+
+// Master volume ayarla
+fonksiyon cihaz_volume_ayarla(cihaz: AudioCihaz, volume: ondalık) -> boş
+yap
+    native_device_set_master_volume(cihaz.handle, volume)
+son
+
+// Master volume al
+fonksiyon cihaz_volume_al(cihaz: AudioCihaz) -> ondalık
+yap
+    dön native_device_get_master_volume(cihaz.handle)
+son
+
+// ============================================================================
+// SES YÜKLEME (Sound Loading)
+// ============================================================================
+
+// Ses dosyası yükle
+fonksiyon ses_yukle(dosya_yolu: yazı, streaming: mantıksal = yanlış) -> Sonuç[Sound, AudioHata]
+yap
+    değişken handle = native_sound_load(dosya_yolu, streaming)
+    
+    eğer handle < 0 ise yap
+        dön Hata(AudioHata yap
+            mesaj: "Ses dosyası yüklenemedi: " + dosya_yolu,
+            hata_türü: "load"
+        son)
+    son
+    
+    değişken bilgi = native_sound_get_info(handle)
+    
+    dön Başarı(Sound yap
+        dosya_yolu: dosya_yolu,
+        sure: bilgi.sure,
+        sample_rate: bilgi.sample_rate,
+        kanal_sayisi: bilgi.kanal_sayisi,
+        format: bilgi.format,
+        streaming: streaming,
+        handle: handle
+    son)
+son
+
+// Bellekten ses oluştur (raw PCM data)
+fonksiyon ses_bellek_olustur(veri: liste[byte], sample_rate: tamsayı, kanal_sayisi: tamsayı) -> Sonuç[Sound, AudioHata]
+yap
+    değişken handle = native_sound_from_memory(veri, sample_rate, kanal_sayisi)
+    
+    eğer handle < 0 ise yap
+        dön Hata(AudioHata yap
+            mesaj: "Bellekten ses oluşturulamadı",
+            hata_türü: "memory"
+        son)
+    son
+    
+    değişken sure = tamsayı_ondalık(veri.uzunluk()) / tamsayı_ondalık(sample_rate * kanal_sayisi * 2)  // 16-bit samples
+    
+    dön Başarı(Sound yap
+        dosya_yolu: "",
+        sure: sure,
+        sample_rate: sample_rate,
+        kanal_sayisi: kanal_sayisi,
+        format: "RAW",
+        streaming: yanlış,
+        handle: handle
+    son)
+son
+
+// Sesi kapat
+fonksiyon ses_kapat(ses: Sound) -> boş
+yap
+    native_sound_unload(ses.handle)
+son
+
+// ============================================================================
+// SES ÇALMA (Sound Playback)
+// ============================================================================
+
+// Ses çal (basit)
+fonksiyon ses_cal(cihaz: AudioCihaz, ses: Sound, volume: ondalık = 1.0, loop: mantıksal = yanlış) -> Sonuç[SoundInstance, AudioHata]
+yap
+    değişken handle = native_sound_play(cihaz.handle, ses.handle, volume, loop)
+    
+    eğer handle < 0 ise yap
+        dön Hata(AudioHata yap
+            mesaj: "Ses çalınamadı",
+            hata_türü: "playback"
+        son)
+    son
+    
+    dön Başarı(SoundInstance yap
+        ses: ses,
+        pozisyon: 0.0,
+        ses_seviyesi: volume,
+        pitch: 1.0,
+        pan: 0.0,
+        loop: loop,
+        oynatiliyor: doğru,
+        handle: handle
+    son)
+son
+
+// Ses durdur
+fonksiyon ses_durdur(instance: SoundInstance) -> boş
+yap
+    native_sound_stop(instance.handle)
+    instance.oynatiliyor = yanlış
+son
+
+// Ses duraklat
+fonksiyon ses_duraklat(instance: SoundInstance) -> boş
+yap
+    native_sound_pause(instance.handle)
+    instance.oynatiliyor = yanlış
+son
+
+// Ses devam ettir
+fonksiyon ses_devam_ettir(instance: SoundInstance) -> boş
+yap
+    native_sound_resume(instance.handle)
+    instance.oynatiliyor = doğru
+son
+
+// Ses oynatılıyor mu?
+fonksiyon ses_oynatiliyor_mu(instance: SoundInstance) -> mantıksal
+yap
+    dön native_sound_is_playing(instance.handle)
+son
+
+// Oynatma pozisyonunu ayarla (seek)
+fonksiyon ses_pozisyon_ayarla(instance: SoundInstance, saniye: ondalık) -> boş
+yap
+    native_sound_seek(instance.handle, saniye)
+    instance.pozisyon = saniye
+son
+
+// Oynatma pozisyonunu al
+fonksiyon ses_pozisyon_al(instance: SoundInstance) -> ondalık
+yap
+    dön native_sound_get_position(instance.handle)
+son
+
+// ============================================================================
+// SES PARAMETRELERİ (Sound Parameters)
+// ============================================================================
+
+// Volume ayarla
+fonksiyon ses_volume_ayarla(instance: SoundInstance, volume: ondalık) -> boş
+yap
+    değişken v = math::clamp(volume, 0.0, 1.0)
+    native_sound_set_volume(instance.handle, v)
+    instance.ses_seviyesi = v
+son
+
+// Pitch ayarla (hız/frekans)
+fonksiyon ses_pitch_ayarla(instance: SoundInstance, pitch: ondalık) -> boş
+yap
+    değişken p = math::clamp(pitch, 0.1, 10.0)
+    native_sound_set_pitch(instance.handle, p)
+    instance.pitch = p
+son
+
+// Pan ayarla (stereo konum)
+fonksiyon ses_pan_ayarla(instance: SoundInstance, pan: ondalık) -> boş
+yap
+    değişken p = math::clamp(pan, -1.0, 1.0)
+    native_sound_set_pan(instance.handle, p)
+    instance.pan = p
+son
+
+// Loop ayarla
+fonksiyon ses_loop_ayarla(instance: SoundInstance, loop: mantıksal) -> boş
+yap
+    native_sound_set_looping(instance.handle, loop)
+    instance.loop = loop
+son
+
+// ============================================================================
+// 3D AUDIO (Spatial Sound)
+// ============================================================================
+
+// 3D ses oluştur
+fonksiyon ses_3d_olustur(cihaz: AudioCihaz, ses: Sound, pozisyon: AudioPozisyon3D) -> Sonuç[Sound3D, AudioHata]
+yap
+    değişken instance_sonuc = ses_cal(cihaz, ses, 1.0, yanlış)
+    eğer instance_sonuc.hata_mi() ise yap
+        dön Hata(instance_sonuc.hata_al())
+    son
+    
+    değişken instance = instance_sonuc.unwrap()
+    
+    // 3D spatial
+    native_sound_set_spatial(instance.handle, doğru)
+    native_sound_set_position(instance.handle, pozisyon.x, pozisyon.y, pozisyon.z)
+    
+    dön Başarı(Sound3D yap
+        instance: instance,
+        pozisyon: pozisyon,
+        hiz: AudioPozisyon3D yap x: 0.0, y: 0.0, z: 0.0 son,
+        min_mesafe: 1.0,
+        max_mesafe: 100.0,
+        attenuation: 1.0
+    son)
+son
+
+// 3D ses pozisyonunu güncelle
+fonksiyon ses_3d_pozisyon_ayarla(ses_3d: Sound3D, pozisyon: AudioPozisyon3D) -> boş
+yap
+    ses_3d.pozisyon = pozisyon
+    native_sound_set_position(ses_3d.instance.handle, pozisyon.x, pozisyon.y, pozisyon.z)
+son
+
+// 3D ses hızını ayarla (Doppler effect)
+fonksiyon ses_3d_hiz_ayarla(ses_3d: Sound3D, hiz: AudioPozisyon3D) -> boş
+yap
+    ses_3d.hiz = hiz
+    native_sound_set_velocity(ses_3d.instance.handle, hiz.x, hiz.y, hiz.z)
+son
+
+// 3D ses mesafe parametreleri
+fonksiyon ses_3d_mesafe_ayarla(ses_3d: Sound3D, min: ondalık, max: ondalık, attenuation: ondalık = 1.0) -> boş
+yap
+    ses_3d.min_mesafe = min
+    ses_3d.max_mesafe = max
+    ses_3d.attenuation = attenuation
+    native_sound_set_distance(ses_3d.instance.handle, min, max, attenuation)
+son
+
+// Listener (dinleyici) oluştur
+fonksiyon listener_olustur(cihaz: AudioCihaz) -> AudioListener
+yap
+    dön AudioListener yap
+        pozisyon: AudioPozisyon3D yap x: 0.0, y: 0.0, z: 0.0 son,
+        yon: AudioPozisyon3D yap x: 0.0, y: 0.0, z: -1.0 son,
+        yukari: AudioPozisyon3D yap x: 0.0, y: 1.0, z: 0.0 son,
+        hiz: AudioPozisyon3D yap x: 0.0, y: 0.0, z: 0.0 son
+    son
+son
+
+// Listener pozisyonunu ayarla
+fonksiyon listener_pozisyon_ayarla(cihaz: AudioCihaz, listener: AudioListener, pozisyon: AudioPozisyon3D) -> boş
+yap
+    listener.pozisyon = pozisyon
+    native_listener_set_position(cihaz.handle, pozisyon.x, pozisyon.y, pozisyon.z)
+son
+
+// Listener yönünü ayarla
+fonksiyon listener_yon_ayarla(cihaz: AudioCihaz, listener: AudioListener, yon: AudioPozisyon3D, yukari: AudioPozisyon3D) -> boş
+yap
+    listener.yon = yon
+    listener.yukari = yukari
+    native_listener_set_orientation(cihaz.handle, yon.x, yon.y, yon.z, yukari.x, yukari.y, yukari.z)
+son
+
+// ============================================================================
+// EFEKTLER (Effects)
+// ============================================================================
+
+// Reverb efekti oluştur
+fonksiyon efekt_reverb_olustur(oda_boyutu: ondalık = 0.5, yankılama: ondalık = 0.5, nemlilik: ondalık = 0.5) -> AudioEffect
+yap
+    değişken handle = native_effect_reverb_create(oda_boyutu, yankılama, nemlilik)
+    
+    değişken params = liste_oluştur()
+    params.ekle(("room_size", oda_boyutu))
+    params.ekle(("decay", yankılama))
+    params.ekle(("damping", nemlilik))
+    
+    dön AudioEffect yap
+        tür: "Reverb",
+        parametreler: params,
+        etkin: doğru,
+        handle: handle
+    son
+son
+
+// Echo efekti oluştur
+fonksiyon efekt_echo_olustur(gecikme: ondalık = 0.5, geri_besleme: ondalık = 0.3) -> AudioEffect
+yap
+    değişken handle = native_effect_echo_create(gecikme, geri_besleme)
+    
+    değişken params = liste_oluştur()
+    params.ekle(("delay", gecikme))
+    params.ekle(("feedback", geri_besleme))
+    
+    dön AudioEffect yap
+        tür: "Echo",
+        parametreler: params,
+        etkin: doğru,
+        handle: handle
+    son
+son
+
+// Low-pass filter
+fonksiyon efekt_lowpass_olustur(kesim_frekansi: ondalık = 1000.0) -> AudioEffect
+yap
+    değişken handle = native_effect_lowpass_create(kesim_frekansi)
+    
+    değişken params = liste_oluştur()
+    params.ekle(("cutoff", kesim_frekansi))
+    
+    dön AudioEffect yap
+        tür: "LowPass",
+        parametreler: params,
+        etkin: doğru,
+        handle: handle
+    son
+son
+
+// High-pass filter
+fonksiyon efekt_highpass_olustur(kesim_frekansi: ondalık = 100.0) -> AudioEffect
+yap
+    değişken handle = native_effect_highpass_create(kesim_frekansi)
+    
+    değişken params = liste_oluştur()
+    params.ekle(("cutoff", kesim_frekansi))
+    
+    dön AudioEffect yap
+        tür: "HighPass",
+        parametreler: params,
+        etkin: doğru,
+        handle: handle
+    son
+son
+
+// Efekti sese uygula
+fonksiyon ses_efekt_uygula(instance: SoundInstance, efekt: AudioEffect) -> boş
+yap
+    native_sound_apply_effect(instance.handle, efekt.handle)
+son
+
+// Efekti kaldır
+fonksiyon ses_efekt_kaldir(instance: SoundInstance, efekt: AudioEffect) -> boş
+yap
+    native_sound_remove_effect(instance.handle, efekt.handle)
+son
+
+// Efekti sil
+fonksiyon efekt_sil(efekt: AudioEffect) -> boş
+yap
+    native_effect_delete(efekt.handle)
+son
+
+// ============================================================================
+// DALGA ÜRETİCİ (Wave Generator)
+// ============================================================================
+
+// Dalga üretici oluştur
+fonksiyon dalga_olustur(dalga_tipi: DalgaTipi, frekans: ondalık, genlik: ondalık = 0.5) -> WaveGenerator
+yap
+    değişken handle = native_wave_generator_create(dalga_tipi, frekans, genlik)
+    
+    dön WaveGenerator yap
+        dalga_tipi: dalga_tipi,
+        frekans: frekans,
+        genlik: genlik,
+        faz: 0.0,
+        handle: handle
+    son
+son
+
+// Dalga üreticiyi çal
+fonksiyon dalga_cal(cihaz: AudioCihaz, generator: WaveGenerator, sure: ondalık = 1.0) -> Sonuç[SoundInstance, AudioHata]
+yap
+    değişken handle = native_wave_play(cihaz.handle, generator.handle, sure)
+    
+    eğer handle < 0 ise yap
+        dön Hata(AudioHata yap
+            mesaj: "Dalga üretici çalıştırılamadı",
+            hata_türü: "generator"
+        son)
+    son
+    
+    // Dummy Sound object
+    değişken ses = Sound yap
+        dosya_yolu: "",
+        sure: sure,
+        sample_rate: 44100,
+        kanal_sayisi: 1,
+        format: "RAW",
+        streaming: yanlış,
+        handle: -1
+    son
+    
+    dön Başarı(SoundInstance yap
+        ses: ses,
+        pozisyon: 0.0,
+        ses_seviyesi: generator.genlik,
+        pitch: 1.0,
+        pan: 0.0,
+        loop: yanlış,
+        oynatiliyor: doğru,
+        handle: handle
+    son)
+son
+
+// Dalga frekansını değiştir
+fonksiyon dalga_frekans_ayarla(generator: WaveGenerator, frekans: ondalık) -> boş
+yap
+    generator.frekans = frekans
+    native_wave_set_frequency(generator.handle, frekans)
+son
+
+// Dalga üreticiyi sil
+fonksiyon dalga_sil(generator: WaveGenerator) -> boş
+yap
+    native_wave_generator_delete(generator.handle)
+son
+
+// ============================================================================
+// MİKSER (Audio Mixer)
+// ============================================================================
+
+// Mixer oluştur
+fonksiyon mixer_olustur(cihaz: AudioCihaz, kanal_sayisi: tamsayı = 8) -> AudioMixer
+yap
+    değişken handle = native_mixer_create(cihaz.handle, kanal_sayisi)
+    
+    değişken kanallar = liste_oluştur()
+    değişken i = 0
+    iken i < kanal_sayisi yap
+        kanallar.ekle(MixerKanal yap
+            isim: "Kanal " + tamsayı_yazı(i + 1),
+            ses_seviyesi: 1.0,
+            mute: yanlış,
+            solo: yanlış,
+            efektler: liste_oluştur()
+        son)
+        i = i + 1
+    son
+    
+    dön AudioMixer yap
+        kanallar: kanallar,
+        master_volume: 1.0,
+        handle: handle
+    son
+son
+
+// Mixer'a ses ekle
+fonksiyon mixer_ses_ekle(mixer: AudioMixer, kanal_index: tamsayı, instance: SoundInstance) -> boş
+yap
+    native_mixer_add_sound(mixer.handle, kanal_index, instance.handle)
+son
+
+// Kanal volume ayarla
+fonksiyon mixer_kanal_volume(mixer: AudioMixer, kanal_index: tamsayı, volume: ondalık) -> boş
+yap
+    mixer.kanallar[kanal_index].ses_seviyesi = volume
+    native_mixer_set_channel_volume(mixer.handle, kanal_index, volume)
+son
+
+// Kanal mute
+fonksiyon mixer_kanal_mute(mixer: AudioMixer, kanal_index: tamsayı, mute: mantıksal) -> boş
+yap
+    mixer.kanallar[kanal_index].mute = mute
+    native_mixer_set_channel_mute(mixer.handle, kanal_index, mute)
+son
+
+// Master volume ayarla
+fonksiyon mixer_master_volume(mixer: AudioMixer, volume: ondalık) -> boş
+yap
+    mixer.master_volume = volume
+    native_mixer_set_master_volume(mixer.handle, volume)
+son
+
+// Mixer'ı sil
+fonksiyon mixer_sil(mixer: AudioMixer) -> boş
+yap
+    native_mixer_delete(mixer.handle)
+son
+
+// ============================================================================
+// SES KAYDEDICI (Audio Recorder)
+// ============================================================================
+
+// Recorder oluştur
+fonksiyon recorder_olustur(sample_rate: tamsayı = 44100, kanal_sayisi: tamsayı = 1) -> Sonuç[AudioRecorder, AudioHata]
+yap
+    değişken handle = native_recorder_init(sample_rate, kanal_sayisi)
+    
+    eğer handle < 0 ise yap
+        dön Hata(AudioHata yap
+            mesaj: "Audio recorder başlatılamadı",
+            hata_türü: "recorder"
+        son)
+    son
+    
+    dön Başarı(AudioRecorder yap
+        kayit_aktif: yanlış,
+        buffer: liste_oluştur(),
+        sample_rate: sample_rate,
+        kanal_sayisi: kanal_sayisi,
+        handle: handle
+    son)
+son
+
+// Kayıt başlat
+fonksiyon recorder_baslat(recorder: AudioRecorder) -> boş
+yap
+    native_recorder_start(recorder.handle)
+    recorder.kayit_aktif = doğru
+son
+
+// Kayıt durdur
+fonksiyon recorder_durdur(recorder: AudioRecorder) -> boş
+yap
+    native_recorder_stop(recorder.handle)
+    recorder.kayit_aktif = yanlış
+son
+
+// Kaydı al (PCM float data)
+fonksiyon recorder_veri_al(recorder: AudioRecorder) -> liste[ondalık]
+yap
+    dön native_recorder_get_data(recorder.handle)
+son
+
+// Kaydı dosyaya kaydet
+fonksiyon recorder_dosya_kaydet(recorder: AudioRecorder, dosya_yolu: yazı, format: AudioFormat = "WAV") -> Sonuç[boş, AudioHata]
+yap
+    değişken başarılı = native_recorder_save(recorder.handle, dosya_yolu, format)
+    
+    eğer değil başarılı ise yap
+        dön Hata(AudioHata yap
+            mesaj: "Kayıt dosyaya yazılamadı: " + dosya_yolu,
+            hata_türü: "save"
+        son)
+    son
+    
+    dön Başarı(boş)
+son
+
+// Recorder'ı kapat
+fonksiyon recorder_kapat(recorder: AudioRecorder) -> boş
+yap
+    native_recorder_uninit(recorder.handle)
+son
+
+// ============================================================================
+// YARDIMCI FONKSİYONLAR (Helper Functions)
+// ============================================================================
+
+// Desibel'den lineer volume'e çevir
+fonksiyon db_to_linear(db: ondalık) -> ondalık
+yap
+    dön math::pow(10.0, db / 20.0)
+son
+
+// Lineer volume'den desibel'e çevir
+fonksiyon linear_to_db(linear: ondalık) -> ondalık
+yap
+    eğer linear <= 0.0 ise yap
+        dön -100.0  // -inf dB
+    son
+    dön 20.0 * math::log10(linear)
+son
+
+// Saniyeyi sample sayısına çevir
+fonksiyon saniye_to_samples(saniye: ondalık, sample_rate: tamsayı) -> tamsayı
+yap
+    dön tamsayı_al(saniye * tamsayı_ondalık(sample_rate))
+son
+
+// Sample sayısını saniyeye çevir
+fonksiyon samples_to_saniye(samples: tamsayı, sample_rate: tamsayı) -> ondalık
+yap
+    dön tamsayı_ondalık(samples) / tamsayı_ondalık(sample_rate)
+son
+
+// ============================================================================
+// AUDIO HATA
+// ============================================================================
+
+tip AudioHata = yapı yap
+    mesaj: yazı,
+    hata_türü: yazı
+son
+
+// ============================================================================
+// DÜŞÜK SEVİYE FONKSİYONLAR (Low-level - Native bindings)
+// ============================================================================
+
+// Device
+harici fonksiyon native_device_init(sample_rate: tamsayı, kanallar: tamsayı, backend: AudioBackend) -> tamsayı
+harici fonksiyon native_device_uninit(handle: tamsayı) -> boş
+harici fonksiyon native_device_get_name(handle: tamsayı) -> yazı
+harici fonksiyon native_device_enum() -> liste[yazı]
+harici fonksiyon native_device_set_master_volume(handle: tamsayı, volume: ondalık) -> boş
+harici fonksiyon native_device_get_master_volume(handle: tamsayı) -> ondalık
+
+// Sound Loading
+harici fonksiyon native_sound_load(yol: yazı, streaming: mantıksal) -> tamsayı
+harici fonksiyon native_sound_from_memory(veri: liste[byte], sample_rate: tamsayı, kanallar: tamsayı) -> tamsayı
+harici fonksiyon native_sound_unload(handle: tamsayı) -> boş
+harici fonksiyon native_sound_get_info(handle: tamsayı) -> yapı yap sure: ondalık, sample_rate: tamsayı, kanal_sayisi: tamsayı, format: AudioFormat son
+
+// Playback
+harici fonksiyon native_sound_play(cihaz: tamsayı, ses: tamsayı, volume: ondalık, loop: mantıksal) -> tamsayı
+harici fonksiyon native_sound_stop(handle: tamsayı) -> boş
+harici fonksiyon native_sound_pause(handle: tamsayı) -> boş
+harici fonksiyon native_sound_resume(handle: tamsayı) -> boş
+harici fonksiyon native_sound_is_playing(handle: tamsayı) -> mantıksal
+harici fonksiyon native_sound_seek(handle: tamsayı, saniye: ondalık) -> boş
+harici fonksiyon native_sound_get_position(handle: tamsayı) -> ondalık
+
+// Parameters
+harici fonksiyon native_sound_set_volume(handle: tamsayı, volume: ondalık) -> boş
+harici fonksiyon native_sound_set_pitch(handle: tamsayı, pitch: ondalık) -> boş
+harici fonksiyon native_sound_set_pan(handle: tamsayı, pan: ondalık) -> boş
+harici fonksiyon native_sound_set_looping(handle: tamsayı, loop: mantıksal) -> boş
+
+// 3D Audio
+harici fonksiyon native_sound_set_spatial(handle: tamsayı, spatial: mantıksal) -> boş
+harici fonksiyon native_sound_set_position(handle: tamsayı, x: ondalık, y: ondalık, z: ondalık) -> boş
+harici fonksiyon native_sound_set_velocity(handle: tamsayı, x: ondalık, y: ondalık, z: ondalık) -> boş
+harici fonksiyon native_sound_set_distance(handle: tamsayı, min: ondalık, max: ondalık, attenuation: ondalık) -> boş
+harici fonksiyon native_listener_set_position(cihaz: tamsayı, x: ondalık, y: ondalık, z: ondalık) -> boş
+harici fonksiyon native_listener_set_orientation(cihaz: tamsayı, fx: ondalık, fy: ondalık, fz: ondalık, ux: ondalık, uy: ondalık, uz: ondalık) -> boş
+
+// Effects
+harici fonksiyon native_effect_reverb_create(oda: ondalık, yankı: ondalık, nem: ondalık) -> tamsayı
+harici fonksiyon native_effect_echo_create(gecikme: ondalık, geri_besleme: ondalık) -> tamsayı
+harici fonksiyon native_effect_lowpass_create(kesim: ondalık) -> tamsayı
+harici fonksiyon native_effect_highpass_create(kesim: ondalık) -> tamsayı
+harici fonksiyon native_sound_apply_effect(ses: tamsayı, efekt: tamsayı) -> boş
+harici fonksiyon native_sound_remove_effect(ses: tamsayı, efekt: tamsayı) -> boş
+harici fonksiyon native_effect_delete(handle: tamsayı) -> boş
+
+// Wave Generator
+harici fonksiyon native_wave_generator_create(tipi: DalgaTipi, frekans: ondalık, genlik: ondalık) -> tamsayı
+harici fonksiyon native_wave_play(cihaz: tamsayı, generator: tamsayı, sure: ondalık) -> tamsayı
+harici fonksiyon native_wave_set_frequency(generator: tamsayı, frekans: ondalık) -> boş
+harici fonksiyon native_wave_generator_delete(handle: tamsayı) -> boş
+
+// Mixer
+harici fonksiyon native_mixer_create(cihaz: tamsayı, kanal_sayisi: tamsayı) -> tamsayı
+harici fonksiyon native_mixer_add_sound(mixer: tamsayı, kanal: tamsayı, ses: tamsayı) -> boş
+harici fonksiyon native_mixer_set_channel_volume(mixer: tamsayı, kanal: tamsayı, volume: ondalık) -> boş
+harici fonksiyon native_mixer_set_channel_mute(mixer: tamsayı, kanal: tamsayı, mute: mantıksal) -> boş
+harici fonksiyon native_mixer_set_master_volume(mixer: tamsayı, volume: ondalık) -> boş
+harici fonksiyon native_mixer_delete(handle: tamsayı) -> boş
+
+// Recorder
+harici fonksiyon native_recorder_init(sample_rate: tamsayı, kanallar: tamsayı) -> tamsayı
+harici fonksiyon native_recorder_start(handle: tamsayı) -> boş
+harici fonksiyon native_recorder_stop(handle: tamsayı) -> boş
+harici fonksiyon native_recorder_get_data(handle: tamsayı) -> liste[ondalık]
+harici fonksiyon native_recorder_save(handle: tamsayı, yol: yazı, format: AudioFormat) -> mantıksal
+harici fonksiyon native_recorder_uninit(handle: tamsayı) -> boş
+
+// ============================================================================
+// KULLANIM ÖRNEKLERİ (Usage Examples)
+// ============================================================================
+
+/*
+// ============================================================================
+// ÖRNEK 1: TEMEL SES ÇALMA
+// ============================================================================
+
+kullan audio
+
+// Cihaz başlat
+değişken cihaz = audio::cihaz_olustur(44100, 2, "Auto").unwrap()
+
+// Ses yükle
+değişken muzik = audio::ses_yukle("music/background.mp3", doğru).unwrap()  // Streaming
+değişken efekt = audio::ses_yukle("sfx/explosion.wav", yanlış).unwrap()    // Tam yüklü
+
+// Müzik çal (loop)
+değişken muzik_instance = audio::ses_cal(cihaz, muzik, 0.7, doğru).unwrap()
+
+// Efekt çal (tek sefer)
+değişken efekt_instance = audio::ses_cal(cihaz, efekt, 1.0, yanlış).unwrap()
+
+// 5 saniye bekle
+bekle(5.0)
+
+// Durdur
+audio::ses_durdur(muzik_instance)
+audio::ses_durdur(efekt_instance)
+
+// Temizlik
+audio::ses_kapat(muzik)
+audio::ses_kapat(efekt)
+audio::cihaz_kapat(cihaz)
+
+// ============================================================================
+// ÖRNEK 2: 3D SPATIAL AUDIO (Oyun)
+// ============================================================================
+
+kullan audio
+kullan graphics
+
+değişken cihaz = audio::cihaz_olustur().unwrap()
+değişken adim_sesi = audio::ses_yukle("sfx/footstep.wav").unwrap()
+
+// Listener (oyuncu)
+değişken listener = audio::listener_olustur(cihaz)
+audio::listener_pozisyon_ayarla(cihaz, listener, audio::AudioPozisyon3D yap x: 0.0, y: 0.0, z: 0.0 son)
+
+// 3D ses kaynağı (düşman)
+değişken dusman_pozisyon = audio::AudioPozisyon3D yap x: 10.0, y: 0.0, z: -5.0 son
+değişken dusman_ses = audio::ses_3d_olustur(cihaz, adim_sesi, dusman_pozisyon).unwrap()
+audio::ses_3d_mesafe_ayarla(dusman_ses, 1.0, 50.0, 1.0)
+
+// Oyun döngüsü
+iken doğru yap
+    // Oyuncu hareket eder
+    değişken yeni_pozisyon = oyuncu_pozisyon_al()
+    audio::listener_pozisyon_ayarla(cihaz, listener, yeni_pozisyon)
+    
+    // Düşman hareket eder
+    değişken dusman_yeni_poz = dusman_pozisyon_al()
+    audio::ses_3d_pozisyon_ayarla(dusman_ses, dusman_yeni_poz)
+    
+    bekle(0.016)  // 60 FPS
+son
+
+// ============================================================================
+// ÖRNEK 3: AUDIO EFEKTLERİ
+// ============================================================================
+
+kullan audio
+
+değişken cihaz = audio::cihaz_olustur().unwrap()
+değişken vokal = audio::ses_yukle("vocal.wav").unwrap()
+değişken vokal_inst = audio::ses_cal(cihaz, vokal, 1.0, yanlış).unwrap()
+
+// Reverb ekle (yankı)
+değişken reverb = audio::efekt_reverb_olustur(0.8, 0.7, 0.5)
+audio::ses_efekt_uygula(vokal_inst, reverb)
+
+// Echo ekle
+değişken echo = audio::efekt_echo_olustur(0.3, 0.4)
+audio::ses_efekt_uygula(vokal_inst, echo)
+
+// 10 saniye sonra efektleri kaldır
+bekle(10.0)
+audio::ses_efekt_kaldir(vokal_inst, reverb)
+audio::ses_efekt_kaldir(vokal_inst, echo)
+
+// Temizlik
+audio::efekt_sil(reverb)
+audio::efekt_sil(echo)
+
+// ============================================================================
+// ÖRNEK 4: DALGA ÜRETİCİ (Synthesizer)
+// ============================================================================
+
+kullan audio
+
+değişken cihaz = audio::cihaz_olustur().unwrap()
+
+// 440 Hz (A4 notası) sine wave
+değişken generator = audio::dalga_olustur("Sine", 440.0, 0.5)
+değişken ses = audio::dalga_cal(cihaz, generator, 2.0).unwrap()
+
+bekle(2.0)
+
+// 880 Hz (A5 notası)
+audio::dalga_frekans_ayarla(generator, 880.0)
+değişken ses2 = audio::dalga_cal(cihaz, generator, 2.0).unwrap()
+
+bekle(2.0)
+
+audio::dalga_sil(generator)
+
+// ============================================================================
+// ÖRNEK 5: SES KAYDEDICI (Mikrofondan kayıt)
+// ============================================================================
+
+kullan audio
+
+değişken recorder = audio::recorder_olustur(44100, 1).unwrap()
+
+yazdır("Kayıt başlıyor...")
+audio::recorder_baslat(recorder)
+
+bekle(5.0)  // 5 saniye kaydet
+
+yazdır("Kayıt durduruluyor...")
+audio::recorder_durdur(recorder)
+
+// Dosyaya kaydet
+audio::recorder_dosya_kaydet(recorder, "kayit.wav", "WAV").unwrap()
+yazdır("Kayıt kaydedildi: kayit.wav")
+
+audio::recorder_kapat(recorder)
+*/
+
+// ============================================================================
+// ADVANCED AUDIO BACKEND API - Real-time Processing (Yeni - v1.7)
+// ============================================================================
+
+// Audio Stream Callback (real-time processing)
+tip AudioStreamCallback = fonksiyon(input_buffer: liste[ondalık], output_buffer: liste[ondalık], frame_count: tamsayı) -> boş
+
+// Audio Stream (callback-based low-latency audio)
+tip AudioStream = yapı yap
+    sample_rate: tamsayı,
+    kanal_sayisi: tamsayı,
+    buffer_boyutu: tamsayı,
+    callback: AudioStreamCallback,
+    user_data: Seçenek[boş],
+    handle: tamsayı
+son
+
+// Audio stream oluştur (low-latency callback mode)
+fonksiyon stream_olustur(sample_rate: tamsayı, kanallar: tamsayı, buffer_boyutu: tamsayı, callback: AudioStreamCallback) -> Sonuç[AudioStream, AudioHata]
+yap
+    değişken handle = @native miniaudio_stream_init(sample_rate, kanallar, buffer_boyutu, callback)
+    
+    eğer handle < 0 ise yap
+        dön Hata(AudioHata yap
+            mesaj: "Audio stream oluşturulamadı",
+            hata_türü: "stream"
+        son)
+    son
+    
+    dön Başarılı(AudioStream yap
+        sample_rate: sample_rate,
+        kanal_sayisi: kanallar,
+        buffer_boyutu: buffer_boyutu,
+        callback: callback,
+        user_data: Hiç,
+        handle: handle
+    son)
+son
+
+// Stream başlat
+fonksiyon stream_baslat(stream: AudioStream) -> Sonuç[boş, AudioHata]
+yap
+    değişken sonuç = @native miniaudio_stream_start(stream.handle)
+    
+    eğer sonuç < 0 ise yap
+        dön Hata(AudioHata yap
+            mesaj: "Stream başlatılamadı",
+            hata_türü: "stream"
+        son)
+    son
+    
+    dön Başarılı(boş)
+son
+
+// Stream durdur
+fonksiyon stream_durdur(stream: AudioStream) -> boş
+yap
+    @native miniaudio_stream_stop(stream.handle)
+son
+
+// Stream kapat
+fonksiyon stream_kapat(stream: AudioStream) -> boş
+yap
+    @native miniaudio_stream_uninit(stream.handle)
+son
+
+// ============================================================================
+// DSP (Digital Signal Processing) - Filtreler ve Dönüşümler (Yeni - v1.7)
+// ============================================================================
+
+// FFT (Fast Fourier Transform) - Frekans analizi
+tip FFTResult = yapı yap
+    frekanslar: liste[ondalık],     // Frekans değerleri (Hz)
+    magnitudes: liste[ondalık],     // Genlik değerleri
+    fazlar: liste[ondalık],         // Faz değerleri (radyan)
+    sample_rate: tamsayı,
+    fft_boyut: tamsayı              // 256, 512, 1024, 2048, 4096, 8192
+son
+
+// FFT hesapla (audio buffer'dan frekans spektrumu)
+fonksiyon fft_hesapla(audio_data: liste[ondalık], sample_rate: tamsayı, fft_boyut: tamsayı = 2048) -> Sonuç[FFTResult, AudioHata]
+yap
+    // FFT boyutu 2'nin kuvveti olmalı
+    eğer (fft_boyut & (fft_boyut - 1)) != 0 ise yap
+        dön Hata(AudioHata yap
+            mesaj: "FFT boyutu 2'nin kuvveti olmalı",
+            hata_türü: "fft"
+        son)
+    son
+    
+    // Native FFT call
+    değişken sonuç = @native dsp_fft_compute(audio_data, fft_boyut)
+    
+    eğer sonuç.hata_mı() ise yap
+        dön Hata(AudioHata yap
+            mesaj: "FFT hesaplama hatası",
+            hata_türü: "fft"
+        son)
+    son
+    
+    değişken (re, im) = sonuç.unwrap()  // Real ve Imaginary kısımlar
+    
+    // Magnitude ve faz hesapla
+    değişken magnitudes = liste_oluştur[ondalık]()
+    değişken fazlar = liste_oluştur[ondalık]()
+    değişken frekanslar = liste_oluştur[ondalık]()
+    
+    her biri i içinde aralık(fft_boyut / 2) yap
+        değişken mag = math::sqrt(re[i] * re[i] + im[i] * im[i])
+        değişken faz = math::atan2(im[i], re[i])
+        değişken frek = (tamsayı_ondalık(i) * tamsayı_ondalık(sample_rate)) / tamsayı_ondalık(fft_boyut)
+        
+        liste_ekle(magnitudes, mag)
+        liste_ekle(fazlar, faz)
+        liste_ekle(frekanslar, frek)
+    son
+    
+    dön Başarılı(FFTResult yap
+        frekanslar: frekanslar,
+        magnitudes: magnitudes,
+        fazlar: fazlar,
+        sample_rate: sample_rate,
+        fft_boyut: fft_boyut
+    son)
+son
+
+// IFFT (Inverse FFT) - Frekans'tan zamana dönüşüm
+fonksiyon ifft_hesapla(fft_result: FFTResult) -> Sonuç[liste[ondalık], AudioHata]
+yap
+    // Complex sayıları reconstruct et
+    değişken real_parts = liste_oluştur[ondalık]()
+    değişken imag_parts = liste_oluştur[ondalık]()
+    
+    her biri i içinde aralık(fft_result.fft_boyut / 2) yap
+        değişken mag = fft_result.magnitudes[i]
+        değişken faz = fft_result.fazlar[i]
+        
+        liste_ekle(real_parts, mag * math::cos(faz))
+        liste_ekle(imag_parts, mag * math::sin(faz))
+    son
+    
+    değişken audio_data = @native dsp_ifft_compute(real_parts, imag_parts, fft_result.fft_boyut)
+    
+    dön Başarılı(audio_data)
+son
+
+// Biquad Filter (2nd order IIR filter)
+tip BiquadFilter = yapı yap
+    tür: FilterTürü,
+    kesim_frekansi: ondalık,    // Hz
+    q_faktoru: ondalık,          // Quality factor (resonance)
+    gain_db: ondalık,            // Gain (sadece peaking/shelving için)
+    sample_rate: tamsayı,
+    // Biquad katsayıları (internal)
+    b0: ondalık, b1: ondalık, b2: ondalık,
+    a1: ondalık, a2: ondalık,
+    // State variables
+    x1: ondalık, x2: ondalık,
+    y1: ondalık, y2: ondalık
+son
+
+tip FilterTürü = "LowPass" | "HighPass" | "BandPass" | "Notch" | "Peaking" | "LowShelf" | "HighShelf"
+
+// Biquad filter oluştur
+fonksiyon biquad_olustur(tür: FilterTürü, kesim_frekansi: ondalık, sample_rate: tamsayı, q: ondalık = 0.707, gain_db: ondalık = 0.0) -> BiquadFilter
+yap
+    değişken filter = BiquadFilter yap
+        tür: tür,
+        kesim_frekansi: kesim_frekansi,
+        q_faktoru: q,
+        gain_db: gain_db,
+        sample_rate: sample_rate,
+        b0: 0.0, b1: 0.0, b2: 0.0,
+        a1: 0.0, a2: 0.0,
+        x1: 0.0, x2: 0.0,
+        y1: 0.0, y2: 0.0
+    son
+    
+    // Katsayıları hesapla
+    biquad_katsayilari_hesapla(filter)
+    
+    dön filter
+son
+
+// Biquad katsayıları hesapla (Robert Bristow-Johnson cookbook formulas)
+fonksiyon biquad_katsayilari_hesapla(filter: BiquadFilter) -> boş
+yap
+    değişken w0 = 2.0 * math::PI * filter.kesim_frekansi / tamsayı_ondalık(filter.sample_rate)
+    değişken cos_w0 = math::cos(w0)
+    değişken sin_w0 = math::sin(w0)
+    değişken alpha = sin_w0 / (2.0 * filter.q_faktoru)
+    değişken A = math::pow(10.0, filter.gain_db / 40.0)
+    
+    seç filter.tür yap
+        durum "LowPass" => yap
+            filter.b0 = (1.0 - cos_w0) / 2.0
+            filter.b1 = 1.0 - cos_w0
+            filter.b2 = (1.0 - cos_w0) / 2.0
+            değişken a0 = 1.0 + alpha
+            filter.a1 = (-2.0 * cos_w0) / a0
+            filter.a2 = (1.0 - alpha) / a0
+            filter.b0 = filter.b0 / a0
+            filter.b1 = filter.b1 / a0
+            filter.b2 = filter.b2 / a0
+        son
+        
+        durum "HighPass" => yap
+            filter.b0 = (1.0 + cos_w0) / 2.0
+            filter.b1 = -(1.0 + cos_w0)
+            filter.b2 = (1.0 + cos_w0) / 2.0
+            değişken a0 = 1.0 + alpha
+            filter.a1 = (-2.0 * cos_w0) / a0
+            filter.a2 = (1.0 - alpha) / a0
+            filter.b0 = filter.b0 / a0
+            filter.b1 = filter.b1 / a0
+            filter.b2 = filter.b2 / a0
+        son
+        
+        durum "BandPass" => yap
+            filter.b0 = alpha
+            filter.b1 = 0.0
+            filter.b2 = -alpha
+            değişken a0 = 1.0 + alpha
+            filter.a1 = (-2.0 * cos_w0) / a0
+            filter.a2 = (1.0 - alpha) / a0
+            filter.b0 = filter.b0 / a0
+            filter.b2 = filter.b2 / a0
+        son
+        
+        // Diğer filter türleri...
+    son
+son
+
+// Biquad filter uygula (tek sample)
+fonksiyon biquad_process_sample(filter: BiquadFilter, input: ondalık) -> ondalık
+yap
+    // Direct Form II implementation
+    değişken output = filter.b0 * input + filter.b1 * filter.x1 + filter.b2 * filter.x2 
+                      - filter.a1 * filter.y1 - filter.a2 * filter.y2
+    
+    // State güncelle
+    filter.x2 = filter.x1
+    filter.x1 = input
+    filter.y2 = filter.y1
+    filter.y1 = output
+    
+    dön output
+son
+
+// Biquad filter uygula (buffer)
+fonksiyon biquad_process_buffer(filter: BiquadFilter, audio_data: liste[ondalık]) -> liste[ondalık]
+yap
+    değişken output = liste_oluştur[ondalık]()
+    
+    her biri sample içinde audio_data yap
+        değişken filtered = biquad_process_sample(filter, sample)
+        liste_ekle(output, filtered)
+    son
+    
+    dön output
+son
+
+// ============================================================================
+// AUDIO ANALYSIS - Spectrum, Waveform, Peak Detection (Yeni - v1.7)
+// ============================================================================
+
+// Spectrum analyzer (real-time frequency visualization)
+tip SpectrumAnalyzer = yapı yap
+    fft_boyut: tamsayı,
+    sample_rate: tamsayı,
+    window_turu: WindowTürü,
+    smoothing: ondalık,          // 0.0-1.0 (temporal smoothing)
+    son_spectrum: liste[ondalık],
+    handle: tamsayı
+son
+
+tip WindowTürü = "Rectangular" | "Hann" | "Hamming" | "Blackman" | "Kaiser"
+
+// Spectrum analyzer oluştur
+fonksiyon spectrum_analyzer_olustur(fft_boyut: tamsayı, sample_rate: tamsayı) -> SpectrumAnalyzer
+yap
+    dön SpectrumAnalyzer yap
+        fft_boyut: fft_boyut,
+        sample_rate: sample_rate,
+        window_turu: "Hann",
+        smoothing: 0.8,
+        son_spectrum: liste_oluştur[ondalık](),
+        handle: @native dsp_spectrum_analyzer_create(fft_boyut, sample_rate)
+    son
+son
+
+// Spectrum analiz et (real-time)
+fonksiyon spectrum_analyze(analyzer: SpectrumAnalyzer, audio_data: liste[ondalık]) -> liste[ondalık]
+yap
+    // Window fonksiyonu uygula
+    değişken windowed_data = dsp_apply_window(audio_data, analyzer.window_turu, analyzer.fft_boyut)
+    
+    // FFT hesapla
+    değişken fft_result = fft_hesapla(windowed_data, analyzer.sample_rate, analyzer.fft_boyut).unwrap()
+    
+    // dB'ye çevir
+    değişken spectrum_db = liste_oluştur[ondalık]()
+    her biri mag içinde fft_result.magnitudes yap
+        değişken db = linear_to_db(mag)
+        liste_ekle(spectrum_db, db)
+    son
+    
+    // Temporal smoothing
+    eğer liste_uzunluk(analyzer.son_spectrum) > 0 ise yap
+        her biri i içinde aralık(liste_uzunluk(spectrum_db)) yap
+            spectrum_db[i] = analyzer.smoothing * analyzer.son_spectrum[i] + 
+                             (1.0 - analyzer.smoothing) * spectrum_db[i]
+        son
+    son
+    
+    analyzer.son_spectrum = spectrum_db
+    dön spectrum_db
+son
+
+// Peak detection (beat detection için)
+tip AudioPeak = yapı yap
+    pozisyon: tamsayı,    // Sample index
+    genlik: ondalık,
+    zaman: ondalık        // Saniye
+son
+
+// Peak tespiti (basit threshold-based)
+fonksiyon detect_peaks(audio_data: liste[ondalık], sample_rate: tamsayı, threshold: ondalık = 0.5, min_mesafe: tamsayı = 4410) -> liste[AudioPeak]
+yap
+    değişken peaks = liste_oluştur[AudioPeak]()
+    değişken son_peak_index = -min_mesafe
+    
+    her biri i içinde aralık(1, liste_uzunluk(audio_data) - 1) yap
+        değişken sample = math::abs(audio_data[i])
+        değişken prev = math::abs(audio_data[i - 1])
+        değişken next = math::abs(audio_data[i + 1])
+        
+        // Local maximum ve threshold kontrolü
+        eğer sample > threshold ve sample > prev ve sample > next ise yap
+            // Minimum mesafe kontrolü
+            eğer i - son_peak_index >= min_mesafe ise yap
+                liste_ekle(peaks, AudioPeak yap
+                    pozisyon: i,
+                    genlik: sample,
+                    zaman: samples_to_saniye(i, sample_rate)
+                son)
+                son_peak_index = i
+            son
+        son
+    son
+    
+    dön peaks
+son
+
+// RMS (Root Mean Square) - Ortalama ses seviyesi
+fonksiyon rms_hesapla(audio_data: liste[ondalık]) -> ondalık
+yap
+    değişken toplam = 0.0
+    
+    her biri sample içinde audio_data yap
+        toplam = toplam + (sample * sample)
+    son
+    
+    dön math::sqrt(toplam / tamsayı_ondalık(liste_uzunluk(audio_data)))
+son
+
+// Zero-crossing rate - Frekans tahmini
+fonksiyon zero_crossing_rate(audio_data: liste[ondalık]) -> ondalık
+yap
+    değişken crossings = 0
+    
+    her biri i içinde aralık(1, liste_uzunluk(audio_data)) yap
+        eğer (audio_data[i] >= 0.0 ve audio_data[i - 1] < 0.0) veya
+           (audio_data[i] < 0.0 ve audio_data[i - 1] >= 0.0) ise yap
+            crossings = crossings + 1
+        son
+    son
+    
+    dön tamsayı_ondalık(crossings) / tamsayı_ondalık(liste_uzunluk(audio_data))
+son
+
+// ============================================================================
+// AUDIO NORMALIZATION & COMPRESSION (Yeni - v1.7)
+// ============================================================================
+
+// Audio normalize et (peak normalization)
+fonksiyon normalize_audio(audio_data: liste[ondalık], target_level: ondalık = 1.0) -> liste[ondalık]
+yap
+    // Maximum genliği bul
+    değişken max_val = 0.0
+    her biri sample içinde audio_data yap
+        değişken abs_sample = math::abs(sample)
+        eğer abs_sample > max_val ise yap
+            max_val = abs_sample
+        son
+    son
+    
+    // Normalization factor hesapla
+    değişken factor = target_level / max_val
+    
+    // Normalize et
+    değişken normalized = liste_oluştur[ondalık]()
+    her biri sample içinde audio_data yap
+        liste_ekle(normalized, sample * factor)
+    son
+    
+    dön normalized
+son
+
+// Dynamic range compression
+fonksiyon compress_audio(audio_data: liste[ondalık], threshold_db: ondalık, ratio: ondalık, attack_ms: ondalık, release_ms: ondalık, sample_rate: tamsayı) -> liste[ondalık]
+yap
+    değişken threshold_linear = db_to_linear(threshold_db)
+    değişken attack_coef = math::exp(-1.0 / (attack_ms * 0.001 * tamsayı_ondalık(sample_rate)))
+    değişken release_coef = math::exp(-1.0 / (release_ms * 0.001 * tamsayı_ondalık(sample_rate)))
+    
+    değişken compressed = liste_oluştur[ondalık]()
+    değişken envelope = 0.0
+    
+    her biri sample içinde audio_data yap
+        değişken abs_sample = math::abs(sample)
+        
+        // Envelope follower
+        eğer abs_sample > envelope ise yap
+            envelope = attack_coef * envelope + (1.0 - attack_coef) * abs_sample
+        son değilse yap
+            envelope = release_coef * envelope + (1.0 - release_coef) * abs_sample
+        son
+        
+        // Compression hesapla
+        değişken gain = 1.0
+        eğer envelope > threshold_linear ise yap
+            değişken excess_db = linear_to_db(envelope) - threshold_db
+            değişken compressed_db = excess_db / ratio
+            gain = db_to_linear(compressed_db - excess_db)
+        son
+        
+        liste_ekle(compressed, sample * gain)
+    son
+    
+    dön compressed
+son
+
+// ============================================================================
+// AUDIO BACKEND IMPLEMENTATION (Yeni - v1.7)
+// ============================================================================
+
+// Platform-specific audio backend
+tip AudioBackendImpl = yapı yap
+    platform: yazı,
+    backend_türü: AudioBackend,
+    initialized: mantıksal,
+    device_count: tamsayı,
+    active_sounds: liste[tamsayı]
+son
+
+// Backend başlat
+fonksiyon backend_init() -> Sonuç[AudioBackendImpl, AudioHata]
+yap
+    #eğer platform == "windows" ise
+        değişken backend = "WASAPI"
+    #değilse eğer platform == "macos" ise
+        değişken backend = "CoreAudio"
+    #değilse eğer platform == "linux" ise
+        değişken backend = "PulseAudio"
+    #değilse
+        değişken backend = "Auto"
+    #son
+    
+    // Native backend init
+    değişken result = native_backend_init(backend)
+    eğer result < 0 ise yap
+        dön Hata(AudioHata yap
+            mesaj: "Backend başlatılamadı: " + backend,
+            hata_türü: "backend"
+        son)
+    son
+    
+    dön Başarı(AudioBackendImpl yap
+        platform: platform_al(),
+        backend_türü: backend,
+        initialized: doğru,
+        device_count: native_backend_get_device_count(),
+        active_sounds: liste_oluştur[tamsayı]()
+    son)
+son
+
+// Backend sonlandır
+fonksiyon backend_cleanup(backend: AudioBackendImpl) -> boş
+yap
+    eğer backend.initialized ise yap
+        // Tüm aktif sesleri durdur
+        her biri sound_handle içinde backend.active_sounds yap
+            native_sound_stop(sound_handle)
+        son
+        
+        native_backend_cleanup()
+        backend.initialized = yanlış
+    son
+son
+
+// Platform-specific backend bindings
+harici fonksiyon native_backend_init(backend: AudioBackend) -> tamsayı
+harici fonksiyon native_backend_cleanup() -> boş
+harici fonksiyon native_backend_get_device_count() -> tamsayı
+
+// Platform helper
+fonksiyon platform_al() -> yazı
+yap
+    #eğer platform == "windows" ise
+        dön "Windows"
+    #değilse eğer platform == "macos" ise
+        dön "macOS"
+    #değilse eğer platform == "linux" ise
+        dön "Linux"
+    #değilse eğer platform == "wasm" ise
+        dön "WebAssembly"
+    #değilse
+        dön "Unknown"
+    #son
+son
+
+// Windows-specific: WASAPI backend bindings
+#eğer platform == "windows" ise
+    harici fonksiyon wasapi_enumerate_devices() -> liste[yazı]
+    harici fonksiyon wasapi_get_default_device() -> tamsayı
+    harici fonksiyon wasapi_create_device(device_id: tamsayı, sample_rate: tamsayı, kanallar: tamsayı) -> tamsayı
+    harici fonksiyon wasapi_start_stream(device: tamsayı) -> mantıksal
+    harici fonksiyon wasapi_stop_stream(device: tamsayı) -> boş
+#son
+
+// macOS-specific: CoreAudio backend bindings
+#eğer platform == "macos" ise
+    harici fonksiyon coreaudio_enumerate_devices() -> liste[yazı]
+    harici fonksiyon coreaudio_get_default_device() -> tamsayı
+    harici fonksiyon coreaudio_create_device(device_id: tamsayı, sample_rate: tamsayı, kanallar: tamsayı) -> tamsayı
+    harici fonksiyon coreaudio_start_stream(device: tamsayı) -> mantıksal
+    harici fonksiyon coreaudio_stop_stream(device: tamsayı) -> boş
+#son
+
+// Linux-specific: PulseAudio/ALSA backend bindings
+#eğer platform == "linux" ise
+    harici fonksiyon pulseaudio_enumerate_devices() -> liste[yazı]
+    harici fonksiyon pulseaudio_get_default_device() -> tamsayı
+    harici fonksiyon pulseaudio_create_device(device_id: tamsayı, sample_rate: tamsayı, kanallar: tamsayı) -> tamsayı
+    harici fonksiyon pulseaudio_start_stream(device: tamsayı) -> mantıksal
+    harici fonksiyon pulseaudio_stop_stream(device: tamsayı) -> boş
+    
+    harici fonksiyon alsa_enumerate_devices() -> liste[yazı]
+    harici fonksiyon alsa_create_device(device_name: yazı, sample_rate: tamsayı, kanallar: tamsayı) -> tamsayı
+#son
+
+// Web Audio API bindings (WebAssembly)
+#eğer platform == "wasm" ise
+    harici fonksiyon webaudio_create_context(sample_rate: tamsayı) -> tamsayı
+    harici fonksiyon webaudio_create_buffer_source(ctx: tamsayı, buffer: liste[ondalık], sample_rate: tamsayı, kanallar: tamsayı) -> tamsayı
+    harici fonksiyon webaudio_play_source(ctx: tamsayı, source: tamsayı, loop: mantıksal) -> boş
+    harici fonksiyon webaudio_stop_source(ctx: tamsayı, source: tamsayı) -> boş
+#son
+
+// Audio streaming (large file support)
+tip AudioStreamer = yapı yap
+    dosya_handle: tamsayı,
+    buffer: liste[ondalık],
+    buffer_boyutu: tamsayı,
+    okuma_pozisyonu: tamsayı,
+    streaming_aktif: mantıksal
+son
+
+// Streamer oluştur
+fonksiyon streamer_olustur(dosya_yolu: yazı, buffer_boyutu: tamsayı = 4096) -> Sonuç[AudioStreamer, AudioHata]
+yap
+    değişken handle = native_file_open_audio(dosya_yolu)
+    eğer handle < 0 ise yap
+        dön Hata(AudioHata yap
+            mesaj: "Dosya açılamadı: " + dosya_yolu,
+            hata_türü: "file"
+        son)
+    son
+    
+    dön Başarı(AudioStreamer yap
+        dosya_handle: handle,
+        buffer: liste_oluştur[ondalık](),
+        buffer_boyutu: buffer_boyutu,
+        okuma_pozisyonu: 0,
+        streaming_aktif: doğru
+    son)
+son
+
+// Streamer'dan veri oku
+fonksiyon streamer_oku(streamer: AudioStreamer, sample_sayisi: tamsayı) -> liste[ondalık]
+yap
+    eğer değil streamer.streaming_aktif ise yap
+        dön liste_oluştur[ondalık]()
+    son
+    
+    değişken samples = native_file_read_audio(streamer.dosya_handle, sample_sayisi, streamer.okuma_pozisyonu)
+    streamer.okuma_pozisyonu = streamer.okuma_pozisyonu + sample_sayisi
+    
+    dön samples
+son
+
+// Streamer kapat
+fonksiyon streamer_kapat(streamer: AudioStreamer) -> boş
+yap
+    streamer.streaming_aktif = yanlış
+    native_file_close_audio(streamer.dosya_handle)
+son
+
+// File operations
+harici fonksiyon native_file_open_audio(yol: yazı) -> tamsayı
+harici fonksiyon native_file_read_audio(handle: tamsayı, sample_sayisi: tamsayı, pozisyon: tamsayı) -> liste[ondalık]
+harici fonksiyon native_file_close_audio(handle: tamsayı) -> boş
+
+// Audio codec support
+tip AudioCodec = "PCM" | "ADPCM" | "Opus" | "Vorbis" | "AAC" | "MP3"
+
+// Codec encoder/decoder
+tip CodecContext = yapı yap
+    codec: AudioCodec,
+    bitrate: tamsayı,
+    sample_rate: tamsayı,
+    kanal_sayisi: tamsayı,
+    handle: tamsayı
+son
+
+// Encoder oluştur
+fonksiyon codec_encoder_olustur(codec: AudioCodec, bitrate: tamsayı, sample_rate: tamsayı, kanallar: tamsayı) -> Sonuç[CodecContext, AudioHata]
+yap
+    değişken handle = native_codec_encoder_init(codec, bitrate, sample_rate, kanallar)
+    eğer handle < 0 ise yap
+        dön Hata(AudioHata yap
+            mesaj: "Encoder oluşturulamadı",
+            hata_türü: "codec"
+        son)
+    son
+    
+    dön Başarı(CodecContext yap
+        codec: codec,
+        bitrate: bitrate,
+        sample_rate: sample_rate,
+        kanal_sayisi: kanallar,
+        handle: handle
+    son)
+son
+
+// Encode
+fonksiyon codec_encode(ctx: CodecContext, pcm_data: liste[ondalık]) -> liste[byte]
+yap
+    dön native_codec_encode(ctx.handle, pcm_data)
+son
+
+// Decoder oluştur
+fonksiyon codec_decoder_olustur(codec: AudioCodec, sample_rate: tamsayı, kanallar: tamsayı) -> Sonuç[CodecContext, AudioHata]
+yap
+    değişken handle = native_codec_decoder_init(codec, sample_rate, kanallar)
+    eğer handle < 0 ise yap
+        dön Hata(AudioHata yap
+            mesaj: "Decoder oluşturulamadı",
+            hata_türü: "codec"
+        son)
+    son
+    
+    dön Başarı(CodecContext yap
+        codec: codec,
+        bitrate: 0,
+        sample_rate: sample_rate,
+        kanal_sayisi: kanallar,
+        handle: handle
+    son)
+son
+
+// Decode
+fonksiyon codec_decode(ctx: CodecContext, encoded_data: liste[byte]) -> liste[ondalık]
+yap
+    dön native_codec_decode(ctx.handle, encoded_data)
+son
+
+// Codec cleanup
+fonksiyon codec_cleanup(ctx: CodecContext) -> boş
+yap
+    native_codec_cleanup(ctx.handle)
+son
+
+// Codec bindings
+harici fonksiyon native_codec_encoder_init(codec: AudioCodec, bitrate: tamsayı, sample_rate: tamsayı, kanallar: tamsayı) -> tamsayı
+harici fonksiyon native_codec_decoder_init(codec: AudioCodec, sample_rate: tamsayı, kanallar: tamsayı) -> tamsayı
+harici fonksiyon native_codec_encode(handle: tamsayı, pcm: liste[ondalık]) -> liste[byte]
+harici fonksiyon native_codec_decode(handle: tamsayı, encoded: liste[byte]) -> liste[ondalık]
+harici fonksiyon native_codec_cleanup(handle: tamsayı) -> boş
+
+// Hata türü
+tip AudioHata = yapı yap
+    mesaj: yazı,
+    hata_türü: yazı  // "device", "file", "codec", "backend"
+son
+
+son  // modül audio

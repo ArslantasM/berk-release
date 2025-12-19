@@ -1,0 +1,448 @@
+// stdlib/embedded/platforms/stm32f4/i2c.berk
+// STM32F4 I2C HAL Implementation
+// STM32 HAL library bindings
+
+import "embedded/bal/i2c" as I2C_BAL
+
+// STM32 HAL I2C constants
+const I2C_ADDRESSINGMODE_7BIT: u32 = 0x00000001
+const I2C_ADDRESSINGMODE_10BIT: u32 = 0x00000002
+
+const I2C_DUALADDRESS_DISABLE: u32 = 0x00000000
+const I2C_DUALADDRESS_ENABLE: u32 = 0x00000001
+
+const I2C_GENERALCALL_DISABLE: u32 = 0x00000000
+const I2C_GENERALCALL_ENABLE: u32 = 0x00000001
+
+const I2C_NOSTRETCH_DISABLE: u32 = 0x00000000
+const I2C_NOSTRETCH_ENABLE: u32 = 0x00000001
+
+const I2C_MEMADD_SIZE_8BIT: u32 = 0x00000001
+const I2C_MEMADD_SIZE_16BIT: u32 = 0x00000002
+
+const HAL_MAX_DELAY: u32 = 0xFFFFFFFF
+const I2C_TIMEOUT_FLAG: u32 = 25
+const I2C_TIMEOUT_BUSY_FLAG: u32 = 25
+const I2C_TIMEOUT_ADDR_SLAVE: u32 = 10000
+
+// I2C base addresses
+const I2C1_BASE: u32 = 0x40005400
+const I2C2_BASE: u32 = 0x40005800
+const I2C3_BASE: u32 = 0x40005C00
+
+// RCC clock enable bits
+const RCC_APB1ENR_I2C1EN: u32 = 1 << 21
+const RCC_APB1ENR_I2C2EN: u32 = 1 << 22
+const RCC_APB1ENR_I2C3EN: u32 = 1 << 23
+
+// STM32 HAL I2C structures
+struct I2C_TypeDef {
+    CR1: u32,
+    CR2: u32,
+    OAR1: u32,
+    OAR2: u32,
+    DR: u32,
+    SR1: u32,
+    SR2: u32,
+    CCR: u32,
+    TRISE: u32,
+    FLTR: u32,
+}
+
+struct I2C_InitTypeDef {
+    ClockSpeed: u32,
+    DutyCycle: u32,
+    OwnAddress1: u32,
+    AddressingMode: u32,
+    DualAddressMode: u32,
+    OwnAddress2: u32,
+    GeneralCallMode: u32,
+    NoStretchMode: u32,
+}
+
+struct I2C_HandleTypeDef {
+    Instance: *mut I2C_TypeDef,
+    Init: I2C_InitTypeDef,
+    pBuffPtr: *mut u8,
+    XferSize: u16,
+    XferCount: u16,
+    XferOptions: u32,
+    PreviousState: u32,
+    hdmatx: *mut void,
+    hdmarx: *mut void,
+    Lock: u32,
+    State: u32,
+    Mode: u32,
+    ErrorCode: u32,
+    AddrEventCount: u32,
+}
+
+// STM32 HAL I2C functions
+extern "C" {
+    fn HAL_I2C_Init(hi2c: *mut I2C_HandleTypeDef) -> i32
+    fn HAL_I2C_DeInit(hi2c: *mut I2C_HandleTypeDef) -> i32
+    fn HAL_I2C_Master_Transmit(hi2c: *mut I2C_HandleTypeDef, DevAddress: u16, pData: *u8, Size: u16, Timeout: u32) -> i32
+    fn HAL_I2C_Master_Receive(hi2c: *mut I2C_HandleTypeDef, DevAddress: u16, pData: *mut u8, Size: u16, Timeout: u32) -> i32
+    fn HAL_I2C_Mem_Write(hi2c: *mut I2C_HandleTypeDef, DevAddress: u16, MemAddress: u16, MemAddSize: u16, pData: *u8, Size: u16, Timeout: u32) -> i32
+    fn HAL_I2C_Mem_Read(hi2c: *mut I2C_HandleTypeDef, DevAddress: u16, MemAddress: u16, MemAddSize: u16, pData: *mut u8, Size: u16, Timeout: u32) -> i32
+    fn HAL_I2C_IsDeviceReady(hi2c: *mut I2C_HandleTypeDef, DevAddress: u16, Trials: u32, Timeout: u32) -> i32
+}
+
+const HAL_OK: i32 = 0
+const HAL_ERROR: i32 = 1
+const HAL_BUSY: i32 = 2
+const HAL_TIMEOUT: i32 = 3
+
+// I2C handles storage
+static mut i2c_handles: [I2C_HandleTypeDef; 3] = [
+    I2C_HandleTypeDef {
+        Instance: I2C1_BASE as *mut I2C_TypeDef,
+        Init: I2C_InitTypeDef {
+            ClockSpeed: 100000,
+            DutyCycle: 0,
+            OwnAddress1: 0,
+            AddressingMode: I2C_ADDRESSINGMODE_7BIT,
+            DualAddressMode: I2C_DUALADDRESS_DISABLE,
+            OwnAddress2: 0,
+            GeneralCallMode: I2C_GENERALCALL_DISABLE,
+            NoStretchMode: I2C_NOSTRETCH_DISABLE,
+        },
+        pBuffPtr: null,
+        XferSize: 0,
+        XferCount: 0,
+        XferOptions: 0,
+        PreviousState: 0,
+        hdmatx: null,
+        hdmarx: null,
+        Lock: 0,
+        State: 0,
+        Mode: 0,
+        ErrorCode: 0,
+        AddrEventCount: 0,
+    },
+    // I2C2 and I2C3 similar
+    I2C_HandleTypeDef {
+        Instance: I2C2_BASE as *mut I2C_TypeDef,
+        Init: I2C_InitTypeDef {
+            ClockSpeed: 100000,
+            DutyCycle: 0,
+            OwnAddress1: 0,
+            AddressingMode: I2C_ADDRESSINGMODE_7BIT,
+            DualAddressMode: I2C_DUALADDRESS_DISABLE,
+            OwnAddress2: 0,
+            GeneralCallMode: I2C_GENERALCALL_DISABLE,
+            NoStretchMode: I2C_NOSTRETCH_DISABLE,
+        },
+        pBuffPtr: null,
+        XferSize: 0,
+        XferCount: 0,
+        XferOptions: 0,
+        PreviousState: 0,
+        hdmatx: null,
+        hdmarx: null,
+        Lock: 0,
+        State: 0,
+        Mode: 0,
+        ErrorCode: 0,
+        AddrEventCount: 0,
+    },
+    I2C_HandleTypeDef {
+        Instance: I2C3_BASE as *mut I2C_TypeDef,
+        Init: I2C_InitTypeDef {
+            ClockSpeed: 100000,
+            DutyCycle: 0,
+            OwnAddress1: 0,
+            AddressingMode: I2C_ADDRESSINGMODE_7BIT,
+            DualAddressMode: I2C_DUALADDRESS_DISABLE,
+            OwnAddress2: 0,
+            GeneralCallMode: I2C_GENERALCALL_DISABLE,
+            NoStretchMode: I2C_NOSTRETCH_DISABLE,
+        },
+        pBuffPtr: null,
+        XferSize: 0,
+        XferCount: 0,
+        XferOptions: 0,
+        PreviousState: 0,
+        hdmatx: null,
+        hdmarx: null,
+        Lock: 0,
+        State: 0,
+        Mode: 0,
+        ErrorCode: 0,
+        AddrEventCount: 0,
+    },
+]
+
+fn enable_i2c_clock(bus: u8) {
+    unsafe {
+        let rcc_apb1enr = (0x40023800 + 0x40) as *mut u32
+        let current = *rcc_apb1enr
+        let enable_bit = match bus {
+            1 => RCC_APB1ENR_I2C1EN,
+            2 => RCC_APB1ENR_I2C2EN,
+            3 => RCC_APB1ENR_I2C3EN,
+            _ => return,
+        }
+        *rcc_apb1enr = current | enable_bit
+    }
+}
+
+// STM32F4 I2C HAL implementation
+pub struct STM32F4_I2C {}
+
+impl I2C_BAL.I2C_HAL for STM32F4_I2C {
+    fn init(config: I2C_BAL.Config) -> I2C_BAL.Result<()> {
+        let bus = config.bus
+        if bus == 0 || bus > 3 {
+            return Err(I2C_BAL.Error.BusError)
+        }
+        
+        enable_i2c_clock(bus)
+        
+        unsafe {
+            let handle = &mut i2c_handles[(bus - 1) as usize]
+            handle.Init.ClockSpeed = config.speed
+            
+            let ret = HAL_I2C_Init(handle)
+            if ret == HAL_OK {
+                Ok(())
+            } else {
+                Err(I2C_BAL.Error.BusError)
+            }
+        }
+    }
+    
+    fn deinit(bus: u8) {
+        if bus == 0 || bus > 3 {
+            return
+        }
+        
+        unsafe {
+            let handle = &mut i2c_handles[(bus - 1) as usize]
+            HAL_I2C_DeInit(handle)
+        }
+    }
+    
+    fn write(bus: u8, address: u8, data: &[u8]) -> I2C_BAL.Result<()> {
+        if bus == 0 || bus > 3 {
+            return Err(I2C_BAL.Error.BusError)
+        }
+        
+        unsafe {
+            let handle = &mut i2c_handles[(bus - 1) as usize]
+            let dev_addr = (address << 1) as u16
+            
+            let ret = HAL_I2C_Master_Transmit(
+                handle,
+                dev_addr,
+                data.as_ptr(),
+                data.len() as u16,
+                1000
+            )
+            
+            if ret == HAL_OK {
+                Ok(())
+            } else if ret == HAL_TIMEOUT {
+                Err(I2C_BAL.Error.Timeout)
+            } else {
+                Err(I2C_BAL.Error.Nack)
+            }
+        }
+    }
+    
+    fn read(bus: u8, address: u8, buffer: &mut [u8]) -> I2C_BAL.Result<()> {
+        if bus == 0 || bus > 3 {
+            return Err(I2C_BAL.Error.BusError)
+        }
+        
+        unsafe {
+            let handle = &mut i2c_handles[(bus - 1) as usize]
+            let dev_addr = (address << 1) as u16
+            
+            let ret = HAL_I2C_Master_Receive(
+                handle,
+                dev_addr,
+                buffer.as_mut_ptr(),
+                buffer.len() as u16,
+                1000
+            )
+            
+            if ret == HAL_OK {
+                Ok(())
+            } else if ret == HAL_TIMEOUT {
+                Err(I2C_BAL.Error.Timeout)
+            } else {
+                Err(I2C_BAL.Error.Nack)
+            }
+        }
+    }
+    
+    fn write_read(bus: u8, address: u8, write_data: &[u8], read_buffer: &mut [u8]) -> I2C_BAL.Result<()> {
+        STM32F4_I2C.write(bus, address, write_data)?
+        STM32F4_I2C.read(bus, address, read_buffer)?
+        Ok(())
+    }
+    
+    fn write_register(bus: u8, address: u8, register: u8, data: &[u8]) -> I2C_BAL.Result<()> {
+        if bus == 0 || bus > 3 {
+            return Err(I2C_BAL.Error.BusError)
+        }
+        
+        unsafe {
+            let handle = &mut i2c_handles[(bus - 1) as usize]
+            let dev_addr = (address << 1) as u16
+            
+            let ret = HAL_I2C_Mem_Write(
+                handle,
+                dev_addr,
+                register as u16,
+                I2C_MEMADD_SIZE_8BIT as u16,
+                data.as_ptr(),
+                data.len() as u16,
+                1000
+            )
+            
+            if ret == HAL_OK {
+                Ok(())
+            } else {
+                Err(I2C_BAL.Error.Nack)
+            }
+        }
+    }
+    
+    fn read_register(bus: u8, address: u8, register: u8, buffer: &mut [u8]) -> I2C_BAL.Result<()> {
+        if bus == 0 || bus > 3 {
+            return Err(I2C_BAL.Error.BusError)
+        }
+        
+        unsafe {
+            let handle = &mut i2c_handles[(bus - 1) as usize]
+            let dev_addr = (address << 1) as u16
+            
+            let ret = HAL_I2C_Mem_Read(
+                handle,
+                dev_addr,
+                register as u16,
+                I2C_MEMADD_SIZE_8BIT as u16,
+                buffer.as_mut_ptr(),
+                buffer.len() as u16,
+                1000
+            )
+            
+            if ret == HAL_OK {
+                Ok(())
+            } else {
+                Err(I2C_BAL.Error.Nack)
+            }
+        }
+    }
+    
+    fn scan(bus: u8) -> Vec<u8> {
+        let mut devices: Vec<u8> = Vec::new()
+        
+        if bus == 0 || bus > 3 {
+            return devices
+        }
+        
+        unsafe {
+            let handle = &mut i2c_handles[(bus - 1) as usize]
+            
+            for addr in 0x08..=0x77 {
+                let dev_addr = (addr << 1) as u16
+                let ret = HAL_I2C_IsDeviceReady(handle, dev_addr, 1, 10)
+                
+                if ret == HAL_OK {
+                    devices.push(addr)
+                }
+            }
+        }
+        
+        devices
+    }
+    
+    fn set_speed(bus: u8, speed: u32) -> I2C_BAL.Result<()> {
+        if bus == 0 || bus > 3 {
+            return Err(I2C_BAL.Error.BusError)
+        }
+        
+        unsafe {
+            let handle = &mut i2c_handles[(bus - 1) as usize]
+            HAL_I2C_DeInit(handle)
+            handle.Init.ClockSpeed = speed
+            
+            let ret = HAL_I2C_Init(handle)
+            if ret == HAL_OK {
+                Ok(())
+            } else {
+                Err(I2C_BAL.Error.BusError)
+            }
+        }
+    }
+}
+
+// STM32F4-specific I2C functions
+
+/// Initialize I2C master mode with GPIO configuration
+pub fn init_master(bus: u8, speed: u32) -> I2C_BAL.Result<()> {
+    if bus == 0 || bus > 3 {
+        return Err(I2C_BAL.Error.BusError)
+    }
+    
+    // Enable I2C clock
+    enable_i2c_clock(bus)
+    
+    // Configure GPIO pins (AF4 for I2C1/I2C2, AF9 for I2C3)
+    // Pins configured externally using GPIO module
+    
+    let config = I2C_BAL.Config {
+        bus: bus,
+        sda_pin: 0,  // Configured externally
+        scl_pin: 0,  // Configured externally
+        speed: speed,
+        address_mode: I2C_BAL.AddressMode.SevenBit,
+        own_address: 0,
+    }
+    
+    STM32F4_I2C.init(config)
+}
+
+/// Check if device is present on bus
+pub fn is_device_present(bus: u8, address: u8) -> bool {
+    if bus == 0 || bus > 3 {
+        return false
+    }
+    
+    unsafe {
+        let handle = &mut i2c_handles[(bus - 1) as usize]
+        let dev_addr = (address << 1) as u16
+        let ret = HAL_I2C_IsDeviceReady(handle, dev_addr, 3, 100)
+        ret == HAL_OK
+    }
+}
+
+/// Read 16-bit register (big-endian)
+pub fn read_register_16(bus: u8, address: u8, register: u8) -> I2C_BAL.Result<u16> {
+    let mut buffer: [u8; 2] = [0; 2]
+    STM32F4_I2C.read_register(bus, address, register, &mut buffer)?
+    Ok(((buffer[0] as u16) << 8) | (buffer[1] as u16))
+}
+
+/// Write 16-bit register (big-endian)
+pub fn write_register_16(bus: u8, address: u8, register: u8, value: u16) -> I2C_BAL.Result<()> {
+    let buffer: [u8; 2] = [
+        (value >> 8) as u8,
+        (value & 0xFF) as u8,
+    ]
+    STM32F4_I2C.write_register(bus, address, register, &buffer)
+}
+
+/// Get I2C error code
+pub fn get_error(bus: u8) -> u32 {
+    if bus == 0 || bus > 3 {
+        return 0
+    }
+    
+    unsafe {
+        i2c_handles[(bus - 1) as usize].ErrorCode
+    }
+}

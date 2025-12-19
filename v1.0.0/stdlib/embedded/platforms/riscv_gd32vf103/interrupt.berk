@@ -1,0 +1,265 @@
+// stdlib/embedded/platforms/riscv_gd32vf103/interrupt.berk
+// GD32VF103 Interrupt Support (ECLIC - Enhanced CLIC from Nuclei)
+
+// ECLIC base address
+sabit ECLIC_BASE: u32 = 0xD2000000
+
+// ECLIC register offsets
+sabit ECLIC_CFG: u32 = 0x0000           // Global configuration
+sabit ECLIC_INFO: u32 = 0x0004          // ECLIC information
+sabit ECLIC_MTH: u32 = 0x000B           // Machine threshold
+sabit ECLIC_INT_ATTR_BASE: u32 = 0x1000 // Interrupt attributes (per interrupt)
+sabit ECLIC_INT_CTRL_BASE: u32 = 0x1001 // Interrupt control (per interrupt)
+
+// Each interrupt has 4-byte control block at ECLIC_INT_ATTR_BASE + (id * 4)
+// Offset 0: IP (interrupt pending)
+// Offset 1: IE (interrupt enable)
+// Offset 2: ATTR (attributes: level, priority, vector)
+// Offset 3: CTL (control: priority threshold)
+
+// Common interrupt IDs for GD32VF103
+açık sabit INT_WATCHDOG: u16 = 0
+açık sabit INT_LVD: u16 = 1             // Low voltage detect
+açık sabit INT_TAMPER: u16 = 2
+açık sabit INT_RTC: u16 = 3
+açık sabit INT_FMC: u16 = 4             // Flash memory controller
+açık sabit INT_RCU: u16 = 5             // Reset and clock unit
+açık sabit INT_EXTI0: u16 = 6           // External interrupt 0
+açık sabit INT_EXTI1: u16 = 7
+açık sabit INT_EXTI2: u16 = 8
+açık sabit INT_EXTI3: u16 = 9
+açık sabit INT_EXTI4: u16 = 10
+açık sabit INT_DMA0_CHANNEL0: u16 = 11
+açık sabit INT_DMA0_CHANNEL1: u16 = 12
+açık sabit INT_DMA0_CHANNEL2: u16 = 13
+açık sabit INT_DMA0_CHANNEL3: u16 = 14
+açık sabit INT_DMA0_CHANNEL4: u16 = 15
+açık sabit INT_DMA0_CHANNEL5: u16 = 16
+açık sabit INT_DMA0_CHANNEL6: u16 = 17
+açık sabit INT_ADC0_1: u16 = 18
+açık sabit INT_CAN0_TX: u16 = 19
+açık sabit INT_CAN0_RX0: u16 = 20
+açık sabit INT_CAN0_RX1: u16 = 21
+açık sabit INT_CAN0_EWMC: u16 = 22
+açık sabit INT_EXTI5_9: u16 = 23
+açık sabit INT_TIMER0_BRK: u16 = 24
+açık sabit INT_TIMER0_UP: u16 = 25
+açık sabit INT_TIMER0_TRG_CMT: u16 = 26
+açık sabit INT_TIMER0_CHANNEL: u16 = 27
+açık sabit INT_TIMER1: u16 = 28
+açık sabit INT_TIMER2: u16 = 29
+açık sabit INT_TIMER3: u16 = 30
+açık sabit INT_I2C0_EV: u16 = 31
+açık sabit INT_I2C0_ER: u16 = 32
+açık sabit INT_I2C1_EV: u16 = 33
+açık sabit INT_I2C1_ER: u16 = 34
+açık sabit INT_SPI0: u16 = 35
+açık sabit INT_SPI1: u16 = 36
+açık sabit INT_USART0: u16 = 37
+açık sabit INT_USART1: u16 = 38
+açık sabit INT_USART2: u16 = 39
+açık sabit INT_EXTI10_15: u16 = 40
+açık sabit INT_RTC_ALARM: u16 = 41
+açık sabit INT_USBFS_WKUP: u16 = 42
+açık sabit INT_TIMER4: u16 = 50
+açık sabit INT_SPI2: u16 = 51
+açık sabit INT_UART3: u16 = 52
+açık sabit INT_UART4: u16 = 53
+açık sabit INT_TIMER5: u16 = 54
+açık sabit INT_TIMER6: u16 = 55
+açık sabit INT_DMA1_CHANNEL0: u16 = 56
+açık sabit INT_DMA1_CHANNEL1: u16 = 57
+açık sabit INT_DMA1_CHANNEL2: u16 = 58
+açık sabit INT_DMA1_CHANNEL3: u16 = 59
+açık sabit INT_DMA1_CHANNEL4: u16 = 60
+açık sabit INT_CAN1_TX: u16 = 63
+açık sabit INT_CAN1_RX0: u16 = 64
+açık sabit INT_CAN1_RX1: u16 = 65
+açık sabit INT_CAN1_EWMC: u16 = 66
+açık sabit INT_USBFS: u16 = 67
+
+// ECLIC attribute bits
+sabit ECLIC_ATTR_SHV: u8 = 1 << 0       // Selective hardware vectoring
+sabit ECLIC_ATTR_TRIG_EDGE: u8 = 1 << 1 // Edge triggered
+sabit ECLIC_ATTR_TRIG_LEVEL: u8 = 0 << 1 // Level triggered
+
+harici "C" yap
+    fonksiyon volatile_read_u8(addr: *sabit u8) -> u8
+    fonksiyon volatile_write_u8(addr: *değiştir u8, value: u8)
+    fonksiyon volatile_read_u32(addr: *sabit u32) -> u32
+    fonksiyon volatile_write_u32(addr: *değiştir u32, value: u32)
+    
+    // RISC-V CSR operations
+    fonksiyon read_mstatus() -> u64
+    fonksiyon write_mstatus(value: u64)
+    fonksiyon read_mie() -> u64
+    fonksiyon write_mie(value: u64)
+    fonksiyon set_mtvec(addr: u64)
+son
+
+// MSTATUS bits
+sabit MSTATUS_MIE: u64 = 1 << 3  // Global interrupt enable
+
+fonksiyon eclic_read_u8(offset: u32) -> u8 yap
+    değişken addr = (ECLIC_BASE + offset) olarak *sabit u8
+    dön volatile_read_u8(addr)
+son
+
+fonksiyon eclic_write_u8(offset: u32, value: u8) yap
+    değişken addr = (ECLIC_BASE + offset) olarak *değiştir u8
+    volatile_write_u8(addr, value)
+son
+
+// Enable global interrupts
+açık fonksiyon enable_interrupts() yap
+    değişken mstatus = read_mstatus()
+    write_mstatus(mstatus | MSTATUS_MIE)
+son
+
+// Disable global interrupts
+açık fonksiyon disable_interrupts() yap
+    değişken mstatus = read_mstatus()
+    write_mstatus(mstatus & !MSTATUS_MIE)
+son
+
+// Enable specific interrupt
+açık fonksiyon enable_interrupt(source: u16) yap
+    değişken ie_offset = ECLIC_INT_ATTR_BASE + (source olarak u32 * 4) + 1
+    eclic_write_u8(ie_offset, 1)
+son
+
+// Disable specific interrupt
+açık fonksiyon disable_interrupt(source: u16) yap
+    değişken ie_offset = ECLIC_INT_ATTR_BASE + (source olarak u32 * 4) + 1
+    eclic_write_u8(ie_offset, 0)
+son
+
+// Set interrupt priority (0-255, higher = higher priority)
+açık fonksiyon set_interrupt_priority(source: u16, priority: u8) yap
+    // Priority is in bits 7:4, level in bits 3:0
+    değişken ctrl_offset = ECLIC_INT_ATTR_BASE + (source olarak u32 * 4) + 3
+    eclic_write_u8(ctrl_offset, priority)
+son
+
+// Get interrupt priority
+açık fonksiyon get_interrupt_priority(source: u16) -> u8 yap
+    değişken ctrl_offset = ECLIC_INT_ATTR_BASE + (source olarak u32 * 4) + 3
+    dön eclic_read_u8(ctrl_offset)
+son
+
+// Set interrupt attributes (edge/level, vectored)
+açık fonksiyon set_interrupt_attr(source: u16, attr: u8) yap
+    değişken attr_offset = ECLIC_INT_ATTR_BASE + (source olarak u32 * 4) + 2
+    eclic_write_u8(attr_offset, attr)
+son
+
+// Set priority threshold
+açık fonksiyon set_priority_threshold(threshold: u8) yap
+    eclic_write_u8(ECLIC_MTH, threshold)
+son
+
+// Check if interrupt is pending
+açık fonksiyon is_interrupt_pending(source: u16) -> bool yap
+    değişken ip_offset = ECLIC_INT_ATTR_BASE + (source olarak u32 * 4)
+    dön eclic_read_u8(ip_offset) != 0
+son
+
+// Clear pending interrupt
+açık fonksiyon clear_interrupt_pending(source: u16) yap
+    değişken ip_offset = ECLIC_INT_ATTR_BASE + (source olarak u32 * 4)
+    eclic_write_u8(ip_offset, 0)
+son
+
+// Critical section helper
+açık fonksiyon with_interrupts_disabled<F, R>(f: F) -> R
+doğal yerde F: FnOnce() -> R yap
+    değişken was_enabled = (read_mstatus() & MSTATUS_MIE) != 0
+    
+    disable_interrupts()
+    değişken result = f()
+    
+    eğer was_enabled yap
+        enable_interrupts()
+    son
+    
+    dön result
+son
+
+// Interrupt handler type
+açık tip InterruptHandler = fn()
+
+// Simple interrupt vector table (max 87 interrupts for GD32VF103)
+değişken mut INTERRUPT_HANDLERS: [Seçenek<InterruptHandler>; 87] = [Hiçbiri; 87]
+
+// Register interrupt handler
+açık fonksiyon register_handler(source: u16, handler: InterruptHandler) yap
+    eğer source < 87 yap
+        INTERRUPT_HANDLERS[source olarak usize] = Bazı(handler)
+    son
+son
+
+// Unregister interrupt handler
+açık fonksiyon unregister_handler(source: u16) yap
+    eğer source < 87 yap
+        INTERRUPT_HANDLERS[source olarak usize] = Hiçbiri
+    son
+son
+
+// Interrupt dispatcher (called from trap handler)
+#[no_mangle]
+açık harici "C" fonksiyon eclic_interrupt_handler(mcause: u32) yap
+    // mcause contains the interrupt ID
+    değişken source = (mcause & 0xFFF) olarak u16
+    
+    // Call registered handler if exists
+    eğer source < 87 yap
+        eğer let Bazı(handler) = INTERRUPT_HANDLERS[source olarak usize] yap
+            handler()
+        son
+    son
+    
+    // Clear pending flag
+    clear_interrupt_pending(source)
+son
+
+// Initialize ECLIC
+açık fonksiyon init_eclic() yap
+    // Set threshold to 0 (accept all priorities)
+    set_priority_threshold(0)
+    
+    // Configure ECLIC: use vector mode, 4 level bits, 4 priority bits
+    değişken cfg_addr = (ECLIC_BASE + ECLIC_CFG) olarak *değiştir u32
+    volatile_write_u32(cfg_addr, 0x00000404)
+    
+    // Disable all interrupts initially
+    için source içinde 0..87 yap
+        disable_interrupt(source)
+        set_interrupt_priority(source, 0)
+        set_interrupt_attr(source, ECLIC_ATTR_TRIG_LEVEL)
+    son
+son
+
+// Configure external interrupt (EXTI) line
+açık fonksiyon config_exti(line: u8, edge_trigger: bool, rising: bool, falling: bool) yap
+    // This would need the EXTI peripheral configuration
+    // Simplified placeholder
+    değişken attr = eğer edge_trigger yap
+        ECLIC_ATTR_TRIG_EDGE | ECLIC_ATTR_SHV
+    son değilse yap
+        ECLIC_ATTR_TRIG_LEVEL | ECLIC_ATTR_SHV
+    son
+    
+    // Map EXTI line to interrupt source
+    değişken source = seç line yap
+        durum 0 => INT_EXTI0,
+        durum 1 => INT_EXTI1,
+        durum 2 => INT_EXTI2,
+        durum 3 => INT_EXTI3,
+        durum 4 => INT_EXTI4,
+        durum 5..=9 => INT_EXTI5_9,
+        durum 10..=15 => INT_EXTI10_15,
+        durum _ => dön,  // Invalid
+    son
+    
+    set_interrupt_attr(source, attr)
+son

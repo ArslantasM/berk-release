@@ -1,0 +1,415 @@
+// stdlib/embedded/platforms/stm32f4/pwm.berk
+// STM32F4 PWM (TIM) HAL Implementation
+// STM32 HAL Timer library bindings
+
+import "embedded/bal/pwm" as PWM
+
+// STM32 HAL TIM constants
+const TIM_COUNTERMODE_UP: u32 = 0x0000
+const TIM_COUNTERMODE_DOWN: u32 = 0x0010
+const TIM_COUNTERMODE_CENTERALIGNED1: u32 = 0x0020
+
+const TIM_OCMODE_PWM1: u32 = 0x0060
+const TIM_OCMODE_PWM2: u32 = 0x0070
+
+const TIM_OCPOLARITY_HIGH: u32 = 0x0000
+const TIM_OCPOLARITY_LOW: u32 = 0x0002
+
+const TIM_CHANNEL_1: u32 = 0x0000
+const TIM_CHANNEL_2: u32 = 0x0004
+const TIM_CHANNEL_3: u32 = 0x0008
+const TIM_CHANNEL_4: u32 = 0x000C
+
+// STM32 HAL TIM structures
+struct TIM_HandleTypeDef {
+    Instance: *mut void,
+    Init: TIM_Base_InitTypeDef,
+    Channel: u32,
+    Lock: u32,
+    State: u32,
+}
+
+struct TIM_Base_InitTypeDef {
+    Prescaler: u32,
+    CounterMode: u32,
+    Period: u32,
+    ClockDivision: u32,
+    RepetitionCounter: u32,
+}
+
+struct TIM_OC_InitTypeDef {
+    OCMode: u32,
+    Pulse: u32,
+    OCPolarity: u32,
+    OCFastMode: u32,
+}
+
+// TIM peripheral base addresses (for PWM)
+const TIM1_BASE: u32 = 0x40010000
+const TIM2_BASE: u32 = 0x40000000
+const TIM3_BASE: u32 = 0x40000400
+const TIM4_BASE: u32 = 0x40000800
+const TIM5_BASE: u32 = 0x40000C00
+
+// STM32 HAL TIM functions
+extern "C" {
+    fn HAL_TIM_PWM_Init(htim: *mut TIM_HandleTypeDef) -> u32
+    fn HAL_TIM_PWM_DeInit(htim: *mut TIM_HandleTypeDef) -> u32
+    fn HAL_TIM_PWM_ConfigChannel(htim: *mut TIM_HandleTypeDef, sConfig: *TIM_OC_InitTypeDef, Channel: u32) -> u32
+    fn HAL_TIM_PWM_Start(htim: *mut TIM_HandleTypeDef, Channel: u32) -> u32
+    fn HAL_TIM_PWM_Stop(htim: *mut TIM_HandleTypeDef, Channel: u32) -> u32
+    fn __HAL_TIM_SET_COMPARE(htim: *mut TIM_HandleTypeDef, Channel: u32, Compare: u32)
+    fn __HAL_TIM_GET_COMPARE(htim: *mut TIM_HandleTypeDef, Channel: u32) -> u32
+}
+
+const HAL_OK: u32 = 0x00
+
+// PWM channel storage (4 timers × 4 channels = 16 channels)
+static mut tim_handles: [TIM_HandleTypeDef; 4] = [TIM_HandleTypeDef::default(); 4]
+static mut channel_configs: [ChannelConfig; 16] = [ChannelConfig::default(); 16]
+
+struct ChannelConfig {
+    initialized: bool,
+    timer: u8,
+    channel: u8,
+    frequency: u32,
+    period: u32,
+}
+
+impl TIM_HandleTypeDef {
+    fn default() -> TIM_HandleTypeDef {
+        TIM_HandleTypeDef {
+            Instance: null,
+            Init: TIM_Base_InitTypeDef::default(),
+            Channel: 0,
+            Lock: 0,
+            State: 0,
+        }
+    }
+}
+
+impl TIM_Base_InitTypeDef {
+    fn default() -> TIM_Base_InitTypeDef {
+        TIM_Base_InitTypeDef {
+            Prescaler: 0,
+            CounterMode: TIM_COUNTERMODE_UP,
+            Period: 0,
+            ClockDivision: 0,
+            RepetitionCounter: 0,
+        }
+    }
+}
+
+impl ChannelConfig {
+    fn default() -> ChannelConfig {
+        ChannelConfig {
+            initialized: false,
+            timer: 0,
+            channel: 0,
+            frequency: 0,
+            period: 0,
+        }
+    }
+}
+
+// STM32F4 PWM HAL implementation
+pub struct STM32F4_PWM {}
+
+impl PWM.PWM_HAL for STM32F4_PWM {
+    fn init(config: PWM.Config) -> PWM.Result<()> {
+        if config.channel >= 16 {
+            return Err(PWM.Error.ChannelBusy)
+        }
+        
+        let timer = config.channel / 4
+        let channel = config.channel % 4
+        
+        unsafe {
+            // Get timer instance
+            let instance = match timer {
+                0 => TIM2_BASE as *mut void,
+                1 => TIM3_BASE as *mut void,
+                2 => TIM4_BASE as *mut void,
+                3 => TIM5_BASE as *mut void,
+                _ => return Err(PWM.Error.ChannelBusy),
+            }
+            
+            // Calculate prescaler and period for desired frequency
+            // APB1 clock = 84MHz (STM32F4 at 168MHz)
+            const APB1_CLOCK: u32 = 84_000_000
+            let prescaler = (APB1_CLOCK / (config.frequency * 10000)) - 1
+            let period = 9999  // 10000 steps for PWM resolution
+            
+            // Initialize timer base
+            tim_handles[timer as usize].Instance = instance
+            tim_handles[timer as usize].Init = TIM_Base_InitTypeDef {
+                Prescaler: prescaler,
+                CounterMode: TIM_COUNTERMODE_UP,
+                Period: period,
+                ClockDivision: 0,
+                RepetitionCounter: 0,
+            }
+            
+            let ret = HAL_TIM_PWM_Init(&mut tim_handles[timer as usize])
+            if ret != HAL_OK {
+                return Err(PWM.Error.TimerError)
+            }
+            
+            // Configure PWM channel
+            let pulse = ((config.duty_cycle / 100.0) * period as f32) as u32
+            
+            let polarity = match config.polarity {
+                PWM.Polarity.Normal => TIM_OCPOLARITY_HIGH,
+                PWM.Polarity.Inverted => TIM_OCPOLARITY_LOW,
+            }
+            
+            let oc_config = TIM_OC_InitTypeDef {
+                OCMode: TIM_OCMODE_PWM1,
+                Pulse: pulse,
+                OCPolarity: polarity,
+                OCFastMode: 0,
+            }
+            
+            let channel_num = match channel {
+                0 => TIM_CHANNEL_1,
+                1 => TIM_CHANNEL_2,
+                2 => TIM_CHANNEL_3,
+                3 => TIM_CHANNEL_4,
+                _ => return Err(PWM.Error.ChannelBusy),
+            }
+            
+            let ret = HAL_TIM_PWM_ConfigChannel(
+                &mut tim_handles[timer as usize],
+                &oc_config,
+                channel_num
+            )
+            
+            if ret != HAL_OK {
+                return Err(PWM.Error.ChannelBusy)
+            }
+            
+            // Save configuration
+            channel_configs[config.channel as usize] = ChannelConfig {
+                initialized: true,
+                timer: timer,
+                channel: channel,
+                frequency: config.frequency,
+                period: period,
+            }
+            
+            Ok(())
+        }
+    }
+    
+    fn deinit(channel: u8) {
+        if channel < 16 {
+            unsafe {
+                let timer = channel / 4
+                let ch = channel % 4
+                
+                let channel_num = match ch {
+                    0 => TIM_CHANNEL_1,
+                    1 => TIM_CHANNEL_2,
+                    2 => TIM_CHANNEL_3,
+                    3 => TIM_CHANNEL_4,
+                    _ => return,
+                }
+                
+                HAL_TIM_PWM_Stop(&mut tim_handles[timer as usize], channel_num)
+                channel_configs[channel as usize].initialized = false
+            }
+        }
+    }
+    
+    fn start(channel: u8) {
+        if channel >= 16 {
+            return
+        }
+        
+        unsafe {
+            if !channel_configs[channel as usize].initialized {
+                return
+            }
+            
+            let timer = channel_configs[channel as usize].timer
+            let ch = channel_configs[channel as usize].channel
+            
+            let channel_num = match ch {
+                0 => TIM_CHANNEL_1,
+                1 => TIM_CHANNEL_2,
+                2 => TIM_CHANNEL_3,
+                3 => TIM_CHANNEL_4,
+                _ => return,
+            }
+            
+            HAL_TIM_PWM_Start(&mut tim_handles[timer as usize], channel_num)
+        }
+    }
+    
+    fn stop(channel: u8) {
+        if channel >= 16 {
+            return
+        }
+        
+        unsafe {
+            if !channel_configs[channel as usize].initialized {
+                return
+            }
+            
+            let timer = channel_configs[channel as usize].timer
+            let ch = channel_configs[channel as usize].channel
+            
+            let channel_num = match ch {
+                0 => TIM_CHANNEL_1,
+                1 => TIM_CHANNEL_2,
+                2 => TIM_CHANNEL_3,
+                3 => TIM_CHANNEL_4,
+                _ => return,
+            }
+            
+            HAL_TIM_PWM_Stop(&mut tim_handles[timer as usize], channel_num)
+        }
+    }
+    
+    fn set_frequency(channel: u8, frequency: u32) -> PWM.Result<()> {
+        // Requires timer reinitialization
+        Err(PWM.Error.InvalidFrequency)
+    }
+    
+    fn set_duty_cycle(channel: u8, duty_cycle: f32) -> PWM.Result<()> {
+        if channel >= 16 || duty_cycle < 0.0 || duty_cycle > 100.0 {
+            return Err(PWM.Error.InvalidDutyCycle)
+        }
+        
+        unsafe {
+            if !channel_configs[channel as usize].initialized {
+                return Err(PWM.Error.ChannelBusy)
+            }
+            
+            let timer = channel_configs[channel as usize].timer
+            let ch = channel_configs[channel as usize].channel
+            let period = channel_configs[channel as usize].period
+            
+            let pulse = ((duty_cycle / 100.0) * period as f32) as u32
+            
+            let channel_num = match ch {
+                0 => TIM_CHANNEL_1,
+                1 => TIM_CHANNEL_2,
+                2 => TIM_CHANNEL_3,
+                3 => TIM_CHANNEL_4,
+                _ => return Err(PWM.Error.ChannelBusy),
+            }
+            
+            __HAL_TIM_SET_COMPARE(&mut tim_handles[timer as usize], channel_num, pulse)
+            Ok(())
+        }
+    }
+    
+    fn set_duty_raw(channel: u8, value: u32) -> PWM.Result<()> {
+        if channel >= 16 {
+            return Err(PWM.Error.InvalidDutyCycle)
+        }
+        
+        unsafe {
+            if !channel_configs[channel as usize].initialized {
+                return Err(PWM.Error.ChannelBusy)
+            }
+            
+            let period = channel_configs[channel as usize].period
+            if value > period {
+                return Err(PWM.Error.InvalidDutyCycle)
+            }
+            
+            let timer = channel_configs[channel as usize].timer
+            let ch = channel_configs[channel as usize].channel
+            
+            let channel_num = match ch {
+                0 => TIM_CHANNEL_1,
+                1 => TIM_CHANNEL_2,
+                2 => TIM_CHANNEL_3,
+                3 => TIM_CHANNEL_4,
+                _ => return Err(PWM.Error.ChannelBusy),
+            }
+            
+            __HAL_TIM_SET_COMPARE(&mut tim_handles[timer as usize], channel_num, value)
+            Ok(())
+        }
+    }
+    
+    fn get_duty_cycle(channel: u8) -> f32 {
+        if channel >= 16 {
+            return 0.0
+        }
+        
+        unsafe {
+            if !channel_configs[channel as usize].initialized {
+                return 0.0
+            }
+            
+            let timer = channel_configs[channel as usize].timer
+            let ch = channel_configs[channel as usize].channel
+            let period = channel_configs[channel as usize].period
+            
+            let channel_num = match ch {
+                0 => TIM_CHANNEL_1,
+                1 => TIM_CHANNEL_2,
+                2 => TIM_CHANNEL_3,
+                3 => TIM_CHANNEL_4,
+                _ => return 0.0,
+            }
+            
+            let pulse = __HAL_TIM_GET_COMPARE(&mut tim_handles[timer as usize], channel_num)
+            (pulse as f32 / period as f32) * 100.0
+        }
+    }
+    
+    fn set_polarity(channel: u8, polarity: PWM.Polarity) {
+        // Requires channel reconfiguration
+    }
+    
+    fn set_enabled(channel: u8, enabled: bool) {
+        if enabled {
+            STM32F4_PWM.start(channel)
+        } else {
+            STM32F4_PWM.stop(channel)
+        }
+    }
+}
+
+// STM32F4-specific PWM functions
+
+/// Get maximum PWM resolution
+pub fn get_max_resolution(channel: u8) -> u32 {
+    unsafe {
+        if channel < 16 && channel_configs[channel as usize].initialized {
+            channel_configs[channel as usize].period
+        } else {
+            0
+        }
+    }
+}
+
+/// Initialize servo motor control (50Hz, 1-2ms pulse)
+pub fn init_servo(channel: u8, pin: u8) -> PWM.Result<()> {
+    let config = PWM.Config {
+        channel: channel,
+        pin: pin,
+        frequency: 50,  // 50Hz for servo
+        duty_cycle: 7.5,  // 1.5ms neutral position
+        polarity: PWM.Polarity.Normal,
+        alignment: PWM.Alignment.Edge,
+    }
+    STM32F4_PWM.init(config)
+}
+
+/// Set servo angle (0-180 degrees)
+pub fn set_servo_angle(channel: u8, angle: f32) -> PWM.Result<()> {
+    if angle < 0.0 || angle > 180.0 {
+        return Err(PWM.Error.InvalidDutyCycle)
+    }
+    
+    // Convert angle to duty cycle (1ms to 2ms)
+    // 0° = 1ms (5%), 90° = 1.5ms (7.5%), 180° = 2ms (10%)
+    let duty_cycle = 5.0 + (angle / 180.0) * 5.0
+    STM32F4_PWM.set_duty_cycle(channel, duty_cycle)
+}

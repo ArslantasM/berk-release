@@ -1,0 +1,468 @@
+//! # Testing Module
+//!
+//! Unit testing framework.
+//!
+//! Birim test çerçevesi.
+//!
+//! ## Features / Özellikler
+//!
+//! - **Unit tests**: Test framework / Test çerçevesi
+//! - **Assertions**: eq, ne, true, false / Doğrulama
+//! - **Test suites**: Organize tests / Test paketleri
+//! - **Setup/teardown**: Hooks / Hazırlık ve temizlik
+//! - **Async tests**: Async test support / Asenkron test desteği
+//! - **Benchmarking**: Performance testing / Performans testi
+//! - **Property testing**: QuickCheck-style / Özellik tabanlı test
+//! - **Mocking**: Mock & stub / Sahte nesneler
+//!
+//! ## Example / Örnek
+//!
+//! ```berk
+//! kullan testing
+//!
+//! @test
+//! fonksiyon test_toplama() yap
+//!     testing.assert_eq(2 + 2, 4)
+//!     testing.assert_ne(2 + 2, 5)
+//! son
+//! ```
+//!
+//! Backend: Rust libtest + criterion
+
+modül testing
+
+kullan result
+kullan io
+
+// ============================================================================
+// TEST REGISTRATION
+// ============================================================================
+
+tip Test = yapı yap
+    name: yazı,
+    function: fonksiyon() -> TestResult,
+    skip: mantıksal,
+    timeout_ms: Seçenek[tamsayı]
+son
+
+tip TestResult = Pass | Fail { message: yazı } | Skip
+
+// Register a test
+@native
+fonksiyon register_test(name: yazı, test_fn: fonksiyon() -> TestResult) -> boş
+
+// Run all registered tests
+@native
+fonksiyon run_tests() -> TestSummary
+
+// Run specific test
+@native
+fonksiyon run_test(name: yazı) -> TestResult
+
+// ============================================================================
+// TEST SUITE
+// ============================================================================
+
+tip TestSuite = yapı yap
+    name: yazı,
+    tests: liste[Test],
+    setup: Seçenek[fonksiyon() -> boş],
+    teardown: Seçenek[fonksiyon() -> boş]
+son
+
+tip TestSummary = yapı yap
+    total: tamsayı,
+    passed: tamsayı,
+    failed: tamsayı,
+    skipped: tamsayı,
+    duration_ms: tamsayı,
+    failures: liste[TestFailure]
+son
+
+tip TestFailure = yapı yap
+    test_name: yazı,
+    message: yazı,
+    file: Seçenek[yazı],
+    line: Seçenek[tamsayı]
+son
+
+// Create test suite
+fonksiyon suite_new(name: yazı) -> TestSuite
+yap
+    dön TestSuite {
+        name: name,
+        tests: [],
+        setup: Hiçbiri,
+        teardown: Hiçbiri
+    }
+son
+
+// Add test to suite
+fonksiyon suite_add_test(suite: TestSuite, test: Test) -> TestSuite
+yap
+    değişken new_tests = suite.tests
+    liste_ekle(new_tests, test)
+    dön TestSuite {
+        name: suite.name,
+        tests: new_tests,
+        setup: suite.setup,
+        teardown: suite.teardown
+    }
+son
+
+// Set setup/teardown
+fonksiyon suite_set_setup(suite: TestSuite, setup_fn: fonksiyon() -> boş) -> TestSuite
+yap
+    dön TestSuite {
+        name: suite.name,
+        tests: suite.tests,
+        setup: Bazı(setup_fn),
+        teardown: suite.teardown
+    }
+son
+
+fonksiyon suite_set_teardown(suite: TestSuite, teardown_fn: fonksiyon() -> boş) -> TestSuite
+yap
+    dön TestSuite {
+        name: suite.name,
+        tests: suite.tests,
+        setup: suite.setup,
+        teardown: Bazı(teardown_fn)
+    }
+son
+
+// Run test suite
+@native
+fonksiyon suite_run(suite: TestSuite) -> TestSummary
+
+// ============================================================================
+// ASSERTIONS
+// ============================================================================
+
+// Assert equality
+@native
+fonksiyon assert_eq<T>(actual: T, expected: T) -> TestResult
+
+// Assert inequality
+@native
+fonksiyon assert_ne<T>(actual: T, expected: T) -> TestResult
+
+// Assert true
+fonksiyon assert_true(condition: mantıksal) -> TestResult
+yap
+    eğer condition yap
+        dön Pass
+    son değilse yap
+        dön Fail { message: "Expected true, got false" }
+    son
+son
+
+// Assert false
+fonksiyon assert_false(condition: mantıksal) -> TestResult
+yap
+    eğer !condition yap
+        dön Pass
+    son değilse yap
+        dön Fail { message: "Expected false, got true" }
+    son
+son
+
+// Assert greater than
+@native
+fonksiyon assert_gt<T>(actual: T, expected: T) -> TestResult
+
+// Assert less than
+@native
+fonksiyon assert_lt<T>(actual: T, expected: T) -> TestResult
+
+// Assert greater than or equal
+@native
+fonksiyon assert_gte<T>(actual: T, expected: T) -> TestResult
+
+// Assert less than or equal
+@native
+fonksiyon assert_lte<T>(actual: T, expected: T) -> TestResult
+
+// Assert contains
+@native
+fonksiyon assert_contains<T>(collection: liste[T], item: T) -> TestResult
+
+// Assert not contains
+@native
+fonksiyon assert_not_contains<T>(collection: liste[T], item: T) -> TestResult
+
+// Assert empty
+@native
+fonksiyon assert_empty<T>(collection: liste[T]) -> TestResult
+
+// Assert not empty
+@native
+fonksiyon assert_not_empty<T>(collection: liste[T]) -> TestResult
+
+// Assert null/none
+@native
+fonksiyon assert_none<T>(value: Seçenek[T]) -> TestResult
+
+// Assert some
+@native
+fonksiyon assert_some<T>(value: Seçenek[T]) -> TestResult
+
+// Assert Ok
+@native
+fonksiyon assert_ok<T, E>(result: Sonuç[T, E]) -> TestResult
+
+// Assert Err
+@native
+fonksiyon assert_err<T, E>(result: Sonuç[T, E]) -> TestResult
+
+// Custom assertion with message
+fonksiyon assert_with_message(condition: mantıksal, message: yazı) -> TestResult
+yap
+    eğer condition yap
+        dön Pass
+    son değilse yap
+        dön Fail { message: message }
+    son
+son
+
+// Assert panics (function should panic)
+@native
+fonksiyon assert_panics(f: fonksiyon() -> boş) -> TestResult
+
+// ============================================================================
+// APPROXIMATE EQUALITY (for floats)
+// ============================================================================
+
+// Assert approximately equal (within epsilon)
+@native
+fonksiyon assert_approx_eq(actual: ondalık, expected: ondalık, epsilon: ondalık) -> TestResult
+
+// Assert approximately equal (default epsilon = 1e-6)
+fonksiyon assert_float_eq(actual: ondalık, expected: ondalık) -> TestResult
+yap
+    dön assert_approx_eq(actual, expected, 0.000001)
+son
+
+// ============================================================================
+// PARAMETERIZED TESTS
+// ============================================================================
+
+tip TestCase<T> = yapı yap
+    name: yazı,
+    input: T,
+    expected: T
+son
+
+// Run parameterized tests
+fonksiyon run_parameterized<T>(test_name: yazı, cases: liste[TestCase[T]], test_fn: fonksiyon(T) -> T) -> TestSummary
+yap
+    değişken passed = 0
+    değişken failed = 0
+    değişken failures: liste[TestFailure] = []
+    
+    için test_case içinde cases yap
+        değişken result = test_fn(test_case.input)
+        
+        eğer result == test_case.expected yap
+            passed = passed + 1
+        son değilse yap
+            failed = failed + 1
+            liste_ekle(failures, TestFailure {
+                test_name: string::format("{} - {}", [test_name, test_case.name]),
+                message: string::format("Expected {:?}, got {:?}", [test_case.expected, result]),
+                file: Hiçbiri,
+                line: Hiçbiri
+            })
+        son
+    son
+    
+    dön TestSummary {
+        total: liste_uzunluk(cases),
+        passed: passed,
+        failed: failed,
+        skipped: 0,
+        duration_ms: 0,
+        failures: failures
+    }
+son
+
+// ============================================================================
+// ASYNC TESTING
+// ============================================================================
+
+// Async test
+@native
+fonksiyon assert_async<T>(future: async T, expected: T, timeout_ms: tamsayı) -> TestResult
+
+// Run async test
+@native
+fonksiyon run_async_test(name: yazı, test_fn: fonksiyon() -> async TestResult) -> TestResult
+
+// ============================================================================
+// BENCHMARKING
+// ============================================================================
+
+tip Benchmark = yapı yap
+    name: yazı,
+    function: fonksiyon() -> boş,
+    iterations: tamsayı
+son
+
+tip BenchResult = yapı yap
+    name: yazı,
+    iterations: tamsayı,
+    total_time_ns: tamsayı,
+    avg_time_ns: tamsayı,
+    min_time_ns: tamsayı,
+    max_time_ns: tamsayı,
+    stddev_ns: tamsayı
+son
+
+// Run benchmark
+@native
+fonksiyon bench(name: yazı, f: fonksiyon() -> boş, iterations: tamsayı) -> BenchResult
+
+// Quick benchmark (auto-determine iterations)
+@native
+fonksiyon bench_auto(name: yazı, f: fonksiyon() -> boş) -> BenchResult
+
+// Compare benchmarks
+fonksiyon bench_compare(name1: yazı, f1: fonksiyon() -> boş, name2: yazı, f2: fonksiyon() -> boş) -> boş
+yap
+    değişken result1 = bench_auto(name1, f1)
+    değişken result2 = bench_auto(name2, f2)
+    
+    io::println(string::format("Benchmark: {} vs {}", [name1, name2]))
+    io::println(string::format("  {}: {} ns/iter", [name1, result1.avg_time_ns]))
+    io::println(string::format("  {}: {} ns/iter", [name2, result2.avg_time_ns]))
+    
+    eğer result1.avg_time_ns < result2.avg_time_ns yap
+        değişken speedup = ondalık(result2.avg_time_ns) / ondalık(result1.avg_time_ns)
+        io::println(string::format("  {} is {:.2f}x faster", [name1, speedup]))
+    son değilse yap
+        değişken speedup = ondalık(result1.avg_time_ns) / ondalık(result2.avg_time_ns)
+        io::println(string::format("  {} is {:.2f}x faster", [name2, speedup]))
+    son
+son
+
+// ============================================================================
+// PROPERTY-BASED TESTING (QuickCheck-style)
+// ============================================================================
+
+// Generate random test values
+@native
+fonksiyon quickcheck<T>(property: fonksiyon(T) -> mantıksal, num_tests: tamsayı) -> TestResult
+
+// Property-based test with custom generator
+@native
+fonksiyon quickcheck_with_gen<T>(property: fonksiyon(T) -> mantıksal, generator: fonksiyon() -> T, num_tests: tamsayı) -> TestResult
+
+// ============================================================================
+// MOCKING & STUBBING
+// ============================================================================
+
+tip Mock<T> = yapı yap
+    handle: tamsayı,
+    return_value: T,
+    call_count: tamsayı
+son
+
+// Create mock
+@native
+fonksiyon mock_new<T>(return_value: T) -> Mock[T]
+
+// Set return value
+@native
+fonksiyon mock_set_return<T>(mock: Mock[T], value: T) -> Mock[T]
+
+// Get call count
+fonksiyon mock_call_count<T>(mock: Mock[T]) -> tamsayı
+yap
+    dön mock.call_count
+son
+
+// Verify called
+fonksiyon mock_verify_called<T>(mock: Mock[T]) -> TestResult
+yap
+    eğer mock.call_count > 0 yap
+        dön Pass
+    son değilse yap
+        dön Fail { message: "Mock was not called" }
+    son
+son
+
+// Verify called N times
+fonksiyon mock_verify_called_times<T>(mock: Mock[T], expected: tamsayı) -> TestResult
+yap
+    eğer mock.call_count == expected yap
+        dön Pass
+    son değilse yap
+        dön Fail { message: string::format("Expected {} calls, got {}", [expected, mock.call_count]) }
+    son
+son
+
+// ============================================================================
+// TEST UTILITIES
+// ============================================================================
+
+// Print test summary
+fonksiyon print_summary(summary: TestSummary) -> boş
+yap
+    io::println(string::format("\nTest Results: {} tests, {} passed, {} failed, {} skipped",
+        [summary.total, summary.passed, summary.failed, summary.skipped]))
+    io::println(string::format("Duration: {} ms", [summary.duration_ms]))
+    
+    eğer summary.failed > 0 yap
+        io::println("\nFailures:")
+        için failure içinde summary.failures yap
+            io::println(string::format("  - {}: {}", [failure.test_name, failure.message]))
+        son
+    son
+son
+
+// Exit with correct code
+fonksiyon exit_with_summary(summary: TestSummary) -> boş
+yap
+    print_summary(summary)
+    eğer summary.failed > 0 yap
+        process::exit(1)
+    son değilse yap
+        process::exit(0)
+    son
+son
+
+// ============================================================================
+// TURKISH ALIASES
+// ============================================================================
+
+fonksiyon test_kaydet(isim: yazı, test_fn: fonksiyon() -> TestResult) -> boş
+yap
+    register_test(isim, test_fn)
+son
+
+fonksiyon testleri_çalıştır() -> TestSummary
+yap
+    dön run_tests()
+son
+
+fonksiyon doğrula_eşit<T>(gerçek: T, beklenen: T) -> TestResult
+yap
+    dön assert_eq(gerçek, beklenen)
+son
+
+fonksiyon doğrula_doğru(koşul: mantıksal) -> TestResult
+yap
+    dön assert_true(koşul)
+son
+
+fonksiyon doğrula_yanlış(koşul: mantıksal) -> TestResult
+yap
+    dön assert_false(koşul)
+son
+
+fonksiyon kıyasla(isim: yazı, f: fonksiyon() -> boş, tekrarlar: tamsayı) -> BenchResult
+yap
+    dön bench(isim, f, tekrarlar)
+son
+
+son  // modül testing

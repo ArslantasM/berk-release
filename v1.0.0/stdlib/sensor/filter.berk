@@ -1,0 +1,843 @@
+// ============================================================================
+// BERK SENSOR API - Filtreleme Katmanı
+// ============================================================================
+// Sensör = %70 filtre, %30 donanım
+// Moving Average, Median, Low-pass, Kalman
+// ============================================================================
+
+modül sensor::filter
+
+import sensor::measurement::{Measurement, Vector3Measurement, Confidence}
+
+// ============================================================================
+// NATIVE BAĞLANTILARI (Rust FFI)
+// ============================================================================
+
+/// EMA filtresi oluştur
+@native
+fonksiyon native_filter_ema_create(alpha: ondalık) -> sayı
+
+/// Alpha-Beta filtresi oluştur
+@native
+fonksiyon native_filter_alpha_beta_create(alpha: ondalık, beta: ondalık) -> sayı
+
+/// Median filtresi oluştur
+@native
+fonksiyon native_filter_median_create(window_size: sayı) -> sayı
+
+/// Hareketli ortalama filtresi oluştur
+@native
+fonksiyon native_filter_moving_avg_create(window_size: sayı) -> sayı
+
+/// Hampel filtresi oluştur
+@native
+fonksiyon native_filter_hampel_create(window_size: sayı, threshold: ondalık) -> sayı
+
+/// Kalman filtresi oluştur
+@native
+fonksiyon native_filter_kalman_create(process_noise: ondalık, measurement_noise: ondalık, estimation_error: ondalık) -> sayı
+
+/// Adaptif filtre oluştur
+@native
+fonksiyon native_filter_adaptive_create(min_alpha: ondalık, max_alpha: ondalık, sensitivity: ondalık) -> sayı
+
+/// Alçak geçiren filtre oluştur
+@native
+fonksiyon native_filter_lowpass_create(cutoff_freq: ondalık, sample_rate: ondalık) -> sayı
+
+/// Yüksek geçiren filtre oluştur
+@native
+fonksiyon native_filter_highpass_create(cutoff_freq: ondalık, sample_rate: ondalık) -> sayı
+
+/// Filtre güncelle (tek değer)
+@native
+fonksiyon native_filter_update(handle: sayı, value: ondalık) -> ondalık
+
+/// Dizi işle
+@native
+fonksiyon native_filter_process_array(handle: sayı, values: Liste[ondalık]) -> Liste[ondalık]
+
+/// Filtre sıfırla
+@native
+fonksiyon native_filter_reset(handle: sayı) -> mantıksal
+
+/// Filtre kaldır
+@native
+fonksiyon native_filter_destroy(handle: sayı) -> mantıksal
+
+// Türkçe alias'lar
+pub fn ema_olustur(alpha: ondalık) -> sayı:
+    döndür native_filter_ema_create(alpha)
+son
+
+pub fn kalman_olustur(process_noise: ondalık, measurement_noise: ondalık, estimation_error: ondalık) -> sayı:
+    döndür native_filter_kalman_create(process_noise, measurement_noise, estimation_error)
+son
+
+pub fn median_olustur(window_size: sayı) -> sayı:
+    döndür native_filter_median_create(window_size)
+son
+
+pub fn hampel_olustur(window_size: sayı, threshold: ondalık) -> sayı:
+    döndür native_filter_hampel_create(window_size, threshold)
+son
+
+pub fn adaptif_olustur(min_alpha: ondalık, max_alpha: ondalık, sensitivity: ondalık) -> sayı:
+    döndür native_filter_adaptive_create(min_alpha, max_alpha, sensitivity)
+son
+
+pub fn lowpass_olustur(cutoff_freq: ondalık, sample_rate: ondalık) -> sayı:
+    döndür native_filter_lowpass_create(cutoff_freq, sample_rate)
+son
+
+pub fn highpass_olustur(cutoff_freq: ondalık, sample_rate: ondalık) -> sayı:
+    döndür native_filter_highpass_create(cutoff_freq, sample_rate)
+son
+
+pub fn guncelle(handle: sayı, value: ondalık) -> ondalık:
+    döndür native_filter_update(handle, value)
+son
+
+pub fn dizi_isle(handle: sayı, values: Liste[ondalık]) -> Liste[ondalık]:
+    döndür native_filter_process_array(handle, values)
+son
+
+pub fn sifirla(handle: sayı) -> mantıksal:
+    döndür native_filter_reset(handle)
+son
+
+pub fn kaldir(handle: sayı) -> mantıksal:
+    döndür native_filter_destroy(handle)
+son
+
+// ============================================================================
+// FİLTRE ARAYÜZÜ
+// ============================================================================
+
+/// Filtre trait'i
+pub özellik Filter:
+    /// Tek değer filtrele
+    fn apply(mut self, value: ondalık) döndür ondalık
+    
+    /// Reset
+    fn reset(mut self) döndür void
+    
+    /// Filtre hazır mı? (yeterli örnek var mı?)
+    fn is_ready(self) döndür mantıksal
+son
+
+/// Vektör filtresi trait'i
+pub özellik VectorFilter:
+    fn apply(mut self, x: ondalık, y: ondalık, z: ondalık) döndür (ondalık, ondalık, ondalık)
+    fn reset(mut self) döndür void
+    fn is_ready(self) döndür mantıksal
+son
+
+// ============================================================================
+// MOVING AVERAGE (Hareketli Ortalama)
+// ============================================================================
+
+/// Simple Moving Average (SMA)
+pub tip MovingAverage = yapı yap
+    /// Pencere boyutu
+    window_size: sayı,
+    /// Değer tamponu
+    buffer: Liste[ondalık],
+    /// Toplam (hızlı hesaplama için)
+    sum: ondalık,
+    /// Buffer index
+    index: sayı,
+    /// Dolu mu?
+    filled: mantıksal,
+son
+
+impl MovingAverage:
+    /// Yeni moving average oluştur
+    pub fn new(window_size: sayı) döndür MovingAverage:
+        döndür MovingAverage {
+            window_size: window_size,
+            buffer: [],
+            sum: 0.0,
+            index: 0,
+            filled: yanlış,
+        }
+    son
+    
+    /// Preset: Hızlı (5 örnek)
+    pub fn fast() döndür MovingAverage: MovingAverage::new(5) son
+    
+    /// Preset: Normal (10 örnek)
+    pub fn normal() döndür MovingAverage: MovingAverage::new(10) son
+    
+    /// Preset: Yavaş (20 örnek)
+    pub fn slow() döndür MovingAverage: MovingAverage::new(20) son
+son
+
+impl Filter for MovingAverage:
+    fn apply(mut self, value: ondalık) döndür ondalık:
+        eğer self.buffer.len() < self.window_size:
+            // Buffer dolmadı, ekle
+            self.buffer.push(value)
+            self.sum = self.sum + value
+        yoksa:
+            // Eski değeri çıkar, yeni ekle
+            self.sum = self.sum - self.buffer[self.index]
+            self.buffer[self.index] = value
+            self.sum = self.sum + value
+            
+            self.index = (self.index + 1) % self.window_size
+            self.filled = doğru
+        son
+        
+        döndür self.sum / self.buffer.len()
+    son
+    
+    fn reset(mut self) döndür void:
+        self.buffer.clear()
+        self.sum = 0.0
+        self.index = 0
+        self.filled = yanlış
+    son
+    
+    fn is_ready(self) döndür mantıksal:
+        döndür self.filled
+    son
+son
+
+/// Exponential Moving Average (EMA)
+pub tip ExponentialMovingAverage = yapı yap
+    /// Alpha (0-1, yüksek = daha hızlı tepki)
+    alpha: ondalık,
+    /// Son değer
+    value: ondalık,
+    /// İlk örnek alındı mı?
+    initialized: mantıksal,
+son
+
+impl ExponentialMovingAverage:
+    /// Alpha değeriyle oluştur
+    pub fn new(alpha: ondalık) döndür ExponentialMovingAverage:
+        döndür ExponentialMovingAverage {
+            alpha: alpha.clamp(0.0, 1.0),
+            value: 0.0,
+            initialized: yanlış,
+        }
+    son
+    
+    /// Pencere boyutundan alpha hesapla
+    pub fn from_window(window_size: sayı) döndür ExponentialMovingAverage:
+        // alpha = 2 / (N + 1)
+        değişken alpha = 2.0 / (window_size + 1)
+        döndür ExponentialMovingAverage::new(alpha)
+    son
+    
+    /// Preset: Hızlı
+    pub fn fast() döndür ExponentialMovingAverage: ExponentialMovingAverage::new(0.3) son
+    
+    /// Preset: Normal
+    pub fn normal() döndür ExponentialMovingAverage: ExponentialMovingAverage::new(0.1) son
+    
+    /// Preset: Yavaş
+    pub fn slow() döndür ExponentialMovingAverage: ExponentialMovingAverage::new(0.05) son
+son
+
+impl Filter for ExponentialMovingAverage:
+    fn apply(mut self, value: ondalık) döndür ondalık:
+        eğer !self.initialized:
+            self.value = value
+            self.initialized = doğru
+        yoksa:
+            // EMA = alpha * value + (1 - alpha) * prev
+            self.value = self.alpha * value + (1.0 - self.alpha) * self.value
+        son
+        döndür self.value
+    son
+    
+    fn reset(mut self) döndür void:
+        self.value = 0.0
+        self.initialized = yanlış
+    son
+    
+    fn is_ready(self) döndür mantıksal:
+        döndür self.initialized
+    son
+son
+
+// ============================================================================
+// MEDIAN FILTER
+// ============================================================================
+
+/// Median filtre (gürültü/spike eliminator)
+pub tip MedianFilter = yapı yap
+    window_size: sayı,
+    buffer: Liste[ondalık],
+    index: sayı,
+son
+
+impl MedianFilter:
+    pub fn new(window_size: sayı) döndür MedianFilter:
+        // Pencere boyutu tek olmalı
+        değişken size = eğer window_size % 2 == 0:
+            window_size + 1
+        yoksa:
+            window_size
+        son
+        
+        döndür MedianFilter {
+            window_size: size,
+            buffer: [],
+            index: 0,
+        }
+    son
+    
+    /// Preset: 3 örnek (minimum)
+    pub fn small() döndür MedianFilter: MedianFilter::new(3) son
+    
+    /// Preset: 5 örnek
+    pub fn medium() döndür MedianFilter: MedianFilter::new(5) son
+    
+    /// Preset: 7 örnek
+    pub fn large() döndür MedianFilter: MedianFilter::new(7) son
+son
+
+impl Filter for MedianFilter:
+    fn apply(mut self, value: ondalık) döndür ondalık:
+        eğer self.buffer.len() < self.window_size:
+            self.buffer.push(value)
+        yoksa:
+            self.buffer[self.index] = value
+            self.index = (self.index + 1) % self.window_size
+        son
+        
+        // Sırala ve ortancayı al
+        değişken sorted = self.buffer.clone()
+        sorted.sort()
+        
+        değişken mid = sorted.len() / 2
+        döndür sorted[mid]
+    son
+    
+    fn reset(mut self) döndür void:
+        self.buffer.clear()
+        self.index = 0
+    son
+    
+    fn is_ready(self) döndür mantıksal:
+        döndür self.buffer.len() >= self.window_size
+    son
+son
+
+// ============================================================================
+// LOW-PASS FILTER (IIR)
+// ============================================================================
+
+/// First-order IIR Low-pass filter
+pub tip LowPassFilter = yapı yap
+    /// Cutoff frequency normalized (0-1)
+    cutoff: ondalık,
+    /// Filter coefficient
+    alpha: ondalık,
+    /// Last output
+    y_prev: ondalık,
+    /// Initialized?
+    initialized: mantıksal,
+son
+
+impl LowPassFilter:
+    /// Cutoff frekansı ile oluştur (0-1, normalized)
+    pub fn new(cutoff: ondalık) döndür LowPassFilter:
+        // alpha = dt / (RC + dt)
+        // Basitleştirilmiş: alpha ≈ cutoff
+        döndür LowPassFilter {
+            cutoff: cutoff.clamp(0.001, 0.999),
+            alpha: cutoff.clamp(0.001, 0.999),
+            y_prev: 0.0,
+            initialized: yanlış,
+        }
+    son
+    
+    /// Sample rate ve cutoff Hz ile oluştur
+    pub fn from_frequency(sample_rate_hz: ondalık, cutoff_hz: ondalık) döndür LowPassFilter:
+        // RC = 1 / (2 * PI * fc)
+        // alpha = dt / (RC + dt)
+        değişken dt = 1.0 / sample_rate_hz
+        değişken rc = 1.0 / (2.0 * 3.14159265359 * cutoff_hz)
+        değişken alpha = dt / (rc + dt)
+        
+        döndür LowPassFilter {
+            cutoff: cutoff_hz / sample_rate_hz,
+            alpha: alpha,
+            y_prev: 0.0,
+            initialized: yanlış,
+        }
+    son
+    
+    /// Preset: Çok hafif smoothing
+    pub fn very_light() döndür LowPassFilter: LowPassFilter::new(0.5) son
+    
+    /// Preset: Hafif smoothing
+    pub fn light() döndür LowPassFilter: LowPassFilter::new(0.3) son
+    
+    /// Preset: Orta smoothing
+    pub fn medium() döndür LowPassFilter: LowPassFilter::new(0.1) son
+    
+    /// Preset: Ağır smoothing
+    pub fn heavy() döndür LowPassFilter: LowPassFilter::new(0.05) son
+    
+    /// Preset: Çok ağır smoothing
+    pub fn very_heavy() döndür LowPassFilter: LowPassFilter::new(0.01) son
+son
+
+impl Filter for LowPassFilter:
+    fn apply(mut self, value: ondalık) döndür ondalık:
+        eğer !self.initialized:
+            self.y_prev = value
+            self.initialized = doğru
+            döndür value
+        son
+        
+        // y[n] = alpha * x[n] + (1 - alpha) * y[n-1]
+        self.y_prev = self.alpha * value + (1.0 - self.alpha) * self.y_prev
+        döndür self.y_prev
+    son
+    
+    fn reset(mut self) döndür void:
+        self.y_prev = 0.0
+        self.initialized = yanlış
+    son
+    
+    fn is_ready(self) döndür mantıksal:
+        döndür self.initialized
+    son
+son
+
+/// High-pass filter
+pub tip HighPassFilter = yapı yap
+    alpha: ondalık,
+    x_prev: ondalık,
+    y_prev: ondalık,
+    initialized: mantıksal,
+son
+
+impl HighPassFilter:
+    pub fn new(cutoff: ondalık) döndür HighPassFilter:
+        döndür HighPassFilter {
+            alpha: 1.0 - cutoff.clamp(0.001, 0.999),
+            x_prev: 0.0,
+            y_prev: 0.0,
+            initialized: yanlış,
+        }
+    son
+    
+    pub fn from_frequency(sample_rate_hz: ondalık, cutoff_hz: ondalık) döndür HighPassFilter:
+        değişken dt = 1.0 / sample_rate_hz
+        değişken rc = 1.0 / (2.0 * 3.14159265359 * cutoff_hz)
+        değişken alpha = rc / (rc + dt)
+        
+        döndür HighPassFilter {
+            alpha: alpha,
+            x_prev: 0.0,
+            y_prev: 0.0,
+            initialized: yanlış,
+        }
+    son
+son
+
+impl Filter for HighPassFilter:
+    fn apply(mut self, value: ondalık) döndür ondalık:
+        eğer !self.initialized:
+            self.x_prev = value
+            self.y_prev = 0.0
+            self.initialized = doğru
+            döndür 0.0
+        son
+        
+        // y[n] = alpha * (y[n-1] + x[n] - x[n-1])
+        self.y_prev = self.alpha * (self.y_prev + value - self.x_prev)
+        self.x_prev = value
+        döndür self.y_prev
+    son
+    
+    fn reset(mut self) döndür void:
+        self.x_prev = 0.0
+        self.y_prev = 0.0
+        self.initialized = yanlış
+    son
+    
+    fn is_ready(self) döndür mantıksal:
+        döndür self.initialized
+    son
+son
+
+// ============================================================================
+// KALMAN FILTER (Basitleştirilmiş 1D)
+// ============================================================================
+
+/// Basit 1D Kalman filtresi
+pub tip KalmanFilter = yapı yap
+    /// Tahmin edilen değer
+    x: ondalık,
+    /// Tahmin belirsizliği
+    p: ondalık,
+    /// Process noise covariance (Q)
+    q: ondalık,
+    /// Measurement noise covariance (R)
+    r: ondalık,
+    /// Initialized?
+    initialized: mantıksal,
+son
+
+impl KalmanFilter:
+    /// Yeni Kalman filtresi oluştur
+    /// q: process noise (düşük = daha yavaş tepki)
+    /// r: measurement noise (düşük = ölçüme daha fazla güven)
+    pub fn new(q: ondalık, r: ondalık) döndür KalmanFilter:
+        döndür KalmanFilter {
+            x: 0.0,
+            p: 1.0,
+            q: q,
+            r: r,
+            initialized: yanlış,
+        }
+    son
+    
+    /// Preset: Yüksek güvenilir sensör
+    pub fn for_reliable_sensor() döndür KalmanFilter:
+        döndür KalmanFilter::new(0.001, 0.1)
+    son
+    
+    /// Preset: Gürültülü sensör
+    pub fn for_noisy_sensor() döndür KalmanFilter:
+        döndür KalmanFilter::new(0.01, 1.0)
+    son
+    
+    /// Preset: Çok gürültülü sensör
+    pub fn for_very_noisy_sensor() döndür KalmanFilter:
+        döndür KalmanFilter::new(0.1, 10.0)
+    son
+    
+    /// Kalman gain değerini al
+    pub fn get_gain(self) döndür ondalık:
+        döndür self.p / (self.p + self.r)
+    son
+    
+    /// Belirsizlik değerini al
+    pub fn get_uncertainty(self) döndür ondalık:
+        döndür self.p
+    son
+son
+
+impl Filter for KalmanFilter:
+    fn apply(mut self, measurement: ondalık) döndür ondalık:
+        eğer !self.initialized:
+            self.x = measurement
+            self.p = 1.0
+            self.initialized = doğru
+            döndür measurement
+        son
+        
+        // Prediction step
+        // x_pred = x (statik model)
+        // p_pred = p + q
+        değişken p_pred = self.p + self.q
+        
+        // Update step
+        // k = p_pred / (p_pred + r)
+        değişken k = p_pred / (p_pred + self.r)
+        
+        // x = x_pred + k * (measurement - x_pred)
+        self.x = self.x + k * (measurement - self.x)
+        
+        // p = (1 - k) * p_pred
+        self.p = (1.0 - k) * p_pred
+        
+        döndür self.x
+    son
+    
+    fn reset(mut self) döndür void:
+        self.x = 0.0
+        self.p = 1.0
+        self.initialized = yanlış
+    son
+    
+    fn is_ready(self) döndür mantıksal:
+        döndür self.initialized
+    son
+son
+
+// ============================================================================
+// COMPLEMENTARY FILTER (IMU için)
+// ============================================================================
+
+/// Complementary filter (gyro + accel füzyonu için)
+pub tip ComplementaryFilter = yapı yap
+    /// Alpha (0-1): yüksek = gyro'ya güven, düşük = accel'e güven
+    alpha: ondalık,
+    /// Son açı tahmini
+    angle: ondalık,
+    /// Son zaman
+    last_time_ms: sayı,
+    /// Initialized?
+    initialized: mantıksal,
+son
+
+impl ComplementaryFilter:
+    /// Oluştur
+    /// alpha: 0.96-0.98 tipik değerler
+    pub fn new(alpha: ondalık) döndür ComplementaryFilter:
+        döndür ComplementaryFilter {
+            alpha: alpha.clamp(0.0, 1.0),
+            angle: 0.0,
+            last_time_ms: 0,
+            initialized: yanlış,
+        }
+    son
+    
+    /// Preset: Standart
+    pub fn standard() döndür ComplementaryFilter:
+        döndür ComplementaryFilter::new(0.96)
+    son
+    
+    /// Preset: Gyro ağırlıklı (hızlı hareket)
+    pub fn gyro_heavy() döndür ComplementaryFilter:
+        döndür ComplementaryFilter::new(0.98)
+    son
+    
+    /// Preset: Accel ağırlıklı (yavaş hareket)
+    pub fn accel_heavy() döndür ComplementaryFilter:
+        döndür ComplementaryFilter::new(0.90)
+    son
+    
+    /// Güncelle
+    /// gyro_rate: derece/saniye
+    /// accel_angle: ivmeölçerden hesaplanan açı (derece)
+    pub fn update(mut self, gyro_rate: ondalık, accel_angle: ondalık, current_time_ms: sayı) döndür ondalık:
+        eğer !self.initialized:
+            self.angle = accel_angle
+            self.last_time_ms = current_time_ms
+            self.initialized = doğru
+            döndür accel_angle
+        son
+        
+        değişken dt = (current_time_ms - self.last_time_ms) / 1000.0
+        self.last_time_ms = current_time_ms
+        
+        // angle = alpha * (angle + gyro * dt) + (1 - alpha) * accel_angle
+        self.angle = self.alpha * (self.angle + gyro_rate * dt) + 
+                     (1.0 - self.alpha) * accel_angle
+        
+        döndür self.angle
+    son
+    
+    /// Reset
+    pub fn reset(mut self) döndür void:
+        self.angle = 0.0
+        self.initialized = yanlış
+    son
+son
+
+// ============================================================================
+// FİLTRE ZİNCİRİ
+// ============================================================================
+
+/// Filtre türü (dinamik dispatch için)
+pub tip FilterType = özyinelemeli yap
+    | MovingAvg(MovingAverage)
+    | ExpMovingAvg(ExponentialMovingAverage)
+    | Median(MedianFilter)
+    | LowPass(LowPassFilter)
+    | HighPass(HighPassFilter)
+    | Kalman(KalmanFilter)
+son
+
+impl FilterType:
+    pub fn apply(mut self, value: ondalık) döndür ondalık:
+        eşleştir self:
+            FilterType::MovingAvg(f): f.apply(value)
+            FilterType::ExpMovingAvg(f): f.apply(value)
+            FilterType::Median(f): f.apply(value)
+            FilterType::LowPass(f): f.apply(value)
+            FilterType::HighPass(f): f.apply(value)
+            FilterType::Kalman(f): f.apply(value)
+        son
+    son
+    
+    pub fn reset(mut self) döndür void:
+        eşleştir self:
+            FilterType::MovingAvg(f): f.reset()
+            FilterType::ExpMovingAvg(f): f.reset()
+            FilterType::Median(f): f.reset()
+            FilterType::LowPass(f): f.reset()
+            FilterType::HighPass(f): f.reset()
+            FilterType::Kalman(f): f.reset()
+        son
+    son
+son
+
+/// Filtre zinciri (birden fazla filtre seri olarak)
+pub tip FilterChain = yapı yap
+    filters: Liste[FilterType],
+son
+
+impl FilterChain:
+    pub fn new() döndür FilterChain:
+        döndür FilterChain { filters: [] }
+    son
+    
+    /// Filtre ekle
+    pub fn add(mut self, filter: FilterType) döndür FilterChain:
+        self.filters.push(filter)
+        döndür self
+    son
+    
+    /// Moving average ekle
+    pub fn moving_average(mut self, window: sayı) döndür FilterChain:
+        self.filters.push(FilterType::MovingAvg(MovingAverage::new(window)))
+        döndür self
+    son
+    
+    /// Median ekle
+    pub fn median(mut self, window: sayı) döndür FilterChain:
+        self.filters.push(FilterType::Median(MedianFilter::new(window)))
+        döndür self
+    son
+    
+    /// Low-pass ekle
+    pub fn lowpass(mut self, cutoff: ondalık) döndür FilterChain:
+        self.filters.push(FilterType::LowPass(LowPassFilter::new(cutoff)))
+        döndür self
+    son
+    
+    /// Kalman ekle
+    pub fn kalman(mut self, q: ondalık, r: ondalık) döndür FilterChain:
+        self.filters.push(FilterType::Kalman(KalmanFilter::new(q, r)))
+        döndür self
+    son
+    
+    /// Tüm filtrelerden geçir
+    pub fn apply(mut self, value: ondalık) döndür ondalık:
+        değişken result = value
+        döngü i in 0..self.filters.len():
+            result = self.filters[i].apply(result)
+        son
+        döndür result
+    son
+    
+    /// Tüm filtreleri sıfırla
+    pub fn reset(mut self) döndür void:
+        döngü i in 0..self.filters.len():
+            self.filters[i].reset()
+        son
+    son
+son
+
+// ============================================================================
+// VEKTÖR FİLTRELERİ
+// ============================================================================
+
+/// 3-eksen low-pass filter
+pub tip Vector3LowPass = yapı yap
+    x: LowPassFilter,
+    y: LowPassFilter,
+    z: LowPassFilter,
+son
+
+impl Vector3LowPass:
+    pub fn new(cutoff: ondalık) döndür Vector3LowPass:
+        döndür Vector3LowPass {
+            x: LowPassFilter::new(cutoff),
+            y: LowPassFilter::new(cutoff),
+            z: LowPassFilter::new(cutoff),
+        }
+    son
+son
+
+impl VectorFilter for Vector3LowPass:
+    fn apply(mut self, x: ondalık, y: ondalık, z: ondalık) döndür (ondalık, ondalık, ondalık):
+        döndür (
+            self.x.apply(x),
+            self.y.apply(y),
+            self.z.apply(z)
+        )
+    son
+    
+    fn reset(mut self) döndür void:
+        self.x.reset()
+        self.y.reset()
+        self.z.reset()
+    son
+    
+    fn is_ready(self) döndür mantıksal:
+        döndür self.x.is_ready()
+    son
+son
+
+/// 3-eksen Kalman filter
+pub tip Vector3Kalman = yapı yap
+    x: KalmanFilter,
+    y: KalmanFilter,
+    z: KalmanFilter,
+son
+
+impl Vector3Kalman:
+    pub fn new(q: ondalık, r: ondalık) döndür Vector3Kalman:
+        döndür Vector3Kalman {
+            x: KalmanFilter::new(q, r),
+            y: KalmanFilter::new(q, r),
+            z: KalmanFilter::new(q, r),
+        }
+    son
+    
+    pub fn for_imu() döndür Vector3Kalman:
+        döndür Vector3Kalman::new(0.01, 0.5)
+    son
+son
+
+impl VectorFilter for Vector3Kalman:
+    fn apply(mut self, x: ondalık, y: ondalık, z: ondalık) döndür (ondalık, ondalık, ondalık):
+        döndür (
+            self.x.apply(x),
+            self.y.apply(y),
+            self.z.apply(z)
+        )
+    son
+    
+    fn reset(mut self) döndür void:
+        self.x.reset()
+        self.y.reset()
+        self.z.reset()
+    son
+    
+    fn is_ready(self) döndür mantıksal:
+        döndür self.x.is_ready()
+    son
+son
+
+// ============================================================================
+// CONVENIENCE FUNCTIONS
+// ============================================================================
+
+/// Hızlı low-pass oluştur
+pub fn lowpass(cutoff: ondalık) döndür LowPassFilter:
+    döndür LowPassFilter::new(cutoff)
+son
+
+/// Hızlı median oluştur
+pub fn median(window: sayı) döndür MedianFilter:
+    döndür MedianFilter::new(window)
+son
+
+/// Hızlı moving average oluştur
+pub fn moving_average(window: sayı) döndür MovingAverage:
+    döndür MovingAverage::new(window)
+son
+
+/// Hızlı Kalman oluştur
+pub fn kalman(q: ondalık, r: ondalık) döndür KalmanFilter:
+    döndür KalmanFilter::new(q, r)
+son
+
+/// Filtre zinciri oluştur
+pub fn chain() döndür FilterChain:
+    döndür FilterChain::new()
+son

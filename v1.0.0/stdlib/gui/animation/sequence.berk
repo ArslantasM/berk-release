@@ -1,0 +1,678 @@
+// ============================================================================
+// BERK GUI Framework - Animation Sequence System
+// ============================================================================
+// Gelişmiş animasyon zincirleme ve sıralama
+// After Effects, CSS Animations ve GSAP'tan ilham
+// ============================================================================
+
+modül gui::animation::sequence
+
+kullan gui::animation::time::Time
+kullan gui::animation::easing::EasingType
+kullan gui::animation::tween::{Tween, NumberTween, ColorTween, Vec2Tween}
+kullan gui::animation::spring::{Spring, SpringConfig}
+
+// ============================================================================
+// ANIMATION ACTION - Animasyon Eylemi
+// ============================================================================
+
+/// Bir animasyon eylemi türü
+pub tip ActionType = özyinelemeli yap
+    | Property(PropertyAction)    // Özellik animasyonu
+    | Delay(ondalık)              // Bekle (ms)
+    | Callback(fn() döndür void) // Fonksiyon çağır
+    | Set(SetAction)              // Anlık değer atama
+    | Label(yazı)                 // İşaretçi
+    | Repeat(RepeatAction)        // Tekrar
+    | Stagger(StaggerAction)      // Kademeli animasyon
+son
+
+/// Özellik animasyonu
+pub tip PropertyAction = yapı yap
+    target: yazı,          // Hedef özellik (örn: "opacity", "x", "scale")
+    from: Seçenek[ondalık],
+    to: ondalık,
+    duration: ondalık,      // ms
+    easing: EasingType,
+son
+
+/// Anlık değer atama
+pub tip SetAction = yapı yap
+    target: yazı,
+    value: ondalık,
+son
+
+/// Tekrar eylemi
+pub tip RepeatAction = yapı yap
+    count: sayı,          // -1 = sonsuz
+    actions: Liste[ActionType],
+son
+
+/// Kademeli animasyon
+pub tip StaggerAction = yapı yap
+    targets: Liste[yazı],
+    to: ondalık,
+    duration: ondalık,
+    stagger_delay: ondalık,  // Her eleman arası gecikme
+    easing: EasingType,
+son
+
+// ============================================================================
+// SEQUENCE BUILDER - Sıra Oluşturucu
+// ============================================================================
+
+/// Animasyon sırası oluşturucu
+pub tip SequenceBuilder = yapı yap
+    /// Eylemler listesi
+    actions: Liste[SequenceItem],
+    /// Varsayılan süre
+    default_duration: ondalık,
+    /// Varsayılan easing
+    default_easing: EasingType,
+    /// İsim
+    name: yazı,
+    /// Döngü sayısı
+    loop_count: sayı,
+    /// Yoyo
+    yoyo: mantıksal,
+    /// Otomatik başlat
+    auto_start: mantıksal,
+son
+
+/// Sıra öğesi
+pub tip SequenceItem = yapı yap
+    action: ActionType,
+    position: SequencePosition,
+son
+
+/// Sırada konum
+pub tip SequencePosition = özyinelemeli yap
+    | Sequential              // Öncekinden sonra
+    | AtStart                 // Başlangıçta
+    | AtEnd                   // Bitişte
+    | AtLabel(yazı)          // Belirli label'da
+    | AtTime(ondalık)        // Belirli zamanda (ms)
+    | RelativeOffset(ondalık) // Öncekine göre offset (+ veya -)
+son
+
+impl SequenceBuilder:
+    /// Yeni sequence başlat
+    pub fn new(name: yazı) döndür SequenceBuilder:
+        döndür SequenceBuilder {
+            actions: [],
+            default_duration: 300.0,
+            default_easing: EasingType::EaseOut,
+            name: name,
+            loop_count: 0,
+            yoyo: yanlış,
+            auto_start: yanlış,
+        }
+    son
+    
+    /// Varsayılan süre ayarla
+    pub fn defaults(mut self, duration: ondalık, easing: EasingType) döndür SequenceBuilder:
+        self.default_duration = duration
+        self.default_easing = easing
+        döndür self
+    son
+    
+    // ========================================================================
+    // PROPERTY ANIMATIONS
+    // ========================================================================
+    
+    /// "to" animasyonu ekle
+    pub fn to(mut self, target: yazı, to_value: ondalık, duration: ondalık) döndür SequenceBuilder:
+        değişken action = ActionType::Property(PropertyAction {
+            target: target,
+            from: Hiçbiri,
+            to: to_value,
+            duration: duration,
+            easing: self.default_easing,
+        })
+        self.actions.push(SequenceItem {
+            action: action,
+            position: SequencePosition::Sequential,
+        })
+        döndür self
+    son
+    
+    /// "from-to" animasyonu ekle
+    pub fn from_to(mut self, target: yazı, from: ondalık, to: ondalık, duration: ondalık) döndür SequenceBuilder:
+        değişken action = ActionType::Property(PropertyAction {
+            target: target,
+            from: Bazı(from),
+            to: to,
+            duration: duration,
+            easing: self.default_easing,
+        })
+        self.actions.push(SequenceItem {
+            action: action,
+            position: SequencePosition::Sequential,
+        })
+        döndür self
+    son
+    
+    /// Easing ile "to" animasyonu
+    pub fn to_with_ease(mut self, target: yazı, to_value: ondalık, duration: ondalık, easing: EasingType) döndür SequenceBuilder:
+        değişken action = ActionType::Property(PropertyAction {
+            target: target,
+            from: Hiçbiri,
+            to: to_value,
+            duration: duration,
+            easing: easing,
+        })
+        self.actions.push(SequenceItem {
+            action: action,
+            position: SequencePosition::Sequential,
+        })
+        döndür self
+    son
+    
+    // ========================================================================
+    // TIMING CONTROL
+    // ========================================================================
+    
+    /// Gecikme ekle
+    pub fn delay(mut self, ms: ondalık) döndür SequenceBuilder:
+        self.actions.push(SequenceItem {
+            action: ActionType::Delay(ms),
+            position: SequencePosition::Sequential,
+        })
+        döndür self
+    son
+    
+    /// Label ekle
+    pub fn add_label(mut self, label: yazı) döndür SequenceBuilder:
+        self.actions.push(SequenceItem {
+            action: ActionType::Label(label),
+            position: SequencePosition::Sequential,
+        })
+        döndür self
+    son
+    
+    // ========================================================================
+    // CALLBACKS
+    // ========================================================================
+    
+    /// Callback ekle
+    pub fn call(mut self, callback: fn() döndür void) döndür SequenceBuilder:
+        self.actions.push(SequenceItem {
+            action: ActionType::Callback(callback),
+            position: SequencePosition::Sequential,
+        })
+        döndür self
+    son
+    
+    // ========================================================================
+    // INSTANT SETS
+    // ========================================================================
+    
+    /// Anlık değer ata
+    pub fn set(mut self, target: yazı, value: ondalık) döndür SequenceBuilder:
+        self.actions.push(SequenceItem {
+            action: ActionType::Set(SetAction { target: target, value: value }),
+            position: SequencePosition::Sequential,
+        })
+        döndür self
+    son
+    
+    // ========================================================================
+    // STAGGER (Kademeli Animasyon)
+    // ========================================================================
+    
+    /// Kademeli animasyon ekle
+    pub fn stagger(mut self, targets: Liste[yazı], to: ondalık, duration: ondalık, stagger_delay: ondalık) döndür SequenceBuilder:
+        değişken action = ActionType::Stagger(StaggerAction {
+            targets: targets,
+            to: to,
+            duration: duration,
+            stagger_delay: stagger_delay,
+            easing: self.default_easing,
+        })
+        self.actions.push(SequenceItem {
+            action: action,
+            position: SequencePosition::Sequential,
+        })
+        döndür self
+    son
+    
+    // ========================================================================
+    // POSITIONING
+    // ========================================================================
+    
+    /// Son eylemi başlangıçta konumla
+    pub fn at_start(mut self) döndür SequenceBuilder:
+        eğer self.actions.len() > 0:
+            değişken last_idx = self.actions.len() - 1
+            self.actions[last_idx].position = SequencePosition::AtStart
+        son
+        döndür self
+    son
+    
+    /// Son eylemi belirli zamanda konumla
+    pub fn at(mut self, time_ms: ondalık) döndür SequenceBuilder:
+        eğer self.actions.len() > 0:
+            değişken last_idx = self.actions.len() - 1
+            self.actions[last_idx].position = SequencePosition::AtTime(time_ms)
+        son
+        döndür self
+    son
+    
+    /// Son eylemi label'da konumla
+    pub fn at_label(mut self, label: yazı) döndür SequenceBuilder:
+        eğer self.actions.len() > 0:
+            değişken last_idx = self.actions.len() - 1
+            self.actions[last_idx].position = SequencePosition::AtLabel(label)
+        son
+        döndür self
+    son
+    
+    /// Son eylemi offset ile konumla
+    pub fn offset(mut self, offset_ms: ondalık) döndür SequenceBuilder:
+        eğer self.actions.len() > 0:
+            değişken last_idx = self.actions.len() - 1
+            self.actions[last_idx].position = SequencePosition::RelativeOffset(offset_ms)
+        son
+        döndür self
+    son
+    
+    // ========================================================================
+    // LOOPING
+    // ========================================================================
+    
+    /// Döngü ayarla
+    pub fn repeat(mut self, count: sayı) döndür SequenceBuilder:
+        self.loop_count = count
+        döndür self
+    son
+    
+    /// Sonsuz döngü
+    pub fn infinite(mut self) döndür SequenceBuilder:
+        self.loop_count = -1
+        döndür self
+    son
+    
+    /// Yoyo (ileri-geri)
+    pub fn yoyo(mut self) döndür SequenceBuilder:
+        self.yoyo = doğru
+        döndür self
+    son
+    
+    // ========================================================================
+    // BUILD
+    // ========================================================================
+    
+    /// Sequence oluştur
+    pub fn build(self) döndür Sequence:
+        döndür Sequence {
+            name: self.name,
+            items: self.actions,
+            current_index: 0,
+            elapsed: 0.0,
+            state: SequenceState::Idle,
+            loop_count: self.loop_count,
+            remaining_loops: self.loop_count,
+            yoyo: self.yoyo,
+            reversed: yanlış,
+            labels: Harita::new(),
+            properties: Harita::new(),
+        }
+    son
+son
+
+// ============================================================================
+// SEQUENCE - Animasyon Sırası
+// ============================================================================
+
+/// Sequence durumu
+pub tip SequenceState = özyinelemeli yap
+    | Idle
+    | Running
+    | Paused
+    | Completed
+son
+
+/// Animasyon sırası
+pub tip Sequence = yapı yap
+    /// İsim
+    name: yazı,
+    /// Eylemler
+    items: Liste[SequenceItem],
+    /// Mevcut eylem indeksi
+    current_index: sayı,
+    /// Geçen süre (mevcut eylem için)
+    elapsed: ondalık,
+    /// Durum
+    state: SequenceState,
+    /// Döngü sayısı
+    loop_count: sayı,
+    /// Kalan döngü
+    remaining_loops: sayı,
+    /// Yoyo
+    yoyo: mantıksal,
+    /// Ters mi?
+    reversed: mantıksal,
+    /// Label pozisyonları
+    labels: Harita[yazı, sayı],
+    /// Özellik değerleri
+    properties: Harita[yazı, ondalık],
+son
+
+impl Sequence:
+    /// Sequence başlat
+    pub fn play(mut self) döndür void:
+        self.state = SequenceState::Running
+        self.current_index = 0
+        self.elapsed = 0.0
+        self.build_labels()
+    son
+    
+    /// Duraklat
+    pub fn pause(mut self) döndür void:
+        eğer self.state == SequenceState::Running:
+            self.state = SequenceState::Paused
+        son
+    son
+    
+    /// Devam et
+    pub fn resume(mut self) döndür void:
+        eğer self.state == SequenceState::Paused:
+            self.state = SequenceState::Running
+        son
+    son
+    
+    /// Durdur ve sıfırla
+    pub fn stop(mut self) döndür void:
+        self.state = SequenceState::Idle
+        self.current_index = 0
+        self.elapsed = 0.0
+    son
+    
+    /// Label'ları index'le
+    fn build_labels(mut self) döndür void:
+        self.labels.clear()
+        döngü i in 0..self.items.len():
+            eşleştir self.items[i].action:
+                ActionType::Label(name):
+                    self.labels.insert(name, i)
+                _:
+                    // Skip
+            son
+        son
+    son
+    
+    /// Özellik değeri al
+    pub fn get(self, property: yazı) döndür ondalık:
+        döndür self.properties.get(property).unwrap_or(0.0)
+    son
+    
+    /// Özellik değeri ayarla
+    pub fn set_property(mut self, property: yazı, value: ondalık) döndür void:
+        self.properties.insert(property, value)
+    son
+    
+    /// Güncelle
+    pub fn update(mut self, delta_ms: ondalık) döndür void:
+        eğer self.state != SequenceState::Running:
+            döndür
+        son
+        
+        eğer self.current_index >= self.items.len():
+            self.handle_completion()
+            döndür
+        son
+        
+        değişken item = self.items[self.current_index]
+        
+        eşleştir item.action:
+            ActionType::Property(prop):
+                self.update_property(prop, delta_ms)
+            
+            ActionType::Delay(delay):
+                self.elapsed = self.elapsed + delta_ms
+                eğer self.elapsed >= delay:
+                    self.next_action()
+                son
+            
+            ActionType::Callback(cb):
+                cb()
+                self.next_action()
+            
+            ActionType::Set(set_action):
+                self.properties.insert(set_action.target, set_action.value)
+                self.next_action()
+            
+            ActionType::Label(_):
+                self.next_action()
+            
+            ActionType::Stagger(stagger):
+                self.update_stagger(stagger, delta_ms)
+            
+            ActionType::Repeat(repeat):
+                // TODO: Repeat implementation
+                self.next_action()
+        son
+    son
+    
+    /// Property animasyonu güncelle
+    fn update_property(mut self, prop: PropertyAction, delta_ms: ondalık) döndür void:
+        self.elapsed = self.elapsed + delta_ms
+        
+        değişken t = (self.elapsed / prop.duration).min(1.0).max(0.0)
+        değişken eased_t = self.apply_easing(t, prop.easing)
+        
+        değişken from = prop.from.unwrap_or(self.properties.get(prop.target).unwrap_or(0.0))
+        değişken value = from + (prop.to - from) * eased_t
+        
+        self.properties.insert(prop.target, value)
+        
+        eğer t >= 1.0:
+            self.next_action()
+        son
+    son
+    
+    /// Stagger güncelle
+    fn update_stagger(mut self, stagger: StaggerAction, delta_ms: ondalık) döndür void:
+        self.elapsed = self.elapsed + delta_ms
+        
+        değişken total_duration = stagger.duration + (stagger.targets.len() - 1) * stagger.stagger_delay
+        
+        döngü i in 0..stagger.targets.len():
+            değişken target = stagger.targets[i]
+            değişken start_time = i * stagger.stagger_delay
+            değişken local_elapsed = self.elapsed - start_time
+            
+            eğer local_elapsed > 0.0:
+                değişken t = (local_elapsed / stagger.duration).min(1.0).max(0.0)
+                değişken eased_t = self.apply_easing(t, stagger.easing)
+                değişken from = self.properties.get(target).unwrap_or(0.0)
+                değişken value = from + (stagger.to - from) * eased_t
+                self.properties.insert(target, value)
+            son
+        son
+        
+        eğer self.elapsed >= total_duration:
+            self.next_action()
+        son
+    son
+    
+    /// Sonraki eyleme geç
+    fn next_action(mut self) döndür void:
+        self.current_index = self.current_index + 1
+        self.elapsed = 0.0
+    son
+    
+    /// Tamamlanma işle
+    fn handle_completion(mut self) döndür void:
+        eğer self.remaining_loops > 0 veya self.remaining_loops == -1:
+            eğer self.remaining_loops > 0:
+                self.remaining_loops = self.remaining_loops - 1
+            son
+            
+            eğer self.yoyo:
+                self.reversed = !self.reversed
+                // Eylemleri tersine çevir
+                self.items = self.items.reverse()
+            son
+            
+            self.current_index = 0
+            self.elapsed = 0.0
+        yoksa:
+            self.state = SequenceState::Completed
+        son
+    son
+    
+    /// Easing uygula
+    fn apply_easing(self, t: ondalık, easing: EasingType) döndür ondalık:
+        kullan gui::animation::easing::ease
+        döndür ease(t, easing)
+    son
+    
+    /// Çalışıyor mu?
+    pub fn is_running(self) döndür mantıksal:
+        döndür self.state == SequenceState::Running
+    son
+    
+    /// Tamamlandı mı?
+    pub fn is_complete(self) döndür mantıksal:
+        döndür self.state == SequenceState::Completed
+    son
+son
+
+// ============================================================================
+// PARALLEL - Paralel Animasyonlar
+// ============================================================================
+
+/// Aynı anda çalışan animasyonlar
+pub tip Parallel = yapı yap
+    sequences: Liste[Sequence],
+    state: SequenceState,
+son
+
+impl Parallel:
+    pub fn new() döndür Parallel:
+        döndür Parallel {
+            sequences: [],
+            state: SequenceState::Idle,
+        }
+    son
+    
+    pub fn add(mut self, seq: Sequence) döndür Parallel:
+        self.sequences.push(seq)
+        döndür self
+    son
+    
+    pub fn play(mut self) döndür void:
+        self.state = SequenceState::Running
+        döngü seq in self.sequences:
+            seq.play()
+        son
+    son
+    
+    pub fn update(mut self, delta_ms: ondalık) döndür void:
+        eğer self.state != SequenceState::Running:
+            döndür
+        son
+        
+        değişken all_complete = doğru
+        döngü seq in self.sequences:
+            seq.update(delta_ms)
+            eğer !seq.is_complete():
+                all_complete = yanlış
+            son
+        son
+        
+        eğer all_complete:
+            self.state = SequenceState::Completed
+        son
+    son
+    
+    pub fn is_complete(self) döndür mantıksal:
+        döndür self.state == SequenceState::Completed
+    son
+son
+
+// ============================================================================
+// CONVENIENCE FUNCTIONS
+// ============================================================================
+
+/// Hızlı sequence oluştur
+pub fn sequence(name: yazı) döndür SequenceBuilder:
+    döndür SequenceBuilder::new(name)
+son
+
+/// Paralel animasyonlar
+pub fn parallel() döndür Parallel:
+    döndür Parallel::new()
+son
+
+/// Fade in animasyonu
+pub fn fade_in(duration: ondalık) döndür SequenceBuilder:
+    döndür SequenceBuilder::new("fade_in")
+        .set("opacity", 0.0)
+        .to_with_ease("opacity", 1.0, duration, EasingType::EaseOut)
+son
+
+/// Fade out animasyonu
+pub fn fade_out(duration: ondalık) döndür SequenceBuilder:
+    döndür SequenceBuilder::new("fade_out")
+        .to_with_ease("opacity", 0.0, duration, EasingType::EaseIn)
+son
+
+/// Slide in (soldan)
+pub fn slide_in_left(duration: ondalık, distance: ondalık) döndür SequenceBuilder:
+    döndür SequenceBuilder::new("slide_in_left")
+        .set("x", -distance)
+        .set("opacity", 0.0)
+        .to_with_ease("x", 0.0, duration, EasingType::EaseOutCubic)
+        .to_with_ease("opacity", 1.0, duration * 0.5, EasingType::EaseOut).at_start()
+son
+
+/// Scale up
+pub fn scale_up(duration: ondalık) döndür SequenceBuilder:
+    döndür SequenceBuilder::new("scale_up")
+        .set("scale", 0.0)
+        .to_with_ease("scale", 1.0, duration, EasingType::EaseOutBack)
+son
+
+/// Bounce animasyonu
+pub fn bounce(duration: ondalık) döndür SequenceBuilder:
+    döndür SequenceBuilder::new("bounce")
+        .to_with_ease("y", -20.0, duration * 0.25, EasingType::EaseOutQuad)
+        .to_with_ease("y", 0.0, duration * 0.25, EasingType::EaseInQuad)
+        .to_with_ease("y", -10.0, duration * 0.2, EasingType::EaseOutQuad)
+        .to_with_ease("y", 0.0, duration * 0.2, EasingType::EaseInQuad)
+        .to_with_ease("y", -5.0, duration * 0.1, EasingType::EaseOutQuad)
+        .to_with_ease("y", 0.0, duration * 0.1, EasingType::EaseInQuad)
+son
+
+/// Shake animasyonu
+pub fn shake(duration: ondalık, intensity: ondalık) döndür SequenceBuilder:
+    değişken step = duration / 8.0
+    döndür SequenceBuilder::new("shake")
+        .to("x", -intensity, step)
+        .to("x", intensity, step)
+        .to("x", -intensity * 0.8, step)
+        .to("x", intensity * 0.8, step)
+        .to("x", -intensity * 0.5, step)
+        .to("x", intensity * 0.5, step)
+        .to("x", -intensity * 0.2, step)
+        .to("x", 0.0, step)
+son
+
+/// Pulse animasyonu
+pub fn pulse(duration: ondalık) döndür SequenceBuilder:
+    döndür SequenceBuilder::new("pulse")
+        .to_with_ease("scale", 1.1, duration * 0.5, EasingType::EaseOutQuad)
+        .to_with_ease("scale", 1.0, duration * 0.5, EasingType::EaseInQuad)
+son
+
+/// Heartbeat animasyonu
+pub fn heartbeat(duration: ondalık) döndür SequenceBuilder:
+    döndür SequenceBuilder::new("heartbeat")
+        .to_with_ease("scale", 1.15, duration * 0.1, EasingType::EaseOut)
+        .to_with_ease("scale", 1.0, duration * 0.1, EasingType::EaseIn)
+        .delay(duration * 0.05)
+        .to_with_ease("scale", 1.25, duration * 0.15, EasingType::EaseOut)
+        .to_with_ease("scale", 1.0, duration * 0.6, EasingType::EaseOutQuad)
+son

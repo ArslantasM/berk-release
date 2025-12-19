@@ -1,0 +1,214 @@
+// =============================================================================
+// BERK Hardware Bridge - SLIP Demo
+// RFC 1055 Serial Line Internet Protocol
+// =============================================================================
+
+kullan std::slip
+
+yazdır("=== BERK SLIP Protocol Demo ===\n")
+
+// -----------------------------------------------------------------------------
+// SLIP Temelleri
+// -----------------------------------------------------------------------------
+
+yazdır("📦 SLIP (Serial Line Internet Protocol)")
+yazdır("-" * 40)
+
+yazdır("""
+SLIP, seri hat üzerinden güvenilir paket iletimi sağlar.
+
+Özel Karakterler:
+  END  (0xC0) - Paket sonu işareti
+  ESC  (0xDB) - Escape karakteri
+  
+Escape Dizileri:
+  0xC0 → 0xDB 0xDC (END in data)
+  0xDB → 0xDB 0xDD (ESC in data)
+
+Avantajları:
+  • Basit implementasyon
+  • Düşük overhead
+  • Güvenilir çerçeveleme
+""")
+
+// -----------------------------------------------------------------------------
+// Temel Kullanım
+// -----------------------------------------------------------------------------
+
+yazdır("\n🔌 Temel Kullanım:")
+yazdır("-" * 40)
+
+yazdır("""
+kullan std::slip
+
+// Port aç
+olsun port = slip::open("COM5", 115200)
+
+// Paket gönder
+slip::send(port, [0x01, 0x02, 0x03, 0x04])
+
+// String gönder
+slip::send_string(port, "Merhaba Dünya!")
+
+// Paket al (1 saniye timeout)
+olsun paket = slip::receive(port)
+yazdır("Alınan: {:?}", paket)
+
+// Özel timeout ile al
+olsun paket = slip::receive(port, 5000)  // 5 saniye
+
+// Port kapat
+slip::close(port)
+""")
+
+// -----------------------------------------------------------------------------
+// Encode/Decode İşlemleri
+// -----------------------------------------------------------------------------
+
+yazdır("\n🔄 Encode/Decode:")
+yazdır("-" * 40)
+
+yazdır("""
+// Ham veriyi SLIP formatına çevir
+olsun veri = [0x01, 0xC0, 0xDB, 0x04]  // 0xC0 ve 0xDB özel!
+olsun encoded = slip::encode(veri)
+yazdır("Encoded: {:?}", encoded)
+// Sonuç: [0x01, 0xDB, 0xDC, 0xDB, 0xDD, 0x04, 0xC0]
+
+// SLIP formatından çöz
+olsun decoded = slip::decode(encoded)
+yazdır("Decoded: {:?}", decoded)
+// Sonuç: [0x01, 0xC0, 0xDB, 0x04]
+""")
+
+// -----------------------------------------------------------------------------
+// Paket Yapısı
+// -----------------------------------------------------------------------------
+
+yazdır("\n📋 Yapılandırılmış Paketler:")
+yazdır("-" * 40)
+
+yazdır("""
+// Komut paketi oluştur
+// Format: [CMD, LEN_HI, LEN_LO, PAYLOAD...]
+olsun komut = slip::build_packet(0x10, [0xAA, 0xBB, 0xCC])
+yazdır("Paket: {:?}", komut)
+// Sonuç: [0x10, 0x00, 0x03, 0xAA, 0xBB, 0xCC]
+
+// Paketi çözümle
+olsun [cmd, payload] = slip::parse_packet(paket)
+yazdır("Komut: 0x{:02X}", cmd)
+yazdır("Payload: {:?}", payload)
+""")
+
+// -----------------------------------------------------------------------------
+// Request/Response Paterni
+// -----------------------------------------------------------------------------
+
+yazdır("\n🔁 İstek/Yanıt Paterni:")
+yazdır("-" * 40)
+
+yazdır("""
+// Komut gönder ve yanıt bekle
+olsun yanit = slip::request(port, [0x01, 0x00], 1000)
+yazdır("Yanıt: {:?}", yanit)
+
+// Veri hazır mı kontrol et
+eğer slip::available(port) ise
+    olsun veri = slip::receive(port)
+    // işle...
+son
+""")
+
+// -----------------------------------------------------------------------------
+// Tam Örnek: Sensör Protokolü
+// -----------------------------------------------------------------------------
+
+yazdır("\n📡 Tam Örnek: Sensör Haberleşme")
+yazdır("-" * 40)
+
+yazdır("""
+kullan std::slip
+
+// Komut tanımları
+sabit CMD_PING        = 0x00
+sabit CMD_GET_TEMP    = 0x01
+sabit CMD_GET_HUMID   = 0x02
+sabit CMD_SET_LED     = 0x10
+sabit CMD_RESPONSE    = 0x80
+
+// Sensör modülüne bağlan
+olsun sensor = slip::open("COM5", 115200)
+
+// Ping gönder
+yazdır("Ping gönderiliyor...")
+olsun yanit = slip::request(sensor, [CMD_PING], 1000)
+eğer yanit[0] == (CMD_PING | CMD_RESPONSE) ise
+    yazdır("✓ Sensör yanıt verdi!")
+son
+
+// Sıcaklık oku
+yazdır("Sıcaklık okunuyor...")
+olsun [cmd, veri] = slip::request(sensor, [CMD_GET_TEMP], 1000)
+olsun sicaklik = (veri[0] << 8 | veri[1]) / 100.0
+yazdır("Sıcaklık: {:.2f}°C", sicaklik)
+
+// Nem oku
+yazdır("Nem okunuyor...")
+olsun [cmd, veri] = slip::request(sensor, [CMD_GET_HUMID], 1000)
+olsun nem = (veri[0] << 8 | veri[1]) / 100.0
+yazdır("Nem: {:.1f}%", nem)
+
+// LED'i aç
+yazdır("LED açılıyor...")
+slip::send(sensor, [CMD_SET_LED, 0x01])
+
+slip::close(sensor)
+yazdır("Bağlantı kapatıldı.")
+""")
+
+// -----------------------------------------------------------------------------
+// ESP32 Tarafı Örnek Kodu
+// -----------------------------------------------------------------------------
+
+yazdır("\n💻 ESP32 Firmware Örneği (C++):")
+yazdır("-" * 40)
+
+yazdır("""
+// ESP32 tarafında SLIP handler
+#include <Arduino.h>
+
+#define END     0xC0
+#define ESC     0xDB
+#define ESC_END 0xDC
+#define ESC_ESC 0xDD
+
+void sendSLIP(uint8_t* data, size_t len) {
+    for (size_t i = 0; i < len; i++) {
+        if (data[i] == END) {
+            Serial.write(ESC);
+            Serial.write(ESC_END);
+        } else if (data[i] == ESC) {
+            Serial.write(ESC);
+            Serial.write(ESC_ESC);
+        } else {
+            Serial.write(data[i]);
+        }
+    }
+    Serial.write(END);
+}
+
+void handleCommand(uint8_t cmd, uint8_t* payload, size_t len) {
+    switch (cmd) {
+        case 0x00: // PING
+            sendSLIP((uint8_t[]){0x80}, 1);
+            break;
+        case 0x01: // GET_TEMP
+            int16_t temp = readTemperature() * 100;
+            sendSLIP((uint8_t[]){0x81, temp >> 8, temp & 0xFF}, 3);
+            break;
+    }
+}
+""")
+
+yazdır("\n✅ SLIP demo tamamlandı!")

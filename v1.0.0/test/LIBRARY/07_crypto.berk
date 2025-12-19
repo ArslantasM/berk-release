@@ -1,0 +1,142 @@
+// =============================================================================
+// BERK Standard Library - Crypto Module Demo
+// Şifreleme ve güvenlik işlemleri
+// =============================================================================
+
+kullan std::crypto
+
+yazdır("=== BERK Crypto Demo ===\n")
+
+// -----------------------------------------------------------------------------
+// Hash Fonksiyonları
+// -----------------------------------------------------------------------------
+
+yazdır("🔐 Hash Fonksiyonları:")
+yazdır("-" * 40)
+
+olsun mesaj = "Merhaba BERK!"
+
+// SHA-256
+olsun sha256_hash = crypto::sha256(mesaj)
+yazdır("SHA-256: {}", sha256_hash)
+
+// SHA-512
+olsun sha512_hash = crypto::sha512(mesaj)
+yazdır("SHA-512: {}...", sha512_hash[0..32])
+
+// MD5 (güvenlik için önerilmez, uyumluluk için)
+olsun md5_hash = crypto::md5(mesaj)
+yazdır("MD5: {}", md5_hash)
+
+// -----------------------------------------------------------------------------
+// HMAC (Hash-based Message Authentication)
+// -----------------------------------------------------------------------------
+
+yazdır("\n🔑 HMAC:")
+yazdır("-" * 40)
+
+olsun anahtar = "gizli-anahtar-123"
+olsun veri = "Doğrulanacak veri"
+
+olsun hmac = crypto::hmac_sha256(anahtar, veri)
+yazdır("HMAC-SHA256: {}", hmac)
+
+// Doğrulama
+olsun gecerli = crypto::hmac_verify(anahtar, veri, hmac)
+yazdır("Doğrulama: {}", eğer gecerli ise "✓ Geçerli" değilse "✗ Geçersiz" son)
+
+// -----------------------------------------------------------------------------
+// Simetrik Şifreleme (AES)
+// -----------------------------------------------------------------------------
+
+yazdır("\n🔒 AES Şifreleme:")
+yazdır("-" * 40)
+
+olsun aes_anahtar = crypto::generate_key(256)  // 256-bit anahtar
+olsun iv = crypto::generate_iv()                // Initialization vector
+
+olsun acik_metin = "Bu gizli bir mesajdır!"
+yazdır("Açık metin: {}", acik_metin)
+
+// Şifrele
+olsun sifreli = crypto::aes_encrypt(acik_metin, aes_anahtar, iv)
+yazdır("Şifreli (base64): {}", sifreli)
+
+// Çöz
+olsun cozulmus = crypto::aes_decrypt(sifreli, aes_anahtar, iv)
+yazdır("Çözülmüş: {}", cozulmus)
+
+// -----------------------------------------------------------------------------
+// Asimetrik Şifreleme (RSA)
+// -----------------------------------------------------------------------------
+
+yazdır("\n🔐 RSA Şifreleme:")
+yazdır("-" * 40)
+
+// Anahtar çifti oluştur
+olsun [ozel_anahtar, acik_anahtar] = crypto::rsa_generate_keypair(2048)
+yazdır("Anahtar çifti oluşturuldu (2048-bit)")
+
+olsun mesaj = "RSA ile şifrelenmiş mesaj"
+
+// Public key ile şifrele
+olsun rsa_sifreli = crypto::rsa_encrypt(mesaj, acik_anahtar)
+yazdır("Şifreli: {}...", rsa_sifreli[0..32])
+
+// Private key ile çöz
+olsun rsa_cozulmus = crypto::rsa_decrypt(rsa_sifreli, ozel_anahtar)
+yazdır("Çözülmüş: {}", rsa_cozulmus)
+
+// -----------------------------------------------------------------------------
+// Dijital İmza (Ed25519)
+// -----------------------------------------------------------------------------
+
+yazdır("\n✍️  Dijital İmza (Ed25519):")
+yazdır("-" * 40)
+
+// İmza anahtarları
+olsun [imza_ozel, imza_acik] = crypto::ed25519_generate_keypair()
+yazdır("Ed25519 anahtar çifti oluşturuldu")
+
+olsun belge = "Bu belge imzalanacak"
+
+// İmzala
+olsun imza = crypto::ed25519_sign(belge, imza_ozel)
+yazdır("İmza: {}...", imza[0..32])
+
+// Doğrula
+olsun imza_gecerli = crypto::ed25519_verify(belge, imza, imza_acik)
+yazdır("İmza geçerli: {}", imza_gecerli)
+
+// -----------------------------------------------------------------------------
+// Rastgele Sayı Üretimi
+// -----------------------------------------------------------------------------
+
+yazdır("\n🎲 Kriptografik Rastgele Sayılar:")
+yazdır("-" * 40)
+
+olsun rastgele_bytes = crypto::random_bytes(16)
+yazdır("Rastgele 16 byte: {:?}", rastgele_bytes)
+
+olsun uuid = crypto::uuid_v4()
+yazdır("UUID v4: {}", uuid)
+
+olsun token = crypto::generate_token(32)
+yazdır("Token: {}", token)
+
+// -----------------------------------------------------------------------------
+// Base64 Kodlama
+// -----------------------------------------------------------------------------
+
+yazdır("\n📝 Base64 Kodlama:")
+yazdır("-" * 40)
+
+olsun veri = "BERK programlama dili"
+
+olsun encoded = crypto::base64_encode(veri)
+yazdır("Encoded: {}", encoded)
+
+olsun decoded = crypto::base64_decode(encoded)
+yazdır("Decoded: {}", decoded)
+
+yazdır("\n✅ Crypto demo tamamlandı!")

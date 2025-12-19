@@ -1,0 +1,1625 @@
+//! # Graphics Module
+//!
+//! Graphics and rendering system (cross-platform GPU).
+//!
+//! Grafik ve rendering sistemi (çapraz platform GPU).
+//!
+//! ## Features / Özellikler
+//!
+//! - **Cross-platform**: OpenGL, Vulkan, Metal, WebGPU / Çapraz platform
+//! - **Shaders**: GLSL/WGSL compilation / Shader derleme
+//! - **Textures**: PNG, JPG, DDS loading / Doku yükleme
+//! - **Meshes**: Vertex/index buffers / Mesh rendering
+//! - **Primitives**: 2D/3D drawing (lines, triangles) / Temel çizimler
+//! - **Materials**: PBR + custom shaders / Malzeme sistemi
+//! - **Batching**: Instancing / Toplu rendering
+//!
+//! ## Example / Örnek
+//!
+//! ```berk
+//! kullan graphics
+//!
+//! değişken ctx = graphics.create_context(800, 600, "Pencere")?
+//! graphics.draw_line(ctx, 0, 0, 100, 100, color.red())
+//! graphics.present(ctx)
+//! ```
+//!
+//! Backend: SDL2 + wgpu-native
+
+modül graphics
+
+kullan string
+kullan io
+kullan math
+
+// ============================================================================
+// TÜRLER (Types)
+// ============================================================================
+
+// Grafik Context (GPU device + window)
+tip GraphicsContext = yapı yap
+    genişlik: tamsayı,
+    yükseklik: tamsayı,
+    başlık: yazı,
+    vsync: mantıksal,
+    backend: BackendTürü,
+    handle: tamsayı  // Native context handle (opaque)
+son
+
+tip BackendTürü = "OpenGL" | "Vulkan" | "Metal" | "WebGPU" | "DX12"
+
+// Renk (RGBA float)
+tip Renk = yapı yap
+    r: ondalık,  // 0.0-1.0
+    g: ondalık,
+    b: ondalık,
+    a: ondalık   // Alpha (transparency)
+son
+
+// Vertex (3D köşe noktası)
+tip Vertex = yapı yap
+    pozisyon: Vec3,
+    normal: Vec3,
+    uv: Vec2,
+    renk: Renk
+son
+
+tip Vec2 = yapı yap x: ondalık, y: ondalık son
+tip Vec3 = yapı yap x: ondalık, y: ondalık, z: ondalık son
+tip Vec4 = yapı yap x: ondalık, y: ondalık, z: ondalık, w: ondalık son
+
+// Matrix4x4 (transformasyon matrisi)
+tip Mat4 = yapı yap
+    m: liste[ondalık]  // 16 elemanlı dizi (row-major)
+son
+
+// Vertex Buffer (GPU'da vertex verisi)
+tip VertexBuffer = yapı yap
+    vertex_sayisi: tamsayı,
+    vertex_boyutu: tamsayı,  // bytes
+    kullanim: BufferKullanim,
+    handle: tamsayı
+son
+
+tip BufferKullanim = "Static" | "Dynamic" | "Stream"
+
+// Index Buffer (vertex indeksleri)
+tip IndexBuffer = yapı yap
+    index_sayisi: tamsayı,
+    index_tipi: IndexTipi,
+    handle: tamsayı
+son
+
+tip IndexTipi = "U16" | "U32"
+
+// Mesh (3D model)
+tip Mesh = yapı yap
+    vertex_buffer: VertexBuffer,
+    index_buffer: Seçenek[IndexBuffer],
+    primitive_tipi: PrimitiveTipi,
+    malzeme: Seçenek[Material]
+son
+
+tip PrimitiveTipi = "Triangles" | "TriangleStrip" | "TriangleFan" | "Lines" | "LineStrip" | "Points"
+
+// Texture (resim dokusu)
+tip Texture = yapı yap
+    genişlik: tamsayı,
+    yükseklik: tamsayı,
+    format: TextureFormat,
+    mipmap_seviyeleri: tamsayı,
+    filtreleme: TextureFiltreleme,
+    sarma: TextureSarma,
+    handle: tamsayı
+son
+
+tip TextureFormat = "RGBA8" | "RGB8" | "RGBA16F" | "RGBA32F" | "Depth24Stencil8" | "R8" | "RG8"
+tip TextureFiltreleme = "Nearest" | "Linear" | "Bilinear" | "Trilinear" | "Anisotropic"
+tip TextureSarma = "Repeat" | "MirroredRepeat" | "ClampToEdge" | "ClampToBorder"
+
+// Shader (GPU programı)
+tip Shader = yapı yap
+    vertex_source: yazı,
+    fragment_source: yazı,
+    uniformlar: liste[Uniform],
+    handle: tamsayı
+son
+
+tip Uniform = yapı yap
+    isim: yazı,
+    tipi: UniformTipi,
+    konum: tamsayı
+son
+
+tip UniformTipi = "Float" | "Vec2" | "Vec3" | "Vec4" | "Mat4" | "Texture" | "Int" | "Bool"
+
+// Material (shader + texture + parametreler)
+tip Material = yapı yap
+    shader: Shader,
+    textures: liste[(yazı, Texture)],  // (uniform name, texture)
+    parametreler: liste[(yazı, ondalık)],
+    blend_modu: BlendModu,
+    depth_test: mantıksal,
+    cull_face: CullModu
+son
+
+tip BlendModu = "Opaque" | "Alpha" | "Additive" | "Multiply" | "Premultiplied"
+tip CullModu = "None" | "Front" | "Back" | "FrontAndBack"
+
+// Framebuffer (off-screen rendering hedefi)
+tip Framebuffer = yapı yap
+    genişlik: tamsayı,
+    yükseklik: tamsayı,
+    renk_ekler: liste[Texture],
+    derinlik_ek: Seçenek[Texture],
+    handle: tamsayı
+son
+
+// Camera (kamera transformasyonu)
+tip Camera = yapı yap
+    pozisyon: Vec3,
+    hedef: Vec3,
+    yukari: Vec3,
+    fov: ondalık,  // Field of view (degrees)
+    aspect_ratio: ondalık,
+    yakin_duzlem: ondalık,
+    uzak_duzlem: ondalık,
+    projeksiyon_tipi: ProjeksiyonTipi
+son
+
+tip ProjeksiyonTipi = "Perspective" | "Orthographic"
+
+// Render State (çizim durumu)
+tip RenderState = yapı yap
+    viewport: Viewport,
+    depth_test: mantıksal,
+    depth_write: mantıksal,
+    blend: mantıksal,
+    cull_face: CullModu,
+    wireframe: mantıksal,
+    clear_color: Renk
+son
+
+tip Viewport = yapı yap
+    x: tamsayı,
+    y: tamsayı,
+    genişlik: tamsayı,
+    yükseklik: tamsayı
+son
+
+// ============================================================================
+// CONTEXT YÖNETİMİ (Context Management)
+// ============================================================================
+
+// Graphics context oluştur
+fonksiyon context_olustur(genişlik: tamsayı, yükseklik: tamsayı, başlık: yazı, backend: BackendTürü = "OpenGL") -> Sonuç[GraphicsContext, GraphicsHata]
+yap
+    değişken handle = native_context_olustur(genişlik, yükseklik, başlık, backend)
+    
+    eğer handle < 0 ise yap
+        dön Hata(GraphicsHata yap
+            mesaj: "Graphics context oluşturulamadı",
+            hata_türü: "context"
+        son)
+    son
+    
+    // GPU başlat
+    native_gpu_init(handle)
+    
+    dön Başarı(GraphicsContext yap
+        genişlik: genişlik,
+        yükseklik: yükseklik,
+        başlık: başlık,
+        vsync: doğru,
+        backend: backend,
+        handle: handle
+    son)
+son
+
+// Context'i kapat
+fonksiyon context_kapat(ctx: GraphicsContext) -> boş
+yap
+    native_context_kapat(ctx.handle)
+son
+
+// Frame başlat (çizim döngüsü başı)
+fonksiyon frame_basla(ctx: GraphicsContext) -> boş
+yap
+    native_frame_basla(ctx.handle)
+son
+
+// Frame bitir (swap buffers)
+fonksiyon frame_bitir(ctx: GraphicsContext) -> boş
+yap
+    native_frame_bitir(ctx.handle)
+son
+
+// Ekranı temizle
+fonksiyon ekran_temizle(ctx: GraphicsContext, renk: Renk) -> boş
+yap
+    native_clear(ctx.handle, renk.r, renk.g, renk.b, renk.a)
+son
+
+// Depth buffer'ı temizle
+fonksiyon derinlik_temizle(ctx: GraphicsContext) -> boş
+yap
+    native_clear_depth(ctx.handle)
+son
+
+// VSync ayarla
+fonksiyon vsync_ayarla(ctx: GraphicsContext, etkin: mantıksal) -> boş
+yap
+    native_vsync_ayarla(ctx.handle, etkin)
+    ctx.vsync = etkin
+son
+
+// ============================================================================
+// 2D ÇİZİM (2D Drawing - Immediate Mode)
+// ============================================================================
+
+// Çizgi çiz
+fonksiyon cizgi_ciz(ctx: GraphicsContext, x1: ondalık, y1: ondalık, x2: ondalık, y2: ondalık, renk: Renk, kalinlik: ondalık = 1.0) -> boş
+yap
+    native_draw_line(ctx.handle, x1, y1, x2, y2, renk, kalinlik)
+son
+
+// Dikdörtgen çiz
+fonksiyon dikdortgen_ciz(ctx: GraphicsContext, x: ondalık, y: ondalık, genişlik: ondalık, yükseklik: ondalık, renk: Renk, dolu: mantıksal = yanlış) -> boş
+yap
+    native_draw_rect(ctx.handle, x, y, genişlik, yükseklik, renk, dolu)
+son
+
+// Daire çiz
+fonksiyon daire_ciz(ctx: GraphicsContext, merkez_x: ondalık, merkez_y: ondalık, yaricap: ondalık, renk: Renk, dolu: mantıksal = yanlış, segmentler: tamsayı = 32) -> boş
+yap
+    native_draw_circle(ctx.handle, merkez_x, merkez_y, yaricap, renk, dolu, segmentler)
+son
+
+// Üçgen çiz
+fonksiyon ucgen_ciz(ctx: GraphicsContext, x1: ondalık, y1: ondalık, x2: ondalık, y2: ondalık, x3: ondalık, y3: ondalık, renk: Renk, dolu: mantıksal = yanlış) -> boş
+yap
+    native_draw_triangle(ctx.handle, x1, y1, x2, y2, x3, y3, renk, dolu)
+son
+
+// Nokta çiz
+fonksiyon nokta_ciz(ctx: GraphicsContext, x: ondalık, y: ondalık, renk: Renk, boyut: ondalık = 1.0) -> boş
+yap
+    native_draw_point(ctx.handle, x, y, renk, boyut)
+son
+
+// Çokgen çiz (polygon)
+fonksiyon cokgen_ciz(ctx: GraphicsContext, noktalar: liste[Vec2], renk: Renk, dolu: mantıksal = yanlış) -> boş
+yap
+    native_draw_polygon(ctx.handle, noktalar, renk, dolu)
+son
+
+// Bezier eğrisi çiz
+fonksiyon bezier_ciz(ctx: GraphicsContext, p0: Vec2, p1: Vec2, p2: Vec2, p3: Vec2, renk: Renk, segmentler: tamsayı = 20) -> boş
+yap
+    // Cubic Bezier interpolation
+    değişken noktalar = liste_oluştur()
+    
+    değişken i = 0
+    iken i <= segmentler yap
+        değişken t = tamsayı_ondalık(i) / tamsayı_ondalık(segmentler)
+        değişken bir_eksi_t = 1.0 - t
+        
+        değişken x = bir_eksi_t * bir_eksi_t * bir_eksi_t * p0.x +
+                     3.0 * bir_eksi_t * bir_eksi_t * t * p1.x +
+                     3.0 * bir_eksi_t * t * t * p2.x +
+                     t * t * t * p3.x
+        
+        değişken y = bir_eksi_t * bir_eksi_t * bir_eksi_t * p0.y +
+                     3.0 * bir_eksi_t * bir_eksi_t * t * p1.y +
+                     3.0 * bir_eksi_t * t * t * p2.y +
+                     t * t * t * p3.y
+        
+        noktalar.ekle(Vec2 yap x: x, y: y son)
+        i = i + 1
+    son
+    
+    // Çizgileri çiz
+    değişken j = 0
+    iken j < noktalar.uzunluk() - 1 yap
+        değişken p1_nokta = noktalar[j]
+        değişken p2_nokta = noktalar[j + 1]
+        cizgi_ciz(ctx, p1_nokta.x, p1_nokta.y, p2_nokta.x, p2_nokta.y, renk, 1.0)
+        j = j + 1
+    son
+son
+
+// ============================================================================
+// VERTEX BUFFER YÖNETİMİ (Vertex Buffer Management)
+// ============================================================================
+
+// Vertex buffer oluştur
+fonksiyon vertex_buffer_olustur(vertices: liste[Vertex], kullanim: BufferKullanim = "Static") -> Sonuç[VertexBuffer, GraphicsHata]
+yap
+    değişken vertex_sayisi = vertices.uzunluk()
+    değişken vertex_boyutu = 60  // sizeof(Vertex) = 3*4 + 3*4 + 2*4 + 4*4 = 60 bytes
+    
+    değişken handle = native_vertex_buffer_create(vertices, vertex_sayisi, vertex_boyutu, kullanim)
+    
+    eğer handle < 0 ise yap
+        dön Hata(GraphicsHata yap
+            mesaj: "Vertex buffer oluşturulamadı",
+            hata_türü: "buffer"
+        son)
+    son
+    
+    dön Başarı(VertexBuffer yap
+        vertex_sayisi: vertex_sayisi,
+        vertex_boyutu: vertex_boyutu,
+        kullanim: kullanim,
+        handle: handle
+    son)
+son
+
+// Vertex buffer güncelle
+fonksiyon vertex_buffer_guncelle(vb: VertexBuffer, vertices: liste[Vertex], offset: tamsayı = 0) -> boş
+yap
+    native_vertex_buffer_update(vb.handle, vertices, offset)
+son
+
+// Vertex buffer sil
+fonksiyon vertex_buffer_sil(vb: VertexBuffer) -> boş
+yap
+    native_vertex_buffer_delete(vb.handle)
+son
+
+// Index buffer oluştur
+fonksiyon index_buffer_olustur(indices: liste[tamsayı], index_tipi: IndexTipi = "U32") -> Sonuç[IndexBuffer, GraphicsHata]
+yap
+    değişken index_sayisi = indices.uzunluk()
+    değişken handle = native_index_buffer_create(indices, index_sayisi, index_tipi)
+    
+    eğer handle < 0 ise yap
+        dön Hata(GraphicsHata yap
+            mesaj: "Index buffer oluşturulamadı",
+            hata_türü: "buffer"
+        son)
+    son
+    
+    dön Başarı(IndexBuffer yap
+        index_sayisi: index_sayisi,
+        index_tipi: index_tipi,
+        handle: handle
+    son)
+son
+
+// Index buffer sil
+fonksiyon index_buffer_sil(ib: IndexBuffer) -> boş
+yap
+    native_index_buffer_delete(ib.handle)
+son
+
+// ============================================================================
+// MESH YÖNETİMİ (Mesh Management)
+// ============================================================================
+
+// Mesh oluştur
+fonksiyon mesh_olustur(vertices: liste[Vertex], indices: Seçenek[liste[tamsayı]] = Hiç, primitive: PrimitiveTipi = "Triangles") -> Sonuç[Mesh, GraphicsHata]
+yap
+    değişken vb_sonuç = vertex_buffer_olustur(vertices, "Static")
+    eğer vb_sonuç.hata_mi() ise yap
+        dön Hata(vb_sonuç.hata_al())
+    son
+    
+    değişken ib_secenegi = Hiç
+    eğer indices.bazı_mı() ise yap
+        değişken ib_sonuç = index_buffer_olustur(indices.unwrap(), "U32")
+        eğer ib_sonuç.hata_mi() ise yap
+            vertex_buffer_sil(vb_sonuç.unwrap())
+            dön Hata(ib_sonuç.hata_al())
+        son
+        ib_secenegi = Bazı(ib_sonuç.unwrap())
+    son
+    
+    dön Başarı(Mesh yap
+        vertex_buffer: vb_sonuç.unwrap(),
+        index_buffer: ib_secenegi,
+        primitive_tipi: primitive,
+        malzeme: Hiç
+    son)
+son
+
+// Mesh çiz
+fonksiyon mesh_ciz(ctx: GraphicsContext, mesh: Mesh, transform: Mat4) -> boş
+yap
+    // Vertex buffer bind
+    native_vertex_buffer_bind(mesh.vertex_buffer.handle)
+    
+    // Index buffer bind (varsa)
+    eğer mesh.index_buffer.bazı_mı() ise yap
+        değişken ib = mesh.index_buffer.unwrap()
+        native_index_buffer_bind(ib.handle)
+        native_draw_indexed(ctx.handle, ib.index_sayisi, mesh.primitive_tipi)
+    son değilse yap
+        native_draw_arrays(ctx.handle, mesh.vertex_buffer.vertex_sayisi, mesh.primitive_tipi)
+    son
+son
+
+// Mesh sil
+fonksiyon mesh_sil(mesh: Mesh) -> boş
+yap
+    vertex_buffer_sil(mesh.vertex_buffer)
+    eğer mesh.index_buffer.bazı_mı() ise yap
+        index_buffer_sil(mesh.index_buffer.unwrap())
+    son
+son
+
+// ============================================================================
+// HAZIR MESH'LER (Primitive Meshes)
+// ============================================================================
+
+// Küp mesh'i
+fonksiyon mesh_kup(boyut: ondalık = 1.0) -> Sonuç[Mesh, GraphicsHata]
+yap
+    değişken s = boyut / 2.0
+    
+    // 24 vertex (her yüz için 4 vertex - farklı normaller)
+    değişken vertices = liste_oluştur()
+    
+    // Front face (+Z)
+    vertices.ekle(Vertex yap pozisyon: vec3(-s, -s, s), normal: vec3(0.0, 0.0, 1.0), uv: vec2(0.0, 0.0), renk: renk_beyaz() son)
+    vertices.ekle(Vertex yap pozisyon: vec3(s, -s, s), normal: vec3(0.0, 0.0, 1.0), uv: vec2(1.0, 0.0), renk: renk_beyaz() son)
+    vertices.ekle(Vertex yap pozisyon: vec3(s, s, s), normal: vec3(0.0, 0.0, 1.0), uv: vec2(1.0, 1.0), renk: renk_beyaz() son)
+    vertices.ekle(Vertex yap pozisyon: vec3(-s, s, s), normal: vec3(0.0, 0.0, 1.0), uv: vec2(0.0, 1.0), renk: renk_beyaz() son)
+    
+    // Back face (-Z)
+    vertices.ekle(Vertex yap pozisyon: vec3(s, -s, -s), normal: vec3(0.0, 0.0, -1.0), uv: vec2(0.0, 0.0), renk: renk_beyaz() son)
+    vertices.ekle(Vertex yap pozisyon: vec3(-s, -s, -s), normal: vec3(0.0, 0.0, -1.0), uv: vec2(1.0, 0.0), renk: renk_beyaz() son)
+    vertices.ekle(Vertex yap pozisyon: vec3(-s, s, -s), normal: vec3(0.0, 0.0, -1.0), uv: vec2(1.0, 1.0), renk: renk_beyaz() son)
+    vertices.ekle(Vertex yap pozisyon: vec3(s, s, -s), normal: vec3(0.0, 0.0, -1.0), uv: vec2(0.0, 1.0), renk: renk_beyaz() son)
+    
+    // ... (diğer 4 yüz için vertex'ler)
+    
+    // 36 index (6 yüz * 2 üçgen * 3 vertex)
+    değişken indices = liste_oluştur()
+    // Front
+    indices.ekle(0); indices.ekle(1); indices.ekle(2)
+    indices.ekle(2); indices.ekle(3); indices.ekle(0)
+    // Back
+    indices.ekle(4); indices.ekle(5); indices.ekle(6)
+    indices.ekle(6); indices.ekle(7); indices.ekle(4)
+    // ... (diğer yüzler)
+    
+    dön mesh_olustur(vertices, Bazı(indices), "Triangles")
+son
+
+// Küre mesh'i
+fonksiyon mesh_kure(yaricap: ondalık = 1.0, segmentler: tamsayı = 32) -> Sonuç[Mesh, GraphicsHata]
+yap
+    değişken vertices = liste_oluştur()
+    değişken indices = liste_oluştur()
+    
+    // UV sphere generation
+    değişken lat = 0
+    iken lat <= segmentler yap
+        değişken theta = tamsayı_ondalık(lat) * 3.14159 / tamsayı_ondalık(segmentler)
+        değişken sin_theta = math::sin(theta)
+        değişken cos_theta = math::cos(theta)
+        
+        değişken lon = 0
+        iken lon <= segmentler yap
+            değişken phi = tamsayı_ondalık(lon) * 2.0 * 3.14159 / tamsayı_ondalık(segmentler)
+            değişken sin_phi = math::sin(phi)
+            değişken cos_phi = math::cos(phi)
+            
+            değişken x = cos_phi * sin_theta
+            değişken y = cos_theta
+            değişken z = sin_phi * sin_theta
+            
+            değişken pozisyon = vec3(yaricap * x, yaricap * y, yaricap * z)
+            değişken normal = vec3(x, y, z)
+            değişken uv = vec2(tamsayı_ondalık(lon) / tamsayı_ondalık(segmentler), 
+                              tamsayı_ondalık(lat) / tamsayı_ondalık(segmentler))
+            
+            vertices.ekle(Vertex yap pozisyon: pozisyon, normal: normal, uv: uv, renk: renk_beyaz() son)
+            
+            lon = lon + 1
+        son
+        lat = lat + 1
+    son
+    
+    // Generate indices
+    // ... (sphere triangulation)
+    
+    dön mesh_olustur(vertices, Bazı(indices), "Triangles")
+son
+
+// Düzlem mesh'i
+fonksiyon mesh_duzlem(genişlik: ondalık = 1.0, yükseklik: ondalık = 1.0) -> Sonuç[Mesh, GraphicsHata]
+yap
+    değişken w = genişlik / 2.0
+    değişken h = yükseklik / 2.0
+    
+    değişken vertices = liste_oluştur()
+    vertices.ekle(Vertex yap pozisyon: vec3(-w, 0.0, -h), normal: vec3(0.0, 1.0, 0.0), uv: vec2(0.0, 0.0), renk: renk_beyaz() son)
+    vertices.ekle(Vertex yap pozisyon: vec3(w, 0.0, -h), normal: vec3(0.0, 1.0, 0.0), uv: vec2(1.0, 0.0), renk: renk_beyaz() son)
+    vertices.ekle(Vertex yap pozisyon: vec3(w, 0.0, h), normal: vec3(0.0, 1.0, 0.0), uv: vec2(1.0, 1.0), renk: renk_beyaz() son)
+    vertices.ekle(Vertex yap pozisyon: vec3(-w, 0.0, h), normal: vec3(0.0, 1.0, 0.0), uv: vec2(0.0, 1.0), renk: renk_beyaz() son)
+    
+    değişken indices = liste_oluştur()
+    indices.ekle(0); indices.ekle(1); indices.ekle(2)
+    indices.ekle(2); indices.ekle(3); indices.ekle(0)
+    
+    dön mesh_olustur(vertices, Bazı(indices), "Triangles")
+son
+
+// ============================================================================
+// TEXTURE YÖNETİMİ (Texture Management)
+// ============================================================================
+
+// Dosyadan texture yükle
+fonksiyon texture_yukle(dosya_yolu: yazı) -> Sonuç[Texture, GraphicsHata]
+yap
+    değişken handle = native_texture_load(dosya_yolu)
+    
+    eğer handle < 0 ise yap
+        dön Hata(GraphicsHata yap
+            mesaj: "Texture yüklenemedi: " + dosya_yolu,
+            hata_türü: "texture"
+        son)
+    son
+    
+    değişken boyutlar = native_texture_get_size(handle)
+    
+    dön Başarı(Texture yap
+        genişlik: boyutlar.0,
+        yükseklik: boyutlar.1,
+        format: "RGBA8",
+        mipmap_seviyeleri: 1,
+        filtreleme: "Linear",
+        sarma: "Repeat",
+        handle: handle
+    son)
+son
+
+// Boş texture oluştur
+fonksiyon texture_olustur(genişlik: tamsayı, yükseklik: tamsayı, format: TextureFormat = "RGBA8") -> Sonuç[Texture, GraphicsHata]
+yap
+    değişken handle = native_texture_create(genişlik, yükseklik, format)
+    
+    eğer handle < 0 ise yap
+        dön Hata(GraphicsHata yap
+            mesaj: "Texture oluşturulamadı",
+            hata_türü: "texture"
+        son)
+    son
+    
+    dön Başarı(Texture yap
+        genişlik: genişlik,
+        yükseklik: yükseklik,
+        format: format,
+        mipmap_seviyeleri: 1,
+        filtreleme: "Linear",
+        sarma: "Repeat",
+        handle: handle
+    son)
+son
+
+// Texture verisi güncelle
+fonksiyon texture_guncelle(texture: Texture, veri: liste[byte]) -> boş
+yap
+    native_texture_update(texture.handle, veri, 0, 0, texture.genişlik, texture.yükseklik)
+son
+
+// Texture bind et
+fonksiyon texture_bagla(texture: Texture, slot: tamsayı = 0) -> boş
+yap
+    native_texture_bind(texture.handle, slot)
+son
+
+// Texture sil
+fonksiyon texture_sil(texture: Texture) -> boş
+yap
+    native_texture_delete(texture.handle)
+son
+
+// Mipmap oluştur
+fonksiyon texture_mipmap_olustur(texture: Texture) -> boş
+yap
+    native_texture_generate_mipmap(texture.handle)
+son
+
+// ============================================================================
+// SHADER YÖNETİMİ (Shader Management)
+// ============================================================================
+
+// Shader oluştur
+fonksiyon shader_olustur(vertex_source: yazı, fragment_source: yazı) -> Sonuç[Shader, GraphicsHata]
+yap
+    değişken handle = native_shader_create(vertex_source, fragment_source)
+    
+    eğer handle < 0 ise yap
+        değişken hata_mesaji = native_shader_get_error(handle)
+        dön Hata(GraphicsHata yap
+            mesaj: "Shader derlenemedi: " + hata_mesaji,
+            hata_türü: "shader"
+        son)
+    son
+    
+    dön Başarı(Shader yap
+        vertex_source: vertex_source,
+        fragment_source: fragment_source,
+        uniformlar: liste_oluştur(),
+        handle: handle
+    son)
+son
+
+// Dosyadan shader yükle
+fonksiyon shader_yukle(vertex_dosya: yazı, fragment_dosya: yazı) -> Sonuç[Shader, GraphicsHata]
+yap
+    değişken vs_sonuç = fs::dosya_oku_string(vertex_dosya)
+    eğer vs_sonuç.hata_mi() ise yap
+        dön Hata(GraphicsHata yap
+            mesaj: "Vertex shader dosyası okunamadı: " + vertex_dosya,
+            hata_türü: "io"
+        son)
+    son
+    
+    değişken fs_sonuç = fs::dosya_oku_string(fragment_dosya)
+    eğer fs_sonuç.hata_mi() ise yap
+        dön Hata(GraphicsHata yap
+            mesaj: "Fragment shader dosyası okunamadı: " + fragment_dosya,
+            hata_türü: "io"
+        son)
+    son
+    
+    dön shader_olustur(vs_sonuç.unwrap(), fs_sonuç.unwrap())
+son
+
+// Shader kullan
+fonksiyon shader_kullan(shader: Shader) -> boş
+yap
+    native_shader_use(shader.handle)
+son
+
+// Uniform değer ayarla
+fonksiyon shader_uniform_float(shader: Shader, isim: yazı, değer: ondalık) -> boş
+yap
+    native_shader_set_uniform_float(shader.handle, isim, değer)
+son
+
+fonksiyon shader_uniform_vec2(shader: Shader, isim: yazı, x: ondalık, y: ondalık) -> boş
+yap
+    native_shader_set_uniform_vec2(shader.handle, isim, x, y)
+son
+
+fonksiyon shader_uniform_vec3(shader: Shader, isim: yazı, x: ondalık, y: ondalık, z: ondalık) -> boş
+yap
+    native_shader_set_uniform_vec3(shader.handle, isim, x, y, z)
+son
+
+fonksiyon shader_uniform_vec4(shader: Shader, isim: yazı, x: ondalık, y: ondalık, z: ondalık, w: ondalık) -> boş
+yap
+    native_shader_set_uniform_vec4(shader.handle, isim, x, y, z, w)
+son
+
+fonksiyon shader_uniform_mat4(shader: Shader, isim: yazı, matris: Mat4) -> boş
+yap
+    native_shader_set_uniform_mat4(shader.handle, isim, matris.m)
+son
+
+fonksiyon shader_uniform_texture(shader: Shader, isim: yazı, texture: Texture, slot: tamsayı) -> boş
+yap
+    texture_bagla(texture, slot)
+    native_shader_set_uniform_int(shader.handle, isim, slot)
+son
+
+// Shader sil
+fonksiyon shader_sil(shader: Shader) -> boş
+yap
+    native_shader_delete(shader.handle)
+son
+
+// ============================================================================
+// CAMERA (Kamera Transformasyonu)
+// ============================================================================
+
+// Perspektif kamera oluştur
+fonksiyon camera_perspektif(pozisyon: Vec3, hedef: Vec3, fov: ondalık = 60.0, aspect: ondalık = 16.0/9.0) -> Camera
+yap
+    dön Camera yap
+        pozisyon: pozisyon,
+        hedef: hedef,
+        yukari: vec3(0.0, 1.0, 0.0),
+        fov: fov,
+        aspect_ratio: aspect,
+        yakin_duzlem: 0.1,
+        uzak_duzlem: 1000.0,
+        projeksiyon_tipi: "Perspective"
+    son
+son
+
+// Orthographic kamera oluştur
+fonksiyon camera_orthographic(pozisyon: Vec3, hedef: Vec3, sol: ondalık, sag: ondalık, alt: ondalık, ust: ondalık) -> Camera
+yap
+    dön Camera yap
+        pozisyon: pozisyon,
+        hedef: hedef,
+        yukari: vec3(0.0, 1.0, 0.0),
+        fov: 0.0,
+        aspect_ratio: (sag - sol) / (ust - alt),
+        yakin_duzlem: -100.0,
+        uzak_duzlem: 100.0,
+        projeksiyon_tipi: "Orthographic"
+    son
+son
+
+// View matrix al
+fonksiyon camera_view_matrix(camera: Camera) -> Mat4
+yap
+    dön native_camera_look_at(camera.pozisyon, camera.hedef, camera.yukari)
+son
+
+// Projection matrix al
+fonksiyon camera_projection_matrix(camera: Camera) -> Mat4
+yap
+    eğer camera.projeksiyon_tipi == "Perspective" ise yap
+        dön native_mat4_perspective(camera.fov, camera.aspect_ratio, camera.yakin_duzlem, camera.uzak_duzlem)
+    son değilse yap
+        değişken half_w = camera.aspect_ratio / 2.0
+        değişken half_h = 0.5
+        dön native_mat4_orthographic(-half_w, half_w, -half_h, half_h, camera.yakin_duzlem, camera.uzak_duzlem)
+    son
+son
+
+// ============================================================================
+// FRAMEBUFFER (Off-screen Rendering)
+// ============================================================================
+
+// Framebuffer oluştur
+fonksiyon framebuffer_olustur(genişlik: tamsayı, yükseklik: tamsayı, renk_ekler_sayisi: tamsayı = 1, derinlik: mantıksal = doğru) -> Sonuç[Framebuffer, GraphicsHata]
+yap
+    değişken handle = native_framebuffer_create(genişlik, yükseklik)
+    
+    eğer handle < 0 ise yap
+        dön Hata(GraphicsHata yap
+            mesaj: "Framebuffer oluşturulamadı",
+            hata_türü: "framebuffer"
+        son)
+    son
+    
+    // Renk attachments
+    değişken renk_ekler = liste_oluştur()
+    değişken i = 0
+    iken i < renk_ekler_sayisi yap
+        değişken tex_sonuç = texture_olustur(genişlik, yükseklik, "RGBA8")
+        eğer tex_sonuç.başarılı_mı() ise yap
+            değişken tex = tex_sonuç.unwrap()
+            native_framebuffer_attach_color(handle, tex.handle, i)
+            renk_ekler.ekle(tex)
+        son
+        i = i + 1
+    son
+    
+    // Depth attachment
+    değişken derinlik_ek = Hiç
+    eğer derinlik ise yap
+        değişken depth_sonuç = texture_olustur(genişlik, yükseklik, "Depth24Stencil8")
+        eğer depth_sonuç.başarılı_mı() ise yap
+            değişken depth_tex = depth_sonuç.unwrap()
+            native_framebuffer_attach_depth(handle, depth_tex.handle)
+            derinlik_ek = Bazı(depth_tex)
+        son
+    son
+    
+    dön Başarı(Framebuffer yap
+        genişlik: genişlik,
+        yükseklik: yükseklik,
+        renk_ekler: renk_ekler,
+        derinlik_ek: derinlik_ek,
+        handle: handle
+    son)
+son
+
+// Framebuffer bind et
+fonksiyon framebuffer_bagla(fb: Framebuffer) -> boş
+yap
+    native_framebuffer_bind(fb.handle)
+son
+
+// Default framebuffer'a dön (ekran)
+fonksiyon framebuffer_varsayilan() -> boş
+yap
+    native_framebuffer_bind(0)
+son
+
+// Framebuffer sil
+fonksiyon framebuffer_sil(fb: Framebuffer) -> boş
+yap
+    // Texture'ları sil
+    değişken i = 0
+    iken i < fb.renk_ekler.uzunluk() yap
+        texture_sil(fb.renk_ekler[i])
+        i = i + 1
+    son
+    
+    eğer fb.derinlik_ek.bazı_mı() ise yap
+        texture_sil(fb.derinlik_ek.unwrap())
+    son
+    
+    native_framebuffer_delete(fb.handle)
+son
+
+// ============================================================================
+// MATRİX İŞLEMLERİ (Matrix Operations)
+// ============================================================================
+
+// Identity matrix
+fonksiyon mat4_identity() -> Mat4
+yap
+    değişken m = liste_oluştur()
+    değişken i = 0
+    iken i < 16 yap
+        eğer i % 5 == 0 ise yap
+            m.ekle(1.0)
+        son değilse yap
+            m.ekle(0.0)
+        son
+        i = i + 1
+    son
+    dön Mat4 yap m: m son
+son
+
+// Translation matrix
+fonksiyon mat4_translate(x: ondalık, y: ondalık, z: ondalık) -> Mat4
+yap
+    dön native_mat4_translate(x, y, z)
+son
+
+// Rotation matrix
+fonksiyon mat4_rotate(aci: ondalık, x: ondalık, y: ondalık, z: ondalık) -> Mat4
+yap
+    dön native_mat4_rotate(aci, x, y, z)
+son
+
+// Scale matrix
+fonksiyon mat4_scale(x: ondalık, y: ondalık, z: ondalık) -> Mat4
+yap
+    dön native_mat4_scale(x, y, z)
+son
+
+// Matrix çarpımı
+fonksiyon mat4_multiply(a: Mat4, b: Mat4) -> Mat4
+yap
+    dön native_mat4_multiply(a.m, b.m)
+son
+
+// ============================================================================
+// RENK YARDIMCILARI (Color Helpers)
+// ============================================================================
+
+fonksiyon renk_olustur(r: ondalık, g: ondalık, b: ondalık, a: ondalık = 1.0) -> Renk
+yap
+    dön Renk yap r: r, g: g, b: b, a: a son
+son
+
+fonksiyon renk_siyah() -> Renk yap dön renk_olustur(0.0, 0.0, 0.0) son
+fonksiyon renk_beyaz() -> Renk yap dön renk_olustur(1.0, 1.0, 1.0) son
+fonksiyon renk_kirmizi() -> Renk yap dön renk_olustur(1.0, 0.0, 0.0) son
+fonksiyon renk_yesil() -> Renk yap dön renk_olustur(0.0, 1.0, 0.0) son
+fonksiyon renk_mavi() -> Renk yap dön renk_olustur(0.0, 0.0, 1.0) son
+fonksiyon renk_sari() -> Renk yap dön renk_olustur(1.0, 1.0, 0.0) son
+fonksiyon renk_turuncu() -> Renk yap dön renk_olustur(1.0, 0.5, 0.0) son
+fonksiyon renk_mor() -> Renk yap dön renk_olustur(0.5, 0.0, 0.5) son
+fonksiyon renk_gri() -> Renk yap dön renk_olustur(0.5, 0.5, 0.5) son
+
+// ============================================================================
+// VEC YARDIMCILARI (Vector Helpers)
+// ============================================================================
+
+fonksiyon vec2(x: ondalık, y: ondalık) -> Vec2
+yap
+    dön Vec2 yap x: x, y: y son
+son
+
+fonksiyon vec3(x: ondalık, y: ondalık, z: ondalık) -> Vec3
+yap
+    dön Vec3 yap x: x, y: y, z: z son
+son
+
+fonksiyon vec4(x: ondalık, y: ondalık, z: ondalık, w: ondalık) -> Vec4
+yap
+    dön Vec4 yap x: x, y: y, z: z, w: w son
+son
+
+// ============================================================================
+// GRAPHICS HATA
+// ============================================================================
+
+tip GraphicsHata = yapı yap
+    mesaj: yazı,
+    hata_türü: yazı
+son
+
+// ============================================================================
+// DÜŞÜK SEVİYE FONKSİYONLAR (Low-level - Native bindings)
+// ============================================================================
+
+// Context
+harici fonksiyon native_context_olustur(w: tamsayı, h: tamsayı, baslik: yazı, backend: BackendTürü) -> tamsayı
+harici fonksiyon native_context_kapat(handle: tamsayı) -> boş
+harici fonksiyon native_gpu_init(handle: tamsayı) -> boş
+harici fonksiyon native_frame_basla(handle: tamsayı) -> boş
+harici fonksiyon native_frame_bitir(handle: tamsayı) -> boş
+harici fonksiyon native_clear(handle: tamsayı, r: ondalık, g: ondalık, b: ondalık, a: ondalık) -> boş
+harici fonksiyon native_clear_depth(handle: tamsayı) -> boş
+harici fonksiyon native_vsync_ayarla(handle: tamsayı, etkin: mantıksal) -> boş
+
+// 2D Drawing
+harici fonksiyon native_draw_line(ctx: tamsayı, x1: ondalık, y1: ondalık, x2: ondalık, y2: ondalık, renk: Renk, kalinlik: ondalık) -> boş
+harici fonksiyon native_draw_rect(ctx: tamsayı, x: ondalık, y: ondalık, w: ondalık, h: ondalık, renk: Renk, dolu: mantıksal) -> boş
+harici fonksiyon native_draw_circle(ctx: tamsayı, cx: ondalık, cy: ondalık, r: ondalık, renk: Renk, dolu: mantıksal, segmentler: tamsayı) -> boş
+harici fonksiyon native_draw_triangle(ctx: tamsayı, x1: ondalık, y1: ondalık, x2: ondalık, y2: ondalık, x3: ondalık, y3: ondalık, renk: Renk, dolu: mantıksal) -> boş
+harici fonksiyon native_draw_point(ctx: tamsayı, x: ondalık, y: ondalık, renk: Renk, boyut: ondalık) -> boş
+harici fonksiyon native_draw_polygon(ctx: tamsayı, noktalar: liste[Vec2], renk: Renk, dolu: mantıksal) -> boş
+
+// Buffers
+harici fonksiyon native_vertex_buffer_create(vertices: liste[Vertex], sayı: tamsayı, boyut: tamsayı, kullanim: BufferKullanim) -> tamsayı
+harici fonksiyon native_vertex_buffer_update(handle: tamsayı, vertices: liste[Vertex], offset: tamsayı) -> boş
+harici fonksiyon native_vertex_buffer_bind(handle: tamsayı) -> boş
+harici fonksiyon native_vertex_buffer_delete(handle: tamsayı) -> boş
+
+harici fonksiyon native_index_buffer_create(indices: liste[tamsayı], sayı: tamsayı, tipi: IndexTipi) -> tamsayı
+harici fonksiyon native_index_buffer_bind(handle: tamsayı) -> boş
+harici fonksiyon native_index_buffer_delete(handle: tamsayı) -> boş
+
+harici fonksiyon native_draw_arrays(ctx: tamsayı, vertex_sayisi: tamsayı, primitive: PrimitiveTipi) -> boş
+harici fonksiyon native_draw_indexed(ctx: tamsayı, index_sayisi: tamsayı, primitive: PrimitiveTipi) -> boş
+
+// Textures
+harici fonksiyon native_texture_load(yol: yazı) -> tamsayı
+harici fonksiyon native_texture_create(w: tamsayı, h: tamsayı, format: TextureFormat) -> tamsayı
+harici fonksiyon native_texture_update(handle: tamsayı, veri: liste[byte], x: tamsayı, y: tamsayı, w: tamsayı, h: tamsayı) -> boş
+harici fonksiyon native_texture_bind(handle: tamsayı, slot: tamsayı) -> boş
+harici fonksiyon native_texture_delete(handle: tamsayı) -> boş
+harici fonksiyon native_texture_get_size(handle: tamsayı) -> (tamsayı, tamsayı)
+harici fonksiyon native_texture_generate_mipmap(handle: tamsayı) -> boş
+
+// Shaders
+harici fonksiyon native_shader_create(vs: yazı, fs: yazı) -> tamsayı
+harici fonksiyon native_shader_use(handle: tamsayı) -> boş
+harici fonksiyon native_shader_delete(handle: tamsayı) -> boş
+harici fonksiyon native_shader_get_error(handle: tamsayı) -> yazı
+harici fonksiyon native_shader_set_uniform_float(handle: tamsayı, isim: yazı, değer: ondalık) -> boş
+harici fonksiyon native_shader_set_uniform_vec2(handle: tamsayı, isim: yazı, x: ondalık, y: ondalık) -> boş
+harici fonksiyon native_shader_set_uniform_vec3(handle: tamsayı, isim: yazı, x: ondalık, y: ondalık, z: ondalık) -> boş
+harici fonksiyon native_shader_set_uniform_vec4(handle: tamsayı, isim: yazı, x: ondalık, y: ondalık, z: ondalık, w: ondalık) -> boş
+harici fonksiyon native_shader_set_uniform_mat4(handle: tamsayı, isim: yazı, m: liste[ondalık]) -> boş
+harici fonksiyon native_shader_set_uniform_int(handle: tamsayı, isim: yazı, değer: tamsayı) -> boş
+
+// Camera
+harici fonksiyon native_camera_look_at(pos: Vec3, target: Vec3, up: Vec3) -> Mat4
+
+// Matrix
+harici fonksiyon native_mat4_perspective(fov: ondalık, aspect: ondalık, near: ondalık, far: ondalık) -> Mat4
+harici fonksiyon native_mat4_orthographic(left: ondalık, right: ondalık, bottom: ondalık, top: ondalık, near: ondalık, far: ondalık) -> Mat4
+harici fonksiyon native_mat4_translate(x: ondalık, y: ondalık, z: ondalık) -> Mat4
+harici fonksiyon native_mat4_rotate(aci: ondalık, x: ondalık, y: ondalık, z: ondalık) -> Mat4
+harici fonksiyon native_mat4_scale(x: ondalık, y: ondalık, z: ondalık) -> Mat4
+harici fonksiyon native_mat4_multiply(a: liste[ondalık], b: liste[ondalık]) -> Mat4
+
+// Framebuffer
+harici fonksiyon native_framebuffer_create(w: tamsayı, h: tamsayı) -> tamsayı
+harici fonksiyon native_framebuffer_attach_color(fb: tamsayı, tex: tamsayı, index: tamsayı) -> boş
+harici fonksiyon native_framebuffer_attach_depth(fb: tamsayı, tex: tamsayı) -> boş
+harici fonksiyon native_framebuffer_bind(fb: tamsayı) -> boş
+harici fonksiyon native_framebuffer_delete(fb: tamsayı) -> boş
+
+// ============================================================================
+// KULLANIM ÖRNEKLERİ (Usage Examples)
+// ============================================================================
+
+/*
+// ============================================================================
+// ÖRNEK 1: TEMEL 2D ÇİZİM
+// ============================================================================
+
+kullan graphics
+
+// Context oluştur
+değişken ctx = graphics::context_olustur(800, 600, "BERK Graphics", "OpenGL").unwrap()
+
+// Ana döngü
+iken doğru yap
+    graphics::frame_basla(ctx)
+    graphics::ekran_temizle(ctx, graphics::renk_siyah())
+    
+    // Çizgi
+    graphics::cizgi_ciz(ctx, 100.0, 100.0, 700.0, 500.0, graphics::renk_beyaz(), 2.0)
+    
+    // Dikdörtgen
+    graphics::dikdortgen_ciz(ctx, 200.0, 150.0, 400.0, 300.0, graphics::renk_mavi(), doğru)
+    
+    // Daire
+    graphics::daire_ciz(ctx, 400.0, 300.0, 100.0, graphics::renk_kirmizi(), yanlış, 64)
+    
+    graphics::frame_bitir(ctx)
+    
+    // Çıkış kontrolü
+    eğer input::tus_basildi(input::ESC) ise yap
+        dur
+    son
+son
+
+graphics::context_kapat(ctx)
+
+// ============================================================================
+// ÖRNEK 2: 3D MESH RENDERİNG
+// ============================================================================
+
+kullan graphics
+
+değişken ctx = graphics::context_olustur(1024, 768, "3D Cube", "Vulkan").unwrap()
+
+// Küp mesh'i oluştur
+değişken kup = graphics::mesh_kup(2.0).unwrap()
+
+// Kamera
+değişken kamera = graphics::camera_perspektif(
+    graphics::vec3(0.0, 2.0, 5.0),
+    graphics::vec3(0.0, 0.0, 0.0),
+    60.0,
+    1024.0 / 768.0
+)
+
+// Shader (basit vertex + fragment)
+değişken vertex_shader = "
+    #version 330 core
+    layout(location = 0) in vec3 aPos;
+    layout(location = 1) in vec3 aNormal;
+    layout(location = 2) in vec2 aUV;
+    layout(location = 3) in vec4 aColor;
+    
+    uniform mat4 uModel;
+    uniform mat4 uView;
+    uniform mat4 uProjection;
+    
+    out vec3 FragPos;
+    out vec3 Normal;
+    
+    void main() {
+        FragPos = vec3(uModel * vec4(aPos, 1.0));
+        Normal = mat3(transpose(inverse(uModel))) * aNormal;
+        gl_Position = uProjection * uView * vec4(FragPos, 1.0);
+    }
+"
+
+değişken fragment_shader = "
+    #version 330 core
+    in vec3 FragPos;
+    in vec3 Normal;
+    
+    uniform vec3 uLightPos;
+    uniform vec3 uViewPos;
+    uniform vec3 uColor;
+    
+    out vec4 FragColor;
+    
+    void main() {
+        vec3 norm = normalize(Normal);
+        vec3 lightDir = normalize(uLightPos - FragPos);
+        float diff = max(dot(norm, lightDir), 0.0);
+        vec3 diffuse = diff * uColor;
+        
+        vec3 ambient = 0.2 * uColor;
+        vec3 result = ambient + diffuse;
+        FragColor = vec4(result, 1.0);
+    }
+"
+
+değişken shader = graphics::shader_olustur(vertex_shader, fragment_shader).unwrap()
+
+// Ana döngü
+değişken açı = 0.0
+iken doğru yap
+    graphics::frame_basla(ctx)
+    graphics::ekran_temizle(ctx, graphics::renk_gri())
+    graphics::derinlik_temizle(ctx)
+    
+    // Shader kullan
+    graphics::shader_kullan(shader)
+    
+    // Uniform'ları ayarla
+    değişken model = graphics::mat4_rotate(açı, 0.0, 1.0, 0.0)
+    değişken view = graphics::camera_view_matrix(kamera)
+    değişken projection = graphics::camera_projection_matrix(kamera)
+    
+    graphics::shader_uniform_mat4(shader, "uModel", model)
+    graphics::shader_uniform_mat4(shader, "uView", view)
+    graphics::shader_uniform_mat4(shader, "uProjection", projection)
+    graphics::shader_uniform_vec3(shader, "uLightPos", 5.0, 5.0, 5.0)
+    graphics::shader_uniform_vec3(shader, "uViewPos", 0.0, 2.0, 5.0)
+    graphics::shader_uniform_vec3(shader, "uColor", 0.2, 0.6, 1.0)
+    
+    // Mesh çiz
+    graphics::mesh_ciz(ctx, kup, model)
+    
+    graphics::frame_bitir(ctx)
+    
+    açı = açı + 0.01
+    
+    eğer input::tus_basildi(input::ESC) ise yap
+        dur
+    son
+son
+
+// Temizlik
+graphics::shader_sil(shader)
+graphics::mesh_sil(kup)
+graphics::context_kapat(ctx)
+
+// ============================================================================
+// ÖRNEK 3: TEXTURE MAPPING
+// ============================================================================
+
+kullan graphics
+
+değişken ctx = graphics::context_olustur(800, 600, "Texture Demo").unwrap()
+
+// Texture yükle
+değişken texture = graphics::texture_yukle("textures/brick.png").unwrap()
+
+// Quad mesh
+değişken quad = graphics::mesh_duzlem(4.0, 4.0).unwrap()
+
+// Textured shader
+değişken shader = graphics::shader_yukle("shaders/textured.vs", "shaders/textured.fs").unwrap()
+
+iken doğru yap
+    graphics::frame_basla(ctx)
+    graphics::ekran_temizle(ctx, graphics::renk_siyah())
+    
+    graphics::shader_kullan(shader)
+    graphics::shader_uniform_texture(shader, "uTexture", texture, 0)
+    
+    graphics::mesh_ciz(ctx, quad, graphics::mat4_identity())
+    
+    graphics::frame_bitir(ctx)
+son
+
+graphics::texture_sil(texture)
+graphics::mesh_sil(quad)
+graphics::shader_sil(shader)
+graphics::context_kapat(ctx)
+*/
+
+// ============================================================================
+// GPU RENDERING API - Compute Shaders & GPGPU (Yeni - v1.7)
+// ============================================================================
+
+// Compute shader
+tip ComputeShader = yapı yap
+    handle: tamsayı,
+    work_group_x: tamsayı,
+    work_group_y: tamsayı,
+    work_group_z: tamsayı
+son
+
+// Storage buffer (SSBO - Shader Storage Buffer Object)
+tip StorageBuffer = yapı yap
+    handle: tamsayı,
+    boyut: tamsayı,
+    kullanim: BufferKullanim
+son
+
+// Compute shader oluştur
+fonksiyon compute_shader_olustur(compute_code: yazı) -> Sonuç[ComputeShader, GraphicsHata]
+yap
+    değişken handle = opengl_compute_shader_create(compute_code)
+    
+    eğer handle < 0 ise yap
+        değişken hata = opengl_get_shader_error()
+        dön Hata(GraphicsHata yap
+            mesaj: "Compute shader derleme hatası: " + hata,
+            hata_türü: "shader_compile"
+        son)
+    son
+    
+    dön Başarı(ComputeShader yap
+        handle: handle,
+        work_group_x: 1,
+        work_group_y: 1,
+        work_group_z: 1
+    son)
+son
+
+// Storage buffer oluştur (GPU memory)
+fonksiyon storage_buffer_olustur(boyut: tamsayı, kullanim: BufferKullanim) -> Sonuç[StorageBuffer, GraphicsHata]
+yap
+    değişken handle = opengl_ssbo_create(boyut, kullanim)
+    
+    eğer handle < 0 ise yap
+        dön Hata(GraphicsHata yap
+            mesaj: "Storage buffer oluşturulamadı",
+            hata_türü: "buffer_create"
+        son)
+    son
+    
+    dön Başarılı(StorageBuffer yap
+        handle: handle,
+        boyut: boyut,
+        kullanim: kullanim
+    son)
+son
+
+// Storage buffer'a veri yaz
+fonksiyon storage_buffer_yaz(buffer: StorageBuffer, veri: liste[byte], offset: tamsayı) -> Sonuç[boş, GraphicsHata]
+yap
+    opengl_ssbo_write(buffer.handle, veri, offset, liste_uzunluk(veri))
+    dön Başarılı(boş)
+son
+
+// Storage buffer'dan veri oku
+fonksiyon storage_buffer_oku(buffer: StorageBuffer, boyut: tamsayı, offset: tamsayı) -> Sonuç[liste[byte], GraphicsHata]
+yap
+    değişken veri = opengl_ssbo_read(buffer.handle, offset, boyut)
+    dön Başarılı(veri)
+son
+
+// Compute shader çalıştır (dispatch)
+fonksiyon compute_dispatch(shader: ComputeShader, x: tamsayı, y: tamsayı, z: tamsayı) -> Sonuç[boş, GraphicsHata]
+yap
+    opengl_compute_shader_use(shader.handle)
+    opengl_compute_dispatch(x, y, z)
+    opengl_compute_barrier()  // Wait for completion
+    
+    dön Başarılı(boş)
+son
+
+// Compute shader uniform ayarla
+fonksiyon compute_uniform_int(shader: ComputeShader, isim: yazı, değer: tamsayı) -> boş
+yap
+    opengl_compute_uniform_int(shader.handle, isim, değer)
+son
+
+fonksiyon compute_uniform_float(shader: ComputeShader, isim: yazı, değer: ondalık) -> boş
+yap
+    opengl_compute_uniform_float(shader.handle, isim, değer)
+son
+
+// ============================================================================
+// INSTANCED RENDERING - Batch çizim (Yeni - v1.7)
+// ============================================================================
+
+// Instance buffer (transformation data per instance)
+tip InstanceBuffer = yapı yap
+    handle: tamsayı,
+    instance_sayisi: tamsayı,
+    stride: tamsayı  // Bytes per instance
+son
+
+// Instance buffer oluştur
+fonksiyon instance_buffer_olustur(transformlar: liste[Mat4]) -> Sonuç[InstanceBuffer, GraphicsHata]
+yap
+    değişken handle = opengl_instance_buffer_create(transformlar, liste_uzunluk(transformlar))
+    
+    eğer handle < 0 ise yap
+        dön Hata(GraphicsHata yap
+            mesaj: "Instance buffer oluşturulamadı",
+            hata_türü: "buffer_create"
+        son)
+    son
+    
+    dön Başarılı(InstanceBuffer yap
+        handle: handle,
+        instance_sayisi: liste_uzunluk(transformlar),
+        stride: 64  // Mat4 = 16 floats * 4 bytes = 64 bytes
+    son)
+son
+
+// Instanced draw call
+fonksiyon mesh_instanced_ciz(ctx: GraphicsContext, mesh: Mesh, instance_buffer: InstanceBuffer) -> Sonuç[boş, GraphicsHata]
+yap
+    // Vertex buffer bind
+    native_vertex_buffer_bind(mesh.vertex_buffer.handle)
+    
+    // Instance buffer bind
+    opengl_instance_buffer_bind(instance_buffer.handle)
+    
+    // Draw instanced
+    eğer mesh.index_buffer.bazı_mı() ise yap
+        değişken ib = mesh.index_buffer.unwrap()
+        native_index_buffer_bind(ib.handle)
+        opengl_draw_elements_instanced(
+            mesh.primitive_tipi,
+            ib.index_sayisi,
+            ib.index_tipi,
+            instance_buffer.instance_sayisi
+        )
+    son değilse yap
+        opengl_draw_arrays_instanced(
+            mesh.primitive_tipi,
+            mesh.vertex_buffer.vertex_sayisi,
+            instance_buffer.instance_sayisi
+        )
+    son
+    
+    dön Başarılı(boş)
+son
+
+// ============================================================================
+// POST-PROCESSING EFFECTS (Yeni - v1.7)
+// ============================================================================
+
+// Post-processing efekt türleri
+tip PostEffect = "Bloom" | "Blur" | "SSAO" | "MotionBlur" | "DOF" | "ToneMapping" | "ColorGrading"
+
+// Post-processing pipeline
+tip PostProcessPipeline = yapı yap
+    efektler: liste[PostEffect],
+    framebuffer_a: tamsayı,
+    framebuffer_b: tamsayı,
+    shader_map: eşleme[PostEffect, tamsayı]
+son
+
+// Post-processing pipeline oluştur
+fonksiyon post_process_pipeline_olustur(genişlik: tamsayı, yükseklik: tamsayı, efektler: liste[PostEffect]) -> Sonuç[PostProcessPipeline, GraphicsHata]
+yap
+    // İki framebuffer (ping-pong rendering için)
+    değişken fb_a = native_framebuffer_create(genişlik, yükseklik)
+    değişken fb_b = native_framebuffer_create(genişlik, yükseklik)
+    
+    // Her efekt için shader yükle
+    değişken shader_map = eşleme_oluştur[PostEffect, tamsayı]()
+    
+    her biri efekt içinde efektler yap
+        değişken shader_path = "shaders/post/" + efekt + ".glsl"
+        değişken shader = native_shader_load(shader_path)
+        eşleme_ekle(shader_map, efekt, shader)
+    son
+    
+    dön Başarılı(PostProcessPipeline yap
+        efektler: efektler,
+        framebuffer_a: fb_a,
+        framebuffer_b: fb_b,
+        shader_map: shader_map
+    son)
+son
+
+// Post-processing uygula
+fonksiyon post_process_uygula(pipeline: PostProcessPipeline, source_texture: tamsayı) -> tamsayı
+yap
+    değişken current_tex = source_texture
+    değişken ping_pong = doğru
+    
+    // Her efekti sırayla uygula
+    her biri efekt içinde pipeline.efektler yap
+        değişken shader = eşleme_al(pipeline.shader_map, efekt)
+        değişken target_fb = ping_pong ? pipeline.framebuffer_a : pipeline.framebuffer_b
+        
+        // Framebuffer'a render et
+        native_framebuffer_bind(target_fb)
+        native_shader_use(shader)
+        native_texture_bind(current_tex, 0)
+        opengl_draw_fullscreen_quad()
+        
+        // Sonucu yeni source yap
+        current_tex = native_framebuffer_get_color_texture(target_fb, 0)
+        ping_pong = ping_pong == yanlış
+    son
+    
+    // Final texture dön
+    dön current_tex
+son
+
+// ============================================================================
+// PBR (Physically Based Rendering) MATERIAL (Yeni - v1.7)
+// ============================================================================
+
+// PBR material parametreleri
+tip PbrMaterial = yapı yap
+    albedo: Renk,
+    metallic: ondalık,      // 0.0 = dielectric, 1.0 = metal
+    roughness: ondalık,     // 0.0 = smooth, 1.0 = rough
+    ao: ondalık,            // Ambient occlusion
+    albedo_map: Seçenek[tamsayı],
+    normal_map: Seçenek[tamsayı],
+    metallic_map: Seçenek[tamsayı],
+    roughness_map: Seçenek[tamsayı],
+    ao_map: Seçenek[tamsayı]
+son
+
+// PBR material oluştur
+fonksiyon pbr_material_olustur(albedo: Renk, metallic: ondalık, roughness: ondalık) -> PbrMaterial
+yap
+    dön PbrMaterial yap
+        albedo: albedo,
+        metallic: metallic,
+        roughness: roughness,
+        ao: 1.0,
+        albedo_map: Hiç,
+        normal_map: Hiç,
+        metallic_map: Hiç,
+        roughness_map: Hiç,
+        ao_map: Hiç
+    son
+son
+
+// PBR shader'a material parametrelerini ayarla
+fonksiyon pbr_material_bind(shader: tamsayı, material: PbrMaterial) -> boş
+yap
+    // Base color
+    native_shader_set_uniform_vec3(shader, "uAlbedo", material.albedo.r, material.albedo.g, material.albedo.b)
+    native_shader_set_uniform_float(shader, "uMetallic", material.metallic)
+    native_shader_set_uniform_float(shader, "uRoughness", material.roughness)
+    native_shader_set_uniform_float(shader, "uAO", material.ao)
+    
+    // Texture maps
+    eğer material.albedo_map.bazı_mı() ise yap
+        native_texture_bind(material.albedo_map.unwrap(), 0)
+        native_shader_set_uniform_int(shader, "uAlbedoMap", 0)
+        native_shader_set_uniform_int(shader, "uHasAlbedoMap", 1)
+    son değilse yap
+        native_shader_set_uniform_int(shader, "uHasAlbedoMap", 0)
+    son
+    
+    eğer material.normal_map.bazı_mı() ise yap
+        native_texture_bind(material.normal_map.unwrap(), 1)
+        native_shader_set_uniform_int(shader, "uNormalMap", 1)
+        native_shader_set_uniform_int(shader, "uHasNormalMap", 1)
+    son değilse yap
+        native_shader_set_uniform_int(shader, "uHasNormalMap", 0)
+    son
+    
+    // ... diğer texture maps
+son
+
+// ============================================================================
+// RAY TRACING SUPPORT (Experimental - Vulkan/DXR) (Yeni - v1.7)
+// ============================================================================
+
+// Ray tracing için acceleration structure
+tip AccelerationStructure = yapı yap
+    handle: tamsayı,
+    mesh_sayisi: tamsayı,
+    backend: yazı  // "Vulkan RT", "DXR", "OptiX"
+son
+
+// Bottom-level acceleration structure (BLAS) oluştur
+fonksiyon rt_blas_olustur(mesh: Mesh) -> Sonuç[AccelerationStructure, GraphicsHata]
+yap
+    #eğer feature == "raytracing" ise
+        değişken handle = vulkan_blas_create(mesh.vertex_buffer.handle, mesh.index_buffer.unwrap().handle)
+        
+        eğer handle < 0 ise yap
+            dön Hata(GraphicsHata yap
+                mesaj: "BLAS oluşturulamadı",
+                hata_türü: "raytracing"
+            son)
+        son
+        
+        dön Başarılı(AccelerationStructure yap
+            handle: handle,
+            mesh_sayisi: 1,
+            backend: "Vulkan RT"
+        son)
+    #değilse
+        dön Hata(GraphicsHata yap
+            mesaj: "Ray tracing desteklenmiyor",
+            hata_türü: "not_supported"
+        son)
+    #son
+son
+
+// Top-level acceleration structure (TLAS) oluştur
+fonksiyon rt_tlas_olustur(blas_list: liste[AccelerationStructure], transformlar: liste[Mat4]) -> Sonuç[AccelerationStructure, GraphicsHata]
+yap
+    #eğer feature == "raytracing" ise
+        değişken handles = liste_map(blas_list, fonksiyon(blas) -> blas.handle)
+        değişken handle = vulkan_tlas_create(handles, transformlar)
+        
+        dön Başarılı(AccelerationStructure yap
+            handle: handle,
+            mesh_sayisi: liste_uzunluk(blas_list),
+            backend: "Vulkan RT"
+        son)
+    #değilse
+        dön Hata(GraphicsHata yap mesaj: "Ray tracing desteklenmiyor", hata_türü: "not_supported" son)
+    #son
+son
+
+// Ray tracing pipeline oluştur
+fonksiyon rt_pipeline_olustur(raygen_shader: yazı, miss_shader: yazı, closesthit_shader: yazı) -> Sonuç[tamsayı, GraphicsHata]
+yap
+    #eğer feature == "raytracing" ise
+        dön Başarılı(vulkan_rt_pipeline_create(raygen_shader, miss_shader, closesthit_shader))
+    #değilse
+        dön Hata(GraphicsHata yap mesaj: "Ray tracing desteklenmiyor", hata_türü: "not_supported" son)
+    #son
+son
+
+// Ray tracing render
+fonksiyon rt_trace_rays(pipeline: tamsayı, tlas: AccelerationStructure, genişlik: tamsayı, yükseklik: tamsayı) -> Sonuç[boş, GraphicsHata]
+yap
+    #eğer feature == "raytracing" ise
+        vulkan_trace_rays(pipeline, tlas.handle, genişlik, yükseklik)
+        dön Başarılı(boş)
+    #değilse
+        dön Hata(GraphicsHata yap mesaj: "Ray tracing desteklenmiyor", hata_türü: "not_supported" son)
+    #son
+son
+
+// ============================================================================
+// NATIVE BINDINGS - GPU Rendering (Yeni - v1.7)
+// ============================================================================
+
+// Compute shader bindings
+harici fonksiyon opengl_compute_shader_create(source: yazı) -> tamsayı
+harici fonksiyon opengl_get_shader_error() -> yazı
+harici fonksiyon opengl_ssbo_create(boyut: tamsayı, kullanim: BufferKullanim) -> tamsayı
+harici fonksiyon opengl_ssbo_write(handle: tamsayı, veri: liste[byte], offset: tamsayı, boyut: tamsayı) -> boş
+harici fonksiyon opengl_ssbo_read(handle: tamsayı, offset: tamsayı, boyut: tamsayı) -> liste[byte]
+harici fonksiyon opengl_compute_shader_use(handle: tamsayı) -> boş
+harici fonksiyon opengl_compute_dispatch(x: tamsayı, y: tamsayı, z: tamsayı) -> boş
+harici fonksiyon opengl_compute_barrier() -> boş
+harici fonksiyon opengl_compute_uniform_int(shader: tamsayı, isim: yazı, değer: tamsayı) -> boş
+harici fonksiyon opengl_compute_uniform_float(shader: tamsayı, isim: yazı, değer: ondalık) -> boş
+
+// Instanced rendering bindings
+harici fonksiyon opengl_instance_buffer_create(transforms: liste[Mat4], count: tamsayı) -> tamsayı
+harici fonksiyon opengl_instance_buffer_bind(handle: tamsayı) -> boş
+harici fonksiyon opengl_draw_elements_instanced(primitive: PrimitiveTipi, count: tamsayı, index_type: IndexTipi, instance_count: tamsayı) -> boş
+harici fonksiyon opengl_draw_arrays_instanced(primitive: PrimitiveTipi, vertex_count: tamsayı, instance_count: tamsayı) -> boş
+
+// Post-processing bindings
+harici fonksiyon opengl_draw_fullscreen_quad() -> boş
+
+// PBR bindings
+harici fonksiyon native_shader_set_uniform_vec3(shader: tamsayı, name: yazı, x: ondalık, y: ondalık, z: ondalık) -> boş
+harici fonksiyon native_shader_set_uniform_float(shader: tamsayı, name: yazı, value: ondalık) -> boş
+harici fonksiyon native_shader_set_uniform_int(shader: tamsayı, name: yazı, value: tamsayı) -> boş
+
+// Ray tracing bindings (Vulkan/DXR)
+#eğer feature == "raytracing" ise
+    harici fonksiyon vulkan_blas_create(vertex_buffer: tamsayı, index_buffer: tamsayı) -> tamsayı
+    harici fonksiyon vulkan_tlas_create(blas_handles: liste[tamsayı], transforms: liste[Mat4]) -> tamsayı
+    harici fonksiyon vulkan_rt_pipeline_create(raygen: yazı, miss: yazı, closesthit: yazı) -> tamsayı
+    harici fonksiyon vulkan_trace_rays(pipeline: tamsayı, tlas: tamsayı, width: tamsayı, height: tamsayı) -> boş
+#son
+
+// Hata türü
+tip GraphicsHata = yapı yap
+    mesaj: yazı,
+    hata_türü: yazı  // "shader_compile", "buffer_create", "not_supported", "raytracing"
+son
+
+// Helper fonksiyonlar
+fonksiyon eşleme_oluştur[K, V]() -> eşleme[K, V]
+yap
+    dön hashmap_create()
+son
+
+fonksiyon eşleme_ekle[K, V](map: eşleme[K, V], key: K, value: V) -> boş
+yap
+    hashmap_insert(map, key, value)
+son
+
+fonksiyon eşleme_al[K, V](map: eşleme[K, V], key: K) -> V
+yap
+    dön hashmap_get(map, key)
+son
+
+fonksiyon liste_map[T, U](liste: liste[T], fn: fonksiyon(T) -> U) -> liste[U]
+yap
+    değişken sonuç = list_create()
+    her biri eleman içinde liste yap
+        list_append(sonuç, fn(eleman))
+    son
+    dön sonuç
+son
+
+fonksiyon liste_uzunluk[T](liste: liste[T]) -> tamsayı
+yap
+    değişken sayaç = 0
+    her biri _ içinde liste yap
+        sayaç = sayaç + 1
+    son
+    dön sayaç
+son
+
+son  // modül graphics
+

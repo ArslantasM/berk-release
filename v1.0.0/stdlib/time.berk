@@ -1,0 +1,548 @@
+//! # Time Module
+//!
+//! Advanced time and datetime library.
+//!
+//! Gelişmiş zaman ve tarih kütüphanesi.
+//!
+//! ## Features / Özellikler
+//!
+//! - **DateTime**: Year, month, day, hour, minute, second, nanosecond / Yıl, ay, gün, saat, dakika, saniye
+//! - **Timezone**: UTC, local, IANA timezones / Zaman dilimleri
+//! - **Duration**: Arithmetic, comparison, formatting / Süre işlemleri
+//! - **Instant**: Monotonic clock for timing / Zamanlayıcı
+//! - **Parsing**: RFC 3339, ISO 8601, custom formats / Ayrıştırma
+//! - **Formatting**: strftime, custom formats / Biçimlendirme
+//! - **Timers**: sleep, timeout, interval / Zamanlayıcılar
+//!
+//! ## Example / Örnek
+//!
+//! ```berk
+//! kullan time
+//!
+//! değişken şimdi = time.now()
+//! değişken tarih = time.format(şimdi, "%Y-%m-%d %H:%M:%S")
+//! io.println(tarih)
+//!
+//! time.sleep(1000)  // 1 second / 1 saniye
+//! ```
+//!
+//! Backend: Rust chrono + chrono-tz
+
+modül time
+
+kullan result
+
+// ============================================================================
+// CONSTANTS
+// ============================================================================
+
+sabit SANİYE_MS: tamsayı = 1000
+sabit DAKİKA_SANİYE: tamsayı = 60
+sabit SAAT_DAKİKA: tamsayı = 60
+sabit GÜN_SAAT: tamsayı = 24
+sabit HAFTA_GÜN: tamsayı = 7
+
+sabit SANİYE_MİKRO: tamsayı = 1000000
+sabit SANİYE_NANO: tamsayı = 1000000000
+
+sabit DAKİKA_MS: tamsayı = 60000
+sabit SAAT_MS: tamsayı = 3600000
+sabit GÜN_MS: tamsayı = 86400000
+
+// ============================================================================
+// DATETIME (Main Type)
+// ============================================================================
+
+tip DateTime = yapı yap
+    year: tamsayı,
+    month: tamsayı,        // 1-12
+    day: tamsayı,          // 1-31
+    hour: tamsayı,         // 0-23
+    minute: tamsayı,       // 0-59
+    second: tamsayı,       // 0-59
+    nanosecond: tamsayı,   // 0-999999999
+    timezone: Timezone,
+    timestamp: tamsayı     // Unix timestamp (seconds since epoch)
+son
+
+// ============================================================================
+// TIMEZONE
+// ============================================================================
+
+tip Timezone = yapı yap
+    name: yazı,           // "UTC", "America/New_York", "Europe/Istanbul"
+    offset: tamsayı,      // Seconds from UTC
+    is_dst: mantıksal     // Daylight Saving Time active
+son
+
+// UTC timezone
+fonksiyon utc() -> Timezone
+yap
+    dön Timezone yap
+        name: "UTC",
+        offset: 0,
+        is_dst: yanlış
+    son
+son
+
+// Local timezone
+@native
+fonksiyon local() -> Timezone
+
+// Named timezone (IANA database)
+@native
+fonksiyon timezone(name: yazı) -> Sonuç[Timezone, yazı]
+
+// Istanbul timezone (Europe/Istanbul)
+fonksiyon istanbul() -> Sonuç[Timezone, yazı]
+yap
+    dön timezone("Europe/Istanbul")
+son
+
+// ============================================================================
+// DATETIME CREATION
+// ============================================================================
+
+// Current time (local)
+@native
+fonksiyon now() -> DateTime
+
+// Current time (UTC)
+@native
+fonksiyon now_utc() -> DateTime
+
+// From timestamp (Unix epoch seconds)
+@native
+fonksiyon from_timestamp(timestamp: tamsayı, tz: Timezone) -> DateTime
+
+// From timestamp with milliseconds
+@native
+fonksiyon from_timestamp_ms(timestamp_ms: tamsayı, tz: Timezone) -> DateTime
+
+// From components
+@native
+fonksiyon from_ymd(year: tamsayı, month: tamsayı, day: tamsayı, tz: Timezone) -> Sonuç[DateTime, yazı]
+
+// From components with time
+@native
+fonksiyon from_ymd_hms(year: tamsayı, month: tamsayı, day: tamsayı, 
+                       hour: tamsayı, minute: tamsayı, second: tamsayı, 
+                       tz: Timezone) -> Sonuç[DateTime, yazı]
+
+// ============================================================================
+// DATETIME PARSING
+// ============================================================================
+
+// Parse RFC 3339 format (2023-12-25T14:30:00Z)
+@native
+fonksiyon parse_rfc3339(text: yazı) -> Sonuç[DateTime, yazı]
+
+// Parse ISO 8601 format
+@native
+fonksiyon parse_iso8601(text: yazı) -> Sonuç[DateTime, yazı]
+
+// Parse with custom format (strptime-style)
+@native
+fonksiyon parse(text: yazı, format: yazı, tz: Timezone) -> Sonuç[DateTime, yazı]
+
+// Common format strings:
+// %Y-%m-%d           -> 2023-12-25
+// %Y-%m-%d %H:%M:%S  -> 2023-12-25 14:30:00
+// %d/%m/%Y           -> 25/12/2023
+// %B %d, %Y          -> December 25, 2023
+
+// ============================================================================
+// DATETIME FORMATTING
+// ============================================================================
+
+// Format as RFC 3339
+@native
+fonksiyon to_rfc3339(dt: DateTime) -> yazı
+
+// Format as ISO 8601
+@native
+fonksiyon to_iso8601(dt: DateTime) -> yazı
+
+// Format with custom format (strftime-style)
+@native
+fonksiyon format(dt: DateTime, format_str: yazı) -> yazı
+
+// Common format examples:
+fonksiyon human_readable(dt: DateTime) -> yazı
+yap
+    dön format(dt, "%B %d, %Y at %H:%M:%S")
+    // Example: December 25, 2023 at 14:30:00
+son
+
+fonksiyon short_date(dt: DateTime) -> yazı
+yap
+    dön format(dt, "%d.%m.%Y")  // 25.12.2023
+son
+
+fonksiyon short_datetime(dt: DateTime) -> yazı
+yap
+    dön format(dt, "%d.%m.%Y %H:%M")  // 25.12.2023 14:30
+son
+
+// ============================================================================
+// DURATION (Time Intervals)
+// ============================================================================
+
+tip Duration = yapı yap
+    seconds: tamsayı,
+    nanoseconds: tamsayı
+son
+
+// Create duration from components
+fonksiyon duration_seconds(seconds: tamsayı) -> Duration
+yap
+    dön Duration yap seconds: seconds, nanoseconds: 0 son
+son
+
+fonksiyon duration_minutes(minutes: tamsayı) -> Duration
+yap
+    dön Duration yap seconds: minutes * 60, nanoseconds: 0 son
+son
+
+fonksiyon duration_hours(hours: tamsayı) -> Duration
+yap
+    dön Duration yap seconds: hours * 3600, nanoseconds: 0 son
+son
+
+fonksiyon duration_days(days: tamsayı) -> Duration
+yap
+    dön Duration yap seconds: days * 86400, nanoseconds: 0 son
+son
+
+fonksiyon duration_ms(milliseconds: tamsayı) -> Duration
+yap
+    dön Duration yap 
+        seconds: milliseconds / 1000, 
+        nanoseconds: (milliseconds % 1000) * 1000000 
+    son
+son
+
+// Duration arithmetic
+@native
+fonksiyon duration_add(a: Duration, b: Duration) -> Duration
+
+@native
+fonksiyon duration_sub(a: Duration, b: Duration) -> Duration
+
+@native
+fonksiyon duration_mul(d: Duration, scalar: tamsayı) -> Duration
+
+// Duration comparison
+@native
+fonksiyon duration_gt(a: Duration, b: Duration) -> mantıksal
+
+@native
+fonksiyon duration_lt(a: Duration, b: Duration) -> mantıksal
+
+// Duration to components
+fonksiyon duration_to_seconds(d: Duration) -> ondalık
+yap
+    dön ondalık(d.seconds) + (ondalık(d.nanoseconds) / 1000000000.0)
+son
+
+fonksiyon duration_to_ms(d: Duration) -> tamsayı
+yap
+    dön d.seconds * 1000 + d.nanoseconds / 1000000
+son
+
+// ============================================================================
+// DATETIME ARITHMETIC
+// ============================================================================
+
+// Add duration
+@native
+fonksiyon datetime_add(dt: DateTime, dur: Duration) -> DateTime
+
+// Subtract duration
+@native
+fonksiyon datetime_sub(dt: DateTime, dur: Duration) -> DateTime
+
+// Difference between two datetimes
+@native
+fonksiyon datetime_diff(a: DateTime, b: DateTime) -> Duration
+
+// Add/subtract components
+@native
+fonksiyon add_years(dt: DateTime, years: tamsayı) -> DateTime
+
+@native
+fonksiyon add_months(dt: DateTime, months: tamsayı) -> DateTime
+
+@native
+fonksiyon add_days(dt: DateTime, days: tamsayı) -> DateTime
+
+// ============================================================================
+// DATETIME COMPARISON
+// ============================================================================
+
+// Compare datetimes
+@native
+fonksiyon datetime_eq(a: DateTime, b: DateTime) -> mantıksal
+
+@native
+fonksiyon datetime_gt(a: DateTime, b: DateTime) -> mantıksal
+
+@native
+fonksiyon datetime_lt(a: DateTime, b: DateTime) -> mantıksal
+
+// ============================================================================
+// INSTANT (Monotonic Clock for Timing)
+// ============================================================================
+
+tip Instant = yapı yap
+    nanos: tamsayı  // Nanoseconds since arbitrary epoch
+son
+
+// Get current instant
+@native
+fonksiyon instant_now() -> Instant
+
+// Elapsed time since instant
+@native
+fonksiyon instant_elapsed(start: Instant) -> Duration
+
+// Time between two instants
+@native
+fonksiyon instant_diff(a: Instant, b: Instant) -> Duration
+
+// ============================================================================
+// SLEEP & TIMERS
+// ============================================================================
+
+// Sleep for duration (blocks thread)
+@native
+fonksiyon sleep(dur: Duration) -> boş
+
+// Sleep for milliseconds
+fonksiyon sleep_ms(milliseconds: tamsayı) -> boş
+yap
+    sleep(duration_ms(milliseconds))
+son
+
+// Sleep for seconds
+fonksiyon sleep_secs(seconds: tamsayı) -> boş
+yap
+    sleep(duration_seconds(seconds))
+son
+
+// Sleep until datetime
+@native
+fonksiyon sleep_until(dt: DateTime) -> boş
+
+// Timeout (returns true if completed before timeout)
+@native
+fonksiyon timeout[T](dur: Duration, func: fonksiyon() -> T) -> Seçenek[T]
+
+// ============================================================================
+// CALENDAR CALCULATIONS
+// ============================================================================
+
+// Is leap year
+fonksiyon is_leap_year(year: tamsayı) -> mantıksal
+yap
+    dön (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0)
+son
+
+// Days in month
+fonksiyon days_in_month(year: tamsayı, month: tamsayı) -> tamsayı
+yap
+    eşleşme month yap
+        1 => dön 31,  // January
+        2 => yap
+            eğer is_leap_year(year) yap
+                dön 29
+            son değilse yap
+                dön 28
+            son
+        son,
+        3 => dön 31,  // March
+        4 => dön 30,  // April
+        5 => dön 31,  // May
+        6 => dön 30,  // June
+        7 => dön 31,  // July
+        8 => dön 31,  // August
+        9 => dön 30,  // September
+        10 => dön 31, // October
+        11 => dön 30, // November
+        12 => dön 31, // December
+        _ => dön 30   // Default
+    son
+son
+
+// Day of week (0 = Monday, 6 = Sunday)
+@native
+fonksiyon day_of_week(dt: DateTime) -> tamsayı
+
+// Day of year (1-366)
+@native
+fonksiyon day_of_year(dt: DateTime) -> tamsayı
+
+// Week of year (1-53, ISO 8601)
+@native
+fonksiyon week_of_year(dt: DateTime) -> tamsayı
+
+// ============================================================================
+// TIMEZONE CONVERSIONS
+// ============================================================================
+
+// Convert to timezone
+@native
+fonksiyon to_timezone(dt: DateTime, tz: Timezone) -> DateTime
+
+// Convert to UTC
+fonksiyon to_utc(dt: DateTime) -> DateTime
+yap
+    dön to_timezone(dt, utc())
+son
+
+// Convert to local timezone
+fonksiyon to_local(dt: DateTime) -> DateTime
+yap
+    dön to_timezone(dt, local())
+son
+
+// ============================================================================
+// STOPWATCH (High-Resolution Timing)
+// ============================================================================
+
+tip Stopwatch = yapı yap
+    start: Instant,
+    elapsed: Duration,
+    running: mantıksal
+son
+
+// Create stopwatch
+fonksiyon stopwatch_new() -> Stopwatch
+yap
+    dön Stopwatch yap
+        start: instant_now(),
+        elapsed: duration_seconds(0),
+        running: yanlış
+    son
+son
+
+// Start stopwatch
+fonksiyon stopwatch_start(sw: Stopwatch) -> boş
+yap
+    eğer !sw.running yap
+        sw.start = instant_now()
+        sw.running = doğru
+    son
+son
+
+// Stop stopwatch
+fonksiyon stopwatch_stop(sw: Stopwatch) -> boş
+yap
+    eğer sw.running yap
+        değişken now = instant_now()
+        değişken diff = instant_diff(now, sw.start)
+        sw.elapsed = duration_add(sw.elapsed, diff)
+        sw.running = yanlış
+    son
+son
+
+// Reset stopwatch
+fonksiyon stopwatch_reset(sw: Stopwatch) -> boş
+yap
+    sw.elapsed = duration_seconds(0)
+    sw.running = yanlış
+son
+
+// Get elapsed time
+fonksiyon stopwatch_elapsed(sw: Stopwatch) -> Duration
+yap
+    eğer sw.running yap
+        değişken now = instant_now()
+        değişken diff = instant_diff(now, sw.start)
+        dön duration_add(sw.elapsed, diff)
+    son
+    dön sw.elapsed
+son
+
+// ============================================================================
+// UTILITIES
+// ============================================================================
+
+// Unix epoch (1970-01-01 00:00:00 UTC)
+fonksiyon epoch() -> DateTime
+yap
+    dön from_timestamp(0, utc())
+son
+
+// Current Unix timestamp
+@native
+fonksiyon unix_timestamp() -> tamsayı
+
+// Current timestamp in milliseconds
+@native
+fonksiyon unix_timestamp_ms() -> tamsayı
+
+// Human-readable duration (e.g., "2 hours, 30 minutes")
+@native
+fonksiyon duration_human(dur: Duration) -> yazı
+
+// ============================================================================
+// TURKISH ALIASES
+// ============================================================================
+
+fonksiyon şimdi() -> DateTime
+yap
+    dön now()
+son
+
+fonksiyon şimdi_utc() -> DateTime
+yap
+    dön now_utc()
+son
+
+fonksiyon artık_yıl_mı(yıl: tamsayı) -> mantıksal
+yap
+    dön is_leap_year(yıl)
+son
+
+fonksiyon ay_gün_sayısı(yıl: tamsayı, ay: tamsayı) -> tamsayı
+yap
+    dön days_in_month(yıl, ay)
+son
+
+fonksiyon bekle(süre: Duration) -> boş
+yap
+    sleep(süre)
+son
+
+fonksiyon bekle_ms(milisaniye: tamsayı) -> boş
+yap
+    sleep_ms(milisaniye)
+son
+
+fonksiyon bekle_saniye(saniye: tamsayı) -> boş
+yap
+    sleep_secs(saniye)
+son
+
+fonksiyon süre_saniye(saniye: tamsayı) -> Duration
+yap
+    dön duration_seconds(saniye)
+son
+
+fonksiyon süre_dakika(dakika: tamsayı) -> Duration
+yap
+    dön duration_minutes(dakika)
+son
+
+fonksiyon süre_saat(saat: tamsayı) -> Duration
+yap
+    dön duration_hours(saat)
+son
+
+fonksiyon biçimlendir(zaman: DateTime, format: yazı) -> yazı
+yap
+    dön format(zaman, format)
+son
+
+son  // modül time

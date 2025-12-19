@@ -1,0 +1,480 @@
+//! # Compression Module
+//!
+//! Advanced compression algorithms.
+//!
+//! Gelişmiş sıkıştırma algoritmaları.
+//!
+//! ## Features / Özellikler
+//!
+//! - **GZIP**: .gz compression/decompression / Sıkıştırma/açma
+//! - **ZLIB**: Deflate/inflate / Deflate/inflate
+//! - **ZIP**: Archive read/write / Arşiv okuma/yazma
+//! - **LZ4**: Ultra-fast compression / Çok hızlı
+//! - **Zstandard**: Modern, high ratio / Modern, yüksek oran
+//! - **Brotli**: Web compression / Web sıkıştırma
+//! - **Snappy**: Google's fast compressor / Google hızlı
+//! - **TAR**: Unix tarballs / TAR arşivleri
+//! - **Streaming**: Large file support / Büyük dosya desteği
+//!
+//! ## Example / Örnek
+//!
+//! ```berk
+//! kullan compression
+//!
+//! değişken data = "Tekrar eden veri..."
+//! değişken compressed = compression.gzip_compress(data)
+//! değişken decompressed = compression.gzip_decompress(compressed)
+//! ```
+//!
+//! Backend: Rust flate2 + zstd + lz4
+
+modül compression
+
+kullan result
+kullan io
+kullan fs
+
+// ============================================================================
+// GZIP COMPRESSION
+// ============================================================================
+
+tip CompressionLevel = "Fastest" | "Fast" | "Default" | "Best"
+
+// Compress data with GZIP
+@native
+fonksiyon gzip_compress(data: liste[bayt], level: CompressionLevel) -> Sonuç[liste[bayt], yazı]
+
+// Decompress GZIP data
+@native
+fonksiyon gzip_decompress(data: liste[bayt]) -> Sonuç[liste[bayt], yazı]
+
+// Compress file to .gz
+@native
+fonksiyon gzip_compress_file(input_path: yazı, output_path: yazı, level: CompressionLevel) -> Sonuç[boş, yazı]
+
+// Decompress .gz file
+@native
+fonksiyon gzip_decompress_file(input_path: yazı, output_path: yazı) -> Sonuç[boş, yazı]
+
+// ============================================================================
+// ZLIB (DEFLATE/INFLATE)
+// ============================================================================
+
+// Compress with ZLIB
+@native
+fonksiyon zlib_compress(data: liste[bayt], level: CompressionLevel) -> Sonuç[liste[bayt], yazı]
+
+// Decompress ZLIB
+@native
+fonksiyon zlib_decompress(data: liste[bayt]) -> Sonuç[liste[bayt], yazı]
+
+// Raw DEFLATE (no zlib wrapper)
+@native
+fonksiyon deflate(data: liste[bayt], level: CompressionLevel) -> Sonuç[liste[bayt], yazı]
+
+// Raw INFLATE
+@native
+fonksiyon inflate(data: liste[bayt]) -> Sonuç[liste[bayt], yazı]
+
+// ============================================================================
+// ZIP ARCHIVES
+// ============================================================================
+
+tip ZipArchive = yapı yap
+    handle: tamsayı,
+    path: yazı,
+    entries: liste[ZipEntry]
+son
+
+tip ZipEntry = yapı yap
+    name: yazı,
+    size: tamsayı,              // Uncompressed size
+    compressed_size: tamsayı,   // Compressed size
+    is_directory: mantıksal,
+    modified_time: tamsayı,     // Unix timestamp
+    compression_method: CompressionMethod
+son
+
+tip CompressionMethod = "Stored" | "Deflated" | "Bzip2" | "Zstd"
+
+// Open ZIP archive for reading
+@native
+fonksiyon zip_open(path: yazı) -> Sonuç[ZipArchive, yazı]
+
+// Create new ZIP archive for writing
+@native
+fonksiyon zip_create(path: yazı) -> Sonuç[ZipArchive, yazı]
+
+// List entries in ZIP
+fonksiyon zip_entries(archive: ZipArchive) -> liste[ZipEntry]
+yap
+    dön archive.entries
+son
+
+// Extract specific file from ZIP
+@native
+fonksiyon zip_extract_file(archive: ZipArchive, entry_name: yazı, output_path: yazı) -> Sonuç[boş, yazı]
+
+// Extract all files from ZIP
+@native
+fonksiyon zip_extract_all(archive: ZipArchive, output_dir: yazı) -> Sonuç[boş, yazı]
+
+// Read file from ZIP to memory
+@native
+fonksiyon zip_read_file(archive: ZipArchive, entry_name: yazı) -> Sonuç[liste[bayt], yazı]
+
+// Add file to ZIP
+@native
+fonksiyon zip_add_file(archive: ZipArchive, file_path: yazı, archive_name: yazı, level: CompressionLevel) -> Sonuç[boş, yazı]
+
+// Add data to ZIP (from memory)
+@native
+fonksiyon zip_add_data(archive: ZipArchive, data: liste[bayt], archive_name: yazı, level: CompressionLevel) -> Sonuç[boş, yazı]
+
+// Add directory to ZIP (recursive)
+@native
+fonksiyon zip_add_directory(archive: ZipArchive, dir_path: yazı, archive_name: yazı) -> Sonuç[boş, yazı]
+
+// Close ZIP archive
+@native
+fonksiyon zip_close(archive: ZipArchive) -> Sonuç[boş, yazı]
+
+// ============================================================================
+// ZIP UTILITIES
+// ============================================================================
+
+// Create ZIP from directory (one-shot)
+fonksiyon zip_directory(dir_path: yazı, output_path: yazı) -> Sonuç[boş, yazı]
+yap
+    değişken archive = zip_create(output_path)?
+    zip_add_directory(archive, dir_path, "")?
+    zip_close(archive)?
+    dön Tamam(boş)
+son
+
+// Extract ZIP (one-shot)
+fonksiyon unzip(zip_path: yazı, output_dir: yazı) -> Sonuç[boş, yazı]
+yap
+    değişken archive = zip_open(zip_path)?
+    zip_extract_all(archive, output_dir)?
+    zip_close(archive)?
+    dön Tamam(boş)
+son
+
+// Get compression ratio
+fonksiyon zip_entry_ratio(entry: ZipEntry) -> ondalık
+yap
+    eğer entry.size == 0 yap
+        dön 0.0
+    son
+    dön (ondalık(entry.compressed_size) / ondalık(entry.size)) * 100.0
+son
+
+// ============================================================================
+// LZ4 COMPRESSION (Ultra-Fast)
+// ============================================================================
+
+// Compress with LZ4
+@native
+fonksiyon lz4_compress(data: liste[bayt]) -> Sonuç[liste[bayt], yazı]
+
+// Decompress LZ4
+@native
+fonksiyon lz4_decompress(data: liste[bayt], original_size: tamsayı) -> Sonuç[liste[bayt], yazı]
+
+// Compress file with LZ4
+@native
+fonksiyon lz4_compress_file(input_path: yazı, output_path: yazı) -> Sonuç[boş, yazı]
+
+// Decompress LZ4 file
+@native
+fonksiyon lz4_decompress_file(input_path: yazı, output_path: yazı) -> Sonuç[boş, yazı]
+
+// LZ4 High Compression (slower, better ratio)
+@native
+fonksiyon lz4_compress_hc(data: liste[bayt], level: tamsayı) -> Sonuç[liste[bayt], yazı]  // level: 1-12
+
+// ============================================================================
+// ZSTANDARD (Modern, Fast, High Ratio)
+// ============================================================================
+
+// Compress with Zstandard
+@native
+fonksiyon zstd_compress(data: liste[bayt], level: tamsayı) -> Sonuç[liste[bayt], yazı]  // level: 1-22
+
+// Decompress Zstandard
+@native
+fonksiyon zstd_decompress(data: liste[bayt]) -> Sonuç[liste[bayt], yazı]
+
+// Compress file with Zstandard
+@native
+fonksiyon zstd_compress_file(input_path: yazı, output_path: yazı, level: tamsayı) -> Sonuç[boş, yazı]
+
+// Decompress Zstandard file
+@native
+fonksiyon zstd_decompress_file(input_path: yazı, output_path: yazı) -> Sonuç[boş, yazı]
+
+// Zstandard with dictionary (better compression for small files)
+@native
+fonksiyon zstd_compress_with_dict(data: liste[bayt], dict: liste[bayt], level: tamsayı) -> Sonuç[liste[bayt], yazı]
+
+@native
+fonksiyon zstd_decompress_with_dict(data: liste[bayt], dict: liste[bayt]) -> Sonuç[liste[bayt], yazı]
+
+// Train dictionary from samples
+@native
+fonksiyon zstd_train_dictionary(samples: liste[liste[bayt]], dict_size: tamsayı) -> Sonuç[liste[bayt], yazı]
+
+// ============================================================================
+// BROTLI (Web Compression)
+// ============================================================================
+
+// Compress with Brotli
+@native
+fonksiyon brotli_compress(data: liste[bayt], quality: tamsayı) -> Sonuç[liste[bayt], yazı]  // quality: 0-11
+
+// Decompress Brotli
+@native
+fonksiyon brotli_decompress(data: liste[bayt]) -> Sonuç[liste[bayt], yazı]
+
+// Compress file with Brotli
+@native
+fonksiyon brotli_compress_file(input_path: yazı, output_path: yazı, quality: tamsayı) -> Sonuç[boş, yazı]
+
+// Decompress Brotli file
+@native
+fonksiyon brotli_decompress_file(input_path: yazı, output_path: yazı) -> Sonuç[boş, yazı]
+
+// ============================================================================
+// SNAPPY (Google's Fast Compressor)
+// ============================================================================
+
+// Compress with Snappy
+@native
+fonksiyon snappy_compress(data: liste[bayt]) -> Sonuç[liste[bayt], yazı]
+
+// Decompress Snappy
+@native
+fonksiyon snappy_decompress(data: liste[bayt]) -> Sonuç[liste[bayt], yazı]
+
+// ============================================================================
+// TAR ARCHIVES (Unix Tarball)
+// ============================================================================
+
+tip TarArchive = yapı yap
+    handle: tamsayı,
+    path: yazı,
+    entries: liste[TarEntry]
+son
+
+tip TarEntry = yapı yap
+    name: yazı,
+    size: tamsayı,
+    is_directory: mantıksal,
+    is_symlink: mantıksal,
+    modified_time: tamsayı,
+    mode: tamsayı,           // Unix permissions
+    owner: yazı,
+    group: yazı
+son
+
+// Open TAR archive for reading
+@native
+fonksiyon tar_open(path: yazı) -> Sonuç[TarArchive, yazı]
+
+// Create new TAR archive
+@native
+fonksiyon tar_create(path: yazı) -> Sonuç[TarArchive, yazı]
+
+// List entries in TAR
+fonksiyon tar_entries(archive: TarArchive) -> liste[TarEntry]
+yap
+    dön archive.entries
+son
+
+// Extract TAR file
+@native
+fonksiyon tar_extract_file(archive: TarArchive, entry_name: yazı, output_path: yazı) -> Sonuç[boş, yazı]
+
+// Extract all from TAR
+@native
+fonksiyon tar_extract_all(archive: TarArchive, output_dir: yazı) -> Sonuç[boş, yazı]
+
+// Add file to TAR
+@native
+fonksiyon tar_add_file(archive: TarArchive, file_path: yazı, archive_name: yazı) -> Sonuç[boş, yazı]
+
+// Add directory to TAR (recursive)
+@native
+fonksiyon tar_add_directory(archive: TarArchive, dir_path: yazı, archive_name: yazı) -> Sonuç[boş, yazı]
+
+// Close TAR archive
+@native
+fonksiyon tar_close(archive: TarArchive) -> Sonuç[boş, yazı]
+
+// ============================================================================
+// TAR.GZ (Common Combination)
+// ============================================================================
+
+// Create TAR.GZ archive
+fonksiyon tar_gz_create(dir_path: yazı, output_path: yazı) -> Sonuç[boş, yazı]
+yap
+    // Create TAR in memory, then GZIP compress
+    değişken tar_path = string::format("{}.tmp.tar", [output_path])
+    
+    değişken tar = tar_create(tar_path)?
+    tar_add_directory(tar, dir_path, "")?
+    tar_close(tar)?
+    
+    gzip_compress_file(tar_path, output_path, "Default")?
+    fs::remove_file(tar_path)?
+    
+    dön Tamam(boş)
+son
+
+// Extract TAR.GZ archive
+fonksiyon tar_gz_extract(tar_gz_path: yazı, output_dir: yazı) -> Sonuç[boş, yazı]
+yap
+    değişken tar_path = string::format("{}.tmp.tar", [tar_gz_path])
+    
+    gzip_decompress_file(tar_gz_path, tar_path)?
+    
+    değişken tar = tar_open(tar_path)?
+    tar_extract_all(tar, output_dir)?
+    tar_close(tar)?
+    
+    fs::remove_file(tar_path)?
+    
+    dön Tamam(boş)
+son
+
+// ============================================================================
+// STREAMING COMPRESSION (Large Files)
+// ============================================================================
+
+tip CompressStream = yapı yap
+    handle: tamsayı,
+    algorithm: Algorithm
+son
+
+tip Algorithm = "Gzip" | "Zlib" | "Zstd" | "Lz4" | "Brotli"
+
+// Create compress stream
+@native
+fonksiyon compress_stream_new(algorithm: Algorithm, level: CompressionLevel) -> CompressStream
+
+// Write data to stream
+@native
+fonksiyon compress_stream_write(stream: CompressStream, data: liste[bayt]) -> Sonuç[liste[bayt], yazı]
+
+// Finish compression
+@native
+fonksiyon compress_stream_finish(stream: CompressStream) -> Sonuç[liste[bayt], yazı]
+
+// Create decompress stream
+@native
+fonksiyon decompress_stream_new(algorithm: Algorithm) -> CompressStream
+
+// Read/decompress data from stream
+@native
+fonksiyon decompress_stream_read(stream: CompressStream, data: liste[bayt]) -> Sonuç[liste[bayt], yazı]
+
+// ============================================================================
+// COMPRESSION BENCHMARKING
+// ============================================================================
+
+tip CompressionStats = yapı yap
+    algorithm: yazı,
+    original_size: tamsayı,
+    compressed_size: tamsayı,
+    compression_ratio: ondalık,
+    compression_time_ms: tamsayı,
+    decompression_time_ms: tamsayı
+son
+
+// Benchmark compression algorithms
+@native
+fonksiyon benchmark_compression(data: liste[bayt]) -> liste[CompressionStats]
+
+// Compare algorithms
+fonksiyon compare_algorithms(data: liste[bayt]) -> boş
+yap
+    değişken stats = benchmark_compression(data)
+    
+    io::println("Compression Benchmark:")
+    io::println(string::format("Original size: {} bytes", [liste_al(stats, 0).original_size]))
+    io::println("")
+    
+    için stat içinde stats yap
+        io::println(string::format("{}: {} bytes ({:.2f}%), {} ms compress, {} ms decompress",
+            [stat.algorithm, stat.compressed_size, stat.compression_ratio, 
+             stat.compression_time_ms, stat.decompression_time_ms]))
+    son
+son
+
+// ============================================================================
+// UTILITIES
+// ============================================================================
+
+// Calculate compression ratio
+fonksiyon compression_ratio(original_size: tamsayı, compressed_size: tamsayı) -> ondalık
+yap
+    eğer original_size == 0 yap
+        dön 0.0
+    son
+    dön (ondalık(compressed_size) / ondalık(original_size)) * 100.0
+son
+
+// Detect compression format from file header (magic bytes)
+@native
+fonksiyon detect_format(path: yazı) -> Seçenek[Algorithm]
+
+// Auto-decompress (detect format and decompress)
+@native
+fonksiyon auto_decompress(input_path: yazı, output_path: yazı) -> Sonuç[boş, yazı]
+
+// ============================================================================
+// TURKISH ALIASES
+// ============================================================================
+
+fonksiyon gzip_sıkıştır(veri: liste[bayt], seviye: CompressionLevel) -> Sonuç[liste[bayt], yazı]
+yap
+    dön gzip_compress(veri, seviye)
+son
+
+fonksiyon gzip_aç(veri: liste[bayt]) -> Sonuç[liste[bayt], yazı]
+yap
+    dön gzip_decompress(veri)
+son
+
+fonksiyon zip_oluştur(yol: yazı) -> Sonuç[ZipArchive, yazı]
+yap
+    dön zip_create(yol)
+son
+
+fonksiyon zip_dosya_ekle(arşiv: ZipArchive, dosya_yolu: yazı, arşiv_adı: yazı, seviye: CompressionLevel) -> Sonuç[boş, yazı]
+yap
+    dön zip_add_file(arşiv, dosya_yolu, arşiv_adı, seviye)
+son
+
+fonksiyon zip_kapat(arşiv: ZipArchive) -> Sonuç[boş, yazı]
+yap
+    dön zip_close(arşiv)
+son
+
+fonksiyon zip_çıkart(zip_yolu: yazı, çıktı_dizini: yazı) -> Sonuç[boş, yazı]
+yap
+    dön unzip(zip_yolu, çıktı_dizini)
+son
+
+fonksiyon zstd_sıkıştır(veri: liste[bayt], seviye: tamsayı) -> Sonuç[liste[bayt], yazı]
+yap
+    dön zstd_compress(veri, seviye)
+son
+
+fonksiyon zstd_aç(veri: liste[bayt]) -> Sonuç[liste[bayt], yazı]
+yap
+    dön zstd_decompress(veri)
+son
+
+son  // modül compression

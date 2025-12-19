@@ -1,0 +1,255 @@
+// stdlib/embedded/platforms/riscv_fe310/interrupt.berk
+// SiFive FE310 Interrupt Support (PLIC - Platform Level Interrupt Controller)
+
+// PLIC base address and registers
+sabit PLIC_BASE: u32 = 0x0C000000
+
+// PLIC register offsets
+sabit PLIC_PRIORITY_BASE: u32 = 0x0000       // Interrupt priorities (4 bytes per source)
+sabit PLIC_PENDING_BASE: u32 = 0x1000        // Interrupt pending bits
+sabit PLIC_ENABLE_BASE: u32 = 0x2000         // Interrupt enables (per context)
+sabit PLIC_THRESHOLD_BASE: u32 = 0x200000    // Priority threshold (per context)
+sabit PLIC_CLAIM_BASE: u32 = 0x200004        // Claim/complete (per context)
+
+// Interrupt sources (FE310 specific)
+açık sabit INT_RESERVED: u8 = 0
+açık sabit INT_WATCHDOG: u8 = 1
+açık sabit INT_RTC: u8 = 2
+açık sabit INT_UART0: u8 = 3
+açık sabit INT_UART1: u8 = 4
+açık sabit INT_QSPI0: u8 = 5
+açık sabit INT_QSPI1: u8 = 6
+açık sabit INT_QSPI2: u8 = 7
+açık sabit INT_GPIO0: u8 = 8
+açık sabit INT_GPIO1: u8 = 9
+açık sabit INT_GPIO2: u8 = 10
+açık sabit INT_GPIO3: u8 = 11
+açık sabit INT_GPIO4: u8 = 12
+açık sabit INT_GPIO5: u8 = 13
+açık sabit INT_GPIO6: u8 = 14
+açık sabit INT_GPIO7: u8 = 15
+açık sabit INT_GPIO8: u8 = 16
+açık sabit INT_GPIO9: u8 = 17
+açık sabit INT_GPIO10: u8 = 18
+açık sabit INT_GPIO11: u8 = 19
+açık sabit INT_GPIO12: u8 = 20
+açık sabit INT_GPIO13: u8 = 21
+açık sabit INT_GPIO14: u8 = 22
+açık sabit INT_GPIO15: u8 = 23
+açık sabit INT_GPIO16: u8 = 24
+açık sabit INT_GPIO17: u8 = 25
+açık sabit INT_GPIO18: u8 = 26
+açık sabit INT_GPIO19: u8 = 27
+açık sabit INT_GPIO20: u8 = 28
+açık sabit INT_GPIO21: u8 = 29
+açık sabit INT_GPIO22: u8 = 30
+açık sabit INT_GPIO23: u8 = 31
+açık sabit INT_GPIO24: u8 = 32
+açık sabit INT_GPIO25: u8 = 33
+açık sabit INT_GPIO26: u8 = 34
+açık sabit INT_GPIO27: u8 = 35
+açık sabit INT_GPIO28: u8 = 36
+açık sabit INT_GPIO29: u8 = 37
+açık sabit INT_GPIO30: u8 = 38
+açık sabit INT_GPIO31: u8 = 39
+açık sabit INT_PWM0CMP0: u8 = 40
+açık sabit INT_PWM0CMP1: u8 = 41
+açık sabit INT_PWM0CMP2: u8 = 42
+açık sabit INT_PWM0CMP3: u8 = 43
+açık sabit INT_PWM1CMP0: u8 = 44
+açık sabit INT_PWM1CMP1: u8 = 45
+açık sabit INT_PWM1CMP2: u8 = 46
+açık sabit INT_PWM1CMP3: u8 = 47
+açık sabit INT_PWM2CMP0: u8 = 48
+açık sabit INT_PWM2CMP1: u8 = 49
+açık sabit INT_PWM2CMP2: u8 = 50
+açık sabit INT_PWM2CMP3: u8 = 51
+açık sabit INT_I2C0: u8 = 52
+
+harici "C" yap
+    fonksiyon volatile_read_u32(addr: *sabit u32) -> u32
+    fonksiyon volatile_write_u32(addr: *değiştir u32, value: u32)
+    
+    // RISC-V CSR operations
+    fonksiyon read_mstatus() -> u64
+    fonksiyon write_mstatus(value: u64)
+    fonksiyon read_mie() -> u64
+    fonksiyon write_mie(value: u64)
+    fonksiyon read_mip() -> u64
+    fonksiyon set_mie_bit(bit: u32)
+    fonksiyon clear_mie_bit(bit: u32)
+son
+
+// CSR MIE (Machine Interrupt Enable) bits
+sabit MIE_MSIE: u64 = 1 << 3   // Machine software interrupt enable
+sabit MIE_MTIE: u64 = 1 << 7   // Machine timer interrupt enable
+sabit MIE_MEIE: u64 = 1 << 11  // Machine external interrupt enable
+
+// CSR MIP (Machine Interrupt Pending) bits
+sabit MIP_MSIP: u64 = 1 << 3   // Machine software interrupt pending
+sabit MIP_MTIP: u64 = 1 << 7   // Machine timer interrupt pending
+sabit MIP_MEIP: u64 = 1 << 11  // Machine external interrupt pending
+
+// MSTATUS bits
+sabit MSTATUS_MIE: u64 = 1 << 3  // Global interrupt enable
+
+// Interrupt context (0 for machine mode on single-core FE310)
+sabit INTERRUPT_CONTEXT: u32 = 0
+
+fonksiyon plic_read_reg(offset: u32) -> u32 yap
+    değişken addr = (PLIC_BASE + offset) olarak *sabit u32
+    dön volatile_read_u32(addr)
+son
+
+fonksiyon plic_write_reg(offset: u32, value: u32) yap
+    değişken addr = (PLIC_BASE + offset) olarak *değiştir u32
+    volatile_write_u32(addr, value)
+son
+
+// Enable global interrupts
+açık fonksiyon enable_interrupts() yap
+    değişken mstatus = read_mstatus()
+    write_mstatus(mstatus | MSTATUS_MIE)
+son
+
+// Disable global interrupts
+açık fonksiyon disable_interrupts() yap
+    değişken mstatus = read_mstatus()
+    write_mstatus(mstatus & !MSTATUS_MIE)
+son
+
+// Enable specific interrupt source in PLIC
+açık fonksiyon enable_interrupt(source: u8) yap
+    // Enable in PLIC
+    değişken word_offset = (source / 32) * 4
+    değişken bit_offset = source % 32
+    
+    değişken enable_addr = PLIC_ENABLE_BASE + (INTERRUPT_CONTEXT * 0x80) + word_offset
+    değişken current = plic_read_reg(enable_addr)
+    plic_write_reg(enable_addr, current | (1 << bit_offset))
+    
+    // Enable machine external interrupts
+    set_mie_bit(11)  // MEIE bit
+son
+
+// Disable specific interrupt source in PLIC
+açık fonksiyon disable_interrupt(source: u8) yap
+    değişken word_offset = (source / 32) * 4
+    değişken bit_offset = source % 32
+    
+    değişken enable_addr = PLIC_ENABLE_BASE + (INTERRUPT_CONTEXT * 0x80) + word_offset
+    değişken current = plic_read_reg(enable_addr)
+    plic_write_reg(enable_addr, current & !(1 << bit_offset))
+son
+
+// Set interrupt priority (0-7, 0 = disabled, 7 = highest)
+açık fonksiyon set_interrupt_priority(source: u8, priority: u8) yap
+    eğer priority > 7 yap
+        dön  // Invalid priority
+    son
+    
+    değişken priority_addr = PLIC_PRIORITY_BASE + (source olarak u32 * 4)
+    plic_write_reg(priority_addr, priority olarak u32)
+son
+
+// Get interrupt priority
+açık fonksiyon get_interrupt_priority(source: u8) -> u8 yap
+    değişken priority_addr = PLIC_PRIORITY_BASE + (source olarak u32 * 4)
+    dön plic_read_reg(priority_addr) olarak u8
+son
+
+// Set priority threshold (interrupts below this are masked)
+açık fonksiyon set_priority_threshold(threshold: u8) yap
+    değişken threshold_addr = PLIC_THRESHOLD_BASE + (INTERRUPT_CONTEXT * 0x1000)
+    plic_write_reg(threshold_addr, threshold olarak u32)
+son
+
+// Claim pending interrupt (call in ISR)
+açık fonksiyon claim_interrupt() -> u8 yap
+    değişken claim_addr = PLIC_CLAIM_BASE + (INTERRUPT_CONTEXT * 0x1000)
+    dön plic_read_reg(claim_addr) olarak u8
+son
+
+// Complete interrupt (call after handling)
+açık fonksiyon complete_interrupt(source: u8) yap
+    değişken claim_addr = PLIC_CLAIM_BASE + (INTERRUPT_CONTEXT * 0x1000)
+    plic_write_reg(claim_addr, source olarak u32)
+son
+
+// Check if interrupt is pending
+açık fonksiyon is_interrupt_pending(source: u8) -> bool yap
+    değişken word_offset = (source / 32) * 4
+    değişken bit_offset = source % 32
+    
+    değişken pending_addr = PLIC_PENDING_BASE + word_offset
+    değişken pending = plic_read_reg(pending_addr)
+    
+    dön (pending & (1 << bit_offset)) != 0
+son
+
+// Critical section helper
+açık fonksiyon with_interrupts_disabled<F, R>(f: F) -> R
+doğal yerde F: FnOnce() -> R yap
+    değişken was_enabled = (read_mstatus() & MSTATUS_MIE) != 0
+    
+    disable_interrupts()
+    değişken result = f()
+    
+    eğer was_enabled yap
+        enable_interrupts()
+    son
+    
+    dön result
+son
+
+// Interrupt handler type
+açık tip InterruptHandler = fn()
+
+// Simple interrupt vector table (stored in BSS)
+değişken mut INTERRUPT_HANDLERS: [Seçenek<InterruptHandler>; 53] = [Hiçbiri; 53]
+
+// Register interrupt handler
+açık fonksiyon register_handler(source: u8, handler: InterruptHandler) yap
+    eğer source < 53 yap
+        INTERRUPT_HANDLERS[source olarak usize] = Bazı(handler)
+    son
+son
+
+// Unregister interrupt handler
+açık fonksiyon unregister_handler(source: u8) yap
+    eğer source < 53 yap
+        INTERRUPT_HANDLERS[source olarak usize] = Hiçbiri
+    son
+son
+
+// Main interrupt dispatcher (called from trap handler)
+#[no_mangle]
+açık harici "C" fonksiyon handle_external_interrupt() yap
+    // Claim the interrupt
+    değişken source = claim_interrupt()
+    
+    // Call registered handler if exists
+    eğer source < 53 yap
+        eğer let Bazı(handler) = INTERRUPT_HANDLERS[source olarak usize] yap
+            handler()
+        son
+    son
+    
+    // Complete the interrupt
+    complete_interrupt(source)
+son
+
+// Initialize PLIC
+açık fonksiyon init_plic() yap
+    // Set threshold to 0 (accept all priorities)
+    set_priority_threshold(0)
+    
+    // Disable all interrupts initially
+    için source içinde 0..53 yap
+        disable_interrupt(source)
+        set_interrupt_priority(source, 0)
+    son
+    
+    // Enable machine external interrupts in mie
+    set_mie_bit(11)
+son

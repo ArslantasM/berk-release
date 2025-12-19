@@ -1,0 +1,295 @@
+// stdlib/embedded/platforms/riscv_fe310/i2c.berk
+// SiFive FE310 I2C Implementation
+
+kullan "embedded/bal/i2c" olarak I2C_BAL
+
+// FE310 has 1 I2C controller
+sabit I2C0_BASE: u32 = 0x10016000
+
+// I2C register offsets
+sabit I2C_PRESCALE_LOW: u32 = 0x00   // Clock prescale low byte
+sabit I2C_PRESCALE_HIGH: u32 = 0x04  // Clock prescale high byte
+sabit I2C_CONTROL: u32 = 0x08        // Control register
+sabit I2C_DATA: u32 = 0x0C           // Transmit/receive data
+sabit I2C_CMD_STATUS: u32 = 0x10     // Command/status register
+
+// I2C control register bits
+sabit I2C_CONTROL_EN: u32 = 0x80     // I2C core enable
+sabit I2C_CONTROL_IE: u32 = 0x40     // Interrupt enable
+
+// I2C command register bits
+sabit I2C_CMD_START: u32 = 0x80      // Generate START condition
+sabit I2C_CMD_STOP: u32 = 0x40       // Generate STOP condition
+sabit I2C_CMD_READ: u32 = 0x20       // Read from slave
+sabit I2C_CMD_WRITE: u32 = 0x10      // Write to slave
+sabit I2C_CMD_ACK: u32 = 0x08        // ACK received byte
+sabit I2C_CMD_IACK: u32 = 0x01       // Interrupt acknowledge
+
+// I2C status register bits
+sabit I2C_STATUS_RXACK: u32 = 0x80   // Received ACK from slave
+sabit I2C_STATUS_BUSY: u32 = 0x40    // I2C bus busy
+sabit I2C_STATUS_AL: u32 = 0x20      // Arbitration lost
+sabit I2C_STATUS_TIP: u32 = 0x02     // Transfer in progress
+sabit I2C_STATUS_IF: u32 = 0x01      // Interrupt flag
+
+// Default I2C clock
+sabit I2C_CLOCK_HZ: u32 = 16000000   // 16 MHz peripheral clock
+
+// Common I2C speeds
+açık sabit I2C_SPEED_STANDARD: u32 = 100000    // 100 kHz
+açık sabit I2C_SPEED_FAST: u32 = 400000         // 400 kHz
+açık sabit I2C_SPEED_FAST_PLUS: u32 = 1000000  // 1 MHz
+
+harici "C" yap
+    fonksiyon volatile_read_u32(addr: *sabit u32) -> u32
+    fonksiyon volatile_write_u32(addr: *değiştir u32, value: u32)
+son
+
+fonksiyon i2c_read_reg(offset: u32) -> u32 yap
+    değişken addr = (I2C0_BASE + offset) olarak *sabit u32
+    dön volatile_read_u32(addr)
+son
+
+fonksiyon i2c_write_reg(offset: u32, value: u32) yap
+    değişken addr = (I2C0_BASE + offset) olarak *değiştir u32
+    volatile_write_u32(addr, value)
+son
+
+fonksiyon i2c_wait_tip() yap
+    döngü yap
+        değişken status = i2c_read_reg(I2C_CMD_STATUS)
+        eğer (status & I2C_STATUS_TIP) == 0 yap
+            kır
+        son
+    son
+son
+
+açık enum I2cError yap
+    NACK,           // No acknowledge from slave
+    TIMEOUT,        // Operation timeout
+    ARBITRATION,    // Arbitration lost
+    BUS_BUSY,       // Bus busy
+son
+
+yapı FE310_I2C_HAL yap
+    frequency: u32,
+    initialized: bool,
+son
+
+uygula FE310_I2C_HAL yap
+    açık fonksiyon yeni(frequency: u32) -> FE310_I2C_HAL yap
+        // Disable I2C core
+        i2c_write_reg(I2C_CONTROL, 0)
+        
+        // Calculate prescaler
+        // prescale = (I2C_CLOCK_HZ / (5 * frequency)) - 1
+        değişken prescale = (I2C_CLOCK_HZ / (5 * frequency)) - 1
+        
+        // Set prescaler
+        i2c_write_reg(I2C_PRESCALE_LOW, prescale & 0xFF)
+        i2c_write_reg(I2C_PRESCALE_HIGH, (prescale >> 8) & 0xFF)
+        
+        // Enable I2C core
+        i2c_write_reg(I2C_CONTROL, I2C_CONTROL_EN)
+        
+        dön FE310_I2C_HAL yap
+            frequency: frequency,
+            initialized: doğru,
+        son
+    son
+    
+    açık fonksiyon write_to(
+        &kendim,
+        slave_addr: u8,
+        data: &[u8]
+    ) -> Sonuç<(), I2cError> yap
+        // Check bus status
+        değişken status = i2c_read_reg(I2C_CMD_STATUS)
+        eğer (status & I2C_STATUS_BUSY) != 0 yap
+            dön Hata(I2cError::BUS_BUSY)
+        son
+        
+        // Send START and slave address with write bit
+        i2c_write_reg(I2C_DATA, (slave_addr << 1) & 0xFE)
+        i2c_write_reg(I2C_CMD_STATUS, I2C_CMD_START | I2C_CMD_WRITE)
+        i2c_wait_tip()
+        
+        // Check ACK
+        status = i2c_read_reg(I2C_CMD_STATUS)
+        eğer (status & I2C_STATUS_RXACK) != 0 yap
+            i2c_write_reg(I2C_CMD_STATUS, I2C_CMD_STOP)
+            dön Hata(I2cError::NACK)
+        son
+        
+        // Write data bytes
+        için byte içinde data yap
+            i2c_write_reg(I2C_DATA, *byte olarak u32)
+            i2c_write_reg(I2C_CMD_STATUS, I2C_CMD_WRITE)
+            i2c_wait_tip()
+            
+            // Check ACK
+            status = i2c_read_reg(I2C_CMD_STATUS)
+            eğer (status & I2C_STATUS_RXACK) != 0 yap
+                i2c_write_reg(I2C_CMD_STATUS, I2C_CMD_STOP)
+                dön Hata(I2cError::NACK)
+            son
+        son
+        
+        // Send STOP
+        i2c_write_reg(I2C_CMD_STATUS, I2C_CMD_STOP)
+        
+        dön Tamam(())
+    son
+    
+    açık fonksiyon read_from(
+        &kendim,
+        slave_addr: u8,
+        buffer: &değiştir [u8]
+    ) -> Sonuç<(), I2cError> yap
+        eğer buffer.len() == 0 yap
+            dön Tamam(())
+        son
+        
+        // Check bus status
+        değişken status = i2c_read_reg(I2C_CMD_STATUS)
+        eğer (status & I2C_STATUS_BUSY) != 0 yap
+            dön Hata(I2cError::BUS_BUSY)
+        son
+        
+        // Send START and slave address with read bit
+        i2c_write_reg(I2C_DATA, (slave_addr << 1) | 0x01)
+        i2c_write_reg(I2C_CMD_STATUS, I2C_CMD_START | I2C_CMD_WRITE)
+        i2c_wait_tip()
+        
+        // Check ACK
+        status = i2c_read_reg(I2C_CMD_STATUS)
+        eğer (status & I2C_STATUS_RXACK) != 0 yap
+            i2c_write_reg(I2C_CMD_STATUS, I2C_CMD_STOP)
+            dön Hata(I2cError::NACK)
+        son
+        
+        // Read data bytes
+        için i içinde 0..buffer.len() yap
+            değişken cmd = I2C_CMD_READ
+            
+            // NACK the last byte
+            eğer i == buffer.len() - 1 yap
+                cmd |= I2C_CMD_ACK | I2C_CMD_STOP
+            son
+            
+            i2c_write_reg(I2C_CMD_STATUS, cmd)
+            i2c_wait_tip()
+            
+            buffer[i] = i2c_read_reg(I2C_DATA) olarak u8
+        son
+        
+        dön Tamam(())
+    son
+    
+    açık fonksiyon write_read(
+        &kendim,
+        slave_addr: u8,
+        tx_data: &[u8],
+        rx_buffer: &değiştir [u8]
+    ) -> Sonuç<(), I2cError> yap
+        // Check bus status
+        değişken status = i2c_read_reg(I2C_CMD_STATUS)
+        eğer (status & I2C_STATUS_BUSY) != 0 yap
+            dön Hata(I2cError::BUS_BUSY)
+        son
+        
+        // Send START and slave address with write bit
+        i2c_write_reg(I2C_DATA, (slave_addr << 1) & 0xFE)
+        i2c_write_reg(I2C_CMD_STATUS, I2C_CMD_START | I2C_CMD_WRITE)
+        i2c_wait_tip()
+        
+        // Check ACK
+        status = i2c_read_reg(I2C_CMD_STATUS)
+        eğer (status & I2C_STATUS_RXACK) != 0 yap
+            i2c_write_reg(I2C_CMD_STATUS, I2C_CMD_STOP)
+            dön Hata(I2cError::NACK)
+        son
+        
+        // Write data bytes (typically register address)
+        için byte içinde tx_data yap
+            i2c_write_reg(I2C_DATA, *byte olarak u32)
+            i2c_write_reg(I2C_CMD_STATUS, I2C_CMD_WRITE)
+            i2c_wait_tip()
+            
+            status = i2c_read_reg(I2C_CMD_STATUS)
+            eğer (status & I2C_STATUS_RXACK) != 0 yap
+                i2c_write_reg(I2C_CMD_STATUS, I2C_CMD_STOP)
+                dön Hata(I2cError::NACK)
+            son
+        son
+        
+        // Repeated START and slave address with read bit
+        i2c_write_reg(I2C_DATA, (slave_addr << 1) | 0x01)
+        i2c_write_reg(I2C_CMD_STATUS, I2C_CMD_START | I2C_CMD_WRITE)
+        i2c_wait_tip()
+        
+        status = i2c_read_reg(I2C_CMD_STATUS)
+        eğer (status & I2C_STATUS_RXACK) != 0 yap
+            i2c_write_reg(I2C_CMD_STATUS, I2C_CMD_STOP)
+            dön Hata(I2cError::NACK)
+        son
+        
+        // Read data bytes
+        için i içinde 0..rx_buffer.len() yap
+            değişken cmd = I2C_CMD_READ
+            
+            eğer i == rx_buffer.len() - 1 yap
+                cmd |= I2C_CMD_ACK | I2C_CMD_STOP
+            son
+            
+            i2c_write_reg(I2C_CMD_STATUS, cmd)
+            i2c_wait_tip()
+            
+            rx_buffer[i] = i2c_read_reg(I2C_DATA) olarak u8
+        son
+        
+        dön Tamam(())
+    son
+    
+    // High-level register read/write
+    açık fonksiyon write_reg(
+        &kendim,
+        slave_addr: u8,
+        reg_addr: u8,
+        value: u8
+    ) -> Sonuç<(), I2cError> yap
+        değişken data = [reg_addr, value]
+        dön kendim.write_to(slave_addr, &data)
+    son
+    
+    açık fonksiyon read_reg(
+        &kendim,
+        slave_addr: u8,
+        reg_addr: u8
+    ) -> Sonuç<u8, I2cError> yap
+        değişken mut buffer = [0u8; 1]
+        kendim.write_read(slave_addr, &[reg_addr], &mut buffer)?
+        dön Tamam(buffer[0])
+    son
+    
+    açık fonksiyon read_regs(
+        &kendim,
+        slave_addr: u8,
+        reg_addr: u8,
+        buffer: &değiştir [u8]
+    ) -> Sonuç<(), I2cError> yap
+        dön kendim.write_read(slave_addr, &[reg_addr], buffer)
+    son
+son
+
+uygula I2C_BAL::I2cHAL için FE310_I2C_HAL yap
+    fonksiyon write(&kendim, slave_addr: u8, data: &[u8]) -> Sonuç<(), ()> yap
+        kendim.write_to(slave_addr, data).map_err(|_| ())
+    son
+    
+    fonksiyon read(&kendim, slave_addr: u8, buffer: &değiştir [u8]) -> Sonuç<(), ()> yap
+        kendim.read_from(slave_addr, buffer).map_err(|_| ())
+    son
+son
+
+açık tip I2C_HAL = FE310_I2C_HAL

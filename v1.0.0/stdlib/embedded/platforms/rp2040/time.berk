@@ -1,0 +1,65 @@
+// stdlib/embedded/platforms/rp2040/time.berk
+// RP2040 (Raspberry Pi Pico) Time Implementation
+// Provides millisecond and microsecond timing
+
+import "embedded/bal/time" as TIME_BAL
+
+// FFI to RP2040 SDK time functions
+extern "C" {
+    fn time_us_32() -> u32;
+    fn time_us_64() -> u64;
+    fn sleep_ms(ms: u32);
+    fn sleep_us(us: u32);
+    fn busy_wait_us(us: u32);
+}
+
+/// TIME_HAL implementation for RP2040
+pub struct RP2040_TimeHAL;
+
+impl TIME_BAL.TIME_HAL for RP2040_TimeHAL {
+    fn millis() -> u32 {
+        unsafe { time_us_32() / 1000 }
+    }
+    
+    fn micros() -> u32 {
+        unsafe { time_us_32() }
+    }
+    
+    fn delay_ms(ms: u32) {
+        unsafe { sleep_ms(ms); }
+    }
+    
+    fn delay_us(us: u32) {
+        unsafe { sleep_us(us); }
+    }
+}
+
+// Export the HAL instance
+pub const TIME_HAL: RP2040_TimeHAL = RP2040_TimeHAL;
+
+// Convenience functions
+pub fn millis() -> u32 {
+    TIME_HAL.millis()
+}
+
+pub fn micros() -> u32 {
+    TIME_HAL.micros()
+}
+
+pub fn delay_ms(ms: u32) {
+    TIME_HAL.delay_ms(ms)
+}
+
+pub fn delay_us(us: u32) {
+    TIME_HAL.delay_us(us)
+}
+
+// Get time in microseconds (64-bit for long durations)
+pub fn micros64() -> u64 {
+    unsafe { time_us_64() }
+}
+
+// Busy wait (doesn't yield to scheduler)
+pub fn busy_wait(us: u32) {
+    unsafe { busy_wait_us(us); }
+}

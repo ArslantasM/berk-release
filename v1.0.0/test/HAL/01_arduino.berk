@@ -1,0 +1,120 @@
+/// ═══════════════════════════════════════════════════════════════════════════
+/// BERK HAL - Arduino Platformu Demo
+/// Hardware Abstraction Layer
+/// ═══════════════════════════════════════════════════════════════════════════
+
+kullan std::io
+kullan std::arduino
+
+yaz("============================================================")
+yaz("         HAL Demo: Arduino Platformu                        ")
+yaz("============================================================")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 1: GPIO Islemleri
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 1: GPIO Islemleri ---")
+
+değişken LED_PIN = 13
+değişken BUTTON_PIN = 2
+değişken PWM_PIN = 9
+
+yaz("\n   Pin Tanimlari:")
+yaz("   - LED_PIN: ", LED_PIN, " (Dahili LED)")
+yaz("   - BUTTON_PIN: ", BUTTON_PIN, " (Harici buton)")
+yaz("   - PWM_PIN: ", PWM_PIN, " (PWM cikis)")
+
+yaz("\n   Pin Modlari:")
+yaz("   - pinMode(", LED_PIN, ", OUTPUT)")
+yaz("   - pinMode(", BUTTON_PIN, ", INPUT_PULLUP)")
+yaz("   - pinMode(", PWM_PIN, ", OUTPUT)")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 2: Dijital I/O
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 2: Dijital I/O ---")
+
+yaz("\n   Dijital Yazma:")
+yaz("   - digitalWrite(", LED_PIN, ", HIGH) -> LED yanar")
+yaz("   - digitalWrite(", LED_PIN, ", LOW)  -> LED soner")
+
+yaz("\n   Dijital Okuma:")
+yaz("   - digitalRead(", BUTTON_PIN, ") -> 0 veya 1")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 3: Analog I/O
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 3: Analog I/O ---")
+
+değişken ANALOG_PIN = 0
+
+yaz("\n   Analog Okuma (10-bit ADC):")
+yaz("   - analogRead(A", ANALOG_PIN, ") -> 0-1023 arasi")
+
+yaz("\n   Analog Yazma (8-bit PWM):")
+yaz("   - analogWrite(", PWM_PIN, ", 0)   -> %0 duty cycle")
+yaz("   - analogWrite(", PWM_PIN, ", 127) -> %50 duty cycle")
+yaz("   - analogWrite(", PWM_PIN, ", 255) -> %100 duty cycle")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 4: Zamanlama
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 4: Zamanlama ---")
+
+yaz("\n   Bekleme Fonksiyonlari:")
+yaz("   - delay(1000)       -> 1 saniye bekle")
+yaz("   - delayMicroseconds(100) -> 100 mikrosaniye")
+
+yaz("\n   Zaman Olcumu:")
+yaz("   - millis() -> Baslangictan beri milisaniye")
+yaz("   - micros() -> Baslangictan beri mikrosaniye")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 5: Seri Iletisim
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 5: Seri Iletisim ---")
+
+değişken BAUD_RATE = 115200
+
+yaz("\n   Serial Baslat:")
+yaz("   - Serial.begin(", BAUD_RATE, ")")
+
+yaz("\n   Serial Yazma:")
+yaz("   - Serial.print(\"Merhaba\")")
+yaz("   - Serial.println(\"Dunya\")")
+
+yaz("\n   Serial Okuma:")
+yaz("   - Serial.available() -> Bekleyen byte sayisi")
+yaz("   - Serial.read()      -> Bir byte oku")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 6: Ornek: LED Blink
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 6: Ornek Kod ---")
+
+yaz("\n   LED Blink Algoritmasi:")
+yaz("   ┌─────────────────────────────────────┐")
+yaz("   │ 1. LED pinini OUTPUT yap            │")
+yaz("   │ 2. LED'i yak (HIGH)                 │")
+yaz("   │ 3. 500ms bekle                      │")
+yaz("   │ 4. LED'i sondur (LOW)               │")
+yaz("   │ 5. 500ms bekle                      │")
+yaz("   │ 6. Adim 2'ye don                    │")
+yaz("   └─────────────────────────────────────┘")
+
+fonksiyon blink_demo(tekrar: tamsayı) yap
+    yaz("\n   Blink simulasyonu (", tekrar, " kez):")
+    için i içinde 0..tekrar yap
+        yaz("      [", i + 1, "] LED ON -> 500ms -> LED OFF")
+    son
+son
+
+blink_demo(3)
+
+yaz("\n[OK] Arduino HAL demosu tamamlandi!")

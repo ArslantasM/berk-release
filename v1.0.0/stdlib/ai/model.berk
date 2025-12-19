@@ -1,0 +1,383 @@
+// stdlib/ai/model.berk
+// Model Loading & Inference
+// GGUF, ONNX, SafeTensors format support
+//
+// Performance: Native Rust backend
+// - Zero-copy loading
+// - Memory-mapped files
+// - Quantization support (int8, int4)
+
+import "ai/tensor" as tensor
+import "ai/nn" as nn
+import "fs" as fs
+import "collections" as collections
+
+// ============================================================================
+// MODEL FORMATS
+// ============================================================================
+
+/// Supported model formats
+pub enum ModelFormat {
+    GGUF,           // Llama.cpp format (quantized models)
+    ONNX,           // ONNX Runtime format
+    SafeTensors,    // Hugging Face SafeTensors
+    Pickle,         // PyTorch .pt / .pth
+    TorchScript,    // TorchScript .pt
+    TensorFlow,     // TensorFlow SavedModel
+}
+
+// ============================================================================
+// GGUF (GPT-Generated Unified Format)
+// ============================================================================
+
+/// GGUF model loader (Llama.cpp format)
+pub struct GGUFModel {
+    path: str,
+    metadata: collections.HashMap<str, str>,
+    tensors: collections.HashMap<str, tensor.Tensor>,
+    architecture: str,
+    quantization: QuantizationType,
+}
+
+pub enum QuantizationType {
+    F32,        // Full precision
+    F16,        // Half precision
+    Q8_0,       // 8-bit quantization
+    Q4_0,       // 4-bit quantization
+    Q4_1,       // 4-bit quantization (variant)
+    Q5_0,       // 5-bit quantization
+    Q5_1,       // 5-bit quantization (variant)
+}
+
+impl GGUFModel {
+    /// Load GGUF model from file
+    @native("model::gguf::load")
+    pub fn load(path: str) -> Result<GGUFModel, str> {
+        // Memory-mapped loading
+        // Parse GGUF header
+        // Load tensor metadata
+        // Load quantized weights
+    }
+    
+    /// Get model metadata
+    pub fn metadata(self) -> collections.HashMap<str, str> {
+        self.metadata
+    }
+    
+    /// Get architecture info
+    pub fn architecture(self) -> str {
+        self.architecture
+    }
+    
+    /// Forward pass (inference)
+    @native("model::gguf::forward")
+    pub fn forward(self, input_ids: tensor.Tensor, attention_mask: Option<tensor.Tensor> = None) -> tensor.Tensor {
+        // Quantized matrix multiplication
+        // Efficient inference
+    }
+    
+    /// Generate text (autoregressive)
+    @native("model::gguf::generate")
+    pub fn generate(
+        self,
+        input_ids: tensor.Tensor,
+        max_length: u64 = 100,
+        temperature: f32 = 1.0,
+        top_k: u64 = 50,
+        top_p: f32 = 0.9,
+        repetition_penalty: f32 = 1.0
+    ) -> tensor.Tensor {
+        // Autoregressive generation
+        // Sampling strategies: greedy, top-k, top-p (nucleus), temperature
+    }
+}
+
+// ============================================================================
+// ONNX (Open Neural Network Exchange)
+// ============================================================================
+
+/// ONNX model loader
+pub struct ONNXModel {
+    path: str,
+    session: ONNXSession,
+    input_names: [str],
+    output_names: [str],
+}
+
+pub struct ONNXSession {
+    // ONNX Runtime session handle
+}
+
+impl ONNXModel {
+    /// Load ONNX model
+    @native("model::onnx::load")
+    pub fn load(path: str, providers: [str] = ["CPUExecutionProvider"]) -> Result<ONNXModel, str> {
+        // Load with ONNX Runtime
+        // Providers: CPUExecutionProvider, CUDAExecutionProvider, TensorrtExecutionProvider
+    }
+    
+    /// Run inference
+    @native("model::onnx::run")
+    pub fn run(self, inputs: collections.HashMap<str, tensor.Tensor>) -> Result<collections.HashMap<str, tensor.Tensor>, str> {
+        // Run ONNX inference
+        // Returns outputs as HashMap
+    }
+    
+    /// Get input names
+    pub fn input_names(self) -> [str] {
+        self.input_names
+    }
+    
+    /// Get output names
+    pub fn output_names(self) -> [str] {
+        self.output_names
+    }
+}
+
+// ============================================================================
+// SAFETENSORS (Hugging Face format)
+// ============================================================================
+
+/// SafeTensors model loader
+pub struct SafeTensorsModel {
+    path: str,
+    tensors: collections.HashMap<str, tensor.Tensor>,
+    metadata: collections.HashMap<str, str>,
+}
+
+impl SafeTensorsModel {
+    /// Load SafeTensors file
+    @native("model::safetensors::load")
+    pub fn load(path: str) -> Result<SafeTensorsModel, str> {
+        // Load SafeTensors format
+        // Memory-efficient loading
+    }
+    
+    /// Get tensor by name
+    pub fn get_tensor(self, name: str) -> Option<tensor.Tensor> {
+        self.tensors.get(name)
+    }
+    
+    /// List all tensor names
+    pub fn tensor_names(self) -> [str] {
+        self.tensors.keys()
+    }
+    
+    /// Load into nn.Module
+    pub fn load_into_module(self, module: &mut dyn nn.Module) {
+        for (name, tensor) in self.tensors {
+            // Match tensor names to module parameters
+            // Load weights
+        }
+    }
+}
+
+// ============================================================================
+// PYTORCH CHECKPOINTS
+// ============================================================================
+
+/// Load PyTorch checkpoint (.pt, .pth)
+@native("model::pytorch::load")
+pub fn load_pytorch(path: str) -> Result<collections.HashMap<str, tensor.Tensor>, str> {
+    // Load PyTorch pickle format
+    // Returns state_dict
+}
+
+/// Save model checkpoint
+@native("model::pytorch::save")
+pub fn save_checkpoint(state_dict: collections.HashMap<str, tensor.Tensor>, path: str) -> Result<(), str> {
+    // Save as PyTorch-compatible format
+}
+
+// ============================================================================
+// ONNX EXPORT
+// ============================================================================
+
+/// Export model to ONNX format
+/// 
+/// Example:
+/// ```berk
+/// let model = MyModel.new()
+/// let dummy_input = tensor.Tensor.randn([1, 3, 224, 224])
+/// llm.export_to_onnx(
+///     model: model,
+///     dummy_input: dummy_input,
+///     output_path: "model.onnx",
+///     input_names: ["input"],
+///     output_names: ["output"],
+///     opset_version: 13
+/// )
+/// ```
+@native("model::onnx::export")
+pub fn export_to_onnx(
+    model: &dyn nn.Module,
+    dummy_input: tensor.Tensor,
+    output_path: str,
+    input_names: [str] = ["input"],
+    output_names: [str] = ["output"],
+    opset_version: u32 = 13,
+    dynamic_axes: Option<collections.HashMap<str, [str]>> = None
+) -> Result<(), str> {
+    // Trace model with dummy input
+    // Convert to ONNX graph
+    // Serialize to .onnx file
+    // Uses prost for protobuf serialization
+}
+
+/// Verify exported ONNX model
+@native("model::onnx::verify")
+pub fn verify_onnx_export(
+    original_model: &dyn nn.Module,
+    onnx_path: str,
+    test_input: tensor.Tensor,
+    tolerance: f32 = 1e-5
+) -> Result<bool, str> {
+    // Run inference on both models
+    // Compare outputs within tolerance
+    // Returns true if outputs match
+}
+
+/// Optimize ONNX model
+@native("model::onnx::optimize")
+pub fn optimize_onnx(
+    input_path: str,
+    output_path: str,
+    optimization_level: u32 = 2
+) -> Result<(), str> {
+    // Apply ONNX optimizer passes
+    // Level 0: Basic
+    // Level 1: Extended (fuse batch norm, conv+relu)
+    // Level 2: All optimizations
+}
+
+// ============================================================================
+// QUANTIZATION
+// ============================================================================
+
+/// Quantize model to lower precision
+pub mod quantize {
+    /// Quantize to int8
+    @native("model::quantize::int8")
+    pub fn to_int8(model: &dyn nn.Module) -> Box<dyn nn.Module> {
+        // Post-training static quantization
+        // 4x memory reduction, ~3x faster inference
+    }
+    
+    /// Quantize to int4
+    @native("model::quantize::int4")
+    pub fn to_int4(model: &dyn nn.Module) -> Box<dyn nn.Module> {
+        // 4-bit quantization (GPTQ style)
+        // 8x memory reduction
+    }
+    
+    /// Dynamic quantization
+    @native("model::quantize::dynamic")
+    pub fn dynamic(model: &dyn nn.Module) -> Box<dyn nn.Module> {
+        // Dynamic quantization (weights only)
+    }
+}
+
+// ============================================================================
+// MODEL HUB (Hugging Face integration)
+// ============================================================================
+
+pub mod hub {
+    /// Download model from Hugging Face Hub
+    @native("model::hub::download")
+    pub fn download(repo_id: str, filename: str, cache_dir: Option<str> = None) -> Result<str, str> {
+        // Download from hf.co
+        // Returns local path
+        // Example: hub.download("meta-llama/Llama-2-7b-hf", "pytorch_model.bin")
+    }
+    
+    /// Load model from Hugging Face Hub
+    pub fn load_from_hub(repo_id: str, format: ModelFormat = ModelFormat.SafeTensors) -> Result<SafeTensorsModel, str> {
+        // Download and load in one step
+        let path = download(repo_id, "model.safetensors")?
+        SafeTensorsModel.load(path)
+    }
+}
+
+// ============================================================================
+// INFERENCE ENGINE
+// ============================================================================
+
+/// Inference engine with optimizations
+pub struct InferenceEngine {
+    model: Box<dyn nn.Module>,
+    device: tensor.Device,
+    dtype: tensor.DType,
+    compile_mode: CompileMode,
+}
+
+pub enum CompileMode {
+    None,           // No compilation
+    JIT,            // Just-in-time compilation
+    AOT,            // Ahead-of-time compilation
+    TensorRT,       // NVIDIA TensorRT
+}
+
+impl InferenceEngine {
+    pub fn new(model: Box<dyn nn.Module>, device: tensor.Device = tensor.Device.CPU) -> InferenceEngine {
+        InferenceEngine {
+            model: model,
+            device: device,
+            dtype: tensor.DType.Float32,
+            compile_mode: CompileMode.None,
+        }
+    }
+    
+    /// Enable compilation
+    pub fn compile(self, mode: CompileMode) -> InferenceEngine {
+        self.compile_mode = mode
+        self
+    }
+    
+    /// Run inference
+    @native("model::engine::infer")
+    pub fn infer(self, input: tensor.Tensor) -> tensor.Tensor {
+        tensor.no_grad(|| {
+            let input_device = input.to(self.device)
+            self.model.forward(input_device)
+        })
+    }
+    
+    /// Batch inference
+    pub fn infer_batch(self, inputs: [tensor.Tensor]) -> [tensor.Tensor] {
+        inputs.map(|x| self.infer(x))
+    }
+}
+
+// ============================================================================
+// UTILITIES
+// ============================================================================
+
+/// Get model size in MB
+pub fn model_size_mb(model: &dyn nn.Module) -> f32 {
+    let mut total_params = 0u64
+    for param in model.parameters() {
+        total_params += param.numel()
+    }
+    (total_params * 4) as f32 / 1024.0 / 1024.0  // Assuming float32
+}
+
+/// Count trainable parameters
+pub fn count_parameters(model: &dyn nn.Module) -> u64 {
+    let mut count = 0u64
+    for param in model.parameters() {
+        if param.requires_grad() {
+            count += param.numel()
+        }
+    }
+    count
+}
+
+/// Print model summary
+pub fn model_summary(model: &dyn nn.Module) {
+    yaz("=" * 80)
+    yaz("Model Summary")
+    yaz("=" * 80)
+    yaz("Total Parameters: {}", count_parameters(model))
+    yaz("Model Size: {:.2f} MB", model_size_mb(model))
+    yaz("=" * 80)
+}

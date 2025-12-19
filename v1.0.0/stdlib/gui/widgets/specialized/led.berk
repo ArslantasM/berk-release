@@ -1,0 +1,928 @@
+// ============================================================================
+// BERK GUI Framework - LED Indicator Widget
+// ============================================================================
+// Skeuomorphic LED gösterge widget'ı
+// Durum LED'leri, gösterge lambaları ve pilot ışıkları
+// ============================================================================
+
+modül gui::widgets::specialized::led
+
+kullan gui::widgets::core::widget::{Widget, WidgetBase, Rect}
+kullan gui::rendering::canvas::{Canvas, Path, RadialGradient, ColorStop, FillStyle}
+kullan gui::style::colors::Color
+kullan gui::effects::lighting::Light
+kullan gui::animation::tween::Tween
+kullan gui::layout::constraints::{Size, Constraints}
+
+// ============================================================================
+// LED TYPES
+// ============================================================================
+
+/// LED şekli
+pub tip LEDShape = enum yap
+    /// Yuvarlak LED
+    Round,
+    
+    /// Kare LED
+    Square,
+    
+    /// Dikdörtgen LED
+    Rectangular,
+    
+    /// Oval LED
+    Oval,
+    
+    /// Üçgen LED
+    Triangle,
+    
+    /// Yıldız şekli
+    Star,
+    
+    /// Özel şekil
+    Custom(path: Path)
+son
+
+/// LED boyutu
+pub tip LEDSize = enum yap
+    /// 3mm (küçük)
+    Small,
+    
+    /// 5mm (standart)
+    Medium,
+    
+    /// 8mm (büyük)
+    Large,
+    
+    /// 10mm (jumbo)
+    Jumbo,
+    
+    /// Özel boyut
+    Custom(width: ondalık, height: ondalık)
+son
+
+/// LED tipi
+pub tip LEDType = enum yap
+    /// Standart LED
+    Standard,
+    
+    /// Parlak LED (high brightness)
+    HighBrightness,
+    
+    /// Diffused (mat)
+    Diffused,
+    
+    /// Clear (şeffaf)
+    Clear,
+    
+    /// RGB LED
+    RGB
+son
+
+// ============================================================================
+// LED INDICATOR WIDGET
+// ============================================================================
+
+/// LED gösterge widget
+pub tip LED = yapı yap
+    /// Temel widget özellikleri
+    base: WidgetBase,
+    
+    /// LED şekli
+    shape: LEDShape,
+    
+    /// LED boyutu
+    size: LEDSize,
+    
+    /// LED tipi
+    led_type: LEDType,
+    
+    /// Yanık mı?
+    is_on: mantıksal,
+    
+    /// Yanık renk
+    on_color: Color,
+    
+    /// Sönük renk
+    off_color: Color,
+    
+    /// Parlaklık (0.0 - 1.0)
+    brightness: ondalık,
+    
+    /// Glow efekti
+    glow: mantıksal,
+    
+    /// Glow yarıçapı
+    glow_radius: ondalık,
+    
+    /// Glow yoğunluğu
+    glow_intensity: ondalık,
+    
+    /// Lens efekti (3D görünüm)
+    lens_effect: mantıksal,
+    
+    /// Çerçeve rengi
+    bezel_color: Color,
+    
+    /// Çerçeve genişliği
+    bezel_width: ondalık,
+    
+    /// Yansıma (reflection)
+    reflection: mantıksal,
+    
+    /// Etiket
+    label: yazı,
+    
+    /// Etiket pozisyonu
+    label_position: LabelPosition,
+    
+    // === ANIMATION ===
+    
+    /// Yanıp sönme
+    blinking: mantıksal,
+    
+    /// Yanıp sönme hızı (ms)
+    blink_rate: tamsayı,
+    
+    /// Yanıp sönme duty cycle (0.0 - 1.0)
+    blink_duty: ondalık,
+    
+    /// Son durum değişikliği zamanı
+    last_toggle: tamsayı,
+    
+    /// Fade in/out animasyonu
+    fade_animation: mantıksal,
+    
+    /// Fade süresi (ms)
+    fade_duration: tamsayı,
+    
+    /// Mevcut fade değeri
+    current_brightness: ondalık
+son
+
+/// Etiket pozisyonu
+pub tip LabelPosition = enum yap
+    Top,
+    Bottom,
+    Left,
+    Right,
+    None
+son
+
+// ============================================================================
+// LED IMPLEMENTATION
+// ============================================================================
+
+impl LED:
+    /// Yuvarlak LED oluştur
+    pub fn round(color: Color) döndür LED:
+        döndür LED::new(LEDShape::Round, color)
+    son
+    
+    /// Kare LED oluştur
+    pub fn square(color: Color) döndür LED:
+        döndür LED::new(LEDShape::Square, color)
+    son
+    
+    /// Dikdörtgen LED oluştur
+    pub fn rectangular(color: Color) döndür LED:
+        döndür LED::new(LEDShape::Rectangular, color)
+    son
+    
+    /// Standart LED renkleri
+    pub fn red() döndür LED:
+        döndür LED::round(Color::hex("#ff0000"))
+    son
+    
+    pub fn green() döndür LED:
+        döndür LED::round(Color::hex("#00ff00"))
+    son
+    
+    pub fn yellow() döndür LED:
+        döndür LED::round(Color::hex("#ffcc00"))
+    son
+    
+    pub fn blue() döndür LED:
+        döndür LED::round(Color::hex("#0066ff"))
+    son
+    
+    pub fn orange() döndür LED:
+        döndür LED::round(Color::hex("#ff6600"))
+    son
+    
+    pub fn white() döndür LED:
+        döndür LED::round(Color::hex("#ffffff"))
+    son
+    
+    /// Temel LED oluştur
+    pub fn new(shape: LEDShape, on_color: Color) döndür LED:
+        döndür LED yap
+            base: WidgetBase::new(WidgetBase::generate_id()),
+            shape: shape,
+            size: LEDSize::Medium,
+            led_type: LEDType::Standard,
+            is_on: yanlış,
+            on_color: on_color,
+            off_color: on_color.darken(0.8),
+            brightness: 1.0,
+            glow: doğru,
+            glow_radius: 8.0,
+            glow_intensity: 0.6,
+            lens_effect: doğru,
+            bezel_color: Color::hex("#333333"),
+            bezel_width: 2.0,
+            reflection: doğru,
+            label: "",
+            label_position: LabelPosition::None,
+            blinking: yanlış,
+            blink_rate: 500,
+            blink_duty: 0.5,
+            last_toggle: 0,
+            fade_animation: doğru,
+            fade_duration: 100,
+            current_brightness: 0.0
+        son
+    son
+    
+    // === BUILDER METHODS ===
+    
+    /// Boyut ayarla
+    pub fn size(mut self, size: LEDSize) döndür LED:
+        self.size = size
+        döndür self
+    son
+    
+    /// Küçük LED
+    pub fn small(mut self) döndür LED:
+        self.size = LEDSize::Small
+        döndür self
+    son
+    
+    /// Büyük LED
+    pub fn large(mut self) döndür LED:
+        self.size = LEDSize::Large
+        döndür self
+    son
+    
+    /// LED tipini ayarla
+    pub fn led_type(mut self, led_type: LEDType) döndür LED:
+        self.led_type = led_type
+        döndür self
+    son
+    
+    /// Parlak LED
+    pub fn high_brightness(mut self) döndür LED:
+        self.led_type = LEDType::HighBrightness
+        self.glow_intensity = 0.9
+        döndür self
+    son
+    
+    /// Mat LED
+    pub fn diffused(mut self) döndür LED:
+        self.led_type = LEDType::Diffused
+        self.lens_effect = yanlış
+        self.glow_intensity = 0.3
+        döndür self
+    son
+    
+    /// Durumu ayarla
+    pub fn set_on(mut self, on: mantıksal) döndür void:
+        self.is_on = on
+        self.last_toggle = current_time_ms()
+    son
+    
+    /// Aç
+    pub fn turn_on(mut self) döndür void:
+        self.set_on(doğru)
+    son
+    
+    /// Kapat
+    pub fn turn_off(mut self) döndür void:
+        self.set_on(yanlış)
+    son
+    
+    /// Toggle
+    pub fn toggle(mut self) döndür void:
+        self.set_on(!self.is_on)
+    son
+    
+    /// Yanık renk
+    pub fn on_color(mut self, color: Color) döndür LED:
+        self.on_color = color
+        self.off_color = color.darken(0.8)
+        döndür self
+    son
+    
+    /// Sönük renk
+    pub fn off_color(mut self, color: Color) döndür LED:
+        self.off_color = color
+        döndür self
+    son
+    
+    /// Parlaklık
+    pub fn brightness(mut self, brightness: ondalık) döndür LED:
+        self.brightness = clamp(brightness, 0.0, 1.0)
+        döndür self
+    son
+    
+    /// Glow efekti
+    pub fn glow(mut self, enabled: mantıksal) döndür LED:
+        self.glow = enabled
+        döndür self
+    son
+    
+    /// Glow ayarları
+    pub fn glow_settings(mut self, radius: ondalık, intensity: ondalık) döndür LED:
+        self.glow_radius = radius
+        self.glow_intensity = intensity
+        döndür self
+    son
+    
+    /// Lens efekti
+    pub fn lens(mut self, enabled: mantıksal) döndür LED:
+        self.lens_effect = enabled
+        döndür self
+    son
+    
+    /// Çerçeve rengi
+    pub fn bezel(mut self, color: Color, width: ondalık) döndür LED:
+        self.bezel_color = color
+        self.bezel_width = width
+        döndür self
+    son
+    
+    /// Yansıma
+    pub fn reflection(mut self, enabled: mantıksal) döndür LED:
+        self.reflection = enabled
+        döndür self
+    son
+    
+    /// Etiket ekle
+    pub fn label(mut self, text: yazı, position: LabelPosition) döndür LED:
+        self.label = text
+        self.label_position = position
+        döndür self
+    son
+    
+    /// Yanıp sönme
+    pub fn blink(mut self, rate_ms: tamsayı) döndür LED:
+        self.blinking = doğru
+        self.blink_rate = rate_ms
+        döndür self
+    son
+    
+    /// Yanıp sönmeyi durdur
+    pub fn stop_blink(mut self) döndür void:
+        self.blinking = yanlış
+    son
+    
+    /// Fade animasyonu
+    pub fn fade(mut self, enabled: mantıksal, duration: tamsayı) döndür LED:
+        self.fade_animation = enabled
+        self.fade_duration = duration
+        döndür self
+    son
+    
+    // === HELPERS ===
+    
+    /// Gerçek boyutu al
+    fn get_actual_size(self) döndür (ondalık, ondalık):
+        eşle self.size:
+            LEDSize::Small => döndür (6.0, 6.0),
+            LEDSize::Medium => döndür (10.0, 10.0),
+            LEDSize::Large => döndür (16.0, 16.0),
+            LEDSize::Jumbo => döDür (20.0, 20.0),
+            LEDSize::Custom(w, h) => döndür (w, h)
+        son
+    son
+    
+    /// Mevcut rengi al
+    fn get_current_color(self) döndür Color:
+        değişken base_color = eğer self.is_on: self.on_color değilse: self.off_color son
+        
+        eğer self.fade_animation:
+            döndür self.off_color.lerp(self.on_color, self.current_brightness)
+        son
+        
+        döndür base_color.with_brightness(self.brightness)
+    son
+son
+
+// ============================================================================
+// WIDGET TRAIT IMPLEMENTATION
+// ============================================================================
+
+impl Widget için LED:
+    fn id(self) döndür yazı:
+        döndür self.base.id
+    son
+    
+    fn measure(self, constraints: Constraints) döndür Size:
+        değişken (w, h) = self.get_actual_size()
+        
+        // Glow için ekstra alan
+        eğer self.glow:
+            w = w + self.glow_radius * 2.0
+            h = h + self.glow_radius * 2.0
+        son
+        
+        // Çerçeve için ekstra alan
+        w = w + self.bezel_width * 2.0
+        h = h + self.bezel_width * 2.0
+        
+        // Etiket için ekstra alan
+        eşle self.label_position:
+            LabelPosition::Top | LabelPosition::Bottom => h = h + 16.0,
+            LabelPosition::Left | LabelPosition::Right => w = w + 40.0,
+            _ => ()
+        son
+        
+        döndür Size yap width: w, height: h son
+    son
+    
+    fn layout(mut self, x: ondalık, y: ondalık, width: ondalık, height: ondalık) döndür void:
+        self.base.x = x
+        self.base.y = y
+        self.base.width = width
+        self.base.height = height
+    son
+    
+    fn bounds(self) döndür Rect:
+        döndür self.base.bounds()
+    son
+    
+    fn update(mut self) döndür void:
+        değişken now = current_time_ms()
+        
+        // Yanıp sönme
+        eğer self.blinking:
+            değişken cycle_time = now % self.blink_rate
+            değişken threshold = self.blink_rate * self.blink_duty
+            self.is_on = cycle_time < threshold
+        son
+        
+        // Fade animasyonu
+        eğer self.fade_animation:
+            değişken target = eğer self.is_on: 1.0 değilse: 0.0 son
+            değişken rate = 1.0 / self.fade_duration * 16.0  // ~60fps
+            
+            eğer self.current_brightness < target:
+                self.current_brightness = min(self.current_brightness + rate, target)
+            değilse eğer self.current_brightness > target:
+                self.current_brightness = max(self.current_brightness - rate, target)
+            son
+        değilse:
+            self.current_brightness = eğer self.is_on: 1.0 değilse: 0.0 son
+        son
+        
+        self.base.update_animations()
+    son
+    
+    fn render(self, canvas: Canvas) döndür void:
+        değişken (led_w, led_h) = self.get_actual_size()
+        değişken cx = self.base.x + self.base.width / 2.0
+        değişken cy = self.base.y + self.base.height / 2.0
+        
+        // Etiket için ofset
+        eşle self.label_position:
+            LabelPosition::Top => cy = cy + 8.0,
+            LabelPosition::Bottom => cy = cy - 8.0,
+            LabelPosition::Left => cx = cx + 20.0,
+            LabelPosition::Right => cx = cx - 20.0,
+            _ => ()
+        son
+        
+        canvas.save()
+        
+        // Glow efekti (arka plan)
+        eğer self.glow ve self.is_on:
+            self.render_glow(canvas, cx, cy, led_w, led_h)
+        son
+        
+        // Çerçeve
+        self.render_bezel(canvas, cx, cy, led_w, led_h)
+        
+        // LED gövdesi
+        self.render_led_body(canvas, cx, cy, led_w, led_h)
+        
+        // Lens efekti
+        eğer self.lens_effect:
+            self.render_lens(canvas, cx, cy, led_w, led_h)
+        son
+        
+        // Yansıma
+        eğer self.reflection:
+            self.render_reflection(canvas, cx, cy, led_w, led_h)
+        son
+        
+        // Etiket
+        eğer self.label != "":
+            self.render_label(canvas, cx, cy, led_w, led_h)
+        son
+        
+        canvas.restore()
+    son
+son
+
+// ============================================================================
+// RENDER METHODS
+// ============================================================================
+
+impl LED:
+    /// Glow efekti
+    fn render_glow(self, canvas: Canvas, cx: ondalık, cy: ondalık, w: ondalık, h: ondalık) döndür void:
+        değişken glow_color = self.on_color.with_alpha((self.glow_intensity * self.current_brightness * 255.0).floor())
+        
+        değişken glow_gradient = RadialGradient yap
+            x0: cx, y0: cy, r0: 0.0,
+            x1: cx, y1: cy, r1: w / 2.0 + self.glow_radius,
+            stops: [
+                ColorStop yap offset: 0.0, color: glow_color son,
+                ColorStop yap offset: 0.5, color: glow_color.with_alpha((glow_color.alpha() * 0.5).floor()) son,
+                ColorStop yap offset: 1.0, color: Color::transparent() son
+            ]
+        son
+        
+        canvas.set_fill_style(FillStyle::RadialGradient(glow_gradient))
+        
+        eşle self.shape:
+            LEDShape::Round => yap
+                canvas.fill_circle(cx, cy, w / 2.0 + self.glow_radius)
+            son,
+            _ => yap
+                canvas.fill_rect(cx - w / 2.0 - self.glow_radius, cy - h / 2.0 - self.glow_radius,
+                                 w + self.glow_radius * 2.0, h + self.glow_radius * 2.0)
+            son
+        son
+    son
+    
+    /// Çerçeve
+    fn render_bezel(self, canvas: Canvas, cx: ondalık, cy: ondalık, w: ondalık, h: ondalık) döndür void:
+        değişken bezel_size = w / 2.0 + self.bezel_width
+        
+        // Çerçeve gölge
+        canvas.set_fill_color(Color::rgba(0, 0, 0, 64))
+        
+        eşle self.shape:
+            LEDShape::Round => yap
+                canvas.fill_circle(cx + 1.0, cy + 1.0, bezel_size)
+            son,
+            LEDShape::Square | LEDShape::Rectangular => yap
+                canvas.fill_rect(cx - bezel_size + 1.0, cy - bezel_size + 1.0, bezel_size * 2.0, bezel_size * 2.0)
+            son,
+            _ => ()
+        son
+        
+        // Çerçeve gradyan
+        değişken bezel_gradient = RadialGradient yap
+            x0: cx - bezel_size * 0.3, y0: cy - bezel_size * 0.3, r0: 0.0,
+            x1: cx, y1: cy, r1: bezel_size,
+            stops: [
+                ColorStop yap offset: 0.0, color: self.bezel_color.lighten(0.3) son,
+                ColorStop yap offset: 0.5, color: self.bezel_color son,
+                ColorStop yap offset: 1.0, color: self.bezel_color.darken(0.3) son
+            ]
+        son
+        
+        canvas.set_fill_style(FillStyle::RadialGradient(bezel_gradient))
+        
+        eşle self.shape:
+            LEDShape::Round => canvas.fill_circle(cx, cy, bezel_size),
+            LEDShape::Square => canvas.fill_rect(cx - bezel_size, cy - bezel_size, bezel_size * 2.0, bezel_size * 2.0),
+            LEDShape::Rectangular => canvas.fill_rect(cx - bezel_size, cy - bezel_size * 0.6, bezel_size * 2.0, bezel_size * 1.2),
+            LEDShape::Oval => canvas.fill_ellipse(cx, cy, bezel_size, bezel_size * 0.7),
+            LEDShape::Triangle => yap
+                canvas.fill_path(
+                    Path::new()
+                        .move_to(cx, cy - bezel_size)
+                        .line_to(cx - bezel_size, cy + bezel_size * 0.7)
+                        .line_to(cx + bezel_size, cy + bezel_size * 0.7)
+                        .close()
+                )
+            son,
+            _ => ()
+        son
+    son
+    
+    /// LED gövdesi
+    fn render_led_body(self, canvas: Canvas, cx: ondalık, cy: ondalık, w: ondalık, h: ondalık) döndür void:
+        değişken led_color = self.get_current_color()
+        değişken radius = w / 2.0
+        
+        // LED iç gradyan
+        değişken led_gradient = RadialGradient yap
+            x0: cx - radius * 0.3, y0: cy - radius * 0.3, r0: 0.0,
+            x1: cx, y1: cy, r1: radius,
+            stops: [
+                ColorStop yap offset: 0.0, color: led_color.lighten(0.4) son,
+                ColorStop yap offset: 0.6, color: led_color son,
+                ColorStop yap offset: 1.0, color: led_color.darken(0.3) son
+            ]
+        son
+        
+        canvas.set_fill_style(FillStyle::RadialGradient(led_gradient))
+        
+        eşle self.shape:
+            LEDShape::Round => canvas.fill_circle(cx, cy, radius),
+            LEDShape::Square => canvas.fill_rect(cx - radius, cy - radius, w, h),
+            LEDShape::Rectangular => canvas.fill_rect(cx - radius, cy - radius * 0.6, w, h * 0.6),
+            LEDShape::Oval => canvas.fill_ellipse(cx, cy, radius, radius * 0.7),
+            LEDShape::Triangle => yap
+                canvas.fill_path(
+                    Path::new()
+                        .move_to(cx, cy - radius * 0.8)
+                        .line_to(cx - radius * 0.8, cy + radius * 0.5)
+                        .line_to(cx + radius * 0.8, cy + radius * 0.5)
+                        .close()
+                )
+            son,
+            _ => ()
+        son
+    son
+    
+    /// Lens efekti (3D görünüm)
+    fn render_lens(self, canvas: Canvas, cx: ondalık, cy: ondalık, w: ondalık, h: ondalık) döndür void:
+        değişken radius = w / 2.0
+        
+        // Üst parlak bölge
+        değişken highlight_gradient = RadialGradient yap
+            x0: cx - radius * 0.3, y0: cy - radius * 0.4, r0: 0.0,
+            x1: cx, y1: cy, r1: radius * 0.8,
+            stops: [
+                ColorStop yap offset: 0.0, color: Color::rgba(255, 255, 255, 180) son,
+                ColorStop yap offset: 0.3, color: Color::rgba(255, 255, 255, 60) son,
+                ColorStop yap offset: 0.6, color: Color::transparent() son
+            ]
+        son
+        
+        canvas.set_fill_style(FillStyle::RadialGradient(highlight_gradient))
+        
+        eşle self.shape:
+            LEDShape::Round => canvas.fill_circle(cx, cy - radius * 0.1, radius * 0.9),
+            _ => canvas.fill_rect(cx - radius * 0.9, cy - radius * 0.9, w * 0.9, h * 0.5)
+        son
+        
+        // Küçük parlak nokta
+        canvas.set_fill_color(Color::rgba(255, 255, 255, 200))
+        canvas.fill_circle(cx - radius * 0.3, cy - radius * 0.3, radius * 0.15)
+    son
+    
+    /// Yansıma efekti
+    fn render_reflection(self, canvas: Canvas, cx: ondalık, cy: ondalık, w: ondalık, h: ondalık) döndür void:
+        // Alt yansıma (surface reflection)
+        değişken radius = w / 2.0
+        değişken ref_y = cy + radius + 2.0
+        
+        değişken ref_gradient = LinearGradient yap
+            x0: cx, y0: ref_y, x1: cx, y1: ref_y + radius * 0.5,
+            stops: [
+                ColorStop yap offset: 0.0, color: self.get_current_color().with_alpha(40) son,
+                ColorStop yap offset: 1.0, color: Color::transparent() son
+            ]
+        son
+        
+        canvas.save()
+        canvas.set_global_alpha(0.3)
+        canvas.scale(1.0, -0.4)
+        canvas.translate(0.0, -(ref_y + radius) * 2.0)
+        
+        canvas.set_fill_style(FillStyle::RadialGradient(
+            RadialGradient yap
+                x0: cx, y0: cy, r0: 0.0,
+                x1: cx, y1: cy, r1: radius,
+                stops: [
+                    ColorStop yap offset: 0.0, color: self.get_current_color().with_alpha(60) son,
+                    ColorStop yap offset: 1.0, color: Color::transparent() son
+                ]
+            son
+        ))
+        
+        canvas.fill_circle(cx, cy, radius)
+        canvas.restore()
+    son
+    
+    /// Etiket
+    fn render_label(self, canvas: Canvas, cx: ondalık, cy: ondalık, w: ondalık, h: ondalık) döndür void:
+        canvas.set_fill_color(Color::white())
+        canvas.set_font(Font::new("Arial", 10.0))
+        
+        değişken radius = w / 2.0
+        
+        eşle self.label_position:
+            LabelPosition::Top => yap
+                canvas.fill_text(self.label, cx, cy - radius - self.bezel_width - 10.0)
+            son,
+            LabelPosition::Bottom => yap
+                canvas.fill_text(self.label, cx, cy + radius + self.bezel_width + 12.0)
+            son,
+            LabelPosition::Left => yap
+                canvas.fill_text(self.label, cx - radius - self.bezel_width - 5.0, cy)
+            son,
+            LabelPosition::Right => yap
+                canvas.fill_text(self.label, cx + radius + self.bezel_width + 5.0, cy)
+            son,
+            _ => ()
+        son
+    son
+son
+
+// ============================================================================
+// LED GROUP
+// ============================================================================
+
+/// LED grubu (birden fazla LED'i yönetmek için)
+pub tip LEDGroup = yapı yap
+    /// LED listesi
+    leds: liste[LED],
+    
+    /// Düzen (layout)
+    layout: LEDGroupLayout,
+    
+    /// Aralık
+    spacing: ondalık,
+    
+    /// Temel widget
+    base: WidgetBase
+son
+
+/// LED grup düzeni
+pub tip LEDGroupLayout = enum yap
+    Horizontal,
+    Vertical,
+    Grid(columns: tamsayı),
+    Circular
+son
+
+impl LEDGroup:
+    /// Yeni LED grubu oluştur
+    pub fn new(layout: LEDGroupLayout) döndür LEDGroup:
+        döndür LEDGroup yap
+            leds: [],
+            layout: layout,
+            spacing: 5.0,
+            base: WidgetBase::new(WidgetBase::generate_id())
+        son
+    son
+    
+    /// LED ekle
+    pub fn add(mut self, led: LED) döndür LEDGroup:
+        self.leds.push(led)
+        döndür self
+    son
+    
+    /// Birden fazla LED ekle
+    pub fn add_multiple(mut self, count: tamsayı, color: Color) döndür LEDGroup:
+        için i içinde 0..count:
+            self.leds.push(LED::round(color))
+        son
+        döndür self
+    son
+    
+    /// Tüm LED'leri aç
+    pub fn all_on(mut self) döndür void:
+        için led içinde &mut self.leds:
+            led.turn_on()
+        son
+    son
+    
+    /// Tüm LED'leri kapat
+    pub fn all_off(mut self) döndür void:
+        için led içinde &mut self.leds:
+            led.turn_off()
+        son
+    son
+    
+    /// Belirli LED'i ayarla
+    pub fn set(mut self, index: tamsayı, on: mantıksal) döndür void:
+        eğer index >= 0 ve index < self.leds.len():
+            self.leds[index].set_on(on)
+        son
+    son
+    
+    /// Binary değer göster (bit pattern)
+    pub fn set_binary(mut self, value: tamsayı) döndür void:
+        için i içinde 0..self.leds.len():
+            self.leds[i].set_on((value >> i) & 1 == 1)
+        son
+    son
+    
+    /// Bar graph göster
+    pub fn set_bar(mut self, level: ondalık) döndür void:
+        değişken lit_count = (level * self.leds.len()).ceil()
+        için i içinde 0..self.leds.len():
+            self.leds[i].set_on(i < lit_count)
+        son
+    son
+    
+    /// Sıralı animasyon (chasing)
+    pub fn chase(mut self, position: tamsayı) döndür void:
+        için i içinde 0..self.leds.len():
+            self.leds[i].set_on(i == position % self.leds.len())
+        son
+    son
+son
+
+impl Widget için LEDGroup:
+    fn id(self) döndür yazı:
+        döndür self.base.id
+    son
+    
+    fn measure(self, constraints: Constraints) döndür Size:
+        // Basitleştirilmiş hesaplama
+        değişken total_size = 0.0
+        için led içinde &self.leds:
+            değişken led_size = led.measure(constraints)
+            total_size = total_size + led_size.width + self.spacing
+        son
+        
+        eşle self.layout:
+            LEDGroupLayout::Horizontal => döndür Size yap width: total_size, height: 30.0 son,
+            LEDGroupLayout::Vertical => döndür Size yap width: 30.0, height: total_size son,
+            LEDGroupLayout::Grid(cols) => yap
+                değişken rows = (self.leds.len() + cols - 1) / cols
+                döndür Size yap width: cols * 25.0, height: rows * 25.0 son
+            son,
+            LEDGroupLayout::Circular => yap
+                değişken size = self.leds.len() * 10.0 + 40.0
+                döndür Size yap width: size, height: size son
+            son
+        son
+    son
+    
+    fn layout(mut self, x: ondalık, y: ondalık, width: ondalık, height: ondalık) döndür void:
+        self.base.x = x
+        self.base.y = y
+        self.base.width = width
+        self.base.height = height
+        
+        // LED pozisyonlarını hesapla
+        eşle self.layout:
+            LEDGroupLayout::Horizontal => yap
+                değişken led_x = x
+                için led içinde &mut self.leds:
+                    led.layout(led_x, y, 20.0, 20.0)
+                    led_x = led_x + 20.0 + self.spacing
+                son
+            son,
+            LEDGroupLayout::Vertical => yap
+                değişken led_y = y
+                için led içinde &mut self.leds:
+                    led.layout(x, led_y, 20.0, 20.0)
+                    led_y = led_y + 20.0 + self.spacing
+                son
+            son,
+            LEDGroupLayout::Grid(cols) => yap
+                için i içinde 0..self.leds.len():
+                    değişken col = i % cols
+                    değişken row = i / cols
+                    self.leds[i].layout(x + col * (20.0 + self.spacing), y + row * (20.0 + self.spacing), 20.0, 20.0)
+                son
+            son,
+            LEDGroupLayout::Circular => yap
+                değişken cx = x + width / 2.0
+                değişken cy = y + height / 2.0
+                değişken radius = min(width, height) / 2.0 - 15.0
+                değişken angle_step = 6.28318 / self.leds.len()
+                
+                için i içinde 0..self.leds.len():
+                    değişken angle = i * angle_step - 1.5708  // Start from top
+                    değişken led_x = cx + cos(angle) * radius - 10.0
+                    değişken led_y = cy + sin(angle) * radius - 10.0
+                    self.leds[i].layout(led_x, led_y, 20.0, 20.0)
+                son
+            son
+        son
+    son
+    
+    fn bounds(self) döndür Rect:
+        döndür self.base.bounds()
+    son
+    
+    fn update(mut self) döndür void:
+        için led içinde &mut self.leds:
+            led.update()
+        son
+    son
+    
+    fn render(self, canvas: Canvas) döndür void:
+        için led içinde &self.leds:
+            led.render(canvas)
+        son
+    son
+son
+
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+fn clamp(value: ondalık, min: ondalık, max: ondalık) döndür ondalık:
+    eğer value < min: döndür min son
+    eğer value > max: döndür max son
+    döndür value
+son
+
+fn current_time_ms() döndür tamsayı:
+    döndür @native_current_time_ms()
+son
+
+// Native bindings
+dışsal fn @native_current_time_ms() döndür tamsayı

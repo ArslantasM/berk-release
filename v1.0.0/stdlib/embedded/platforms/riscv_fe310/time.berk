@@ -1,0 +1,275 @@
+// stdlib/embedded/platforms/riscv_fe310/time.berk
+// SiFive FE310 Time/Timer Implementation
+// Using RISC-V mtime (machine timer) and RTC
+
+kullan "embedded/bal/time" olarak TIME_BAL
+
+// RISC-V machine timer registers (CLINT - Core Local Interruptor)
+sabit MTIME_BASE: u64 = 0x0200BFF8      // Timer value (64-bit)
+sabit MTIMECMP_BASE: u64 = 0x02004000   // Timer compare (64-bit)
+
+// FE310 RTC (Real-Time Clock) registers
+sabit RTC_BASE: u32 = 0x10000000
+sabit RTC_CFG: u32 = 0x00      // Configuration
+sabit RTC_COUNTLO: u32 = 0x08  // Counter low
+sabit RTC_COUNTHI: u32 = 0x0C  // Counter high
+sabit RTC_SCALES: u32 = 0x10   // Scale value
+sabit RTC_CMP: u32 = 0x20      // Compare value
+
+// Clock frequencies
+sabit MTIME_FREQ_HZ: u64 = 32768        // 32.768 kHz crystal
+sabit CPU_FREQ_HZ: u32 = 320000000      // 320 MHz max (default 16 MHz)
+sabit RTC_FREQ_HZ: u32 = 32768          // RTC frequency
+
+harici "C" yap
+    // RISC-V CSR (Control and Status Register) access
+    fonksiyon read_mtime() -> u64
+    fonksiyon write_mtimecmp(value: u64)
+    fonksiyon read_mcycle() -> u64       // CPU cycle counter
+    fonksiyon read_minstret() -> u64     // Instructions retired
+    
+    // RTC access
+    fonksiyon rtc_read_count() -> u64
+    fonksiyon rtc_set_compare(value: u64)
+    fonksiyon rtc_enable()
+    fonksiyon rtc_disable()
+    
+    // Volatile memory access
+    fonksiyon volatile_read_u32(addr: *sabit u32) -> u32
+    fonksiyon volatile_write_u32(addr: *değiştir u32, value: u32)
+    fonksiyon volatile_read_u64(addr: *sabit u64) -> u64
+    fonksiyon volatile_write_u64(addr: *değiştir u64, value: u64)
+son
+
+// Global state
+değişken mut TIMER_INITIALIZED: bool = yanlış
+
+açık fonksiyon time_init() yap
+    eğer !TIMER_INITIALIZED yap
+        // Enable RTC
+        rtc_enable()
+        TIMER_INITIALIZED = doğru
+    son
+son
+
+// Get milliseconds since boot (using mtime)
+açık fonksiyon millis() -> u64 yap
+    değişken mtime = read_mtime()
+    // Convert: (mtime * 1000) / MTIME_FREQ_HZ
+    dön (mtime * 1000) / MTIME_FREQ_HZ
+son
+
+// Get microseconds since boot (using mtime)
+açık fonksiyon micros() -> u64 yap
+    değişken mtime = read_mtime()
+    // Convert: (mtime * 1000000) / MTIME_FREQ_HZ
+    dön (mtime * 1000000) / MTIME_FREQ_HZ
+son
+
+// Get nanoseconds (using CPU cycle counter for precision)
+açık fonksiyon nanos() -> u64 yap
+    değişken cycles = read_mcycle()
+    // Convert cycles to nanoseconds
+    // ns = (cycles * 1000000000) / CPU_FREQ_HZ
+    dön (cycles * 1000000000) / CPU_FREQ_HZ olarak u64
+son
+
+// Delay milliseconds (busy-wait)
+açık fonksiyon delay_ms(ms: u32) yap
+    değişken start = millis()
+    değişken target = start + ms olarak u64
+    
+    döngü yap
+        eğer millis() >= target yap
+            kır
+        son
+    son
+son
+
+// Delay microseconds (busy-wait)
+açık fonksiyon delay_us(us: u32) yap
+    değişken start = micros()
+    değişken target = start + us olarak u64
+    
+    döngü yap
+        eğer micros() >= target yap
+            kır
+        son
+    son
+son
+
+// High-precision delay using CPU cycles
+açık fonksiyon delay_cycles(cycles: u64) yap
+    değişken start = read_mcycle()
+    değişken target = start + cycles
+    
+    döngü yap
+        eğer read_mcycle() >= target yap
+            kır
+        son
+    son
+son
+
+// Convert time units to cycles
+açık fonksiyon ms_to_cycles(ms: u32) -> u64 yap
+    dön (CPU_FREQ_HZ olarak u64 * ms olarak u64) / 1000
+son
+
+açık fonksiyon us_to_cycles(us: u32) -> u64 yap
+    dön (CPU_FREQ_HZ olarak u64 * us olarak u64) / 1000000
+son
+
+// Performance measurement helpers
+yapı PerfTimer yap
+    start_cycle: u64,
+    start_instret: u64,
+son
+
+uygula PerfTimer yap
+    açık fonksiyon yeni() -> PerfTimer yap
+        dön PerfTimer yap
+            start_cycle: read_mcycle(),
+            start_instret: read_minstret(),
+        son
+    son
+    
+    açık fonksiyon elapsed_cycles(&kendim) -> u64 yap
+        dön read_mcycle() - kendim.start_cycle
+    son
+    
+    açık fonksiyon elapsed_instructions(&kendim) -> u64 yap
+        dön read_minstret() - kendim.start_instret
+    son
+    
+    açık fonksiyon elapsed_us(&kendim) -> u64 yap
+        değişken cycles = kendim.elapsed_cycles()
+        dön (cycles * 1000000) / CPU_FREQ_HZ olarak u64
+    son
+    
+    açık fonksiyon ipc(&kendim) -> f32 yap
+        // Instructions Per Cycle
+        değişken cycles = kendim.elapsed_cycles()
+        değişken instret = kendim.elapsed_instructions()
+        
+        eğer cycles == 0 yap
+            dön 0.0
+        son
+        
+        dön instret olarak f32 / cycles olarak f32
+    son
+son
+
+// Timeout helper with absolute deadline
+yapı Timeout yap
+    deadline_ms: u64,
+son
+
+uygula Timeout yap
+    açık fonksiyon yeni(duration_ms: u32) -> Timeout yap
+        dön Timeout yap
+            deadline_ms: millis() + duration_ms olarak u64,
+        son
+    son
+    
+    açık fonksiyon expired(&kendim) -> bool yap
+        dön millis() >= kendim.deadline_ms
+    son
+    
+    açık fonksiyon reset(&değiştir kendim, duration_ms: u32) yap
+        kendim.deadline_ms = millis() + duration_ms olarak u64
+    son
+    
+    açık fonksiyon remaining(&kendim) -> u32 yap
+        değişken now = millis()
+        eğer now >= kendim.deadline_ms yap
+            dön 0
+        son
+        dön (kendim.deadline_ms - now) olarak u32
+    son
+son
+
+// Stopwatch for interval timing
+yapı Stopwatch yap
+    start_time: u64,
+    running: bool,
+    elapsed_total: u64,
+son
+
+uygula Stopwatch yap
+    açık fonksiyon yeni() -> Stopwatch yap
+        dön Stopwatch yap
+            start_time: 0,
+            running: yanlış,
+            elapsed_total: 0,
+        son
+    son
+    
+    açık fonksiyon start(&değiştir kendim) yap
+        eğer !kendim.running yap
+            kendim.start_time = millis()
+            kendim.running = doğru
+        son
+    son
+    
+    açık fonksiyon stop(&değiştir kendim) yap
+        eğer kendim.running yap
+            kendim.elapsed_total += millis() - kendim.start_time
+            kendim.running = yanlış
+        son
+    son
+    
+    açık fonksiyon reset(&değiştir kendim) yap
+        kendim.start_time = millis()
+        kendim.elapsed_total = 0
+        kendim.running = yanlış
+    son
+    
+    açık fonksiyon elapsed_ms(&kendim) -> u64 yap
+        değişken total = kendim.elapsed_total
+        
+        eğer kendim.running yap
+            total += millis() - kendim.start_time
+        son
+        
+        dön total
+    son
+son
+
+// BAL implementation
+yapı FE310_TIME_HAL yap
+    initialized: bool,
+son
+
+uygula FE310_TIME_HAL yap
+    açık fonksiyon yeni() -> FE310_TIME_HAL yap
+        time_init()
+        dön FE310_TIME_HAL yap initialized: doğru son
+    son
+son
+
+uygula TIME_BAL::TimeHAL için FE310_TIME_HAL yap
+    fonksiyon millis(&kendim) -> u64 yap
+        dön millis()
+    son
+    
+    fonksiyon micros(&kendim) -> u64 yap
+        dön micros()
+    son
+    
+    fonksiyon delay_ms(&kendim, ms: u32) yap
+        delay_ms(ms)
+    son
+    
+    fonksiyon delay_us(&kendim, us: u32) yap
+        delay_us(us)
+    son
+son
+
+açık tip TIME_HAL = FE310_TIME_HAL
+
+// Timer interrupt support (for future use)
+açık fonksiyon set_timer_interrupt(delay_ms: u64) yap
+    değişken current = read_mtime()
+    değişken ticks = (delay_ms * MTIME_FREQ_HZ) / 1000
+    write_mtimecmp(current + ticks)
+son

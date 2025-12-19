@@ -1,0 +1,362 @@
+/// ═══════════════════════════════════════════════════════════════════════════
+/// BERK HAL - Motor Control Demo (English)
+/// DC Motor, Stepper and Servo Control
+/// ═══════════════════════════════════════════════════════════════════════════
+
+use std::io
+use std::stm32
+use std::math
+
+print("============================================================")
+print("         HAL Demo: Motor Control                            ")
+print("         DC Motor, Stepper, Servo Systems                   ")
+print("============================================================")
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SECTION 1: DC Motor Control (H-Bridge L298N)
+// ═══════════════════════════════════════════════════════════════════════════
+
+print("\n--- SECTION 1: DC Motor Control ---")
+
+// Pin definitions (L298N H-Bridge)
+let MOTOR1_ENA = 5   // PWM - Speed control
+let MOTOR1_IN1 = 6   // Direction 1
+let MOTOR1_IN2 = 7   // Direction 2
+let MOTOR2_ENB = 10  // PWM - Speed control
+let MOTOR2_IN3 = 8   // Direction 1
+let MOTOR2_IN4 = 9   // Direction 2
+
+print("\n   L298N Pin Connections:")
+print("   ┌─────────────────────────────────────┐")
+print("   │         L298N H-Bridge              │")
+print("   ├─────────────────────────────────────┤")
+print("   │ ENA (PWM)  ──── Pin ", MOTOR1_ENA, "             │")
+print("   │ IN1        ──── Pin ", MOTOR1_IN1, "             │")
+print("   │ IN2        ──── Pin ", MOTOR1_IN2, "             │")
+print("   │ ENB (PWM)  ──── Pin ", MOTOR2_ENB, "            │")
+print("   │ IN3        ──── Pin ", MOTOR2_IN3, "             │")
+print("   │ IN4        ──── Pin ", MOTOR2_IN4, "             │")
+print("   └─────────────────────────────────────┘")
+
+// Motor control functions
+function dc_motor_forward(speed: integer) do
+    // IN1 = HIGH, IN2 = LOW, ENA = speed
+    print("   Motor FORWARD: Speed = ", speed, " / 255")
+end
+
+function dc_motor_reverse(speed: integer) do
+    // IN1 = LOW, IN2 = HIGH, ENA = speed
+    print("   Motor REVERSE: Speed = ", speed, " / 255")
+end
+
+function dc_motor_stop() do
+    // IN1 = LOW, IN2 = LOW
+    print("   Motor STOPPED")
+end
+
+function dc_motor_brake() do
+    // IN1 = HIGH, IN2 = HIGH (regenerative brake)
+    print("   Motor BRAKE (Regenerative)")
+end
+
+// PWM speed ramp function
+function speed_ramp(start: integer, end_val: integer, step: integer, delay_ms: integer) do
+    print("   Speed Ramp: ", start, " -> ", end_val)
+    var speed = start
+    if start < end_val then
+        while speed <= end_val do
+            dc_motor_forward(speed)
+            speed = speed + step
+        end
+    else
+        while speed >= end_val do
+            dc_motor_forward(speed)
+            speed = speed - step
+        end
+    end
+end
+
+// Test
+print("\n   DC Motor Test Scenario:")
+dc_motor_forward(128)
+dc_motor_forward(200)
+dc_motor_stop()
+dc_motor_reverse(150)
+dc_motor_brake()
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SECTION 2: Stepper Motor Control (A4988 / DRV8825)
+// ═══════════════════════════════════════════════════════════════════════════
+
+print("\n--- SECTION 2: Stepper Motor Control ---")
+
+// Stepper pin definitions
+let STEP_PIN = 2
+let DIR_PIN = 3
+let ENABLE_PIN = 4
+let MS1_PIN = 11
+let MS2_PIN = 12
+let MS3_PIN = 13
+
+print("\n   A4988 / DRV8825 Connections:")
+print("   ┌─────────────────────────────────────┐")
+print("   │    Stepper Motor Driver             │")
+print("   ├─────────────────────────────────────┤")
+print("   │ STEP   ──── Pin ", STEP_PIN, "                  │")
+print("   │ DIR    ──── Pin ", DIR_PIN, "                  │")
+print("   │ ENABLE ──── Pin ", ENABLE_PIN, "                  │")
+print("   │ MS1    ──── Pin ", MS1_PIN, " (Microstepping)  │")
+print("   │ MS2    ──── Pin ", MS2_PIN, "                 │")
+print("   │ MS3    ──── Pin ", MS3_PIN, "                 │")
+print("   └─────────────────────────────────────┘")
+
+// Microstepping modes
+print("\n   Microstepping Modes (A4988):")
+print("   ┌─────┬─────┬─────┬────────────┐")
+print("   │ MS1 │ MS2 │ MS3 │ Mode       │")
+print("   ├─────┼─────┼─────┼────────────┤")
+print("   │  L  │  L  │  L  │ Full Step  │")
+print("   │  H  │  L  │  L  │ Half Step  │")
+print("   │  L  │  H  │  L  │ 1/4 Step   │")
+print("   │  H  │  H  │  L  │ 1/8 Step   │")
+print("   │  H  │  H  │  H  │ 1/16 Step  │")
+print("   └─────┴─────┴─────┴────────────┘")
+
+// Motor specifications
+let STEPS_PER_REV = 200     // 1.8 degree/step typical NEMA 17
+let MICROSTEPPING = 16      // 1/16 microstepping
+
+function calculate_step_angle(steps_per_rev: integer, microstepping: integer) -> decimal do
+    return 360.0 / (steps_per_rev * microstepping)
+end
+
+let angle_step = calculate_step_angle(STEPS_PER_REV, MICROSTEPPING)
+print("\n   Motor Parameters:")
+print("   - Steps/Rev: ", STEPS_PER_REV)
+print("   - Microstepping: 1/", MICROSTEPPING)
+print("   - Angle/Step: ", angle_step, " degrees")
+
+// Stepper movement functions
+function stepper_step(step_count: integer, direction: integer, delay_us: integer) do
+    if direction > 0 then
+        print("   Stepper: ", step_count, " steps CLOCKWISE")
+    else
+        print("   Stepper: ", step_count, " steps COUNTER-CLOCKWISE")
+    end
+end
+
+function stepper_angle(angle: decimal, direction: integer) do
+    let steps = angle / angle_step
+    print("   Stepper: ", angle, " degrees = ", steps, " steps")
+end
+
+function stepper_revolution(rev_count: decimal, rpm: integer) do
+    let total_steps = rev_count * STEPS_PER_REV * MICROSTEPPING
+    let duration_ms = (rev_count * 60000.0) / rpm
+    print("   Stepper: ", rev_count, " rev @ ", rpm, " RPM")
+    print("            ", total_steps, " steps, duration: ", duration_ms, " ms")
+end
+
+// Test
+print("\n   Stepper Motor Test:")
+stepper_step(1600, 1, 500)
+stepper_angle(90.0, 1)
+stepper_revolution(2.5, 60)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SECTION 3: Servo Motor Control
+// ═══════════════════════════════════════════════════════════════════════════
+
+print("\n--- SECTION 3: Servo Motor Control ---")
+
+let SERVO1_PIN = 9
+let SERVO2_PIN = 10
+
+print("\n   Servo PWM Parameters:")
+print("   - Frequency: 50 Hz (20 ms period)")
+print("   - Min Pulse: 500 us (0 degrees)")
+print("   - Max Pulse: 2500 us (180 degrees)")
+print("   - Center: 1500 us (90 degrees)")
+
+// Servo PWM calculation
+function angle_to_pwm(angle: decimal, min_us: integer, max_us: integer) -> integer do
+    // 0-180 degrees -> min_us - max_us
+    let range_us = max_us - min_us
+    let pulse = min_us + (angle / 180.0) * range_us
+    return pulse
+end
+
+function servo_move(angle: decimal) do
+    let pulse = angle_to_pwm(angle, 500, 2500)
+    print("   Servo: ", angle, " degrees = ", pulse, " us pulse")
+end
+
+// Smooth movement (interpolation)
+function servo_smooth(start_angle: decimal, end_angle: decimal, duration_ms: integer, step_count: integer) do
+    let angle_diff = end_angle - start_angle
+    let step_angle = angle_diff / step_count
+    let step_time = duration_ms / step_count
+    
+    print("   Servo Smooth Movement:")
+    print("   - Start: ", start_angle, " degrees")
+    print("   - End: ", end_angle, " degrees")
+    print("   - Duration: ", duration_ms, " ms")
+    print("   - Step Count: ", step_count)
+end
+
+// Test
+print("\n   Servo Motor Test:")
+servo_move(0.0)
+servo_move(90.0)
+servo_move(180.0)
+servo_smooth(0.0, 180.0, 1000, 20)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SECTION 4: PID Controller
+// ═══════════════════════════════════════════════════════════════════════════
+
+print("\n--- SECTION 4: PID Controller ---")
+
+// PID parameters
+let Kp = 2.0     // Proportional gain
+let Ki = 0.5     // Integral gain
+let Kd = 0.1     // Derivative gain
+
+// PID variables
+var integral = 0.0
+var prev_error = 0.0
+var dt = 0.01  // 10ms sample time
+
+function pid_calculate(setpoint: decimal, actual: decimal, integral: decimal, prev_error: decimal, dt: decimal) -> (decimal, decimal, decimal) do
+    let error = setpoint - actual
+    
+    // P term
+    let p_out = Kp * error
+    
+    // I term (with anti-windup)
+    var new_integral = integral + error * dt
+    // Limit integral
+    if new_integral > 100.0 then
+        new_integral = 100.0
+    else if new_integral < -100.0 then
+        new_integral = -100.0
+    end
+    let i_out = Ki * new_integral
+    
+    // D term
+    let derivative = (error - prev_error) / dt
+    let d_out = Kd * derivative
+    
+    // Total output
+    var output = p_out + i_out + d_out
+    
+    // Limit output (-255 to 255 for motor PWM)
+    if output > 255.0 then
+        output = 255.0
+    else if output < -255.0 then
+        output = -255.0
+    end
+    
+    return (output, new_integral, error)
+end
+
+print("\n   PID Parameters:")
+print("   - Kp: ", Kp)
+print("   - Ki: ", Ki)
+print("   - Kd: ", Kd)
+
+// Simulation: Target position 100, starting at 0
+print("\n   PID Simulation (Setpoint: 100):")
+let setpoint = 100.0
+var position = 0.0
+var step = 0
+var sim_integral = 0.0
+var sim_prev_error = 0.0
+
+while step < 10 do
+    let result = pid_calculate(setpoint, position, sim_integral, sim_prev_error, dt)
+    let output = result.0
+    sim_integral = result.1
+    sim_prev_error = result.2
+    
+    // Simple motor model: position += output * dt * 0.1
+    position = position + output * dt * 10.0
+    
+    print("   [", step, "] Pos: ", position, " | PID Out: ", output)
+    step = step + 1
+end
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SECTION 5: Encoder Reading
+// ═══════════════════════════════════════════════════════════════════════════
+
+print("\n--- SECTION 5: Rotary Encoder ---")
+
+let ENCODER_A = 2   // Interrupt capable pin
+let ENCODER_B = 3   // Interrupt capable pin
+let PPR = 600       // Pulses Per Revolution
+
+print("\n   Quadrature Encoder:")
+print("   - Channel A: Pin ", ENCODER_A, " (Interrupt)")
+print("   - Channel B: Pin ", ENCODER_B, " (Interrupt)")
+print("   - PPR: ", PPR)
+print("   - Resolution (4x): ", PPR * 4, " count/rev")
+
+function encoder_rpm(pulse_count: integer, delta_ms: integer, ppr: integer) -> decimal do
+    // RPM = (pulse_count / PPR) * (60000 / delta_ms)
+    let rpm = (pulse_count * 60000.0) / (ppr * 4 * delta_ms)
+    return rpm
+end
+
+function encoder_angle(pulse_count: integer, ppr: integer) -> decimal do
+    return (pulse_count * 360.0) / (ppr * 4)
+end
+
+// Example calculation
+let pulse_100ms = 240  // 240 pulses in 100ms
+let rpm = encoder_rpm(pulse_100ms, 100, PPR)
+let angle = encoder_angle(pulse_100ms, PPR)
+
+print("\n   Encoder Reading Example:")
+print("   - Pulses in 100ms: ", pulse_100ms)
+print("   - Calculated RPM: ", rpm)
+print("   - Angle: ", angle, " degrees")
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SECTION 6: System Architecture
+// ═══════════════════════════════════════════════════════════════════════════
+
+print("\n============================================================")
+print("              MOTOR CONTROL SYSTEM ARCHITECTURE             ")
+print("============================================================")
+
+print("\n   ┌─────────────────────────────────────────────────────────┐")
+print("   │                    CONTROL LOOP                         │")
+print("   │                                                         │")
+print("   │   ┌─────────┐    ┌─────────┐    ┌─────────┐            │")
+print("   │   │ TARGET  │───>│   PID   │───>│  MOTOR  │            │")
+print("   │   │POSITION │    │CONTROLLER│   │ DRIVER  │            │")
+print("   │   └─────────┘    └─────────┘    └────┬────┘            │")
+print("   │                       ^              │                  │")
+print("   │                       │              v                  │")
+print("   │                  ┌────┴────┐    ┌─────────┐            │")
+print("   │                  │ ENCODER │<───│  MOTOR  │            │")
+print("   │                  │ READING │    │         │            │")
+print("   │                  └─────────┘    └─────────┘            │")
+print("   └─────────────────────────────────────────────────────────┘")
+
+print("\n   Supported Motor Types:")
+print("   - DC Motor (H-Bridge: L298N, L293D)")
+print("   - Stepper Motor (A4988, DRV8825, TMC2209)")
+print("   - Servo Motor (PWM 50Hz)")
+print("   - BLDC (FOC - Future version)")
+
+print("\n   Control Methods:")
+print("   - Open Loop")
+print("   - PID Position Control")
+print("   - PID Speed Control")
+print("   - Profile-Based Motion (S-Curve, Trapezoidal)")
+
+print("\n============================================================")
+print("         HAL Motor Control Demo Completed                   ")
+print("============================================================")

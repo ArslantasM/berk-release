@@ -1,0 +1,134 @@
+/// ═══════════════════════════════════════════════════════════════════════════
+/// BERK HAL - STM32 Platform Demo (English Version)
+/// Hardware Abstraction Layer - ARM Cortex-M
+/// ═══════════════════════════════════════════════════════════════════════════
+
+use std::io
+use std::stm32
+
+print("============================================================")
+print("         HAL Demo: STM32 Platform                           ")
+print("============================================================")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 1: STM32 Features
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 1: STM32F4 Features ---")
+
+print("\n   Technical Specifications (STM32F407):")
+print("   - CPU: ARM Cortex-M4 @ 168 MHz")
+print("   - FPU: Single precision")
+print("   - RAM: 192 KB SRAM")
+print("   - Flash: 1 MB")
+print("   - GPIO: 140+ pins")
+print("   - ADC: 3x 12-bit (24 channels)")
+print("   - DAC: 2x 12-bit")
+print("   - Timers: 14 total")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 2: GPIO Configuration
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 2: GPIO Configuration ---")
+
+print("\n   GPIO Ports and Pins:")
+print("   - GPIOA, GPIOB, GPIOC, ... GPIOI")
+print("   - Each port has 16 pins (0-15)")
+
+print("\n   GPIO Modes:")
+print("   - GPIO_MODE_INPUT       -> Input")
+print("   - GPIO_MODE_OUTPUT_PP   -> Push-Pull Output")
+print("   - GPIO_MODE_OUTPUT_OD   -> Open-Drain Output")
+print("   - GPIO_MODE_AF_PP       -> Alternate Function")
+print("   - GPIO_MODE_ANALOG      -> Analog")
+
+print("\n   Pull-up/Pull-down:")
+print("   - GPIO_NOPULL")
+print("   - GPIO_PULLUP")
+print("   - GPIO_PULLDOWN")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 3: Clock Configuration
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 3: Clock Configuration ---")
+
+print("\n   Clock Sources:")
+print("   - HSI: 16 MHz internal RC")
+print("   - HSE: 8 MHz external crystal")
+print("   - PLL: Multiplier for high frequency")
+
+print("\n   Clock Tree:")
+print("   ┌──────────────────────────────────────┐")
+print("   │ HSE 8MHz -> PLL -> SYSCLK 168MHz     │")
+print("   │                    │                 │")
+print("   │           ┌────────┴────────┐        │")
+print("   │           │                 │        │")
+print("   │      AHB 168MHz       APB1 42MHz     │")
+print("   │           │           APB2 84MHz     │")
+print("   └──────────────────────────────────────┘")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 4: Timer and PWM
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 4: Timer and PWM ---")
+
+print("\n   Timer Types:")
+print("   - TIM1, TIM8: Advanced (motor control)")
+print("   - TIM2-TIM5: General purpose (32-bit)")
+print("   - TIM9-TIM14: General purpose (16-bit)")
+print("   - TIM6, TIM7: Basic (DAC trigger)")
+
+print("\n   PWM Calculation:")
+print("   - Frequency = Timer_Clock / (Prescaler * Period)")
+print("   - Duty = Pulse / Period * 100%")
+
+fn pwm_calculate(clock: int, prescaler: int, period: int) -> int do
+    return clock / (prescaler * period)
+end
+
+let timer_clock = 84000000
+let prescaler = 84
+let period = 1000
+let pwm_freq = pwm_calculate(timer_clock, prescaler, period)
+
+print("\n   Example PWM:")
+print("   - Timer Clock: ", timer_clock, " Hz")
+print("   - Prescaler: ", prescaler)
+print("   - Period: ", period)
+print("   - PWM Frequency: ", pwm_freq, " Hz")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 5: UART Communication
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 5: UART Communication ---")
+
+print("\n   UART Modules:")
+print("   - USART1, USART2, USART3, USART6")
+print("   - UART4, UART5")
+
+print("\n   Configuration:")
+print("   - Baud Rate: 115200")
+print("   - Word Length: 8 bit")
+print("   - Stop Bits: 1")
+print("   - Parity: None")
+print("   - Mode: TX/RX")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 6: Interrupt Management
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 6: Interrupt Management ---")
+
+print("\n   NVIC (Nested Vector Interrupt Controller):")
+print("   - 82 interrupt lines")
+print("   - 16 priority levels")
+
+print("\n   Example EXTI (External Interrupt):")
+print("   - HAL_NVIC_SetPriority(EXTI0_IRQn, 0, 0)")
+print("   - HAL_NVIC_EnableIRQ(EXTI0_IRQn)")
+
+print("\n[OK] STM32 HAL demo completed!")

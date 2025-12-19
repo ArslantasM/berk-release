@@ -1,0 +1,154 @@
+// =============================================================================
+// BERK Hardware Bridge - Firmata Demo
+// Arduino StandardFirmata protokolü ile donanım kontrolü
+// =============================================================================
+
+kullan std::firmata
+
+yazdır("=== BERK Firmata Demo ===\n")
+
+// -----------------------------------------------------------------------------
+// Arduino Bağlantısı (Simülasyon)
+// -----------------------------------------------------------------------------
+
+yazdır("🔌 Arduino Firmata Protokolü")
+yazdır("-" * 40)
+
+yazdır("""
+⚠️  Bu demo gerçek bir Arduino gerektirir!
+    Arduino'nuza StandardFirmata yüklü olmalı:
+    Arduino IDE → File → Examples → Firmata → StandardFirmata
+""")
+
+// -----------------------------------------------------------------------------
+// Pin Modları
+// -----------------------------------------------------------------------------
+
+yazdır("\n📌 Pin Modları:")
+yazdır("-" * 40)
+
+yazdır("""
+Mod           Açıklama
+------------------------------------------
+"input"       Dijital giriş
+"output"      Dijital çıkış
+"analog"      Analog giriş (ADC)
+"pwm"         PWM çıkış (0-255)
+"servo"       Servo motor kontrolü
+"pullup"      Dahili pull-up ile giriş
+""")
+
+// -----------------------------------------------------------------------------
+// Örnek Kod: LED Blink
+// -----------------------------------------------------------------------------
+
+yazdır("\n💡 LED Blink Örneği:")
+yazdır("-" * 40)
+
+yazdır("""
+kullan std::firmata
+
+// Arduino'ya bağlan (COM3, 57600 baud)
+olsun arduino = firmata::connect("COM3")
+yazdır("Arduino bağlandı!")
+
+// Versiyon bilgisi
+olsun versiyon = firmata::get_version(arduino)
+yazdır("Firmata versiyon: {}", versiyon)
+
+// Pin 13'ü çıkış yap (dahili LED)
+firmata::pin_mode(arduino, 13, "output")
+
+// LED'i 5 kez yakıp söndür
+döngü i için 0..5 yap
+    firmata::digital_write(arduino, 13, 1)
+    yazdır("LED AÇIK")
+    bekle(500)
+    
+    firmata::digital_write(arduino, 13, 0)
+    yazdır("LED KAPALI")
+    bekle(500)
+son
+
+firmata::disconnect(arduino)
+""")
+
+// -----------------------------------------------------------------------------
+// Analog Okuma
+// -----------------------------------------------------------------------------
+
+yazdır("\n📊 Analog Sensör Okuma:")
+yazdır("-" * 40)
+
+yazdır("""
+// A0 pinini analog giriş yap
+firmata::pin_mode(arduino, 0, "analog")
+
+// Değer oku (0-1023)
+olsun deger = firmata::analog_read(arduino, 0)
+yazdır("Analog değer: {}", deger)
+
+// Voltaja çevir (5V referans)
+olsun voltaj = deger * 5.0 / 1023.0
+yazdır("Voltaj: {:.2f}V", voltaj)
+""")
+
+// -----------------------------------------------------------------------------
+// PWM Kontrolü
+// -----------------------------------------------------------------------------
+
+yazdır("\n🌈 PWM (LED Parlaklık) Kontrolü:")
+yazdır("-" * 40)
+
+yazdır("""
+// Pin 9'u PWM moduna al
+firmata::pin_mode(arduino, 9, "pwm")
+
+// Parlaklığı kademeli artır
+döngü parlaklik için 0..256 adım 16 yap
+    firmata::analog_write(arduino, 9, parlaklik)
+    yazdır("Parlaklık: {}/255", parlaklik)
+    bekle(100)
+son
+""")
+
+// -----------------------------------------------------------------------------
+// Servo Motor
+// -----------------------------------------------------------------------------
+
+yazdır("\n🦾 Servo Motor Kontrolü:")
+yazdır("-" * 40)
+
+yazdır("""
+// Pin 10'u servo olarak yapılandır
+firmata::servo_config(arduino, 10, 544, 2400)
+
+// Açıları tara
+döngü aci için [0, 45, 90, 135, 180] yap
+    firmata::servo_write(arduino, 10, aci)
+    yazdır("Servo açısı: {}°", aci)
+    bekle(500)
+son
+""")
+
+// -----------------------------------------------------------------------------
+// I2C Haberleşme
+// -----------------------------------------------------------------------------
+
+yazdır("\n🔗 I2C Cihaz İletişimi:")
+yazdır("-" * 40)
+
+yazdır("""
+// I2C'yi etkinleştir
+firmata::i2c_config(arduino)
+
+// MPU6050 ivmeölçer örneği (adres: 0x68)
+// Wake-up komutu gönder
+firmata::i2c_write(arduino, 0x68, [0x6B, 0x00])
+
+// 6 byte oku (ivme verileri)
+olsun veri = firmata::i2c_read(arduino, 0x68, 6)
+yazdır("I2C verisi: {:?}", veri)
+""")
+
+yazdır("\n✅ Firmata demo tamamlandı!")

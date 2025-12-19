@@ -1,0 +1,707 @@
+//! # Terminal Module
+//!
+//! Terminal control and TUI library.
+//!
+//! Terminal kontrol ve TUI kütüphanesi.
+//!
+//! ## Features / Özellikler
+//!
+//! - **Colors**: 16, 256, true-color RGB / Renkler
+//! - **Cursor**: Movement, visibility / İmleç kontrolu
+//! - **Screen**: Clear, scroll / Ekran manipulasyonu
+//! - **Styling**: Bold, italic, underline / Stil
+//! - **Events**: Keyboard, mouse, resize / Olay yönetimi
+//! - **TUI widgets**: Progress bars, spinners, menus / TUI bileşenleri
+//!
+//! ## Example / Örnek
+//!
+//! ```berk
+//! kullan terminal
+//!
+//! terminal.clear()
+//! terminal.color_set("red")
+//! terminal.println("Kırmızı yazı")
+//! ```
+//!
+//! Backend: Rust crossterm + termios
+
+modül terminal
+
+kullan result
+kullan io
+
+// ============================================================================
+// CONSTANTS
+// ============================================================================
+
+sabit ESC: yazı = "\x1b"
+sabit CSI: yazı = "\x1b["  // Control Sequence Introducer
+
+// ============================================================================
+// CURSOR CONTROL
+// ============================================================================
+
+// Move cursor up N lines
+@native
+fonksiyon cursor_up(n: tamsayı) -> boş
+
+// Move cursor down
+@native
+fonksiyon cursor_down(n: tamsayı) -> boş
+
+// Move cursor right
+@native
+fonksiyon cursor_right(n: tamsayı) -> boş
+
+// Move cursor left
+@native
+fonksiyon cursor_left(n: tamsayı) -> boş
+
+// Move cursor to position (1-indexed)
+@native
+fonksiyon cursor_move(row: tamsayı, col: tamsayı) -> boş
+
+// Move cursor to column
+@native
+fonksiyon cursor_move_col(col: tamsayı) -> boş
+
+// Move cursor to start of line
+fonksiyon cursor_line_start() -> boş
+yap
+    cursor_move_col(1)
+son
+
+// Save cursor position
+@native
+fonksiyon cursor_save() -> boş
+
+// Restore cursor position
+@native
+fonksiyon cursor_restore() -> boş
+
+// Hide cursor
+@native
+fonksiyon cursor_hide() -> boş
+
+// Show cursor
+@native
+fonksiyon cursor_show() -> boş
+
+// Set cursor shape
+tip CursorShape = "Block" | "Underline" | "Bar"
+
+@native
+fonksiyon cursor_set_shape(shape: CursorShape) -> boş
+
+// Enable blinking cursor
+@native
+fonksiyon cursor_blink(enable: mantıksal) -> boş
+
+// ============================================================================
+// SCREEN MANIPULATION
+// ============================================================================
+
+// Clear entire screen
+@native
+fonksiyon clear_screen() -> boş
+
+// Clear current line
+@native
+fonksiyon clear_line() -> boş
+
+// Clear from cursor to end of line
+@native
+fonksiyon clear_line_to_end() -> boş
+
+// Clear from cursor to start of line
+@native
+fonksiyon clear_line_to_start() -> boş
+
+// Clear from cursor to end of screen
+@native
+fonksiyon clear_screen_to_end() -> boş
+
+// Clear from cursor to start of screen
+@native
+fonksiyon clear_screen_to_start() -> boş
+
+// Scroll up N lines
+@native
+fonksiyon scroll_up(n: tamsayı) -> boş
+
+// Scroll down N lines
+@native
+fonksiyon scroll_down(n: tamsayı) -> boş
+
+// ============================================================================
+// COLORS (16-color)
+// ============================================================================
+
+tip Color = "Black" | "Red" | "Green" | "Yellow" | "Blue" | "Magenta" | "Cyan" | "White" | 
+            "BrightBlack" | "BrightRed" | "BrightGreen" | "BrightYellow" | 
+            "BrightBlue" | "BrightMagenta" | "BrightCyan" | "BrightWhite" | "Default"
+
+// Set foreground color
+@native
+fonksiyon set_fg_color(color: Color) -> boş
+
+// Set background color
+@native
+fonksiyon set_bg_color(color: Color) -> boş
+
+// Set foreground color (256-color palette)
+@native
+fonksiyon set_fg_color_256(code: tamsayı) -> boş  // 0-255
+
+// Set background color (256-color)
+@native
+fonksiyon set_bg_color_256(code: tamsayı) -> boş
+
+// Set RGB foreground color (true color)
+@native
+fonksiyon set_fg_rgb(r: tamsayı, g: tamsayı, b: tamsayı) -> boş
+
+// Set RGB background color
+@native
+fonksiyon set_bg_rgb(r: tamsayı, g: tamsayı, b: tamsayı) -> boş
+
+// ============================================================================
+// TEXT STYLING
+// ============================================================================
+
+tip Style = "Bold" | "Dim" | "Italic" | "Underline" | "Blink" | 
+            "Reverse" | "Hidden" | "Strikethrough"
+
+// Apply style
+@native
+fonksiyon set_style(style: Style) -> boş
+
+// Reset all styles and colors
+@native
+fonksiyon reset_style() -> boş
+
+// ============================================================================
+// HIGH-LEVEL PRINTING
+// ============================================================================
+
+// Print colored text (auto-reset)
+fonksiyon print_colored(text: yazı, color: Color) -> boş
+yap
+    set_fg_color(color)
+    io::print(text)
+    reset_style()
+son
+
+// Print with style
+fonksiyon print_styled(text: yazı, style: Style) -> boş
+yap
+    set_style(style)
+    io::print(text)
+    reset_style()
+son
+
+// Print bold
+fonksiyon print_bold(text: yazı) -> boş
+yap
+    print_styled(text, "Bold")
+son
+
+// Print underlined
+fonksiyon print_underline(text: yazı) -> boş
+yap
+    print_styled(text, "Underline")
+son
+
+// Print with foreground and background
+fonksiyon print_fg_bg(text: yazı, fg: Color, bg: Color) -> boş
+yap
+    set_fg_color(fg)
+    set_bg_color(bg)
+    io::print(text)
+    reset_style()
+son
+
+// Print RGB colored text
+fonksiyon print_rgb(text: yazı, r: tamsayı, g: tamsayı, b: tamsayı) -> boş
+yap
+    set_fg_rgb(r, g, b)
+    io::print(text)
+    reset_style()
+son
+
+// ============================================================================
+// TERMINAL SIZE
+// ============================================================================
+
+tip TerminalSize = yapı yap
+    rows: tamsayı,
+    cols: tamsayı
+son
+
+// Get terminal size
+@native
+fonksiyon size() -> TerminalSize
+
+// Terminal width (columns)
+fonksiyon width() -> tamsayı
+yap
+    dön size().cols
+son
+
+// Terminal height (rows)
+fonksiyon height() -> tamsayı
+yap
+    dön size().rows
+son
+
+// ============================================================================
+// TERMINAL MODE
+// ============================================================================
+
+// Enable raw mode (character-by-character input)
+@native
+fonksiyon enable_raw_mode() -> Sonuç[boş, yazı]
+
+// Disable raw mode (line-buffered input)
+@native
+fonksiyon disable_raw_mode() -> Sonuç[boş, yazı]
+
+// Enable alternate screen buffer (TUI mode)
+@native
+fonksiyon enable_alternate_screen() -> boş
+
+// Disable alternate screen
+@native
+fonksiyon disable_alternate_screen() -> boş
+
+// Enable mouse capture
+@native
+fonksiyon enable_mouse() -> boş
+
+// Disable mouse capture
+@native
+fonksiyon disable_mouse() -> boş
+
+// Enable bracketed paste mode
+@native
+fonksiyon enable_bracketed_paste() -> boş
+
+// Disable bracketed paste
+@native
+fonksiyon disable_bracketed_paste() -> boş
+
+// ============================================================================
+// TERMINAL CAPABILITIES
+// ============================================================================
+
+// Check if stdout is a TTY
+@native
+fonksiyon is_tty() -> mantıksal
+
+// Check if terminal supports colors
+@native
+fonksiyon has_color() -> mantıksal
+
+// Check if terminal supports 256 colors
+@native
+fonksiyon has_256_colors() -> mantıksal
+
+// Check if terminal supports true color (24-bit RGB)
+@native
+fonksiyon has_true_color() -> mantıksal
+
+// ============================================================================
+// EVENT HANDLING
+// ============================================================================
+
+tip Event = KeyEvent | MouseEvent | ResizeEvent
+
+tip KeyEvent = yapı yap
+    key: Key,
+    modifiers: KeyModifiers
+son
+
+tip Key = 
+    "Char" { ch: yazı } |
+    "Enter" | "Tab" | "Backspace" | "Escape" | "Delete" |
+    "ArrowUp" | "ArrowDown" | "ArrowLeft" | "ArrowRight" |
+    "Home" | "End" | "PageUp" | "PageDown" |
+    "F1" | "F2" | "F3" | "F4" | "F5" | "F6" | "F7" | "F8" | "F9" | "F10" | "F11" | "F12"
+
+tip KeyModifiers = yapı yap
+    ctrl: mantıksal,
+    alt: mantıksal,
+    shift: mantıksal
+son
+
+tip MouseEvent = yapı yap
+    event_type: MouseEventType,
+    row: tamsayı,
+    col: tamsayı,
+    modifiers: KeyModifiers
+son
+
+tip MouseEventType = "Down" | "Up" | "Drag" | "ScrollUp" | "ScrollDown"
+
+tip ResizeEvent = yapı yap
+    rows: tamsayı,
+    cols: tamsayı
+son
+
+// Read next event (blocking)
+@native
+fonksiyon read_event() -> Sonuç[Event, yazı]
+
+// Poll event with timeout (milliseconds)
+@native
+fonksiyon poll_event(timeout_ms: tamsayı) -> Sonuç[Seçenek[Event], yazı]
+
+// Check if event available
+@native
+fonksiyon has_event() -> mantıksal
+
+// ============================================================================
+// BOX DRAWING CHARACTERS
+// ============================================================================
+
+sabit BOX_HORIZONTAL: yazı = "─"
+sabit BOX_VERTICAL: yazı = "│"
+sabit BOX_TOP_LEFT: yazı = "┌"
+sabit BOX_TOP_RIGHT: yazı = "┐"
+sabit BOX_BOTTOM_LEFT: yazı = "└"
+sabit BOX_BOTTOM_RIGHT: yazı = "┘"
+sabit BOX_CROSS: yazı = "┼"
+sabit BOX_T_DOWN: yazı = "┬"
+sabit BOX_T_UP: yazı = "┴"
+sabit BOX_T_RIGHT: yazı = "├"
+sabit BOX_T_LEFT: yazı = "┤"
+
+// Heavy box drawing
+sabit BOX_HEAVY_HORIZONTAL: yazı = "━"
+sabit BOX_HEAVY_VERTICAL: yazı = "┃"
+sabit BOX_HEAVY_TOP_LEFT: yazı = "┏"
+sabit BOX_HEAVY_TOP_RIGHT: yazı = "┓"
+sabit BOX_HEAVY_BOTTOM_LEFT: yazı = "┗"
+sabit BOX_HEAVY_BOTTOM_RIGHT: yazı = "┛"
+
+// Double box drawing
+sabit BOX_DOUBLE_HORIZONTAL: yazı = "═"
+sabit BOX_DOUBLE_VERTICAL: yazı = "║"
+sabit BOX_DOUBLE_TOP_LEFT: yazı = "╔"
+sabit BOX_DOUBLE_TOP_RIGHT: yazı = "╗"
+sabit BOX_DOUBLE_BOTTOM_LEFT: yazı = "╚"
+sabit BOX_DOUBLE_BOTTOM_RIGHT: yazı = "╝"
+
+// Draw box
+fonksiyon draw_box(row: tamsayı, col: tamsayı, width: tamsayı, height: tamsayı, title: Seçenek[yazı]) -> boş
+yap
+    cursor_move(row, col)
+    io::print(BOX_TOP_LEFT)
+    
+    eşleşme title yap
+        Bazı[t] => yap
+            değişken title_len = string::length(t)
+            değişken padding_left = (width - 2 - title_len) / 2
+            
+            için i içinde aralık(0, padding_left) yap
+                io::print(BOX_HORIZONTAL)
+            son
+            io::print(" ")
+            io::print(t)
+            io::print(" ")
+            için i içinde aralık(0, width - 2 - padding_left - title_len - 2) yap
+                io::print(BOX_HORIZONTAL)
+            son
+        son,
+        Hiç => yap
+            için i içinde aralık(0, width - 2) yap
+                io::print(BOX_HORIZONTAL)
+            son
+        son
+    son
+    
+    io::print(BOX_TOP_RIGHT)
+    
+    için r içinde aralık(1, height - 1) yap
+        cursor_move(row + r, col)
+        io::print(BOX_VERTICAL)
+        cursor_move(row + r, col + width - 1)
+        io::print(BOX_VERTICAL)
+    son
+    
+    cursor_move(row + height - 1, col)
+    io::print(BOX_BOTTOM_LEFT)
+    için i içinde aralık(0, width - 2) yap
+        io::print(BOX_HORIZONTAL)
+    son
+    io::print(BOX_BOTTOM_RIGHT)
+son
+
+// ============================================================================
+// PROGRESS BAR
+// ============================================================================
+
+tip ProgressBar = yapı yap
+    current: tamsayı,
+    total: tamsayı,
+    width: tamsayı,
+    label: yazı,
+    row: tamsayı,
+    col: tamsayı
+son
+
+// Create progress bar
+fonksiyon progress_new(total: tamsayı, width: tamsayı, label: yazı) -> ProgressBar
+yap
+    dön ProgressBar yap
+        current: 0,
+        total: total,
+        width: width,
+        label: label,
+        row: 0,
+        col: 0
+    son
+son
+
+// Update progress
+fonksiyon progress_set(bar: ProgressBar, current: tamsayı) -> boş
+yap
+    bar.current = current
+    
+    değişken percent = (ondalık(current) / ondalık(bar.total)) * 100.0
+    değişken filled = tamsayı((ondalık(current) / ondalık(bar.total)) * ondalık(bar.width))
+    
+    cursor_save()
+    cursor_move(bar.row, bar.col)
+    
+    io::print(bar.label)
+    io::print(" [")
+    
+    set_fg_color("Green")
+    için i içinde aralık(0, filled) yap
+        io::print("=")
+    son
+    
+    eğer filled < bar.width yap
+        io::print(">")
+        set_fg_color("Default")
+        için i içinde aralık(filled + 1, bar.width) yap
+            io::print(" ")
+        son
+    son
+    
+    reset_style()
+    io::print("] ")
+    io::print(string::format("{:.1f}%", [percent]))
+    
+    cursor_restore()
+son
+
+// ============================================================================
+// SPINNER
+// ============================================================================
+
+sabit SPINNER_FRAMES: liste[yazı] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+sabit SPINNER_DOTS: liste[yazı] = ["⠁", "⠂", "⠄", "⡀", "⢀", "⠠", "⠐", "⠈"]
+sabit SPINNER_LINE: liste[yazı] = ["|", "/", "-", "\\"]
+sabit SPINNER_ARROW: liste[yazı] = ["←", "↖", "↑", "↗", "→", "↘", "↓", "↙"]
+
+tip Spinner = yapı yap
+    frames: liste[yazı],
+    current_frame: tamsayı,
+    label: yazı,
+    row: tamsayı,
+    col: tamsayı
+son
+
+// Create spinner
+fonksiyon spinner_new(label: yazı) -> Spinner
+yap
+    dön Spinner yap
+        frames: SPINNER_FRAMES,
+        current_frame: 0,
+        label: label,
+        row: 0,
+        col: 0
+    son
+son
+
+// Advance spinner
+fonksiyon spinner_tick(spinner: Spinner) -> boş
+yap
+    cursor_save()
+    cursor_move(spinner.row, spinner.col)
+    
+    set_fg_color("Cyan")
+    io::print(liste_al(spinner.frames, spinner.current_frame))
+    reset_style()
+    io::print(" ")
+    io::print(spinner.label)
+    
+    spinner.current_frame = (spinner.current_frame + 1) % liste_uzunluk(spinner.frames)
+    
+    cursor_restore()
+son
+
+// ============================================================================
+// MENU
+// ============================================================================
+
+tip Menu = yapı yap
+    items: liste[yazı],
+    selected: tamsayı,
+    row: tamsayı,
+    col: tamsayı
+son
+
+// Create menu
+fonksiyon menu_new(items: liste[yazı]) -> Menu
+yap
+    dön Menu yap
+        items: items,
+        selected: 0,
+        row: 0,
+        col: 0
+    son
+son
+
+// Draw menu
+fonksiyon menu_draw(menu: Menu) -> boş
+yap
+    için i, item içinde numaralı(menu.items) yap
+        cursor_move(menu.row + i, menu.col)
+        
+        eğer i == menu.selected yap
+            set_fg_color("Black")
+            set_bg_color("White")
+            io::print("▶ ")
+            io::print(item)
+            reset_style()
+        son değilse yap
+            io::print("  ")
+            io::print(item)
+        son
+    son
+son
+
+// Move menu selection
+fonksiyon menu_move_up(menu: Menu) -> boş
+yap
+    eğer menu.selected > 0 yap
+        menu.selected = menu.selected - 1
+    son
+son
+
+fonksiyon menu_move_down(menu: Menu) -> boş
+yap
+    eğer menu.selected < liste_uzunluk(menu.items) - 1 yap
+        menu.selected = menu.selected + 1
+    son
+son
+
+// ============================================================================
+// TUI HELPERS
+// ============================================================================
+
+// Initialize TUI mode
+fonksiyon tui_init() -> Sonuç[boş, yazı]
+yap
+    enable_raw_mode()?
+    enable_alternate_screen()
+    cursor_hide()
+    clear_screen()
+    dön Tamam(boş)
+son
+
+// Cleanup TUI mode
+fonksiyon tui_cleanup() -> Sonuç[boş, yazı]
+yap
+    cursor_show()
+    disable_alternate_screen()
+    disable_raw_mode()?
+    reset_style()
+    dön Tamam(boş)
+son
+
+// Print at position
+fonksiyon print_at(row: tamsayı, col: tamsayı, text: yazı) -> boş
+yap
+    cursor_move(row, col)
+    io::print(text)
+son
+
+// Print centered
+fonksiyon print_centered(row: tamsayı, text: yazı) -> boş
+yap
+    değişken term_width = width()
+    değişken text_len = string::length(text)
+    değişken col = (term_width - text_len) / 2
+    
+    eğer col < 1 yap
+        col = 1
+    son
+    
+    print_at(row, col, text)
+son
+
+// ============================================================================
+// SPECIAL EFFECTS
+// ============================================================================
+
+// Ring bell / beep
+@native
+fonksiyon beep() -> boş
+
+// Set window title
+@native
+fonksiyon set_title(title: yazı) -> boş
+
+// Request cursor position (returns row, col)
+@native
+fonksiyon get_cursor_position() -> Sonuç[(tamsayı, tamsayı), yazı]
+
+// ============================================================================
+// TURKISH ALIASES
+// ============================================================================
+
+fonksiyon ekranı_temizle() -> boş
+yap
+    clear_screen()
+son
+
+fonksiyon satırı_temizle() -> boş
+yap
+    clear_line()
+son
+
+fonksiyon imleci_gizle() -> boş
+yap
+    cursor_hide()
+son
+
+fonksiyon imleci_göster() -> boş
+yap
+    cursor_show()
+son
+
+fonksiyon genişlik() -> tamsayı
+yap
+    dön width()
+son
+
+fonksiyon yükseklik() -> tamsayı
+yap
+    dön height()
+son
+
+fonksiyon renkli_yazdır(metin: yazı, renk: Color) -> boş
+yap
+    print_colored(metin, renk)
+son
+
+fonksiyon kalın_yazdır(metin: yazı) -> boş
+yap
+    print_bold(metin)
+son
+
+son  // modül terminal

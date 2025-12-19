@@ -1,0 +1,172 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// BERK Standard Library - SLIP Module
+// Hardware Bridge Phase HAL 6.0
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// RFC 1055 SLIP (Serial Line Internet Protocol) paket çerçeveleme.
+// ESP32, mikrodenetleyiciler ve özel protokoller için paket iletişimi.
+//
+// Örnek:
+//   kullan std::slip
+//   olsun esp = slip::open("COM5", 115200)
+//   slip::send(esp, [0x01, 0x02, 0x03])
+//   olsun paket = slip::receive(esp)
+//   slip::close(esp)
+//
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sabitler
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// SLIP END karakteri (0xC0)
+olsun END = 192
+
+/// SLIP ESC karakteri (0xDB)
+olsun ESC = 219
+
+/// SLIP ESC_END karakteri (0xDC)
+olsun ESC_END = 220
+
+/// SLIP ESC_ESC karakteri (0xDD)
+olsun ESC_ESC = 221
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Bağlantı Yönetimi
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// SLIP bağlantısı aç
+/// port: Port adı
+/// baud_rate: Baud hızı (varsayılan 115200)
+/// Döner: Connection handle
+@native("slip_open")
+dpiş open(port: Metin, baud_rate: Tam) -> Tam
+
+/// SLIP aç - Türkçe
+@native("slip_open")
+dpiş ac(port: Metin, baud: Tam) -> Tam
+
+/// SLIP bağlantısını kapat
+@native("slip_close")
+dpiş close(handle: Tam) -> Mantık
+
+/// SLIP kapat - Türkçe
+@native("slip_close")
+dpiş kapat(handle: Tam) -> Mantık
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Paket Gönderme
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Binary paket gönder
+/// data: Ham byte dizisi
+@native("slip_send")
+dpiş send(handle: Tam, data: Dizi) -> Mantık
+
+/// Paket gönder - Türkçe
+@native("slip_send")
+dpiş gonder(handle: Tam, veri: Dizi) -> Mantık
+
+/// String olarak paket gönder (UTF-8)
+@native("slip_send_string")
+dpiş send_string(handle: Tam, text: Metin) -> Mantık
+
+/// Metin gönder - Türkçe
+@native("slip_send_string")
+dpiş metin_gonder(handle: Tam, metin: Metin) -> Mantık
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Paket Alma
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Paket al (bloke eder)
+/// timeout_ms: Zaman aşımı (ms)
+/// Döner: Alınan byte dizisi
+@native("slip_receive")
+dpiş receive(handle: Tam, timeout_ms: Tam) -> Dizi
+
+/// Paket al - Türkçe
+@native("slip_receive")
+dpiş al(handle: Tam, zaman_asimi: Tam) -> Dizi
+
+/// String olarak paket al (UTF-8)
+@native("slip_receive_string")
+dpiş receive_string(handle: Tam, timeout_ms: Tam) -> Metin
+
+/// Metin al - Türkçe
+@native("slip_receive_string")
+dpiş metin_al(handle: Tam, zaman_asimi: Tam) -> Metin
+
+/// Bekleyen paket var mı?
+@native("slip_available")
+dpiş available(handle: Tam) -> Mantık
+
+/// Hazır mı? - Türkçe
+@native("slip_available")
+dpiş hazir_mi(handle: Tam) -> Mantık
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Encoding/Decoding (Bağlantısız Yardımcılar)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Ham veriyi SLIP formatına kodla
+/// Döner: SLIP çerçeveli byte dizisi
+@native("slip_encode")
+dpiş encode(data: Dizi) -> Dizi
+
+/// SLIP kodla - Türkçe
+@native("slip_encode")
+dpiş kodla(veri: Dizi) -> Dizi
+
+/// SLIP verisini çöz
+/// Döner: Orijinal byte dizisi
+@native("slip_decode")
+dpiş decode(data: Dizi) -> Dizi
+
+/// SLIP çöz - Türkçe
+@native("slip_decode")
+dpiş coz(veri: Dizi) -> Dizi
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Paket Oluşturma
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Yapılandırılmış paket oluştur
+/// packet_type: Paket tipi byte'ı
+/// payload: İçerik byte dizisi
+/// Döner: [type, len_low, len_high, ...payload] formatında dizi
+@native("slip_build_packet")
+dpiş build_packet(packet_type: Tam, payload: Dizi) -> Dizi
+
+/// Paket oluştur - Türkçe
+@native("slip_build_packet")
+dpiş paket_olustur(tip: Tam, icerik: Dizi) -> Dizi
+
+/// Paketi ayrıştır
+/// Döner: {type: Tam, payload: Dizi}
+@native("slip_parse_packet")
+dpiş parse_packet(data: Dizi) -> Harita
+
+/// Paket ayrıştır - Türkçe
+@native("slip_parse_packet")
+dpiş paket_ayristir(veri: Dizi) -> Harita
+
+// ─────────────────────────────────────────────────────────────────────────────
+// İstatistik ve Hata Ayıklama
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Bağlantı istatistiklerini al
+/// Döner: {packets_sent, packets_received, bytes_sent, bytes_received, errors}
+@native("slip_get_stats")
+dpiş get_stats(handle: Tam) -> Harita
+
+/// İstatistik al - Türkçe
+@native("slip_get_stats")
+dpiş istatistik(handle: Tam) -> Harita
+
+/// Alım buffer'ını temizle
+@native("slip_flush")
+dpiş flush(handle: Tam) -> Mantık
+
+/// Buffer temizle - Türkçe
+@native("slip_flush")
+dpiş temizle(handle: Tam) -> Mantık

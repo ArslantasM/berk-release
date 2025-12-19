@@ -1,0 +1,256 @@
+// stdlib/embedded/platforms/riscv_fe310/spi.berk
+// SiFive FE310 SPI (QSPI) Implementation
+
+kullan "embedded/bal/spi" olarak SPI_BAL
+
+// FE310 has 3 SPI controllers (SPI0 is for flash, SPI1/2 for peripherals)
+açık enum SpiPort yap
+    SPI0 = 0,  // Flash memory (QSPI)
+    SPI1 = 1,  // General purpose
+    SPI2 = 2,  // General purpose
+son
+
+// SPI base addresses
+sabit SPI0_BASE: u32 = 0x10014000
+sabit SPI1_BASE: u32 = 0x10024000
+sabit SPI2_BASE: u32 = 0x10034000
+
+// SPI register offsets
+sabit SPI_SCKDIV: u32 = 0x00     // Serial clock divisor
+sabit SPI_SCKMODE: u32 = 0x04    // Serial clock mode
+sabit SPI_CSID: u32 = 0x10       // Chip select ID
+sabit SPI_CSDEF: u32 = 0x14      // Chip select default
+sabit SPI_CSMODE: u32 = 0x18     // Chip select mode
+sabit SPI_DELAY0: u32 = 0x28     // Delay control 0
+sabit SPI_DELAY1: u32 = 0x2C     // Delay control 1
+sabit SPI_FMT: u32 = 0x40        // Frame format
+sabit SPI_TXDATA: u32 = 0x48     // TX FIFO data
+sabit SPI_RXDATA: u32 = 0x4C     // RX FIFO data
+sabit SPI_TXMARK: u32 = 0x50     // TX FIFO watermark
+sabit SPI_RXMARK: u32 = 0x54     // RX FIFO watermark
+sabit SPI_FCTRL: u32 = 0x60      // Flash control (SPI0 only)
+sabit SPI_FFMT: u32 = 0x64       // Flash format (SPI0 only)
+sabit SPI_IE: u32 = 0x70         // Interrupt enable
+sabit SPI_IP: u32 = 0x74         // Interrupt pending
+
+// SPI FMT bits
+sabit SPI_FMT_PROTO_SINGLE: u32 = 0x0 << 0
+sabit SPI_FMT_PROTO_DUAL: u32 = 0x1 << 0
+sabit SPI_FMT_PROTO_QUAD: u32 = 0x2 << 0
+sabit SPI_FMT_ENDIAN_MSB: u32 = 0x0 << 2
+sabit SPI_FMT_ENDIAN_LSB: u32 = 0x1 << 2
+sabit SPI_FMT_DIR_RX: u32 = 0x1 << 3
+sabit SPI_FMT_LEN_SHIFT: u32 = 16
+sabit SPI_FMT_LEN_MASK: u32 = 0xF << 16
+
+// SPI SCKMODE bits
+sabit SPI_SCKMODE_PHA: u32 = 0x1 << 0  // Clock phase
+sabit SPI_SCKMODE_POL: u32 = 0x1 << 1  // Clock polarity
+
+// SPI CSMODE values
+sabit SPI_CSMODE_AUTO: u32 = 0x0
+sabit SPI_CSMODE_HOLD: u32 = 0x2
+sabit SPI_CSMODE_OFF: u32 = 0x3
+
+// TXDATA/RXDATA bits
+sabit SPI_DATA_MASK: u32 = 0xFF
+sabit SPI_TXDATA_FULL: u32 = 0x80000000
+sabit SPI_RXDATA_EMPTY: u32 = 0x80000000
+
+// Clock divider calculation
+sabit SPI_CLOCK_HZ: u32 = 16000000  // 16 MHz peripheral clock
+
+harici "C" yap
+    fonksiyon volatile_read_u32(addr: *sabit u32) -> u32
+    fonksiyon volatile_write_u32(addr: *değiştir u32, value: u32)
+son
+
+fonksiyon spi_base_address(port: SpiPort) -> u32 yap
+    seç port yap
+        durum SpiPort::SPI0 => dön SPI0_BASE,
+        durum SpiPort::SPI1 => dön SPI1_BASE,
+        durum SpiPort::SPI2 => dön SPI2_BASE,
+    son
+son
+
+fonksiyon spi_read_reg(port: SpiPort, offset: u32) -> u32 yap
+    değişken addr = (spi_base_address(port) + offset) olarak *sabit u32
+    dön volatile_read_u32(addr)
+son
+
+fonksiyon spi_write_reg(port: SpiPort, offset: u32, value: u32) yap
+    değişken addr = (spi_base_address(port) + offset) olarak *değiştir u32
+    volatile_write_u32(addr, value)
+son
+
+açık enum SpiMode yap
+    MODE0 = 0,  // CPOL=0, CPHA=0
+    MODE1 = 1,  // CPOL=0, CPHA=1
+    MODE2 = 2,  // CPOL=1, CPHA=0
+    MODE3 = 3,  // CPOL=1, CPHA=1
+son
+
+açık enum BitOrder yap
+    MSB_FIRST,
+    LSB_FIRST,
+son
+
+yapı FE310_SPI_HAL yap
+    port: SpiPort,
+    frequency: u32,
+    mode: SpiMode,
+    bit_order: BitOrder,
+    initialized: bool,
+son
+
+uygula FE310_SPI_HAL yap
+    açık fonksiyon yeni(
+        port: SpiPort,
+        frequency: u32,
+        mode: SpiMode,
+        bit_order: BitOrder
+    ) -> FE310_SPI_HAL yap
+        // Calculate clock divisor
+        // sckdiv = (tlclk / (2 * frequency)) - 1
+        değişken divisor = (SPI_CLOCK_HZ / (2 * frequency))
+        eğer divisor > 0 yap
+            divisor -= 1
+        son
+        
+        // Set clock divisor
+        spi_write_reg(port, SPI_SCKDIV, divisor)
+        
+        // Set clock mode (polarity and phase)
+        değişken sckmode: u32 = 0
+        seç mode yap
+            durum SpiMode::MODE0 => sckmode = 0,
+            durum SpiMode::MODE1 => sckmode = SPI_SCKMODE_PHA,
+            durum SpiMode::MODE2 => sckmode = SPI_SCKMODE_POL,
+            durum SpiMode::MODE3 => sckmode = SPI_SCKMODE_PHA | SPI_SCKMODE_POL,
+        son
+        spi_write_reg(port, SPI_SCKMODE, sckmode)
+        
+        // Set frame format (8-bit, MSB/LSB first)
+        değişken fmt: u32 = (8 << SPI_FMT_LEN_SHIFT) | SPI_FMT_PROTO_SINGLE
+        
+        seç bit_order yap
+            durum BitOrder::MSB_FIRST => fmt |= SPI_FMT_ENDIAN_MSB,
+            durum BitOrder::LSB_FIRST => fmt |= SPI_FMT_ENDIAN_LSB,
+        son
+        
+        spi_write_reg(port, SPI_FMT, fmt)
+        
+        // Set CS mode to auto
+        spi_write_reg(port, SPI_CSMODE, SPI_CSMODE_AUTO)
+        
+        dön FE310_SPI_HAL yap
+            port: port,
+            frequency: frequency,
+            mode: mode,
+            bit_order: bit_order,
+            initialized: doğru,
+        son
+    son
+    
+    açık fonksiyon transfer_byte(&kendim, byte: u8) -> u8 yap
+        // Wait for TX FIFO not full
+        döngü yap
+            değişken txdata = spi_read_reg(kendim.port, SPI_TXDATA)
+            eğer (txdata & SPI_TXDATA_FULL) == 0 yap
+                kır
+            son
+        son
+        
+        // Write byte
+        spi_write_reg(kendim.port, SPI_TXDATA, byte olarak u32)
+        
+        // Wait for RX data
+        döngü yap
+            değişken rxdata = spi_read_reg(kendim.port, SPI_RXDATA)
+            eğer (rxdata & SPI_RXDATA_EMPTY) == 0 yap
+                dön (rxdata & SPI_DATA_MASK) olarak u8
+            son
+        son
+    son
+    
+    açık fonksiyon transfer(&kendim, tx_data: &[u8], rx_data: &değiştir [u8]) yap
+        değişken len = eğer tx_data.len() < rx_data.len() yap
+            tx_data.len()
+        son değilse yap
+            rx_data.len()
+        son
+        
+        için i içinde 0..len yap
+            rx_data[i] = kendim.transfer_byte(tx_data[i])
+        son
+    son
+    
+    açık fonksiyon write(&kendim, data: &[u8]) yap
+        için byte içinde data yap
+            kendim.transfer_byte(*byte)
+        son
+    son
+    
+    açık fonksiyon read(&kendim, data: &değiştir [u8]) yap
+        için i içinde 0..data.len() yap
+            data[i] = kendim.transfer_byte(0xFF)
+        son
+    son
+    
+    // CS control
+    açık fonksiyon set_cs(&kendim, cs_id: u8, active: bool) yap
+        spi_write_reg(kendim.port, SPI_CSID, cs_id olarak u32)
+        
+        değişken csmode = eğer active yap
+            SPI_CSMODE_HOLD
+        son değilse yap
+            SPI_CSMODE_AUTO
+        son
+        
+        spi_write_reg(kendim.port, SPI_CSMODE, csmode)
+    son
+    
+    // High-level transfer with CS control
+    açık fonksiyon transaction(&kendim, cs_id: u8, tx_data: &[u8], rx_data: &değiştir [u8]) yap
+        kendim.set_cs(cs_id, doğru)
+        kendim.transfer(tx_data, rx_data)
+        kendim.set_cs(cs_id, yanlış)
+    son
+    
+    açık fonksiyon write_transaction(&kendim, cs_id: u8, data: &[u8]) yap
+        kendim.set_cs(cs_id, doğru)
+        kendim.write(data)
+        kendim.set_cs(cs_id, yanlış)
+    son
+    
+    açık fonksiyon read_transaction(&kendim, cs_id: u8, data: &değiştir [u8]) yap
+        kendim.set_cs(cs_id, doğru)
+        kendim.read(data)
+        kendim.set_cs(cs_id, yanlış)
+    son
+son
+
+uygula SPI_BAL::SpiHAL için FE310_SPI_HAL yap
+    fonksiyon transfer_byte(&kendim, byte: u8) -> u8 yap
+        dön kendim.transfer_byte(byte)
+    son
+    
+    fonksiyon write(&kendim, data: &[u8]) yap
+        kendim.write(data)
+    son
+    
+    fonksiyon read(&kendim, data: &değiştir [u8]) yap
+        kendim.read(data)
+    son
+son
+
+açık tip SPI_HAL = FE310_SPI_HAL
+
+// Common SPI frequencies
+açık sabit SPI_FREQ_125KHZ: u32 = 125000
+açık sabit SPI_FREQ_250KHZ: u32 = 250000
+açık sabit SPI_FREQ_500KHZ: u32 = 500000
+açık sabit SPI_FREQ_1MHZ: u32 = 1000000
+açık sabit SPI_FREQ_2MHZ: u32 = 2000000
+açık sabit SPI_FREQ_4MHZ: u32 = 4000000
+açık sabit SPI_FREQ_8MHZ: u32 = 8000000

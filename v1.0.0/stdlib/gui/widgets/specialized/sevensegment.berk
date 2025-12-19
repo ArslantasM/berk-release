@@ -1,0 +1,854 @@
+// ============================================================================
+// BERK GUI Framework - 7-Segment Display Widget
+// ============================================================================
+// Profesyonel seviye 7-segment display widget'ı
+// Dijital sayı gösterimi, saat, sayaç ve benzeri uygulamalar için
+// ============================================================================
+
+modül gui::widgets::specialized::sevensegment
+
+kullan gui::widgets::core::widget::{Widget, WidgetBase, Rect}
+kullan gui::rendering::canvas::{Canvas, Path, LinearGradient, ColorStop, FillStyle}
+kullan gui::style::colors::Color
+kullan gui::layout::constraints::{Size, Constraints}
+
+// ============================================================================
+// SEGMENT PATTERNS
+// ============================================================================
+
+/// 7-segment karakter kodları (bit pattern: gfedcba)
+///
+///    aaaa
+///   f    b
+///   f    b
+///    gggg
+///   e    c
+///   e    c
+///    dddd  .dp
+///
+değişken SEGMENT_PATTERNS: eşlem[karakter, tamsayı] = [
+    ('0', 0b0111111),  // abcdef
+    ('1', 0b0000110),  // bc
+    ('2', 0b1011011),  // abdeg
+    ('3', 0b1001111),  // abcdg
+    ('4', 0b1100110),  // bcfg
+    ('5', 0b1101101),  // acdfg
+    ('6', 0b1111101),  // acdefg
+    ('7', 0b0000111),  // abc
+    ('8', 0b1111111),  // abcdefg
+    ('9', 0b1101111),  // abcdfg
+    ('A', 0b1110111),  // abcefg
+    ('b', 0b1111100),  // cdefg
+    ('C', 0b0111001),  // adef
+    ('d', 0b1011110),  // bcdeg
+    ('E', 0b1111001),  // adefg
+    ('F', 0b1110001),  // aefg
+    ('H', 0b1110110),  // bcefg
+    ('h', 0b1110100),  // cefg
+    ('L', 0b0111000),  // def
+    ('n', 0b1010100),  // ceg
+    ('o', 0b1011100),  // cdeg
+    ('P', 0b1110011),  // abefg
+    ('r', 0b1010000),  // eg
+    ('t', 0b1111000),  // defg
+    ('U', 0b0111110),  // bcdef
+    ('u', 0b0011100),  // cde
+    ('Y', 0b1101110),  // bcdfg
+    ('-', 0b1000000),  // g
+    ('_', 0b0001000),  // d
+    (' ', 0b0000000),  // nothing
+    ('.', 0b10000000), // dp (8th bit)
+]
+
+// ============================================================================
+// SEVEN SEGMENT DISPLAY
+// ============================================================================
+
+/// 7-segment display stili
+pub tip SegmentStyle = enum yap
+    /// Klasik (straight segments)
+    Classic,
+    
+    /// Modern (rounded segments)
+    Modern,
+    
+    /// Retro (italik)
+    Retro,
+    
+    /// LCD tarzı
+    LCD,
+    
+    /// LED tarzı (glow ile)
+    LED,
+    
+    /// Nixie tüp tarzı
+    Nixie
+son
+
+/// 7-segment display widget
+pub tip SevenSegmentDisplay = yapı yap
+    /// Temel widget özellikleri
+    base: WidgetBase,
+    
+    /// Gösterilecek metin
+    text: yazı,
+    
+    /// Basamak sayısı
+    digit_count: tamsayı,
+    
+    /// Stil
+    style: SegmentStyle,
+    
+    /// Yanık segment rengi
+    on_color: Color,
+    
+    /// Sönük segment rengi
+    off_color: Color,
+    
+    /// Arka plan rengi
+    background_color: Color,
+    
+    /// Segment kalınlığı
+    segment_thickness: ondalık,
+    
+    /// Segment boşluğu
+    segment_gap: ondalık,
+    
+    /// Basamak genişliği
+    digit_width: ondalık,
+    
+    /// Basamak yüksekliği
+    digit_height: ondalık,
+    
+    /// Basamak arası boşluk
+    digit_spacing: ondalık,
+    
+    /// Glow efekti
+    glow: mantıksal,
+    
+    /// Glow yoğunluğu
+    glow_intensity: ondalık,
+    
+    /// Ondalık nokta göster
+    show_decimal_points: mantıksal,
+    
+    /// Kolon göster (saat için)
+    show_colon: mantıksal,
+    
+    /// Kolon konumu (basamak indeksi)
+    colon_position: tamsayı,
+    
+    /// Kolon yanıp sönme
+    colon_blink: mantıksal,
+    
+    /// Kolon durumu
+    colon_visible: mantıksal,
+    
+    /// Sağa hizala
+    right_align: mantıksal,
+    
+    /// Önde sıfır göster
+    leading_zeros: mantıksal,
+    
+    /// Çerçeve
+    show_bezel: mantıksal,
+    
+    /// Çerçeve rengi
+    bezel_color: Color
+son
+
+impl SevenSegmentDisplay:
+    /// Yeni display oluştur
+    pub fn new(digit_count: tamsayı) döndür SevenSegmentDisplay:
+        döndür SevenSegmentDisplay yap
+            base: WidgetBase::new(WidgetBase::generate_id()),
+            text: "",
+            digit_count: digit_count,
+            style: SegmentStyle::LED,
+            on_color: Color::hex("#ff3300"),
+            off_color: Color::hex("#1a0500"),
+            background_color: Color::hex("#0a0a0a"),
+            segment_thickness: 6.0,
+            segment_gap: 2.0,
+            digit_width: 40.0,
+            digit_height: 70.0,
+            digit_spacing: 8.0,
+            glow: doğru,
+            glow_intensity: 0.5,
+            show_decimal_points: yanlış,
+            show_colon: yanlış,
+            colon_position: 2,
+            colon_blink: yanlış,
+            colon_visible: doğru,
+            right_align: doğru,
+            leading_zeros: yanlış,
+            show_bezel: doğru,
+            bezel_color: Color::hex("#333333")
+        son
+    son
+    
+    /// Saat display (4 basamak + kolon)
+    pub fn clock() döndür SevenSegmentDisplay:
+        değişken display = SevenSegmentDisplay::new(4)
+        display.show_colon = doğru
+        display.colon_position = 2
+        display.colon_blink = doğru
+        display.leading_zeros = doğru
+        döndür display
+    son
+    
+    /// Sayaç display
+    pub fn counter(digits: tamsayı) döndür SevenSegmentDisplay:
+        değişken display = SevenSegmentDisplay::new(digits)
+        display.right_align = doğru
+        döndür display
+    son
+    
+    // === BUILDER METHODS ===
+    
+    /// Metin ayarla
+    pub fn set_text(mut self, text: yazı) döndür void:
+        self.text = text
+    son
+    
+    /// Sayı ayarla
+    pub fn set_number(mut self, number: tamsayı) döndür void:
+        self.text = number.to_string()
+    son
+    
+    /// Ondalıklı sayı ayarla
+    pub fn set_decimal(mut self, number: ondalık, decimals: tamsayı) döndür void:
+        self.text = format("{:.{decimals}f}", number)
+        self.show_decimal_points = doğru
+    son
+    
+    /// Saat ayarla
+    pub fn set_time(mut self, hours: tamsayı, minutes: tamsayı) döndür void:
+        self.text = format("{:02}{:02}", hours, minutes)
+    son
+    
+    /// Stil ayarla
+    pub fn style(mut self, style: SegmentStyle) döndür SevenSegmentDisplay:
+        self.style = style
+        self.apply_style_preset()
+        döndür self
+    son
+    
+    /// Klasik stil
+    pub fn classic(mut self) döndür SevenSegmentDisplay:
+        döndür self.style(SegmentStyle::Classic)
+    son
+    
+    /// LCD stil
+    pub fn lcd(mut self) döndür SevenSegmentDisplay:
+        döndür self.style(SegmentStyle::LCD)
+    son
+    
+    /// Nixie stil
+    pub fn nixie(mut self) döndür SevenSegmentDisplay:
+        döndür self.style(SegmentStyle::Nixie)
+    son
+    
+    /// Yanık renk
+    pub fn on_color(mut self, color: Color) döndür SevenSegmentDisplay:
+        self.on_color = color
+        self.off_color = color.darken(0.9)
+        döndür self
+    son
+    
+    /// Kırmızı renk
+    pub fn red(mut self) döndür SevenSegmentDisplay:
+        döndür self.on_color(Color::hex("#ff0000"))
+    son
+    
+    /// Yeşil renk
+    pub fn green(mut self) döndür SevenSegmentDisplay:
+        döndür self.on_color(Color::hex("#00ff00"))
+    son
+    
+    /// Mavi renk
+    pub fn blue(mut self) döndür SevenSegmentDisplay:
+        döndür self.on_color(Color::hex("#00aaff"))
+    son
+    
+    /// Turuncu renk (klasik LED)
+    pub fn orange(mut self) döndür SevenSegmentDisplay:
+        döndür self.on_color(Color::hex("#ff6600"))
+    son
+    
+    /// Segment boyutu
+    pub fn segment_size(mut self, thickness: ondalık, gap: ondalık) döndür SevenSegmentDisplay:
+        self.segment_thickness = thickness
+        self.segment_gap = gap
+        döndür self
+    son
+    
+    /// Basamak boyutu
+    pub fn digit_size(mut self, width: ondalık, height: ondalık) döndür SevenSegmentDisplay:
+        self.digit_width = width
+        self.digit_height = height
+        döndür self
+    son
+    
+    /// Glow efekti
+    pub fn glow(mut self, enabled: mantıksal) döndür SevenSegmentDisplay:
+        self.glow = enabled
+        döndür self
+    son
+    
+    /// Glow yoğunluğu
+    pub fn glow_intensity(mut self, intensity: ondalık) döndür SevenSegmentDisplay:
+        self.glow_intensity = intensity
+        döndür self
+    son
+    
+    /// Kolon göster
+    pub fn with_colon(mut self, position: tamsayı) döndür SevenSegmentDisplay:
+        self.show_colon = doğru
+        self.colon_position = position
+        döndür self
+    son
+    
+    /// Kolon yanıp sönme
+    pub fn colon_blink(mut self, enabled: mantıksal) döndür SevenSegmentDisplay:
+        self.colon_blink = enabled
+        döndür self
+    son
+    
+    /// Çerçeve
+    pub fn bezel(mut self, show: mantıksal, color: Color) döndür SevenSegmentDisplay:
+        self.show_bezel = show
+        self.bezel_color = color
+        döndür self
+    son
+    
+    /// Hizalama
+    pub fn right_align(mut self, enabled: mantıksal) döndür SevenSegmentDisplay:
+        self.right_align = enabled
+        döndür self
+    son
+    
+    /// Önde sıfır
+    pub fn leading_zeros(mut self, enabled: mantıksal) döndür SevenSegmentDisplay:
+        self.leading_zeros = enabled
+        döndür self
+    son
+    
+    // === STYLE PRESETS ===
+    
+    fn apply_style_preset(mut self) döndür void:
+        eşle self.style:
+            SegmentStyle::Classic => yap
+                self.segment_thickness = 8.0
+                self.segment_gap = 2.0
+                self.glow = yanlış
+            son,
+            
+            SegmentStyle::Modern => yap
+                self.segment_thickness = 6.0
+                self.segment_gap = 3.0
+                self.glow = yanlış
+            son,
+            
+            SegmentStyle::Retro => yap
+                self.segment_thickness = 7.0
+                self.segment_gap = 2.0
+                self.on_color = Color::hex("#ff6600")
+                self.background_color = Color::hex("#1a1008")
+            son,
+            
+            SegmentStyle::LCD => yap
+                self.segment_thickness = 5.0
+                self.segment_gap = 1.0
+                self.on_color = Color::hex("#1a1a1a")
+                self.off_color = Color::hex("#c8c8c8")
+                self.background_color = Color::hex("#a8b0a0")
+                self.glow = yanlış
+            son,
+            
+            SegmentStyle::LED => yap
+                self.segment_thickness = 6.0
+                self.segment_gap = 2.0
+                self.glow = doğru
+                self.glow_intensity = 0.6
+            son,
+            
+            SegmentStyle::Nixie => yap
+                self.segment_thickness = 4.0
+                self.segment_gap = 1.0
+                self.on_color = Color::hex("#ff6622")
+                self.off_color = Color::hex("#331100")
+                self.background_color = Color::hex("#0a0a0a")
+                self.glow = doğru
+                self.glow_intensity = 0.8
+            son
+        son
+    son
+    
+    /// Karakter için segment pattern al
+    fn get_segment_pattern(self, ch: karakter) döndür tamsayı:
+        eğer değişken pattern = SEGMENT_PATTERNS.get(ch.to_upper()):
+            döndür pattern
+        son
+        döndür 0  // Bilinmeyen karakter = boş
+    son
+son
+
+// ============================================================================
+// WIDGET TRAIT IMPLEMENTATION
+// ============================================================================
+
+impl Widget için SevenSegmentDisplay:
+    fn id(self) döndür yazı:
+        döndür self.base.id
+    son
+    
+    fn measure(self, constraints: Constraints) döndür Size:
+        değişken total_width = self.digit_count * (self.digit_width + self.digit_spacing)
+        
+        // Kolon için ek genişlik
+        eğer self.show_colon:
+            total_width = total_width + 15.0
+        son
+        
+        // Çerçeve için ek genişlik
+        eğer self.show_bezel:
+            total_width = total_width + 20.0
+        son
+        
+        değişken height = self.digit_height + (eğer self.show_bezel: 20.0 değilse: 0.0 son)
+        
+        döndür Size yap width: total_width, height: height son
+    son
+    
+    fn layout(mut self, x: ondalık, y: ondalık, width: ondalık, height: ondalık) döndür void:
+        self.base.x = x
+        self.base.y = y
+        self.base.width = width
+        self.base.height = height
+    son
+    
+    fn bounds(self) döndür Rect:
+        döndür self.base.bounds()
+    son
+    
+    fn update(mut self) döndür void:
+        // Kolon yanıp sönme
+        eğer self.show_colon ve self.colon_blink:
+            değişken now = current_time_ms()
+            self.colon_visible = (now / 500) % 2 == 0
+        son
+        
+        self.base.update_animations()
+    son
+    
+    fn render(self, canvas: Canvas) döndür void:
+        canvas.save()
+        
+        değişken padding = eğer self.show_bezel: 10.0 değilse: 0.0 son
+        
+        // Çerçeve
+        eğer self.show_bezel:
+            self.render_bezel(canvas)
+        son
+        
+        // Arka plan
+        canvas.set_fill_color(self.background_color)
+        canvas.fill_rect(
+            self.base.x + padding,
+            self.base.y + padding,
+            self.base.width - padding * 2.0,
+            self.base.height - padding * 2.0
+        )
+        
+        // Metni hazırla
+        değişken display_text = self.prepare_display_text()
+        
+        // Basamakları render et
+        değişken x = self.base.x + padding + 5.0
+        değişken y = self.base.y + padding + 5.0
+        değişken digit_index = 0
+        
+        için i içinde 0..display_text.len():
+            değişken ch = display_text.char_at(i)
+            
+            // Kolon kontrolü
+            eğer self.show_colon ve digit_index == self.colon_position:
+                self.render_colon(canvas, x, y)
+                x = x + 15.0
+            son
+            
+            // Ondalık nokta kontrolü
+            eğer ch == '.':
+                self.render_decimal_point(canvas, x - self.digit_spacing, y + self.digit_height - 10.0)
+                devam
+            son
+            
+            // Basamak render
+            değişken pattern = self.get_segment_pattern(ch)
+            self.render_digit(canvas, x, y, pattern)
+            
+            x = x + self.digit_width + self.digit_spacing
+            digit_index = digit_index + 1
+        son
+        
+        canvas.restore()
+    son
+son
+
+// ============================================================================
+// RENDER METHODS
+// ============================================================================
+
+impl SevenSegmentDisplay:
+    /// Metni display için hazırla
+    fn prepare_display_text(self) döndür yazı:
+        değişken result = self.text
+        
+        // Önde sıfırlar
+        eğer self.leading_zeros:
+            tekrarla result.len() < self.digit_count:
+                result = "0" + result
+            son
+        son
+        
+        // Sağa hizalama
+        eğer self.right_align:
+            tekrarla result.len() < self.digit_count:
+                result = " " + result
+            son
+        son
+        
+        // Maksimum uzunluk
+        eğer result.len() > self.digit_count:
+            result = result.substring(0, self.digit_count)
+        son
+        
+        döndür result
+    son
+    
+    /// Çerçeve render
+    fn render_bezel(self, canvas: Canvas) döndür void:
+        // Dış çerçeve
+        değişken bezel_gradient = LinearGradient yap
+            x0: self.base.x, y0: self.base.y,
+            x1: self.base.x, y1: self.base.y + self.base.height,
+            stops: [
+                ColorStop yap offset: 0.0, color: self.bezel_color.lighten(0.2) son,
+                ColorStop yap offset: 0.5, color: self.bezel_color son,
+                ColorStop yap offset: 1.0, color: self.bezel_color.darken(0.2) son
+            ]
+        son
+        
+        canvas.set_fill_style(FillStyle::LinearGradient(bezel_gradient))
+        canvas.fill_rounded_rect(self.base.x, self.base.y, self.base.width, self.base.height, 5.0)
+        
+        // İç gölge
+        canvas.set_stroke_color(Color::rgba(0, 0, 0, 128))
+        canvas.set_line_width(2.0)
+        canvas.stroke_rounded_rect(self.base.x + 8.0, self.base.y + 8.0, self.base.width - 16.0, self.base.height - 16.0, 3.0)
+    son
+    
+    /// Tek basamak render
+    fn render_digit(self, canvas: Canvas, x: ondalık, y: ondalık, pattern: tamsayı) döndür void:
+        değişken w = self.digit_width
+        değişken h = self.digit_height
+        değişken t = self.segment_thickness
+        değişken g = self.segment_gap
+        
+        // Segment pozisyonları
+        // a: üst yatay
+        self.render_segment(canvas, x + g, y, w - 2.0 * g, t, (pattern & 0b0000001) != 0, yanlış)
+        
+        // b: sağ üst dikey
+        self.render_segment(canvas, x + w - t, y + g, t, h / 2.0 - g * 1.5, (pattern & 0b0000010) != 0, doğru)
+        
+        // c: sağ alt dikey
+        self.render_segment(canvas, x + w - t, y + h / 2.0 + g * 0.5, t, h / 2.0 - g * 1.5, (pattern & 0b0000100) != 0, doğru)
+        
+        // d: alt yatay
+        self.render_segment(canvas, x + g, y + h - t, w - 2.0 * g, t, (pattern & 0b0001000) != 0, yanlış)
+        
+        // e: sol alt dikey
+        self.render_segment(canvas, x, y + h / 2.0 + g * 0.5, t, h / 2.0 - g * 1.5, (pattern & 0b0010000) != 0, doğru)
+        
+        // f: sol üst dikey
+        self.render_segment(canvas, x, y + g, t, h / 2.0 - g * 1.5, (pattern & 0b0100000) != 0, doğru)
+        
+        // g: orta yatay
+        self.render_segment(canvas, x + g, y + h / 2.0 - t / 2.0, w - 2.0 * g, t, (pattern & 0b1000000) != 0, yanlış)
+    son
+    
+    /// Tek segment render
+    fn render_segment(self, canvas: Canvas, x: ondalık, y: ondalık, w: ondalık, h: ondalık, is_on: mantıksal, is_vertical: mantıksal) döndür void:
+        değişken color = eğer is_on: self.on_color değilse: self.off_color son
+        
+        // Glow efekti
+        eğer self.glow ve is_on:
+            canvas.set_shadow(self.on_color, 10.0 * self.glow_intensity, 0.0, 0.0)
+        son
+        
+        // Segment şekli (stil bazlı)
+        eşle self.style:
+            SegmentStyle::Classic | SegmentStyle::Retro => yap
+                // Altıgen segment
+                self.render_hexagon_segment(canvas, x, y, w, h, is_vertical, color)
+            son,
+            
+            SegmentStyle::Modern => yap
+                // Yuvarlak köşeli
+                canvas.set_fill_color(color)
+                canvas.fill_rounded_rect(x, y, w, h, 2.0)
+            son,
+            
+            SegmentStyle::LCD => yap
+                // Keskin köşeli
+                canvas.set_fill_color(color)
+                canvas.fill_rect(x, y, w, h)
+            son,
+            
+            SegmentStyle::LED | SegmentStyle::Nixie => yap
+                // Hafif yuvarlak
+                canvas.set_fill_color(color)
+                canvas.fill_rounded_rect(x, y, w, h, min(w, h) * 0.3)
+            son
+        son
+        
+        eğer self.glow:
+            canvas.clear_shadow()
+        son
+    son
+    
+    /// Altıgen segment render (klasik 7-segment görünümü)
+    fn render_hexagon_segment(self, canvas: Canvas, x: ondalık, y: ondalık, w: ondalık, h: ondalık, is_vertical: mantıksal, color: Color) döndür void:
+        değişken path = Path::new()
+        değişken taper = min(w, h) * 0.3
+        
+        eğer is_vertical:
+            // Dikey segment (üstten alta)
+            path.move_to(x + w / 2.0, y)
+            path.line_to(x + w, y + taper)
+            path.line_to(x + w, y + h - taper)
+            path.line_to(x + w / 2.0, y + h)
+            path.line_to(x, y + h - taper)
+            path.line_to(x, y + taper)
+            path.close()
+        değilse:
+            // Yatay segment (soldan sağa)
+            path.move_to(x, y + h / 2.0)
+            path.line_to(x + taper, y)
+            path.line_to(x + w - taper, y)
+            path.line_to(x + w, y + h / 2.0)
+            path.line_to(x + w - taper, y + h)
+            path.line_to(x + taper, y + h)
+            path.close()
+        son
+        
+        canvas.set_fill_color(color)
+        canvas.fill_path(path)
+    son
+    
+    /// Kolon render (saat display için)
+    fn render_colon(self, canvas: Canvas, x: ondalık, y: ondalık) döndür void:
+        değişken color = eğer self.colon_visible: self.on_color değilse: self.off_color son
+        değişken dot_size = self.segment_thickness
+        değişken h = self.digit_height
+        
+        // Glow
+        eğer self.glow ve self.colon_visible:
+            canvas.set_shadow(self.on_color, 8.0 * self.glow_intensity, 0.0, 0.0)
+        son
+        
+        canvas.set_fill_color(color)
+        canvas.fill_circle(x + 5.0, y + h * 0.3, dot_size / 2.0)
+        canvas.fill_circle(x + 5.0, y + h * 0.7, dot_size / 2.0)
+        
+        eğer self.glow:
+            canvas.clear_shadow()
+        son
+    son
+    
+    /// Ondalık nokta render
+    fn render_decimal_point(self, canvas: Canvas, x: ondalık, y: ondalık) döndür void:
+        değişken dot_size = self.segment_thickness
+        
+        eğer self.glow:
+            canvas.set_shadow(self.on_color, 8.0 * self.glow_intensity, 0.0, 0.0)
+        son
+        
+        canvas.set_fill_color(self.on_color)
+        canvas.fill_circle(x, y, dot_size / 2.0)
+        
+        eğer self.glow:
+            canvas.clear_shadow()
+        son
+    son
+son
+
+// ============================================================================
+// SPECIALIZED DISPLAYS
+// ============================================================================
+
+/// Saat display
+pub tip ClockDisplay = yapı yap
+    display: SevenSegmentDisplay,
+    hours: tamsayı,
+    minutes: tamsayı,
+    seconds: tamsayı,
+    show_seconds: mantıksal,
+    is_24h: mantıksal
+son
+
+impl ClockDisplay:
+    pub fn new() döndür ClockDisplay:
+        döndür ClockDisplay yap
+            display: SevenSegmentDisplay::clock(),
+            hours: 0,
+            minutes: 0,
+            seconds: 0,
+            show_seconds: yanlış,
+            is_24h: doğru
+        son
+    son
+    
+    pub fn set_time(mut self, hours: tamsayı, minutes: tamsayı, seconds: tamsayı) döndür void:
+        self.hours = hours
+        self.minutes = minutes
+        self.seconds = seconds
+        
+        değişken h = eğer self.is_24h: hours değilse: hours % 12 son
+        eğer h == 0 ve !self.is_24h: h = 12 son
+        
+        eğer self.show_seconds:
+            self.display.set_text(format("{:02}{:02}{:02}", h, minutes, seconds))
+        değilse:
+            self.display.set_time(h, minutes)
+        son
+    son
+    
+    pub fn with_seconds(mut self) döndür ClockDisplay:
+        self.show_seconds = doğru
+        self.display = SevenSegmentDisplay::new(6)
+        self.display.show_colon = doğru
+        self.display.colon_position = 2
+        döndür self
+    son
+    
+    pub fn set_24h(mut self, enabled: mantıksal) döndür ClockDisplay:
+        self.is_24h = enabled
+        döndür self
+    son
+son
+
+impl Widget için ClockDisplay:
+    fn id(self) döndür yazı:
+        döndür self.display.id()
+    son
+    
+    fn measure(self, constraints: Constraints) döndür Size:
+        döndür self.display.measure(constraints)
+    son
+    
+    fn layout(mut self, x: ondalık, y: ondalık, width: ondalık, height: ondalık) döndür void:
+        self.display.layout(x, y, width, height)
+    son
+    
+    fn bounds(self) döndür Rect:
+        döndür self.display.bounds()
+    son
+    
+    fn update(mut self) döndür void:
+        self.display.update()
+    son
+    
+    fn render(self, canvas: Canvas) döndür void:
+        self.display.render(canvas)
+    son
+son
+
+/// Sayaç display
+pub tip CounterDisplay = yapı yap
+    display: SevenSegmentDisplay,
+    value: tamsayı,
+    min_value: tamsayı,
+    max_value: tamsayı
+son
+
+impl CounterDisplay:
+    pub fn new(digits: tamsayı) döndür CounterDisplay:
+        döndür CounterDisplay yap
+            display: SevenSegmentDisplay::counter(digits),
+            value: 0,
+            min_value: 0,
+            max_value: pow(10, digits) - 1
+        son
+    son
+    
+    pub fn set_value(mut self, value: tamsayı) döndür void:
+        self.value = clamp(value, self.min_value, self.max_value)
+        self.display.set_number(self.value)
+    son
+    
+    pub fn increment(mut self) döndür void:
+        self.set_value(self.value + 1)
+    son
+    
+    pub fn decrement(mut self) döndür void:
+        self.set_value(self.value - 1)
+    son
+    
+    pub fn reset(mut self) döndür void:
+        self.set_value(0)
+    son
+son
+
+impl Widget için CounterDisplay:
+    fn id(self) döndür yazı:
+        döndür self.display.id()
+    son
+    
+    fn measure(self, constraints: Constraints) döndür Size:
+        döndür self.display.measure(constraints)
+    son
+    
+    fn layout(mut self, x: ondalık, y: ondalık, width: ondalık, height: ondalık) döndür void:
+        self.display.layout(x, y, width, height)
+    son
+    
+    fn bounds(self) döndür Rect:
+        döndür self.display.bounds()
+    son
+    
+    fn update(mut self) döndür void:
+        self.display.update()
+    son
+    
+    fn render(self, canvas: Canvas) döndür void:
+        self.display.render(canvas)
+    son
+son
+
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+fn clamp(value: tamsayı, min: tamsayı, max: tamsayı) döndür tamsayı:
+    eğer value < min: döndür min son
+    eğer value > max: döndür max son
+    döndür value
+son
+
+fn pow(base: tamsayı, exp: tamsayı) döndür tamsayı:
+    değişken result = 1
+    için i içinde 0..exp:
+        result = result * base
+    son
+    döndür result
+son
+
+fn current_time_ms() döndür tamsayı:
+    döndür @native_current_time_ms()
+son
+
+// Native bindings
+dışsal fn @native_current_time_ms() döndür tamsayı

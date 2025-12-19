@@ -1,0 +1,1638 @@
+//! # GUI Module
+//!
+//! Graphical user interface (cross-platform).
+//!
+//! Grafik kullanıcı arayüzü (çapraz platform).
+//!
+//! ## Features / Özellikler
+//!
+//! - **Cross-platform**: Windows, Linux, macOS / Çapraz platform
+//! - **Modes**: Immediate + retained mode / Anlık + kalıcı mod
+//! - **Native widgets**: OS theme support / Native bileşenler
+//! - **Layouts**: Box, Grid, Stack / Düzen yönetimi
+//! - **Events**: Mouse, keyboard, window / Olay yönetimi
+//! - **Canvas**: Drawing shapes, text, images / Canvas çizim
+//! - **Dialogs**: File picker, color picker, message box / Diyaloglar
+//! - **Widgets**: Button, label, textbox, checkbox, slider / Bileşenler
+//! - **Custom**: Widget support / Özel bileşen desteği
+//!
+//! ## Example / Örnek
+//!
+//! ```berk
+//! kullan gui
+//!
+//! değişken window = gui.create_window("Uygulama", 800, 600)
+//! gui.add_button(window, "Tıkla", tiklama_handler)
+//! gui.run(window)
+//! ```
+//!
+//! Backend: SDL2/GTK/Win32 (platform-specific)
+
+modül gui
+
+kullan string
+kullan io
+
+// ============================================================================
+// TÜRLER (Types)
+// ============================================================================
+
+// Pencere
+tip Pencere = yapı yap
+    başlık: yazı,
+    genişlik: tamsayı,
+    yükseklik: tamsayı,
+    x: tamsayı,
+    y: tamsayı,
+    görunen: mantıksal,
+    yeniden_boyutlandırılabilir: mantıksal,
+    tam_ekran: mantıksal,
+    arka_plan_rengi: Renk,
+    handle: tamsayı  // Native window handle (opaque)
+son
+
+// Widget (temel UI bileşeni)
+tip Widget = yapı yap
+    id: yazı,
+    tür: WidgetTürü,
+    x: tamsayı,
+    y: tamsayı,
+    genişlik: tamsayı,
+    yükseklik: tamsayı,
+    görunen: mantıksal,
+    etkin: mantıksal,
+    metin: yazı,
+    değer: WidgetDeger,
+    olay_handler: OlayHandler,
+    ebeveyn: Seçenek[Widget],
+    çocuklar: liste[Widget]
+son
+
+tip WidgetTürü = "Button" | "Label" | "TextBox" | "CheckBox" | "RadioButton" | 
+                  "Slider" | "ProgressBar" | "ComboBox" | "ListBox" | "TabControl" |
+                  "TreeView" | "ImageView" | "Canvas" | "Panel" | "ScrollView" |
+                  "MenuBar" | "ToolBar" | "StatusBar" | "Splitter"
+
+tip WidgetDeger = yazı | tamsayı | ondalık | mantıksal | liste[yazı] | boş
+
+// Renk (RGBA)
+tip Renk = yapı yap
+    r: tamsayı,  // 0-255
+    g: tamsayı,
+    b: tamsayı,
+    a: tamsayı   // Alpha (transparency)
+son
+
+// Konum ve boyut
+tip Dikdörtgen = yapı yap
+    x: tamsayı,
+    y: tamsayı,
+    genişlik: tamsayı,
+    yükseklik: tamsayı
+son
+
+tip Nokta = yapı yap
+    x: tamsayı,
+    y: tamsayı
+son
+
+// Olay (Event)
+tip Olay = yapı yap
+    tür: OlayTürü,
+    widget_id: yazı,
+    fare_pozisyonu: Nokta,
+    fare_tuşu: FareTusu,
+    klavye_tuşu: tamsayı,
+    karakter: yazı,
+    değişiklik_miktarı: ondalık  // Scroll delta
+son
+
+tip OlayTürü = "Click" | "DoubleClick" | "MouseDown" | "MouseUp" | "MouseMove" | 
+               "MouseEnter" | "MouseLeave" | "KeyDown" | "KeyUp" | "KeyPress" |
+               "TextChanged" | "ValueChanged" | "Focus" | "Blur" | "Scroll" |
+               "WindowResize" | "WindowClose" | "Paint"
+
+tip FareTusu = "Left" | "Right" | "Middle" | "X1" | "X2"
+
+// Olay handler fonksiyonu
+tip OlayHandler = fonksiyon(olay: Olay) -> boş
+
+// Layout
+tip LayoutTürü = "Box" | "Grid" | "Stack" | "Flow" | "Absolute"
+
+tip Layout = yapı yap
+    tür: LayoutTürü,
+    yön: yazı,        // "horizontal", "vertical"
+    boşluk: tamsayı,  // Widget'lar arası boşluk (padding)
+    hizalama: yazı    // "left", "center", "right", "top", "bottom"
+son
+
+// Font
+tip Font = yapı yap
+    aile: yazı,         // "Arial", "Times New Roman"
+    boyut: tamsayı,     // Pixel
+    kalın: mantıksal,
+    italik: mantıksal,
+    altı_çizili: mantıksal
+son
+
+// Image
+tip Resim = yapı yap
+    genişlik: tamsayı,
+    yükseklik: tamsayı,
+    veri: liste[byte],  // RGBA pixel data
+    handle: tamsayı     // Native image handle
+son
+
+// Dialog sonucu
+tip DialogSonuc = "OK" | "Cancel" | "Yes" | "No" | "Abort" | "Retry" | "Ignore"
+
+// ============================================================================
+// PENCERE YÖNETİMİ (Window Management)
+// ============================================================================
+
+// Pencere oluştur
+fonksiyon pencere_olustur(başlık: yazı, genişlik: tamsayı, yükseklik: tamsayı) -> Sonuç[Pencere, GuiHata]
+yap
+    değişken handle = native_pencere_olustur(başlık, genişlik, yükseklik, 0, 0)
+    
+    eğer handle < 0 ise yap
+        dön Hata(GuiHata yap
+            mesaj: "Pencere oluşturulamadı",
+            hata_türü: "window"
+        son)
+    son
+    
+    dön Başarı(Pencere yap
+        başlık: başlık,
+        genişlik: genişlik,
+        yükseklik: yükseklik,
+        x: 100,
+        y: 100,
+        görunen: yanlış,
+        yeniden_boyutlandırılabilir: doğru,
+        tam_ekran: yanlış,
+        arka_plan_rengi: renk_beyaz(),
+        handle: handle
+    son)
+son
+
+// Pencereyi göster
+fonksiyon pencere_goster(pencere: Pencere) -> boş
+yap
+    native_pencere_goster(pencere.handle)
+    pencere.görunen = doğru
+son
+
+// Pencereyi gizle
+fonksiyon pencere_gizle(pencere: Pencere) -> boş
+yap
+    native_pencere_gizle(pencere.handle)
+    pencere.görunen = yanlış
+son
+
+// Pencereyi kapat
+fonksiyon pencere_kapat(pencere: Pencere) -> boş
+yap
+    native_pencere_kapat(pencere.handle)
+son
+
+// Pencere başlığını değiştir
+fonksiyon pencere_baslik_ayarla(pencere: Pencere, başlık: yazı) -> boş
+yap
+    native_pencere_baslik_ayarla(pencere.handle, başlık)
+    pencere.başlık = başlık
+son
+
+// Pencere boyutunu ayarla
+fonksiyon pencere_boyut_ayarla(pencere: Pencere, genişlik: tamsayı, yükseklik: tamsayı) -> boş
+yap
+    native_pencere_boyut_ayarla(pencere.handle, genişlik, yükseklik)
+    pencere.genişlik = genişlik
+    pencere.yükseklik = yükseklik
+son
+
+// Pencere pozisyonunu ayarla
+fonksiyon pencere_pozisyon_ayarla(pencere: Pencere, x: tamsayı, y: tamsayı) -> boş
+yap
+    native_pencere_pozisyon_ayarla(pencere.handle, x, y)
+    pencere.x = x
+    pencere.y = y
+son
+
+// Pencereyi ortala
+fonksiyon pencere_ortala(pencere: Pencere) -> boş
+yap
+    değişken ekran_genişlik = native_ekran_genisligi()
+    değişken ekran_yükseklik = native_ekran_yuksekligi()
+    
+    değişken x = (ekran_genişlik - pencere.genişlik) / 2
+    değişken y = (ekran_yükseklik - pencere.yükseklik) / 2
+    
+    pencere_pozisyon_ayarla(pencere, x, y)
+son
+
+// Tam ekran yap
+fonksiyon pencere_tam_ekran(pencere: Pencere, tam_ekran: mantıksal) -> boş
+yap
+    native_pencere_tam_ekran(pencere.handle, tam_ekran)
+    pencere.tam_ekran = tam_ekran
+son
+
+// ============================================================================
+// WİDGET OLUŞTURMA (Widget Creation)
+// ============================================================================
+
+// Buton oluştur
+fonksiyon dugme_olustur(ebeveyn: Pencere, metin: yazı, x: tamsayı, y: tamsayı, genişlik: tamsayı, yükseklik: tamsayı) -> Widget
+yap
+    değişken widget = Widget yap
+        id: widget_id_olustur(),
+        tür: "Button",
+        x: x,
+        y: y,
+        genişlik: genişlik,
+        yükseklik: yükseklik,
+        görunen: doğru,
+        etkin: doğru,
+        metin: metin,
+        değer: boş,
+        olay_handler: boş,
+        ebeveyn: Hiç,
+        çocuklar: liste_oluştur()
+    son
+    
+    native_widget_olustur(ebeveyn.handle, "Button", widget)
+    dön widget
+son
+
+// Label oluştur
+fonksiyon etiket_olustur(ebeveyn: Pencere, metin: yazı, x: tamsayı, y: tamsayı) -> Widget
+yap
+    değişken widget = Widget yap
+        id: widget_id_olustur(),
+        tür: "Label",
+        x: x,
+        y: y,
+        genişlik: 200,
+        yükseklik: 30,
+        görunen: doğru,
+        etkin: doğru,
+        metin: metin,
+        değer: boş,
+        olay_handler: boş,
+        ebeveyn: Hiç,
+        çocuklar: liste_oluştur()
+    son
+    
+    native_widget_olustur(ebeveyn.handle, "Label", widget)
+    dön widget
+son
+
+// TextBox oluştur
+fonksiyon metin_kutusu_olustur(ebeveyn: Pencere, x: tamsayı, y: tamsayı, genişlik: tamsayı, yükseklik: tamsayı) -> Widget
+yap
+    değişken widget = Widget yap
+        id: widget_id_olustur(),
+        tür: "TextBox",
+        x: x,
+        y: y,
+        genişlik: genişlik,
+        yükseklik: yükseklik,
+        görunen: doğru,
+        etkin: doğru,
+        metin: "",
+        değer: "",
+        olay_handler: boş,
+        ebeveyn: Hiç,
+        çocuklar: liste_oluştur()
+    son
+    
+    native_widget_olustur(ebeveyn.handle, "TextBox", widget)
+    dön widget
+son
+
+// CheckBox oluştur
+fonksiyon onay_kutusu_olustur(ebeveyn: Pencere, metin: yazı, x: tamsayı, y: tamsayı) -> Widget
+yap
+    değişken widget = Widget yap
+        id: widget_id_olustur(),
+        tür: "CheckBox",
+        x: x,
+        y: y,
+        genişlik: 200,
+        yükseklik: 30,
+        görunen: doğru,
+        etkin: doğru,
+        metin: metin,
+        değer: yanlış,
+        olay_handler: boş,
+        ebeveyn: Hiç,
+        çocuklar: liste_oluştur()
+    son
+    
+    native_widget_olustur(ebeveyn.handle, "CheckBox", widget)
+    dön widget
+son
+
+// Slider oluştur
+fonksiyon kaydirici_olustur(ebeveyn: Pencere, min: ondalık, max: ondalık, x: tamsayı, y: tamsayı, genişlik: tamsayı) -> Widget
+yap
+    değişken widget = Widget yap
+        id: widget_id_olustur(),
+        tür: "Slider",
+        x: x,
+        y: y,
+        genişlik: genişlik,
+        yükseklik: 30,
+        görunen: doğru,
+        etkin: doğru,
+        metin: "",
+        değer: min,
+        olay_handler: boş,
+        ebeveyn: Hiç,
+        çocuklar: liste_oluştur()
+    son
+    
+    native_widget_olustur(ebeveyn.handle, "Slider", widget)
+    native_slider_aralık_ayarla(widget.id, min, max)
+    dön widget
+son
+
+// ProgressBar oluştur
+fonksiyon ilerleme_cubugu_olustur(ebeveyn: Pencere, x: tamsayı, y: tamsayı, genişlik: tamsayı) -> Widget
+yap
+    değişken widget = Widget yap
+        id: widget_id_olustur(),
+        tür: "ProgressBar",
+        x: x,
+        y: y,
+        genişlik: genişlik,
+        yükseklik: 25,
+        görunen: doğru,
+        etkin: doğru,
+        metin: "",
+        değer: 0.0,
+        olay_handler: boş,
+        ebeveyn: Hiç,
+        çocuklar: liste_oluştur()
+    son
+    
+    native_widget_olustur(ebeveyn.handle, "ProgressBar", widget)
+    dön widget
+son
+
+// ComboBox (dropdown) oluştur
+fonksiyon acilir_liste_olustur(ebeveyn: Pencere, secenekler: liste[yazı], x: tamsayı, y: tamsayı, genişlik: tamsayı) -> Widget
+yap
+    değişken widget = Widget yap
+        id: widget_id_olustur(),
+        tür: "ComboBox",
+        x: x,
+        y: y,
+        genişlik: genişlik,
+        yükseklik: 30,
+        görunen: doğru,
+        etkin: doğru,
+        metin: "",
+        değer: secenekler,
+        olay_handler: boş,
+        ebeveyn: Hiç,
+        çocuklar: liste_oluştur()
+    son
+    
+    native_widget_olustur(ebeveyn.handle, "ComboBox", widget)
+    native_combobox_secenekler_ekle(widget.id, secenekler)
+    dön widget
+son
+
+// ListBox oluştur
+fonksiyon liste_kutusu_olustur(ebeveyn: Pencere, x: tamsayı, y: tamsayı, genişlik: tamsayı, yükseklik: tamsayı) -> Widget
+yap
+    değişken widget = Widget yap
+        id: widget_id_olustur(),
+        tür: "ListBox",
+        x: x,
+        y: y,
+        genişlik: genişlik,
+        yükseklik: yükseklik,
+        görunen: doğru,
+        etkin: doğru,
+        metin: "",
+        değer: liste_oluştur(),
+        olay_handler: boş,
+        ebeveyn: Hiç,
+        çocuklar: liste_oluştur()
+    son
+    
+    native_widget_olustur(ebeveyn.handle, "ListBox", widget)
+    dön widget
+son
+
+// ============================================================================
+// WİDGET İŞLEMLERİ (Widget Operations)
+// ============================================================================
+
+// Widget metnini ayarla
+fonksiyon widget_metin_ayarla(widget: Widget, metin: yazı) -> boş
+yap
+    widget.metin = metin
+    native_widget_metin_ayarla(widget.id, metin)
+son
+
+// Widget değerini ayarla
+fonksiyon widget_deger_ayarla(widget: Widget, değer: WidgetDeger) -> boş
+yap
+    widget.değer = değer
+    native_widget_deger_ayarla(widget.id, değer)
+son
+
+// Widget değerini al
+fonksiyon widget_deger_al(widget: Widget) -> WidgetDeger
+yap
+    dön native_widget_deger_al(widget.id)
+son
+
+// Widget pozisyonunu ayarla
+fonksiyon widget_pozisyon_ayarla(widget: Widget, x: tamsayı, y: tamsayı) -> boş
+yap
+    widget.x = x
+    widget.y = y
+    native_widget_pozisyon_ayarla(widget.id, x, y)
+son
+
+// Widget boyutunu ayarla
+fonksiyon widget_boyut_ayarla(widget: Widget, genişlik: tamsayı, yükseklik: tamsayı) -> boş
+yap
+    widget.genişlik = genişlik
+    widget.yükseklik = yükseklik
+    native_widget_boyut_ayarla(widget.id, genişlik, yükseklik)
+son
+
+// Widget'i göster/gizle
+fonksiyon widget_gorunum_ayarla(widget: Widget, görunen: mantıksal) -> boş
+yap
+    widget.görunen = görunen
+    native_widget_gorunum_ayarla(widget.id, görunen)
+son
+
+// Widget'i etkinleştir/pasifleştir
+fonksiyon widget_etkin_ayarla(widget: Widget, etkin: mantıksal) -> boş
+yap
+    widget.etkin = etkin
+    native_widget_etkin_ayarla(widget.id, etkin)
+son
+
+// Widget'e olay handler ekle
+fonksiyon widget_olay_ekle(widget: Widget, olay_türü: OlayTürü, handler: OlayHandler) -> boş
+yap
+    widget.olay_handler = handler
+    native_widget_olay_bagla(widget.id, olay_türü, handler)
+son
+
+// ============================================================================
+// LAYOUT YÖNETİMİ (Layout Management)
+// ============================================================================
+
+// Box layout (horizontal veya vertical)
+fonksiyon box_layout_olustur(yön: yazı, boşluk: tamsayı = 5) -> Layout
+yap
+    dön Layout yap
+        tür: "Box",
+        yön: yön,
+        boşluk: boşluk,
+        hizalama: "left"
+    son
+son
+
+// Grid layout
+fonksiyon grid_layout_olustur(satır: tamsayı, sütun: tamsayı, boşluk: tamsayı = 5) -> Layout
+yap
+    dön Layout yap
+        tür: "Grid",
+        yön: tamsayı_yazı(satır) + "x" + tamsayı_yazı(sütun),
+        boşluk: boşluk,
+        hizalama: "center"
+    son
+son
+
+// Widget'e layout uygula
+fonksiyon widget_layout_ayarla(widget: Widget, layout: Layout) -> boş
+yap
+    native_widget_layout_ayarla(widget.id, layout)
+son
+
+// ============================================================================
+// OLAY İŞLEME (Event Handling)
+// ============================================================================
+
+// Olay döngüsü (main event loop)
+fonksiyon olay_dongusu_baslat() -> boş
+yap
+    iken doğru yap
+        değişken olay = native_olay_bekle()
+        
+        seç olay.tür yap
+            durum "WindowClose" => yap
+                // Pencere kapatma talebi
+                dur  // Döngüden çık
+            son
+            durum "Click" => yap
+                // Widget'in olay handler'ını çağır
+                değişken widget = widget_bul(olay.widget_id)
+                eğer widget.bazı_mı() ve widget.unwrap().olay_handler != boş ise yap
+                    widget.unwrap().olay_handler(olay)
+                son
+            son
+            durum "KeyPress" => yap
+                // Klavye olayı
+                yazdır("Tuş basıldı: " + olay.karakter)
+            son
+            durum _ => yap
+                // Diğer olayları işle
+            son
+        son
+    son
+son
+
+// Tek olay işle (non-blocking)
+fonksiyon olay_isle() -> Seçenek[Olay]
+yap
+    dön native_olay_yokla()
+son
+
+// ============================================================================
+// CANVAS ÇİZİM (Canvas Drawing)
+// ============================================================================
+
+// Canvas oluştur
+fonksiyon tuval_olustur(ebeveyn: Pencere, x: tamsayı, y: tamsayı, genişlik: tamsayı, yükseklik: tamsayı) -> Widget
+yap
+    değişken widget = Widget yap
+        id: widget_id_olustur(),
+        tür: "Canvas",
+        x: x,
+        y: y,
+        genişlik: genişlik,
+        yükseklik: yükseklik,
+        görunen: doğru,
+        etkin: doğru,
+        metin: "",
+        değer: boş,
+        olay_handler: boş,
+        ebeveyn: Hiç,
+        çocuklar: liste_oluştur()
+    son
+    
+    native_widget_olustur(ebeveyn.handle, "Canvas", widget)
+    dön widget
+son
+
+// Çizgi çiz
+fonksiyon cizgi_ciz(canvas: Widget, x1: tamsayı, y1: tamsayı, x2: tamsayı, y2: tamsayı, renk: Renk, kalinlik: tamsayı = 1) -> boş
+yap
+    native_canvas_cizgi(canvas.id, x1, y1, x2, y2, renk, kalinlik)
+son
+
+// Dikdörtgen çiz
+fonksiyon dikdortgen_ciz(canvas: Widget, x: tamsayı, y: tamsayı, genişlik: tamsayı, yükseklik: tamsayı, renk: Renk, dolu: mantıksal = yanlış) -> boş
+yap
+    native_canvas_dikdortgen(canvas.id, x, y, genişlik, yükseklik, renk, dolu)
+son
+
+// Daire çiz
+fonksiyon daire_ciz(canvas: Widget, merkez_x: tamsayı, merkez_y: tamsayı, yaricap: tamsayı, renk: Renk, dolu: mantıksal = yanlış) -> boş
+yap
+    native_canvas_daire(canvas.id, merkez_x, merkez_y, yaricap, renk, dolu)
+son
+
+// Elips çiz
+fonksiyon elips_ciz(canvas: Widget, merkez_x: tamsayı, merkez_y: tamsayı, yaricap_x: tamsayı, yaricap_y: tamsayı, renk: Renk, dolu: mantıksal = yanlış) -> boş
+yap
+    native_canvas_elips(canvas.id, merkez_x, merkez_y, yaricap_x, yaricap_y, renk, dolu)
+son
+
+// Metin çiz
+fonksiyon metin_ciz(canvas: Widget, metin: yazı, x: tamsayı, y: tamsayı, font: Font, renk: Renk) -> boş
+yap
+    native_canvas_metin(canvas.id, metin, x, y, font, renk)
+son
+
+// Resim çiz
+fonksiyon resim_ciz(canvas: Widget, resim: Resim, x: tamsayı, y: tamsayı) -> boş
+yap
+    native_canvas_resim(canvas.id, resim.handle, x, y)
+son
+
+// Canvas'ı temizle
+fonksiyon tuval_temizle(canvas: Widget, renk: Renk) -> boş
+yap
+    native_canvas_temizle(canvas.id, renk)
+son
+
+// ============================================================================
+// DIALOG KUTULARI (Dialog Boxes)
+// ============================================================================
+
+// Mesaj kutusu göster
+fonksiyon mesaj_kutusu(başlık: yazı, mesaj: yazı, tip: yazı = "info") -> DialogSonuc
+yap
+    // tip: "info", "warning", "error", "question"
+    dön native_mesaj_kutusu(başlık, mesaj, tip)
+son
+
+// Onay kutusu (Yes/No)
+fonksiyon onay_kutusu(başlık: yazı, mesaj: yazı) -> mantıksal
+yap
+    değişken sonuç = native_onay_kutusu(başlık, mesaj)
+    dön sonuç == "Yes"
+son
+
+// Dosya seçici (open)
+fonksiyon dosya_sec(başlık: yazı = "Dosya Seç", filtre: yazı = "*.*") -> Seçenek[yazı]
+yap
+    değişken yol = native_dosya_sec_dialog(başlık, filtre, yanlış)
+    eğer yol == "" ise yap
+        dön Hiç
+    son
+    dön Bazı(yol)
+son
+
+// Dosya kaydet dialog
+fonksiyon dosya_kaydet_dialog(başlık: yazı = "Dosya Kaydet", varsayilan_ad: yazı = "", filtre: yazı = "*.*") -> Seçenek[yazı]
+yap
+    değişken yol = native_dosya_kaydet_dialog(başlık, varsayilan_ad, filtre)
+    eğer yol == "" ise yap
+        dön Hiç
+    son
+    dön Bazı(yol)
+son
+
+// Klasör seçici
+fonksiyon klasor_sec(başlık: yazı = "Klasör Seç") -> Seçenek[yazı]
+yap
+    değişken yol = native_klasor_sec_dialog(başlık)
+    eğer yol == "" ise yap
+        dön Hiç
+    son
+    dön Bazı(yol)
+son
+
+// Renk seçici
+fonksiyon renk_sec(başlangıç_rengi: Renk = renk_beyaz()) -> Seçenek[Renk]
+yap
+    dön native_renk_sec_dialog(başlangıç_rengi)
+son
+
+// Giriş dialog (input box)
+fonksiyon giris_kutusu(başlık: yazı, mesaj: yazı, varsayilan: yazı = "") -> Seçenek[yazı]
+yap
+    dön native_giris_kutusu(başlık, mesaj, varsayilan)
+son
+
+// ============================================================================
+// MENU ve TOOLBAR
+// ============================================================================
+
+// Menu bar oluştur
+fonksiyon menu_cubugu_olustur(pencere: Pencere) -> Widget
+yap
+    değişken widget = Widget yap
+        id: widget_id_olustur(),
+        tür: "MenuBar",
+        x: 0,
+        y: 0,
+        genişlik: pencere.genişlik,
+        yükseklik: 25,
+        görunen: doğru,
+        etkin: doğru,
+        metin: "",
+        değer: boş,
+        olay_handler: boş,
+        ebeveyn: Hiç,
+        çocuklar: liste_oluştur()
+    son
+    
+    native_widget_olustur(pencere.handle, "MenuBar", widget)
+    dön widget
+son
+
+// Menu item ekle
+fonksiyon menu_item_ekle(menu_bar: Widget, metin: yazı, handler: OlayHandler) -> Widget
+yap
+    değişken item = Widget yap
+        id: widget_id_olustur(),
+        tür: "Button",
+        x: 0,
+        y: 0,
+        genişlik: 0,
+        yükseklik: 0,
+        görunen: doğru,
+        etkin: doğru,
+        metin: metin,
+        değer: boş,
+        olay_handler: handler,
+        ebeveyn: Bazı(menu_bar),
+        çocuklar: liste_oluştur()
+    son
+    
+    menu_bar.çocuklar.ekle(item)
+    native_menu_item_ekle(menu_bar.id, item)
+    dön item
+son
+
+// Submenu ekle
+fonksiyon submenu_ekle(ebeveyn_item: Widget, metin: yazı) -> Widget
+yap
+    değişken submenu = Widget yap
+        id: widget_id_olustur(),
+        tür: "MenuBar",
+        x: 0,
+        y: 0,
+        genişlik: 0,
+        yükseklik: 0,
+        görunen: doğru,
+        etkin: doğru,
+        metin: metin,
+        değer: boş,
+        olay_handler: boş,
+        ebeveyn: Bazı(ebeveyn_item),
+        çocuklar: liste_oluştur()
+    son
+    
+    ebeveyn_item.çocuklar.ekle(submenu)
+    native_submenu_ekle(ebeveyn_item.id, submenu)
+    dön submenu
+son
+
+// ============================================================================
+// RESİM İŞLEMLERİ (Image Operations)
+// ============================================================================
+
+// Resim yükle
+fonksiyon resim_yukle(dosya_yolu: yazı) -> Sonuç[Resim, GuiHata]
+yap
+    değişken handle = native_resim_yukle(dosya_yolu)
+    
+    eğer handle < 0 ise yap
+        dön Hata(GuiHata yap
+            mesaj: "Resim yüklenemedi: " + dosya_yolu,
+            hata_türü: "image"
+        son)
+    son
+    
+    değişken boyutlar = native_resim_boyut_al(handle)
+    
+    dön Başarı(Resim yap
+        genişlik: boyutlar.0,
+        yükseklik: boyutlar.1,
+        veri: liste_oluştur(),
+        handle: handle
+    son)
+son
+
+// Resim kaydet
+fonksiyon resim_kaydet(resim: Resim, dosya_yolu: yazı) -> Sonuç[boş, GuiHata]
+yap
+    değişken sonuç = native_resim_kaydet(resim.handle, dosya_yolu)
+    
+    eğer değil sonuç ise yap
+        dön Hata(GuiHata yap
+            mesaj: "Resim kaydedilemedi: " + dosya_yolu,
+            hata_türü: "image"
+        son)
+    son
+    
+    dön Başarı(boş)
+son
+
+// Resim boyutlandır
+fonksiyon resim_boyutlandir(resim: Resim, yeni_genişlik: tamsayı, yeni_yükseklik: tamsayı) -> Resim
+yap
+    değişken yeni_handle = native_resim_boyutlandir(resim.handle, yeni_genişlik, yeni_yükseklik)
+    
+    dön Resim yap
+        genişlik: yeni_genişlik,
+        yükseklik: yeni_yükseklik,
+        veri: liste_oluştur(),
+        handle: yeni_handle
+    son
+son
+
+// ============================================================================
+// RENK YARDIMCILARI (Color Helpers)
+// ============================================================================
+
+fonksiyon renk_olustur(r: tamsayı, g: tamsayı, b: tamsayı, a: tamsayı = 255) -> Renk
+yap
+    dön Renk yap r: r, g: g, b: b, a: a son
+son
+
+fonksiyon renk_siyah() -> Renk yap dön renk_olustur(0, 0, 0) son
+fonksiyon renk_beyaz() -> Renk yap dön renk_olustur(255, 255, 255) son
+fonksiyon renk_kirmizi() -> Renk yap dön renk_olustur(255, 0, 0) son
+fonksiyon renk_yesil() -> Renk yap dön renk_olustur(0, 255, 0) son
+fonksiyon renk_mavi() -> Renk yap dön renk_olustur(0, 0, 255) son
+fonksiyon renk_sari() -> Renk yap dön renk_olustur(255, 255, 0) son
+fonksiyon renk_turuncu() -> Renk yap dön renk_olustur(255, 165, 0) son
+fonksiyon renk_mor() -> Renk yap dön renk_olustur(128, 0, 128) son
+fonksiyon renk_gri() -> Renk yap dön renk_olustur(128, 128, 128) son
+
+// ============================================================================
+// FONT YARDIMCILARI (Font Helpers)
+// ============================================================================
+
+fonksiyon font_olustur(aile: yazı, boyut: tamsayı, kalın: mantıksal = yanlış, italik: mantıksal = yanlış) -> Font
+yap
+    dön Font yap
+        aile: aile,
+        boyut: boyut,
+        kalın: kalın,
+        italik: italik,
+        altı_çizili: yanlış
+    son
+son
+
+fonksiyon font_varsayilan() -> Font
+yap
+    dön font_olustur("Arial", 12)
+son
+
+// ============================================================================
+// GUI HATA
+// ============================================================================
+
+tip GuiHata = yapı yap
+    mesaj: yazı,
+    hata_türü: yazı
+son
+
+// ============================================================================
+// DÜŞÜK SEVİYE FONKSİYONLAR (Low-level - Native bindings)
+// ============================================================================
+
+// Platform-specific native functions (SDL2/GTK/Win32)
+harici fonksiyon native_pencere_olustur(başlık: yazı, w: tamsayı, h: tamsayı, x: tamsayı, y: tamsayı) -> tamsayı
+harici fonksiyon native_pencere_goster(handle: tamsayı) -> boş
+harici fonksiyon native_pencere_gizle(handle: tamsayı) -> boş
+harici fonksiyon native_pencere_kapat(handle: tamsayı) -> boş
+harici fonksiyon native_pencere_baslik_ayarla(handle: tamsayı, başlık: yazı) -> boş
+harici fonksiyon native_pencere_boyut_ayarla(handle: tamsayı, w: tamsayı, h: tamsayı) -> boş
+harici fonksiyon native_pencere_pozisyon_ayarla(handle: tamsayı, x: tamsayı, y: tamsayı) -> boş
+harici fonksiyon native_pencere_tam_ekran(handle: tamsayı, tam: mantıksal) -> boş
+harici fonksiyon native_ekran_genisligi() -> tamsayı
+harici fonksiyon native_ekran_yuksekligi() -> tamsayı
+
+harici fonksiyon native_widget_olustur(pencere: tamsayı, tür: yazı, widget: Widget) -> boş
+harici fonksiyon native_widget_metin_ayarla(id: yazı, metin: yazı) -> boş
+harici fonksiyon native_widget_deger_ayarla(id: yazı, değer: WidgetDeger) -> boş
+harici fonksiyon native_widget_deger_al(id: yazı) -> WidgetDeger
+harici fonksiyon native_widget_pozisyon_ayarla(id: yazı, x: tamsayı, y: tamsayı) -> boş
+harici fonksiyon native_widget_boyut_ayarla(id: yazı, w: tamsayı, h: tamsayı) -> boş
+harici fonksiyon native_widget_gorunum_ayarla(id: yazı, görunen: mantıksal) -> boş
+harici fonksiyon native_widget_etkin_ayarla(id: yazı, etkin: mantıksal) -> boş
+harici fonksiyon native_widget_olay_bagla(id: yazı, olay_türü: OlayTürü, handler: OlayHandler) -> boş
+harici fonksiyon native_widget_layout_ayarla(id: yazı, layout: Layout) -> boş
+
+harici fonksiyon native_olay_bekle() -> Olay
+harici fonksiyon native_olay_yokla() -> Seçenek[Olay]
+
+harici fonksiyon native_canvas_cizgi(id: yazı, x1: tamsayı, y1: tamsayı, x2: tamsayı, y2: tamsayı, renk: Renk, kalinlik: tamsayı) -> boş
+harici fonksiyon native_canvas_dikdortgen(id: yazı, x: tamsayı, y: tamsayı, w: tamsayı, h: tamsayı, renk: Renk, dolu: mantıksal) -> boş
+harici fonksiyon native_canvas_daire(id: yazı, cx: tamsayı, cy: tamsayı, r: tamsayı, renk: Renk, dolu: mantıksal) -> boş
+harici fonksiyon native_canvas_elips(id: yazı, cx: tamsayı, cy: tamsayı, rx: tamsayı, ry: tamsayı, renk: Renk, dolu: mantıksal) -> boş
+harici fonksiyon native_canvas_metin(id: yazı, metin: yazı, x: tamsayı, y: tamsayı, font: Font, renk: Renk) -> boş
+harici fonksiyon native_canvas_resim(id: yazı, resim_handle: tamsayı, x: tamsayı, y: tamsayı) -> boş
+harici fonksiyon native_canvas_temizle(id: yazı, renk: Renk) -> boş
+
+harici fonksiyon native_mesaj_kutusu(başlık: yazı, mesaj: yazı, tip: yazı) -> DialogSonuc
+harici fonksiyon native_onay_kutusu(başlık: yazı, mesaj: yazı) -> DialogSonuc
+harici fonksiyon native_dosya_sec_dialog(başlık: yazı, filtre: yazı, coklu: mantıksal) -> yazı
+harici fonksiyon native_dosya_kaydet_dialog(başlık: yazı, varsayilan: yazı, filtre: yazı) -> yazı
+harici fonksiyon native_klasor_sec_dialog(başlık: yazı) -> yazı
+harici fonksiyon native_renk_sec_dialog(başlangıç: Renk) -> Seçenek[Renk]
+harici fonksiyon native_giris_kutusu(başlık: yazı, mesaj: yazı, varsayilan: yazı) -> Seçenek[yazı]
+
+harici fonksiyon native_resim_yukle(yol: yazı) -> tamsayı
+harici fonksiyon native_resim_kaydet(handle: tamsayı, yol: yazı) -> mantıksal
+harici fonksiyon native_resim_boyut_al(handle: tamsayı) -> (tamsayı, tamsayı)
+harici fonksiyon native_resim_boyutlandir(handle: tamsayı, w: tamsayı, h: tamsayı) -> tamsayı
+
+harici fonksiyon native_menu_item_ekle(menu_id: yazı, item: Widget) -> boş
+harici fonksiyon native_submenu_ekle(item_id: yazı, submenu: Widget) -> boş
+harici fonksiyon native_slider_aralık_ayarla(id: yazı, min: ondalık, max: ondalık) -> boş
+harici fonksiyon native_combobox_secenekler_ekle(id: yazı, secenekler: liste[yazı]) -> boş
+
+// Internal helpers
+harici fonksiyon widget_id_olustur() -> yazı
+harici fonksiyon widget_bul(id: yazı) -> Seçenek[Widget]
+
+// ============================================================================
+// KULLANIM ÖRNEKLERİ (Usage Examples)
+// ============================================================================
+
+/*
+// ============================================================================
+// TEMEL PENCERE UYGULAMASI
+// ============================================================================
+
+kullan gui
+
+// Örnek 1: Basit pencere + buton
+değişken pencere = gui::pencere_olustur("BERK GUI Uygulaması", 800, 600).unwrap()
+gui::pencere_ortala(pencere)
+
+// Buton ekle
+değişken dugme = gui::dugme_olustur(pencere, "Tıkla Bana!", 350, 250, 100, 40)
+
+// Tıklama olayı
+gui::widget_olay_ekle(dugme, "Click", fonksiyon(olay: Olay) yap
+    gui::mesaj_kutusu("Bilgi", "Butona tıklandı!")
+son)
+
+// Label ekle
+değişken etiket = gui::etiket_olustur(pencere, "Hoşgeldiniz!", 350, 200)
+
+// Pencereyi göster
+gui::pencere_goster(pencere)
+
+// Olay döngüsü
+gui::olay_dongusu_baslat()
+
+// ============================================================================
+// FORM UYGULAMASI (Kullanıcı Girişi)
+// ============================================================================
+
+// Örnek 2: Form ile veri toplama
+değişken form_pencere = gui::pencere_olustur("Kullanıcı Kaydı", 400, 300).unwrap()
+
+// Ad label + textbox
+gui::etiket_olustur(form_pencere, "Ad:", 50, 50)
+değişken ad_kutusu = gui::metin_kutusu_olustur(form_pencere, 150, 50, 200, 30)
+
+// Email label + textbox
+gui::etiket_olustur(form_pencere, "Email:", 50, 100)
+değişken email_kutusu = gui::metin_kutusu_olustur(form_pencere, 150, 100, 200, 30)
+
+// Şifre label + textbox (password mode)
+gui::etiket_olustur(form_pencere, "Şifre:", 50, 150)
+değişken sifre_kutusu = gui::metin_kutusu_olustur(form_pencere, 150, 150, 200, 30)
+
+// Onay kutusu
+değişken sozlesme_onay = gui::onay_kutusu_olustur(form_pencere, "Kullanım şartlarını kabul ediyorum", 50, 200)
+
+// Kaydet butonu
+değişken kaydet_dugme = gui::dugme_olustur(form_pencere, "Kaydet", 150, 240, 100, 35)
+
+gui::widget_olay_ekle(kaydet_dugme, "Click", fonksiyon(olay: Olay) yap
+    // Form verilerini al
+    değişken ad = gui::widget_deger_al(ad_kutusu) as yazı
+    değişken email = gui::widget_deger_al(email_kutusu) as yazı
+    değişken sifre = gui::widget_deger_al(sifre_kutusu) as yazı
+    değişken sozlesme = gui::widget_deger_al(sozlesme_onay) as mantıksal
+    
+    eğer değil sozlesme ise yap
+        gui::mesaj_kutusu("Uyarı", "Lütfen kullanım şartlarını kabul edin", "warning")
+        dön
+    son
+    
+    // Veritabanına kaydet
+    sqlite::calistir(db, "INSERT INTO users (name, email, password) VALUES (?, ?, ?)", 
+                     [ad, email, crypto::bcrypt_hash(sifre)])
+    
+    gui::mesaj_kutusu("Başarılı", "Kayıt tamamlandı!", "info")
+    gui::pencere_kapat(form_pencere)
+son)
+
+gui::pencere_goster(form_pencere)
+gui::olay_dongusu_baslat()
+
+// ============================================================================
+// CANVAS ÇİZİM UYGULAMASI
+// ============================================================================
+
+// Örnek 3: Basit çizim uygulaması
+değişken cizim_pencere = gui::pencere_olustur("BERK Paint", 800, 600).unwrap()
+
+değişken tuval = gui::tuval_olustur(cizim_pencere, 0, 50, 800, 550)
+gui::tuval_temizle(tuval, gui::renk_beyaz())
+
+// Çizim rengi seçimi
+değişken renk_dugme = gui::dugme_olustur(cizim_pencere, "Renk Seç", 10, 10, 80, 30)
+değişken secili_renk = gui::renk_siyah()
+
+gui::widget_olay_ekle(renk_dugme, "Click", fonksiyon(olay: Olay) yap
+    değişken renk_sec = gui::renk_sec(secili_renk)
+    eğer renk_sec.bazı_mı() ise yap
+        secili_renk = renk_sec.unwrap()
+    son
+son)
+
+// Fare ile çizim
+değişken cizim_aktif = yanlış
+değişken son_x = 0
+değişken son_y = 0
+
+gui::widget_olay_ekle(tuval, "MouseDown", fonksiyon(olay: Olay) yap
+    cizim_aktif = doğru
+    son_x = olay.fare_pozisyonu.x
+    son_y = olay.fare_pozisyonu.y
+son)
+
+gui::widget_olay_ekle(tuval, "MouseUp", fonksiyon(olay: Olay) yap
+    cizim_aktif = yanlış
+son)
+
+gui::widget_olay_ekle(tuval, "MouseMove", fonksiyon(olay: Olay) yap
+    eğer cizim_aktif ise yap
+        değişken x = olay.fare_pozisyonu.x
+        değişken y = olay.fare_pozisyonu.y
+        gui::cizgi_ciz(tuval, son_x, son_y, x, y, secili_renk, 3)
+        son_x = x
+        son_y = y
+    son
+son)
+
+// Temizle butonu
+değişken temizle_dugme = gui::dugme_olustur(cizim_pencere, "Temizle", 100, 10, 80, 30)
+gui::widget_olay_ekle(temizle_dugme, "Click", fonksiyon(olay: Olay) yap
+    gui::tuval_temizle(tuval, gui::renk_beyaz())
+son)
+
+// Kaydet butonu
+değişken kaydet_dugme = gui::dugme_olustur(cizim_pencere, "Kaydet", 190, 10, 80, 30)
+gui::widget_olay_ekle(kaydet_dugme, "Click", fonksiyon(olay: Olay) yap
+    değişken dosya_yolu = gui::dosya_kaydet_dialog("Resmi Kaydet", "cizim.png", "PNG Files (*.png)|*.png")
+    eğer dosya_yolu.bazı_mı() ise yap
+        // Canvas'ı resim olarak kaydet
+        yazdır("Kaydedildi: " + dosya_yolu.unwrap())
+    son
+son)
+
+gui::pencere_goster(cizim_pencere)
+gui::olay_dongusu_baslat()
+
+// ============================================================================
+// MENU ve TOOLBAR UYGULAMASI
+// ============================================================================
+
+// Örnek 4: Text editor with menu
+değişken editor_pencere = gui::pencere_olustur("BERK Text Editor", 1000, 700).unwrap()
+
+// Menu bar
+değişken menu_bar = gui::menu_cubugu_olustur(editor_pencere)
+
+// File menu
+değişken dosya_menu = gui::menu_item_ekle(menu_bar, "Dosya", boş)
+değişken yeni_item = gui::submenu_ekle(dosya_menu, "Yeni")
+gui::widget_olay_ekle(yeni_item, "Click", fonksiyon(olay: Olay) yap
+    // Yeni dosya aç
+    yazdır("Yeni dosya")
+son)
+
+değişken ac_item = gui::submenu_ekle(dosya_menu, "Aç...")
+gui::widget_olay_ekle(ac_item, "Click", fonksiyon(olay: Olay) yap
+    değişken dosya = gui::dosya_sec("Dosya Aç", "Text Files (*.txt)|*.txt")
+    eğer dosya.bazı_mı() ise yap
+        değişken içerik = fs::dosya_oku_string(dosya.unwrap()).unwrap()
+        gui::widget_metin_ayarla(editor_text, içerik)
+    son
+son)
+
+// Edit menu
+değişken duzenle_menu = gui::menu_item_ekle(menu_bar, "Düzenle", boş)
+değişken kes_item = gui::submenu_ekle(duzenle_menu, "Kes")
+değişken kopyala_item = gui::submenu_ekle(duzenle_menu, "Kopyala")
+değişken yapistir_item = gui::submenu_ekle(duzenle_menu, "Yapıştır")
+
+// Text area (multiline)
+değişken editor_text = gui::metin_kutusu_olustur(editor_pencere, 0, 25, 1000, 675)
+
+gui::pencere_goster(editor_pencere)
+gui::olay_dongusu_baslat()
+
+// ============================================================================
+// RESIM GÖRÜNTÜLEYICI
+// ============================================================================
+
+// Örnek 5: Image viewer
+değişken viewer_pencere = gui::pencere_olustur("Resim Görüntüleyici", 800, 600).unwrap()
+
+değişken tuval = gui::tuval_olustur(viewer_pencere, 0, 40, 800, 560)
+
+// Resim yükle butonu
+değişken yukle_dugme = gui::dugme_olustur(viewer_pencere, "Resim Yükle", 10, 5, 100, 30)
+değişken yuklenen_resim: Seçenek[Resim] = Hiç
+
+gui::widget_olay_ekle(yukle_dugme, "Click", fonksiyon(olay: Olay) yap
+    değişken dosya = gui::dosya_sec("Resim Seç", "Image Files (*.png;*.jpg;*.bmp)|*.png;*.jpg;*.bmp")
+    eğer dosya.bazı_mı() ise yap
+        değişken resim_sonuç = gui::resim_yukle(dosya.unwrap())
+        eğer resim_sonuç.başarılı_mı() ise yap
+            yuklenen_resim = Bazı(resim_sonuç.unwrap())
+            gui::tuval_temizle(tuval, gui::renk_gri())
+            gui::resim_ciz(tuval, yuklenen_resim.unwrap(), 0, 0)
+        son
+    son
+son)
+
+gui::pencere_goster(viewer_pencere)
+gui::olay_dongusu_baslat()
+*/
+
+// ============================================================================
+// NATIVE BACKEND API - Platform-Specific Bindings (Yeni - v1.7)
+// ============================================================================
+
+// Backend türü (compile-time seçim)
+tip GuiBackend = "Win32" | "GTK3" | "Cocoa" | "SDL2"
+
+// Aktif backend'i al
+fonksiyon backend_al() -> GuiBackend
+yap
+    #eğer platform == "windows" ise
+        dön "Win32"
+    #değilse eğer platform == "linux" ise
+        dön "GTK3"
+    #değilse eğer platform == "macos" ise
+        dön "Cocoa"
+    #değilse
+        dön "SDL2"  // Fallback
+    #son
+son
+
+// Native window oluştur (platform-specific)
+fonksiyon native_window_create(başlık: yazı, genişlik: tamsayı, yükseklik: tamsayı) -> tamsayı
+yap
+    değişken backend = backend_al()
+    
+    seç backend yap
+        durum "Win32" => dön @native win32_create_window(başlık, genişlik, yükseklik)
+        durum "GTK3" => dön @native gtk_window_new(başlık, genişlik, yükseklik)
+        durum "Cocoa" => dön @native cocoa_window_new(başlık, genişlik, yükseklik)
+        durum "SDL2" => dön @native sdl2_create_window(başlık, genişlik, yükseklik)
+    son
+son
+
+// Event loop çalıştır (blocking)
+fonksiyon native_event_loop() -> boş
+yap
+    değişken backend = backend_al()
+    
+    seç backend yap
+        durum "Win32" => @native win32_message_loop()
+        durum "GTK3" => @native gtk_main()
+        durum "Cocoa" => @native cocoa_run_loop()
+        durum "SDL2" => @native sdl2_event_loop()
+    son
+son
+
+// Widget oluştur (platform-specific)
+fonksiyon native_widget_create(window_handle: tamsayı, tür: WidgetTürü, x: tamsayı, y: tamsayı, w: tamsayı, h: tamsayı) -> tamsayı
+yap
+    değişken backend = backend_al()
+    
+    seç backend yap
+        durum "Win32" => dön @native win32_create_control(window_handle, tür, x, y, w, h)
+        durum "GTK3" => dön @native gtk_widget_new(window_handle, tür, x, y, w, h)
+        durum "Cocoa" => dön @native cocoa_view_new(window_handle, tür, x, y, w, h)
+        durum "SDL2" => dön @native sdl2_widget_new(window_handle, tür, x, y, w, h)
+    son
+son
+
+// OpenGL context oluştur (hardware-accelerated rendering)
+fonksiyon native_opengl_context_create(window_handle: tamsayı) -> tamsayı
+yap
+    değişken backend = backend_al()
+    
+    seç backend yap
+        durum "Win32" => dön @native wgl_create_context(window_handle)
+        durum "GTK3" => dön @native glx_create_context(window_handle)
+        durum "Cocoa" => dön @native cgl_create_context(window_handle)
+        durum "SDL2" => dön @native sdl2_gl_create_context(window_handle)
+    son
+son
+
+// GPU-accelerated rendering (Metal/DirectX/Vulkan)
+fonksiyon native_gpu_renderer_create(window_handle: tamsayı) -> tamsayı
+yap
+    #eğer platform == "windows" ise
+        // DirectX 11/12
+        dön @native d3d11_create_device(window_handle)
+    #değilse eğer platform == "macos" ise
+        // Metal
+        dön @native metal_create_device(window_handle)
+    #değilse eğer platform == "linux" ise
+        // Vulkan
+        dön @native vulkan_create_device(window_handle)
+    #değilse
+        // OpenGL fallback
+        dön native_opengl_context_create(window_handle)
+    #son
+son
+
+// Immediate mode GUI rendering (egui-style)
+tip ImGuiContext = yapı yap
+    frame_started: mantıksal,
+    widget_stack: liste[yazı],
+    layout_stack: liste[Dikdörtgen],
+    current_rect: Dikdörtgen,
+    hot_widget: yazı,        // Mouse üzerindeki widget
+    active_widget: yazı      // Tıklanan widget
+son
+
+// ImGui context oluştur
+fonksiyon imgui_context_create() -> ImGuiContext
+yap
+    dön ImGuiContext yap
+        frame_started: yanlış,
+        widget_stack: liste_oluştur[yazı](),
+        layout_stack: liste_oluştur[Dikdörtgen](),
+        current_rect: Dikdörtgen yap x: 0, y: 0, genişlik: 0, yükseklik: 0 son,
+        hot_widget: "",
+        active_widget: ""
+    son
+son
+
+// ImGui frame başlat
+fonksiyon imgui_begin_frame(ctx: ImGuiContext) -> boş
+yap
+    ctx.frame_started = doğru
+    liste_temizle(ctx.widget_stack)
+    liste_temizle(ctx.layout_stack)
+son
+
+// ImGui frame bitir
+fonksiyon imgui_end_frame(ctx: ImGuiContext) -> boş
+yap
+    ctx.frame_started = yanlış
+    
+    // Render commands'ı GPU'ya gönder
+    @native imgui_render_draw_data(ctx)
+son
+
+// ImGui button (immediate mode)
+fonksiyon imgui_button(ctx: ImGuiContext, label: yazı, genişlik: tamsayı, yükseklik: tamsayı) -> mantıksal
+yap
+    // Widget ID generate et
+    değişken id = label + "_" + tamsayı_yazı(liste_uzunluk(ctx.widget_stack))
+    liste_ekle(ctx.widget_stack, id)
+    
+    // Layout hesapla
+    değişken rect = imgui_calculate_layout(ctx, genişlik, yükseklik)
+    
+    // Mouse interaction check
+    değişken fare_pos = @native get_mouse_position()
+    değişken mouse_over = imgui_point_in_rect(fare_pos, rect)
+    
+    eğer mouse_over ise yap
+        ctx.hot_widget = id
+        
+        eğer @native is_mouse_button_down(0) ise yap  // Sol tık
+            ctx.active_widget = id
+        son
+    son
+    
+    // Render
+    değişken renk = gui::renk_gri()
+    eğer ctx.hot_widget == id ise yap
+        renk = gui::renk_mavi()
+    son
+    eğer ctx.active_widget == id ise yap
+        renk = gui::renk_lacivert()
+    son
+    
+    @native imgui_draw_rect(rect, renk)
+    @native imgui_draw_text(label, rect.x + 10, rect.y + 5, gui::renk_beyaz())
+    
+    // Click event
+    değişken tiklandi = yanlış
+    eğer ctx.active_widget == id ve @native is_mouse_button_released(0) ise yap
+        tiklandi = doğru
+        ctx.active_widget = ""
+    son
+    
+    dön tiklandi
+son
+
+// ImGui text input
+fonksiyon imgui_text_input(ctx: ImGuiContext, buffer: yazı, max_length: tamsayı, genişlik: tamsayı) -> yazı
+yap
+    değişken id = "textinput_" + tamsayı_yazı(liste_uzunluk(ctx.widget_stack))
+    liste_ekle(ctx.widget_stack, id)
+    
+    değişken rect = imgui_calculate_layout(ctx, genişlik, 30)
+    
+    // Keyboard input
+    eğer ctx.active_widget == id ise yap
+        değişken input = @native get_keyboard_input()
+        eğer string_uzunluk(buffer) < max_length ise yap
+            buffer = buffer + input
+        son
+    son
+    
+    // Render
+    @native imgui_draw_rect(rect, gui::renk_beyaz())
+    @native imgui_draw_text(buffer, rect.x + 5, rect.y + 8, gui::renk_siyah())
+    
+    dön buffer
+son
+
+// Layout helper
+fonksiyon imgui_calculate_layout(ctx: ImGuiContext, genişlik: tamsayı, yükseklik: tamsayı) -> Dikdörtgen
+yap
+    değişken rect = Dikdörtgen yap
+        x: ctx.current_rect.x,
+        y: ctx.current_rect.y,
+        genişlik: genişlik,
+        yükseklik: yükseklik
+    son
+    
+    // Sonraki widget için pozisyon güncelle
+    ctx.current_rect.y = ctx.current_rect.y + yükseklik + 10  // 10px spacing
+    
+    dön rect
+son
+
+// Theme support (Light/Dark mode)
+tip GuiTheme = yapı yap
+    isim: yazı,
+    arka_plan: Renk,
+    ön_plan: Renk,
+    accent: Renk,
+    button_normal: Renk,
+    button_hover: Renk,
+    button_active: Renk,
+    text: Renk,
+    text_disabled: Renk
+son
+
+// Dark theme
+fonksiyon theme_dark() -> GuiTheme
+yap
+    dön GuiTheme yap
+        isim: "Dark",
+        arka_plan: gui::renk_rgb(30, 30, 30),
+        ön_plan: gui::renk_rgb(45, 45, 45),
+        accent: gui::renk_rgb(0, 122, 204),
+        button_normal: gui::renk_rgb(60, 60, 60),
+        button_hover: gui::renk_rgb(80, 80, 80),
+        button_active: gui::renk_rgb(100, 100, 100),
+        text: gui::renk_beyaz(),
+        text_disabled: gui::renk_rgb(128, 128, 128)
+    son
+son
+
+// Light theme
+fonksiyon theme_light() -> GuiTheme
+yap
+    dön GuiTheme yap
+        isim: "Light",
+        arka_plan: gui::renk_beyaz(),
+        ön_plan: gui::renk_rgb(240, 240, 240),
+        accent: gui::renk_rgb(0, 120, 215),
+        button_normal: gui::renk_rgb(225, 225, 225),
+        button_hover: gui::renk_rgb(210, 210, 210),
+        button_active: gui::renk_rgb(190, 190, 190),
+        text: gui::renk_siyah(),
+        text_disabled: gui::renk_rgb(160, 160, 160)
+    son
+son
+
+// ============================================================================
+// PLATFORM-SPECIFIC BACKEND BINDINGS (Yeni - v1.7)
+// ============================================================================
+
+// Win32 API bindings (Windows)
+#eğer platform == "windows" ise
+    harici fonksiyon win32_create_window(başlık: yazı, genişlik: tamsayı, yükseklik: tamsayı) -> tamsayı
+    harici fonksiyon win32_message_loop() -> boş
+    harici fonksiyon win32_create_control(window: tamsayı, tür: WidgetTürü, x: tamsayı, y: tamsayı, w: tamsayı, h: tamsayı) -> tamsayı
+    harici fonksiyon wgl_create_context(window: tamsayı) -> tamsayı
+    harici fonksiyon d3d11_create_device(window: tamsayı) -> tamsayı
+    harici fonksiyon d3d12_create_device(window: tamsayı) -> tamsayı
+#son
+
+// GTK3 API bindings (Linux)
+#eğer platform == "linux" ise
+    harici fonksiyon gtk_window_new(başlık: yazı, genişlik: tamsayı, yükseklik: tamsayı) -> tamsayı
+    harici fonksiyon gtk_main() -> boş
+    harici fonksiyon gtk_widget_new(window: tamsayı, tür: WidgetTürü, x: tamsayı, y: tamsayı, w: tamsayı, h: tamsayı) -> tamsayı
+    harici fonksiyon glx_create_context(window: tamsayı) -> tamsayı
+    harici fonksiyon vulkan_create_device(window: tamsayı) -> tamsayı
+#son
+
+// Cocoa API bindings (macOS)
+#eğer platform == "macos" ise
+    harici fonksiyon cocoa_window_new(başlık: yazı, genişlik: tamsayı, yükseklik: tamsayı) -> tamsayı
+    harici fonksiyon cocoa_run_loop() -> boş
+    harici fonksiyon cocoa_view_new(window: tamsayı, tür: WidgetTürü, x: tamsayı, y: tamsayı, w: tamsayı, h: tamsayı) -> tamsayı
+    harici fonksiyon cgl_create_context(window: tamsayı) -> tamsayı
+    harici fonksiyon metal_create_device(window: tamsayı) -> tamsayı
+#son
+
+// SDL2 API bindings (Cross-platform fallback)
+harici fonksiyon sdl2_create_window(başlık: yazı, genişlik: tamsayı, yükseklik: tamsayı) -> tamsayı
+harici fonksiyon sdl2_event_loop() -> boş
+harici fonksiyon sdl2_widget_new(window: tamsayı, tür: WidgetTürü, x: tamsayı, y: tamsayı, w: tamsayı, h: tamsayı) -> tamsayı
+harici fonksiyon sdl2_gl_create_context(window: tamsayı) -> tamsayı
+
+// ImGui rendering bindings
+harici fonksiyon imgui_render_draw_data(ctx: ImGuiContext) -> boş
+harici fonksiyon imgui_draw_rect(rect: Dikdörtgen, renk: Renk) -> boş
+harici fonksiyon imgui_draw_text(metin: yazı, x: tamsayı, y: tamsayı, renk: Renk) -> boş
+harici fonksiyon get_mouse_position() -> Nokta
+harici fonksiyon is_mouse_button_down(tuş: tamsayı) -> mantıksal
+harici fonksiyon is_mouse_button_released(tuş: tamsayı) -> mantıksal
+harici fonksiyon get_keyboard_input() -> yazı
+
+// High-level backend wrapper
+tip BackendContext = yapı yap
+    backend_türü: GuiBackend,
+    window_handle: tamsayı,
+    renderer_handle: tamsayı,  // OpenGL/DirectX/Metal context
+    imgui_ctx: ImGuiContext,
+    theme: GuiTheme,
+    çalışıyor: mantıksal
+son
+
+// Backend başlat
+fonksiyon backend_basla() -> Sonuç[BackendContext, GuiHata]
+yap
+    değişken backend = backend_al()
+    
+    // Platform-specific initialization
+    değişken init_sonuç = seç backend yap
+        durum "Win32" => @native win32_init()
+        durum "GTK3" => @native gtk_init()
+        durum "Cocoa" => @native cocoa_init()
+        durum "SDL2" => @native sdl2_init()
+    son
+    
+    eğer init_sonuç < 0 ise yap
+        dön Hata(GuiHata yap
+            mesaj: "Backend başlatılamadı: " + backend,
+            hata_türü: "backend"
+        son)
+    son
+    
+    değişken ctx = BackendContext yap
+        backend_türü: backend,
+        window_handle: 0,
+        renderer_handle: 0,
+        imgui_ctx: imgui_context_create(),
+        theme: theme_dark(),
+        çalışıyor: doğru
+    son
+    
+    dön Başarı(ctx)
+son
+
+// Backend sonlandır
+fonksiyon backend_sonlandir(ctx: BackendContext) -> boş
+yap
+    ctx.çalışıyor = yanlış
+    
+    seç ctx.backend_türü yap
+        durum "Win32" => @native win32_cleanup()
+        durum "GTK3" => @native gtk_cleanup()
+        durum "Cocoa" => @native cocoa_cleanup()
+        durum "SDL2" => @native sdl2_cleanup()
+    son
+son
+
+// Application context (tüm uygulama state'i)
+tip AppContext = yapı yap
+    backend: BackendContext,
+    pencere: Pencere,
+    widget_tree: liste[Widget],
+    olay_queue: liste[Olay],
+    render_callback: fonksiyon(AppContext) -> boş
+son
+
+// Uygulama başlat
+fonksiyon uygulama_basla(başlık: yazı, genişlik: tamsayı, yükseklik: tamsayı) -> Sonuç[AppContext, GuiHata]
+yap
+    // Backend initialize
+    değişken backend_sonuç = backend_basla()
+    eğer backend_sonuç.hata_mı() ise yap
+        dön Hata(backend_sonuç.hata())
+    son
+    
+    değişken backend = backend_sonuç.unwrap()
+    
+    // Pencere oluştur
+    değişken pencere_sonuç = pencere_olustur(başlık, genişlik, yükseklik)
+    eğer pencere_sonuç.hata_mı() ise yap
+        backend_sonlandir(backend)
+        dön Hata(pencere_sonuç.hata())
+    son
+    
+    değişken pencere = pencere_sonuç.unwrap()
+    backend.window_handle = pencere.handle
+    
+    // GPU renderer oluştur
+    backend.renderer_handle = native_gpu_renderer_create(pencere.handle)
+    
+    // App context
+    değişken app = AppContext yap
+        backend: backend,
+        pencere: pencere,
+        widget_tree: liste_oluştur[Widget](),
+        olay_queue: liste_oluştur[Olay](),
+        render_callback: fonksiyon(app: AppContext) -> boş yap
+            // Default render: Boş ekran
+        son
+    son
+    
+    dön Başarı(app)
+son
+
+// Uygulama döngüsü (main loop)
+fonksiyon uygulama_calistir(app: AppContext, render_fn: fonksiyon(AppContext) -> boş) -> boş
+yap
+    app.render_callback = render_fn
+    
+    pencere_goster(app.pencere)
+    
+    // Event loop
+    iken app.backend.çalışıyor yap
+        // Poll events
+        değişken olay = native_olay_bekle()
+        
+        eğer olay.tür == "WindowClose" ise yap
+            dur
+        son
+        
+        // ImGui frame başlat
+        imgui_begin_frame(app.backend.imgui_ctx)
+        
+        // User render callback
+        app.render_callback(app)
+        
+        // ImGui frame bitir ve render
+        imgui_end_frame(app.backend.imgui_ctx)
+        
+        // Swap buffers
+        @native swap_buffers(app.backend.renderer_handle)
+    son
+    
+    backend_sonlandir(app.backend)
+son
+
+// ImGui helper fonksiyonları
+fonksiyon imgui_point_in_rect(nokta: Nokta, rect: Dikdörtgen) -> mantıksal
+yap
+    dön nokta.x >= rect.x ve nokta.x <= (rect.x + rect.genişlik) ve
+         nokta.y >= rect.y ve nokta.y <= (rect.y + rect.yükseklik)
+son
+
+// Liste helper fonksiyonları (collections.berk bağımlılığı)
+fonksiyon liste_temizle[T](liste: liste[T]) -> boş
+yap
+    iken liste_uzunluk(liste) > 0 yap
+        liste_sil_son(liste)
+    son
+son
+
+fonksiyon liste_uzunluk[T](liste: liste[T]) -> tamsayı
+yap
+    değişken sayaç = 0
+    her biri _ içinde liste yap
+        sayaç = sayaç + 1
+    son
+    dön sayaç
+son
+
+fonksiyon liste_ekle[T](liste: liste[T], eleman: T) -> boş
+yap
+    liste.ekle(eleman)
+son
+
+fonksiyon liste_sil_son[T](liste: liste[T]) -> boş
+yap
+    // Platform-specific implementation
+    @native list_remove_last(liste)
+son
+
+// Additional platform init/cleanup bindings
+harici fonksiyon win32_init() -> tamsayı
+harici fonksiyon gtk_init() -> tamsayı
+harici fonksiyon cocoa_init() -> tamsayı
+harici fonksiyon sdl2_init() -> tamsayı
+
+harici fonksiyon win32_cleanup() -> boş
+harici fonksiyon gtk_cleanup() -> boş
+harici fonksiyon cocoa_cleanup() -> boş
+harici fonksiyon sdl2_cleanup() -> boş
+
+harici fonksiyon swap_buffers(renderer: tamsayı) -> boş
+harici fonksiyon list_remove_last[T](liste: liste[T]) -> boş
+
+// Hata türü
+tip GuiHata = yapı yap
+    mesaj: yazı,
+    hata_türü: yazı  // "window", "widget", "backend", "render"
+son
+
+son  // modül gui

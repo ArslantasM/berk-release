@@ -1,0 +1,208 @@
+// =============================================================================
+// BERK Standard Library - Network Module Demo
+// Ağ programlama
+// =============================================================================
+
+kullan std::network
+kullan std::http
+
+yazdır("=== BERK Network Demo ===\n")
+
+// -----------------------------------------------------------------------------
+// TCP İstemci
+// -----------------------------------------------------------------------------
+
+yazdır("🔌 TCP İstemci:")
+yazdır("-" * 40)
+
+yazdır("""
+kullan std::network
+
+// Sunucuya bağlan
+olsun soket = network::tcp_connect("example.com", 80)
+yazdır("Bağlandı!")
+
+// Veri gönder
+network::send(soket, "GET / HTTP/1.1\\r\\n")
+network::send(soket, "Host: example.com\\r\\n")
+network::send(soket, "\\r\\n")
+
+// Yanıt al
+olsun yanit = network::recv(soket, 4096)
+yazdır("Yanıt alındı: {} byte", yanit.uzunluk())
+
+// Kapat
+network::close(soket)
+""")
+
+// -----------------------------------------------------------------------------
+// TCP Sunucu
+// -----------------------------------------------------------------------------
+
+yazdır("\n🖥️  TCP Sunucu:")
+yazdır("-" * 40)
+
+yazdır("""
+kullan std::network
+kullan std::thread
+
+// Sunucu oluştur
+olsun sunucu = network::tcp_listen("0.0.0.0", 8080)
+yazdır("Sunucu dinliyor: 0.0.0.0:8080")
+
+döngü yap
+    // Bağlantı bekle
+    olsun istemci = network::accept(sunucu)
+    yazdır("Yeni bağlantı: {}", network::peer_addr(istemci))
+    
+    // Her istemci için thread
+    thread::spawn(fonksiyon() yap
+        olsun veri = network::recv(istemci, 1024)
+        yazdır("Alınan: {}", veri)
+        
+        network::send(istemci, "Merhaba İstemci!\\n")
+        network::close(istemci)
+    son)
+son
+""")
+
+// -----------------------------------------------------------------------------
+// UDP
+// -----------------------------------------------------------------------------
+
+yazdır("\n📡 UDP İletişim:")
+yazdır("-" * 40)
+
+yazdır("""
+// UDP soket oluştur
+olsun udp = network::udp_bind("0.0.0.0", 9000)
+
+// Veri gönder
+network::send_to(udp, "Merhaba!", "192.168.1.100", 9001)
+
+// Veri al
+olsun [veri, adres, port] = network::recv_from(udp, 1024)
+yazdır("Alınan: {} from {}:{}", veri, adres, port)
+
+network::close(udp)
+""")
+
+// -----------------------------------------------------------------------------
+// HTTP İstemci
+// -----------------------------------------------------------------------------
+
+yazdır("\n🌐 HTTP İstemci:")
+yazdır("-" * 40)
+
+yazdır("""
+kullan std::http
+
+// GET isteği
+olsun yanit = http::get("https://api.example.com/data")
+yazdır("Status: {}", yanit.status)
+yazdır("Body: {}", yanit.body)
+
+// POST isteği
+olsun post_yanit = http::post(
+    "https://api.example.com/users",
+    {"name": "BERK", "type": "language"},
+    {"Content-Type": "application/json"}
+)
+
+// Header'lar ile GET
+olsun auth_yanit = http::get_with_headers(
+    "https://api.example.com/protected",
+    {"Authorization": "Bearer token123"}
+)
+
+// Dosya indir
+http::download("https://example.com/file.zip", "./downloads/file.zip")
+
+// Dosya yükle
+http::upload("https://api.example.com/upload", "./myfile.txt")
+""")
+
+// -----------------------------------------------------------------------------
+// DNS Sorguları
+// -----------------------------------------------------------------------------
+
+yazdır("\n🔍 DNS Sorguları:")
+yazdır("-" * 40)
+
+yazdır("""
+// IP adresini çöz
+olsun ip = network::resolve("example.com")
+yazdır("example.com -> {}", ip)
+
+// Tüm IP'leri al
+olsun ipler = network::resolve_all("google.com")
+her ip için ipler yap
+    yazdır("  {}", ip)
+son
+
+// Ters DNS
+olsun hostname = network::reverse_lookup("8.8.8.8")
+yazdır("8.8.8.8 -> {}", hostname)
+""")
+
+// -----------------------------------------------------------------------------
+// Ağ Arayüzleri
+// -----------------------------------------------------------------------------
+
+yazdır("\n🔧 Ağ Arayüzleri:")
+yazdır("-" * 40)
+
+yazdır("""
+olsun arayuzler = network::interfaces()
+
+her arayuz için arayuzler yap
+    yazdır("Arayüz: {}", arayuz.name)
+    yazdır("  MAC: {}", arayuz.mac)
+    yazdır("  IPv4: {}", arayuz.ipv4)
+    yazdır("  IPv6: {}", arayuz.ipv6)
+    yazdır("  Aktif: {}", arayuz.is_up)
+son
+
+// Kendi IP adresimiz
+olsun ip = network::local_ip()
+yazdır("Yerel IP: {}", ip)
+
+// Harici IP
+olsun harici = network::external_ip()
+yazdır("Harici IP: {}", harici)
+""")
+
+// -----------------------------------------------------------------------------
+// WebSocket
+// -----------------------------------------------------------------------------
+
+yazdır("\n🔄 WebSocket:")
+yazdır("-" * 40)
+
+yazdır("""
+kullan std::websocket
+
+// WebSocket bağlantısı
+olsun ws = websocket::connect("wss://echo.websocket.org")
+
+// Mesaj gönder
+websocket::send(ws, "Merhaba WebSocket!")
+
+// Mesaj al
+olsun mesaj = websocket::receive(ws)
+yazdır("Alınan: {}", mesaj)
+
+// Olay döngüsü
+websocket::on_message(ws, fonksiyon(msg) yap
+    yazdır("Mesaj: {}", msg)
+son)
+
+websocket::on_close(ws, fonksiyon() yap
+    yazdır("Bağlantı kapandı")
+son)
+
+// Kapat
+websocket::close(ws)
+""")
+
+yazdır("\n✅ Network demo tamamlandı!")

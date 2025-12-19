@@ -1,0 +1,429 @@
+// stdlib/embedded/platforms/stm32f4/can.berk
+// STM32F4 CAN Bus HAL Implementation
+// STM32 HAL CAN library bindings (bxCAN controller)
+
+// CAN operation modes
+pub enum CANMode {
+    Normal,        // Normal operation mode
+    Loopback,      // Loopback mode (testing)
+    Silent,        // Silent mode (monitoring)
+    SilentLoopback,  // Silent loopback
+}
+
+pub enum CANBitrate {
+    Bitrate_125K,   // 125 Kbit/s
+    Bitrate_250K,   // 250 Kbit/s
+    Bitrate_500K,   // 500 Kbit/s
+    Bitrate_1M,     // 1 Mbit/s
+}
+
+pub enum CANError {
+    NotInitialized,
+    InvalidParameter,
+    TransmitError,
+    ReceiveError,
+    BusOff,
+    Timeout,
+}
+
+pub type Result<T> = result<T, CANError>
+
+// STM32 HAL CAN constants
+const CAN_MODE_NORMAL: u32 = 0x00000000
+const CAN_MODE_LOOPBACK: u32 = 0x00000001
+const CAN_MODE_SILENT: u32 = 0x00000002
+const CAN_MODE_SILENT_LOOPBACK: u32 = 0x00000003
+
+const CAN_SJW_1TQ: u32 = 0x00000000
+const CAN_BS1_1TQ: u32 = 0x00000000
+const CAN_BS1_8TQ: u32 = 0x00070000
+const CAN_BS2_1TQ: u32 = 0x00000000
+const CAN_BS2_7TQ: u32 = 0x00600000
+
+const CAN_ID_STD: u32 = 0x00000000
+const CAN_ID_EXT: u32 = 0x00000004
+
+const CAN_RTR_DATA: u32 = 0x00000000
+const CAN_RTR_REMOTE: u32 = 0x00000002
+
+// STM32 HAL CAN structures
+struct CAN_HandleTypeDef {
+    Instance: *mut void,
+    Init: CAN_InitTypeDef,
+    pTxMsg: *mut CanTxMsgTypeDef,
+    pRxMsg: *mut CanRxMsgTypeDef,
+    ErrorCode: u32,
+    State: u32,
+}
+
+struct CAN_InitTypeDef {
+    Prescaler: u32,
+    Mode: u32,
+    SJW: u32,
+    BS1: u32,
+    BS2: u32,
+    TTCM: u32,
+    ABOM: u32,
+    AWUM: u32,
+    NART: u32,
+    RFLM: u32,
+    TXFP: u32,
+}
+
+struct CanTxMsgTypeDef {
+    StdId: u32,
+    ExtId: u32,
+    IDE: u32,
+    RTR: u32,
+    DLC: u32,
+    Data: [u8; 8],
+}
+
+struct CanRxMsgTypeDef {
+    StdId: u32,
+    ExtId: u32,
+    IDE: u32,
+    RTR: u32,
+    DLC: u32,
+    Data: [u8; 8],
+    FMI: u32,
+    FIFONumber: u32,
+}
+
+// CAN peripheral base addresses
+const CAN1_BASE: u32 = 0x40006400
+const CAN2_BASE: u32 = 0x40006800
+
+// STM32 HAL CAN functions
+extern "C" {
+    fn HAL_CAN_Init(hcan: *mut CAN_HandleTypeDef) -> u32
+    fn HAL_CAN_DeInit(hcan: *mut CAN_HandleTypeDef) -> u32
+    fn HAL_CAN_Transmit(hcan: *mut CAN_HandleTypeDef, Timeout: u32) -> u32
+    fn HAL_CAN_Receive(hcan: *mut CAN_HandleTypeDef, FIFONumber: u8, Timeout: u32) -> u32
+    fn HAL_CAN_GetError(hcan: *mut CAN_HandleTypeDef) -> u32
+}
+
+const HAL_OK: u32 = 0x00
+const HAL_CAN_TIMEOUT: u32 = 1000
+
+// Global CAN state
+static mut can_handles: [CAN_HandleTypeDef; 2] = [CAN_HandleTypeDef::default(); 2]
+static mut can_initialized: [bool; 2] = [false; 2]
+static mut tx_msg: [CanTxMsgTypeDef; 2] = [CanTxMsgTypeDef::default(); 2]
+static mut rx_msg: [CanRxMsgTypeDef; 2] = [CanRxMsgTypeDef::default(); 2]
+
+impl CAN_HandleTypeDef {
+    fn default() -> CAN_HandleTypeDef {
+        CAN_HandleTypeDef {
+            Instance: null,
+            Init: CAN_InitTypeDef::default(),
+            pTxMsg: null,
+            pRxMsg: null,
+            ErrorCode: 0,
+            State: 0,
+        }
+    }
+}
+
+impl CAN_InitTypeDef {
+    fn default() -> CAN_InitTypeDef {
+        CAN_InitTypeDef {
+            Prescaler: 4,
+            Mode: CAN_MODE_NORMAL,
+            SJW: CAN_SJW_1TQ,
+            BS1: CAN_BS1_8TQ,
+            BS2: CAN_BS2_7TQ,
+            TTCM: 0,
+            ABOM: 1,  // Automatic bus-off management
+            AWUM: 1,  // Automatic wake-up mode
+            NART: 0,  // Non-automatic retransmission
+            RFLM: 0,  // Receive FIFO locked mode
+            TXFP: 0,  // Transmit FIFO priority
+        }
+    }
+}
+
+impl CanTxMsgTypeDef {
+    fn default() -> CanTxMsgTypeDef {
+        CanTxMsgTypeDef {
+            StdId: 0,
+            ExtId: 0,
+            IDE: CAN_ID_STD,
+            RTR: CAN_RTR_DATA,
+            DLC: 0,
+            Data: [0; 8],
+        }
+    }
+}
+
+impl CanRxMsgTypeDef {
+    fn default() -> CanRxMsgTypeDef {
+        CanRxMsgTypeDef {
+            StdId: 0,
+            ExtId: 0,
+            IDE: CAN_ID_STD,
+            RTR: CAN_RTR_DATA,
+            DLC: 0,
+            Data: [0; 8],
+            FMI: 0,
+            FIFONumber: 0,
+        }
+    }
+}
+
+// CAN message structure
+pub struct CANMessage {
+    pub id: u32,
+    pub extended: bool,
+    pub remote: bool,
+    pub data: Vec<u8>,
+}
+
+/// Initialize CAN bus
+pub fn init(bus: u8, bitrate: CANBitrate, mode: CANMode) -> Result<()> {
+    if bus >= 2 {
+        return Err(CANError.InvalidParameter)
+    }
+    
+    unsafe {
+        if can_initialized[bus as usize] {
+            return Err(CANError.NotInitialized)
+        }
+        
+        // Get CAN instance
+        let instance = if bus == 0 {
+            CAN1_BASE as *mut void
+        } else {
+            CAN2_BASE as *mut void
+        }
+        
+        // Calculate prescaler for bitrate (APB1 = 42 MHz)
+        // CAN bitrate = APB1 / (Prescaler × (1 + BS1 + BS2))
+        // With BS1=8, BS2=7: bitrate = 42MHz / (Prescaler × 16)
+        let prescaler = match bitrate {
+            CANBitrate.Bitrate_1M => 3,      // 42MHz / (3 × 16) ≈ 875 Kbit/s
+            CANBitrate.Bitrate_500K => 6,    // 42MHz / (6 × 16) ≈ 437 Kbit/s
+            CANBitrate.Bitrate_250K => 12,   // 42MHz / (12 × 16) ≈ 219 Kbit/s
+            CANBitrate.Bitrate_125K => 24,   // 42MHz / (24 × 16) ≈ 109 Kbit/s
+        }
+        
+        let mode_val = match mode {
+            CANMode.Normal => CAN_MODE_NORMAL,
+            CANMode.Loopback => CAN_MODE_LOOPBACK,
+            CANMode.Silent => CAN_MODE_SILENT,
+            CANMode.SilentLoopback => CAN_MODE_SILENT_LOOPBACK,
+        }
+        
+        // Initialize CAN handle
+        can_handles[bus as usize].Instance = instance
+        can_handles[bus as usize].Init = CAN_InitTypeDef {
+            Prescaler: prescaler,
+            Mode: mode_val,
+            SJW: CAN_SJW_1TQ,
+            BS1: CAN_BS1_8TQ,
+            BS2: CAN_BS2_7TQ,
+            TTCM: 0,
+            ABOM: 1,
+            AWUM: 1,
+            NART: 0,
+            RFLM: 0,
+            TXFP: 0,
+        }
+        
+        can_handles[bus as usize].pTxMsg = &mut tx_msg[bus as usize]
+        can_handles[bus as usize].pRxMsg = &mut rx_msg[bus as usize]
+        
+        let ret = HAL_CAN_Init(&mut can_handles[bus as usize])
+        
+        if ret == HAL_OK {
+            can_initialized[bus as usize] = true
+            Ok(())
+        } else {
+            Err(CANError.NotInitialized)
+        }
+    }
+}
+
+/// Deinitialize CAN bus
+pub fn deinit(bus: u8) -> Result<()> {
+    if bus >= 2 {
+        return Err(CANError.InvalidParameter)
+    }
+    
+    unsafe {
+        if !can_initialized[bus as usize] {
+            return Err(CANError.NotInitialized)
+        }
+        
+        let ret = HAL_CAN_DeInit(&mut can_handles[bus as usize])
+        
+        if ret == HAL_OK {
+            can_initialized[bus as usize] = false
+            Ok(())
+        } else {
+            Err(CANError.NotInitialized)
+        }
+    }
+}
+
+/// Send CAN message
+pub fn send(bus: u8, msg: CANMessage) -> Result<()> {
+    if bus >= 2 {
+        return Err(CANError.InvalidParameter)
+    }
+    
+    unsafe {
+        if !can_initialized[bus as usize] {
+            return Err(CANError.NotInitialized)
+        }
+        
+        if msg.data.len() > 8 {
+            return Err(CANError.InvalidParameter)
+        }
+        
+        // Prepare TX message
+        if msg.extended {
+            tx_msg[bus as usize].ExtId = msg.id
+            tx_msg[bus as usize].IDE = CAN_ID_EXT
+        } else {
+            tx_msg[bus as usize].StdId = msg.id
+            tx_msg[bus as usize].IDE = CAN_ID_STD
+        }
+        
+        tx_msg[bus as usize].RTR = if msg.remote { CAN_RTR_REMOTE } else { CAN_RTR_DATA }
+        tx_msg[bus as usize].DLC = msg.data.len() as u32
+        
+        for i in 0..msg.data.len() {
+            tx_msg[bus as usize].Data[i] = msg.data[i]
+        }
+        
+        // Transmit
+        let ret = HAL_CAN_Transmit(&mut can_handles[bus as usize], HAL_CAN_TIMEOUT)
+        
+        if ret == HAL_OK {
+            Ok(())
+        } else {
+            Err(CANError.TransmitError)
+        }
+    }
+}
+
+/// Receive CAN message (blocking)
+pub fn receive(bus: u8, timeout_ms: u32) -> Result<CANMessage> {
+    if bus >= 2 {
+        return Err(CANError.InvalidParameter)
+    }
+    
+    unsafe {
+        if !can_initialized[bus as usize] {
+            return Err(CANError.NotInitialized)
+        }
+        
+        // Receive from FIFO 0
+        let ret = HAL_CAN_Receive(&mut can_handles[bus as usize], 0, timeout_ms)
+        
+        if ret != HAL_OK {
+            return Err(CANError.Timeout)
+        }
+        
+        // Parse received message
+        let extended = rx_msg[bus as usize].IDE == CAN_ID_EXT
+        let id = if extended {
+            rx_msg[bus as usize].ExtId
+        } else {
+            rx_msg[bus as usize].StdId
+        }
+        
+        let remote = rx_msg[bus as usize].RTR == CAN_RTR_REMOTE
+        let dlc = rx_msg[bus as usize].DLC as usize
+        
+        let mut data: Vec<u8> = Vec::with_capacity(dlc)
+        for i in 0..dlc {
+            data.push(rx_msg[bus as usize].Data[i])
+        }
+        
+        Ok(CANMessage {
+            id: id,
+            extended: extended,
+            remote: remote,
+            data: data,
+        })
+    }
+}
+
+/// Check if CAN message is available
+pub fn available(bus: u8) -> bool {
+    if bus >= 2 {
+        return false
+    }
+    
+    unsafe {
+        if !can_initialized[bus as usize] {
+            return false
+        }
+        
+        // Try to receive with 0 timeout (non-blocking)
+        let ret = HAL_CAN_Receive(&mut can_handles[bus as usize], 0, 0)
+        ret == HAL_OK
+    }
+}
+
+/// Get CAN bus error status
+pub fn get_error(bus: u8) -> u32 {
+    if bus >= 2 {
+        return 0
+    }
+    
+    unsafe {
+        if !can_initialized[bus as usize] {
+            return 0
+        }
+        
+        HAL_CAN_GetError(&mut can_handles[bus as usize])
+    }
+}
+
+/// Send standard CAN frame (11-bit ID)
+pub fn send_standard(bus: u8, id: u16, data: &[u8]) -> Result<()> {
+    let msg = CANMessage {
+        id: id as u32,
+        extended: false,
+        remote: false,
+        data: data.to_vec(),
+    }
+    send(bus, msg)
+}
+
+/// Send extended CAN frame (29-bit ID)
+pub fn send_extended(bus: u8, id: u32, data: &[u8]) -> Result<()> {
+    let msg = CANMessage {
+        id: id,
+        extended: true,
+        remote: false,
+        data: data.to_vec(),
+    }
+    send(bus, msg)
+}
+
+/// Format CAN message for display
+pub fn format_message(msg: &CANMessage) -> String {
+    let mut result = String::new()
+    
+    if msg.extended {
+        result.push_str(&format!("ID: 0x{:08X} [EXT] ", msg.id))
+    } else {
+        result.push_str(&format!("ID: 0x{:03X} [STD] ", msg.id))
+    }
+    
+    if msg.remote {
+        result.push_str("[RTR] ")
+    }
+    
+    result.push_str(&format!("DLC: {} Data: ", msg.data.len()))
+    
+    for byte in &msg.data {
+        result.push_str(&format!("{:02X} ", byte))
+    }
+    
+    result
+}

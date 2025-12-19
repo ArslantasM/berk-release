@@ -1,0 +1,450 @@
+// RP2040 ADC Module
+// Hardware Abstraction Layer for RP2040's ADC peripheral
+// 
+// RP2040 Features:
+// - 12-bit SAR ADC (Successive Approximation Register)
+// - 500 kSPS (kilosamples per second)
+// - 5 input channels:
+//   * 4 external channels (ADC0-ADC3 on GPIO26-29)
+//   * 1 internal temperature sensor
+// - Built-in voltage divider for VSYS measurement
+// - Round-robin sampling mode
+// - FIFO with DMA support
+// - Interrupt on conversion complete
+//
+// Pico SDK: hardware_adc
+
+extern "C" {
+    // Pico SDK ADC Functions
+    fn adc_init();
+    fn adc_gpio_init(gpio: u32);
+    fn adc_select_input(input: u32);
+    fn adc_get_selected_input() -> u32;
+    
+    fn adc_read() -> u16;
+    fn adc_run(run: bool);
+    
+    fn adc_set_temp_sensor_enabled(enable: bool);
+    fn adc_fifo_setup(en: bool, dreq_en: bool, dreq_thresh: u16, err_in_fifo: bool, byte_shift: bool);
+    fn adc_fifo_drain();
+    fn adc_fifo_get_level() -> u8;
+    fn adc_fifo_get() -> u16;
+    fn adc_fifo_is_empty() -> bool;
+    
+    fn adc_set_round_robin(input_mask: u32);
+    fn adc_set_clkdiv(clkdiv: f32);
+    fn adc_irq_set_enabled(enabled: bool);
+    
+    // GPIO Functions
+    fn gpio_init(gpio: u32);
+    fn gpio_set_dir(gpio: u32, out: bool);
+}
+
+// ADC channels
+const ADC_CHANNEL_0: u32 = 0;  // GPIO26
+const ADC_CHANNEL_1: u32 = 1;  // GPIO27
+const ADC_CHANNEL_2: u32 = 2;  // GPIO28
+const ADC_CHANNEL_3: u32 = 3;  // GPIO29
+const ADC_CHANNEL_TEMP: u32 = 4;  // Internal temperature sensor
+
+// GPIO pins for ADC channels
+const ADC0_GPIO: u32 = 26;
+const ADC1_GPIO: u32 = 27;
+const ADC2_GPIO: u32 = 28;
+const ADC3_GPIO: u32 = 29;
+
+// ADC resolution
+const ADC_MAX_VALUE: u16 = 4095;  // 12-bit (2^12 - 1)
+const ADC_VREF: f32 = 3.3;         // Reference voltage
+
+// Temperature sensor constants
+const TEMP_SENSOR_V_27C: f32 = 0.706;  // Voltage at 27°C
+const TEMP_SENSOR_SLOPE: f32 = -0.001721;  // Slope: -1.721 mV/°C
+
+pub struct ADC {
+    channel: u32,
+    gpio: u32,
+}
+
+pub struct ADCMulti {
+    channels: Vec<u32>,
+    round_robin_mask: u32,
+}
+
+impl ADC {
+    // Initialize ADC system (call once before using any ADC)
+    pub fn init() {
+        unsafe {
+            adc_init();
+        }
+    }
+    
+    // Create ADC on specific channel (0-3)
+    pub fn new(channel: u32) -> ADC {
+        if channel > 3 {
+            panic!("Invalid ADC channel. Use 0-3 for external channels.");
+        }
+        
+        let gpio = ADC0_GPIO + channel;
+        
+        unsafe {
+            adc_gpio_init(gpio);
+        }
+        
+        ADC { channel, gpio }
+    }
+    
+    // Create ADC for temperature sensor
+    pub fn new_temp_sensor() -> ADC {
+        unsafe {
+            adc_set_temp_sensor_enabled(true);
+        }
+        
+        ADC {
+            channel: ADC_CHANNEL_TEMP,
+            gpio: 0,  // No GPIO for internal sensor
+        }
+    }
+    
+    // Read raw ADC value (0-4095)
+    pub fn read_raw(&self) -> u16 {
+        unsafe {
+            adc_select_input(self.channel);
+            adc_read()
+        }
+    }
+    
+    // Read voltage (0.0 - 3.3V)
+    pub fn read_voltage(&self) -> f32 {
+        let raw = self.read_raw();
+        (raw as f32) * ADC_VREF / (ADC_MAX_VALUE as f32)
+    }
+    
+    // Read as percentage (0-100%)
+    pub fn read_percent(&self) -> f32 {
+        let raw = self.read_raw();
+        (raw as f32) * 100.0 / (ADC_MAX_VALUE as f32)
+    }
+    
+    // Read temperature in Celsius (for temperature sensor only)
+    pub fn read_temperature(&self) -> f32 {
+        if self.channel != ADC_CHANNEL_TEMP {
+            panic!("Not a temperature sensor channel");
+        }
+        
+        let voltage = self.read_voltage();
+        
+        // Convert voltage to temperature using sensor characteristics
+        27.0 - ((voltage - TEMP_SENSOR_V_27C) / TEMP_SENSOR_SLOPE)
+    }
+    
+    // Read multiple samples and average
+    pub fn read_average(&self, samples: u32) -> u16 {
+        let mut sum: u32 = 0;
+        
+        for _ in 0..samples {
+            sum += self.read_raw() as u32;
+        }
+        
+        (sum / samples) as u16
+    }
+    
+    // Read voltage with averaging
+    pub fn read_voltage_avg(&self, samples: u32) -> f32 {
+        let avg = self.read_average(samples);
+        (avg as f32) * ADC_VREF / (ADC_MAX_VALUE as f32)
+    }
+}
+
+impl ADCMulti {
+    // Initialize multi-channel ADC with round-robin sampling
+    pub fn new(channels: Vec<u32>) -> ADCMulti {
+        let mut mask: u32 = 0;
+        
+        for &channel in &channels {
+            if channel <= 3 {
+                let gpio = ADC0_GPIO + channel;
+                unsafe {
+                    adc_gpio_init(gpio);
+                }
+                mask |= 1 << channel;
+            } else if channel == ADC_CHANNEL_TEMP {
+                unsafe {
+                    adc_set_temp_sensor_enabled(true);
+                }
+                mask |= 1 << ADC_CHANNEL_TEMP;
+            }
+        }
+        
+        unsafe {
+            adc_set_round_robin(mask);
+        }
+        
+        ADCMulti {
+            channels,
+            round_robin_mask: mask,
+        }
+    }
+    
+    // Read all channels in order (returns vector of raw values)
+    pub fn read_all_raw(&self) -> Vec<u16> {
+        let mut results: Vec<u16> = Vec::new();
+        
+        for &channel in &self.channels {
+            unsafe {
+                adc_select_input(channel);
+                results.push(adc_read());
+            }
+        }
+        
+        results
+    }
+    
+    // Read all channels as voltages
+    pub fn read_all_voltage(&self) -> Vec<f32> {
+        let raw_values = self.read_all_raw();
+        
+        raw_values.iter()
+            .map(|&raw| (raw as f32) * ADC_VREF / (ADC_MAX_VALUE as f32))
+            .collect()
+    }
+    
+    // Start free-running mode with FIFO
+    pub fn start_continuous(&self) {
+        unsafe {
+            // Setup FIFO: enable, DMA enabled, threshold 1
+            adc_fifo_setup(true, true, 1, false, false);
+            
+            // Start conversion
+            adc_run(true);
+        }
+    }
+    
+    // Stop continuous mode
+    pub fn stop_continuous(&self) {
+        unsafe {
+            adc_run(false);
+            adc_fifo_drain();
+        }
+    }
+    
+    // Read from FIFO (non-blocking)
+    pub fn read_fifo(&self) -> Option<u16> {
+        unsafe {
+            if !adc_fifo_is_empty() {
+                Some(adc_fifo_get())
+            } else {
+                None
+            }
+        }
+    }
+    
+    // Get FIFO level
+    pub fn fifo_level(&self) -> u8 {
+        unsafe {
+            adc_fifo_get_level()
+        }
+    }
+}
+
+// Helper function: Initialize single ADC channel
+pub fn init_adc(channel: u32) -> ADC {
+    ADC::init();
+    ADC::new(channel)
+}
+
+// Helper function: Initialize temperature sensor
+pub fn init_temp_sensor() -> ADC {
+    ADC::init();
+    ADC::new_temp_sensor()
+}
+
+// Example: Read analog sensor (potentiometer)
+pub fn example_potentiometer() {
+    ADC::init();
+    let pot = ADC::new(0);  // ADC0 (GPIO26)
+    
+    loop {
+        let voltage = pot.read_voltage();
+        let percent = pot.read_percent();
+        
+        println!("Potentiometer: {:.2}V ({:.1}%)", voltage, percent);
+        sleep_ms(100);
+    }
+}
+
+// Example: Temperature monitoring
+pub fn example_temperature_monitor() {
+    ADC::init();
+    let temp_sensor = ADC::new_temp_sensor();
+    
+    loop {
+        let temp = temp_sensor.read_temperature();
+        
+        println!("CPU Temperature: {:.1}°C", temp);
+        
+        if temp > 50.0 {
+            println!("Warning: High temperature!");
+        }
+        
+        sleep_ms(1000);
+    }
+}
+
+// Example: Light sensor (LDR with voltage divider)
+pub fn example_light_sensor() {
+    ADC::init();
+    let ldr = ADC::new(1);  // ADC1 (GPIO27)
+    
+    loop {
+        // Read with averaging for stability
+        let voltage = ldr.read_voltage_avg(10);
+        
+        let brightness = if voltage < 1.0 {
+            "Dark"
+        } else if voltage < 2.0 {
+            "Dim"
+        } else {
+            "Bright"
+        };
+        
+        println!("Light level: {:.2}V - {}", voltage, brightness);
+        sleep_ms(500);
+    }
+}
+
+// Example: Battery voltage monitoring
+pub fn example_battery_monitor() {
+    ADC::init();
+    let battery = ADC::new(2);  // ADC2 (GPIO28)
+    
+    loop {
+        // Assuming voltage divider (e.g., 2:1)
+        let adc_voltage = battery.read_voltage();
+        let battery_voltage = adc_voltage * 2.0;  // Adjust for divider
+        
+        let percent = ((battery_voltage - 3.0) / (4.2 - 3.0) * 100.0).max(0.0).min(100.0);
+        
+        println!("Battery: {:.2}V ({:.0}%)", battery_voltage, percent);
+        
+        if percent < 20.0 {
+            println!("Warning: Low battery!");
+        }
+        
+        sleep_ms(5000);
+    }
+}
+
+// Example: Multi-channel data logger
+pub fn example_data_logger() {
+    ADC::init();
+    
+    let channels = vec![0, 1, 2, 3];  // All 4 ADC channels
+    let adc_multi = ADCMulti::new(channels);
+    
+    loop {
+        let voltages = adc_multi.read_all_voltage();
+        
+        print!("ADC Channels: ");
+        for (i, voltage) in voltages.iter().enumerate() {
+            print!("CH{}: {:.2}V  ", i, voltage);
+        }
+        println!();
+        
+        sleep_ms(1000);
+    }
+}
+
+// Example: Analog joystick (X and Y axes)
+pub fn example_joystick() {
+    ADC::init();
+    
+    let x_axis = ADC::new(0);  // ADC0 (GPIO26)
+    let y_axis = ADC::new(1);  // ADC1 (GPIO27)
+    
+    loop {
+        let x = x_axis.read_percent();
+        let y = y_axis.read_percent();
+        
+        // Center position is around 50%
+        let x_dir = if x < 40.0 { "LEFT" } else if x > 60.0 { "RIGHT" } else { "CENTER" };
+        let y_dir = if y < 40.0 { "DOWN" } else if y > 60.0 { "UP" } else { "CENTER" };
+        
+        println!("Joystick: X={:.0}% ({}) Y={:.0}% ({})", x, x_dir, y, y_dir);
+        sleep_ms(100);
+    }
+}
+
+// Example: Fast continuous sampling with FIFO
+pub fn example_fast_sampling() {
+    ADC::init();
+    
+    let channels = vec![0];
+    let adc_multi = ADCMulti::new(channels);
+    
+    // Start continuous sampling at max speed (500 kSPS)
+    adc_multi.start_continuous();
+    
+    let mut sample_count: u32 = 0;
+    let start_time = get_time_ms();
+    
+    loop {
+        if let Some(sample) = adc_multi.read_fifo() {
+            sample_count += 1;
+            
+            // Process sample (e.g., store to buffer, analyze, etc.)
+        }
+        
+        if sample_count >= 10000 {
+            let elapsed = get_time_ms() - start_time;
+            let sample_rate = (sample_count as f32) / (elapsed as f32) * 1000.0;
+            
+            println!("Captured {} samples in {}ms ({:.0} SPS)", 
+                     sample_count, elapsed, sample_rate);
+            break;
+        }
+    }
+    
+    adc_multi.stop_continuous();
+}
+
+// Example: Audio input sampling (microphone)
+pub fn example_audio_input() {
+    ADC::init();
+    
+    let mic = ADC::new(3);  // ADC3 (GPIO29)
+    
+    let mut buffer: [u16; 256] = [0; 256];
+    
+    // Capture audio buffer
+    for i in 0..256 {
+        buffer[i] = mic.read_raw();
+        sleep_us(23);  // ~44.1 kHz sample rate
+    }
+    
+    // Analyze audio (find peak amplitude)
+    let mut max_value: u16 = 0;
+    let mut min_value: u16 = 4095;
+    
+    for &sample in &buffer {
+        if sample > max_value { max_value = sample; }
+        if sample < min_value { min_value = sample; }
+    }
+    
+    let amplitude = max_value - min_value;
+    println!("Audio amplitude: {}", amplitude);
+}
+
+// Helper: Sleep functions (would be implemented in time module)
+fn sleep_ms(ms: u32) {
+    // Placeholder
+}
+
+fn sleep_us(us: u32) {
+    // Placeholder
+}
+
+fn get_time_ms() -> u32 {
+    // Placeholder
+    0
+}

@@ -1,0 +1,125 @@
+/// ═══════════════════════════════════════════════════════════════════════════
+/// BERK HAL - ESP32 Platform Demo (English Version)
+/// Hardware Abstraction Layer - WiFi + Bluetooth SoC
+/// ═══════════════════════════════════════════════════════════════════════════
+
+use std::io
+use std::esp32
+
+print("============================================================")
+print("         HAL Demo: ESP32 Platform                           ")
+print("============================================================")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 1: ESP32 Features
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 1: ESP32 Features ---")
+
+print("\n   Technical Specifications:")
+print("   - CPU: Xtensa LX6 Dual-Core @ 240 MHz")
+print("   - RAM: 520 KB SRAM")
+print("   - Flash: 4 MB (external)")
+print("   - WiFi: 802.11 b/g/n")
+print("   - Bluetooth: v4.2 BR/EDR + BLE")
+print("   - GPIO: 34 pins")
+print("   - ADC: 18 channels (12-bit)")
+print("   - DAC: 2 channels (8-bit)")
+
+print("\n   ESP32 Variants:")
+print("   - ESP32-WROOM-32")
+print("   - ESP32-WROVER (with PSRAM)")
+print("   - ESP32-S2 (single core, USB)")
+print("   - ESP32-S3 (AI acceleration)")
+print("   - ESP32-C3 (RISC-V core)")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 2: WiFi Functions
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 2: WiFi Functions ---")
+
+print("\n   WiFi Modes:")
+print("   - WIFI_MODE_STA:  Station (Client)")
+print("   - WIFI_MODE_AP:   Access Point")
+print("   - WIFI_MODE_APSTA: Both modes")
+
+print("\n   Connection Steps:")
+print("   1. WiFi.begin(ssid, password)")
+print("   2. Wait for connection")
+print("   3. Check WiFi.status()")
+print("   4. Get WiFi.localIP()")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 3: Bluetooth Functions
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 3: Bluetooth Functions ---")
+
+print("\n   Classic Bluetooth:")
+print("   - SerialBT.begin(name)")
+print("   - SerialBT.write(data)")
+print("   - SerialBT.read()")
+
+print("\n   BLE (Low Energy):")
+print("   - BLEDevice::init()")
+print("   - Create Server/Client")
+print("   - Define Services")
+print("   - Define Characteristics")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 4: Dual-Core Usage
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 4: Dual-Core Usage ---")
+
+print("\n   Cores:")
+print("   - Core 0: Protocol handling (WiFi/BT)")
+print("   - Core 1: Application code")
+
+print("\n   Task Creation:")
+print("   - xTaskCreatePinnedToCore()")
+print("   - Specify task, name, stack, core")
+
+let core0_freq = 240
+let core1_freq = 240
+print("\n   Core 0 Frequency: ", core0_freq, " MHz")
+print("   Core 1 Frequency: ", core1_freq, " MHz")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 5: Deep Sleep Mode
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 5: Deep Sleep Mode ---")
+
+print("\n   Power Consumption:")
+print("   - Active: ~240 mA")
+print("   - Modem Sleep: ~20 mA")
+print("   - Light Sleep: ~0.8 mA")
+print("   - Deep Sleep: ~10 uA")
+
+print("\n   Wake Sources:")
+print("   - Timer wakeup")
+print("   - External wakeup (GPIO)")
+print("   - Touch pad wakeup")
+print("   - ULP coprocessor")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 6: Web Server Example
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 6: Web Server Example ---")
+
+print("\n   Simple Web Server:")
+print("   1. Connect to WiFi")
+print("   2. Create WebServer(80)")
+print("   3. Define route handlers")
+print("   4. server.begin()")
+print("   5. server.handleClient()")
+
+let http_port = 80
+let https_port = 443
+print("\n   HTTP Port: ", http_port)
+print("   HTTPS Port: ", https_port)
+
+print("\n[OK] ESP32 HAL demo completed!")

@@ -1,0 +1,468 @@
+// stdlib/ai/data.berk
+// Data Loading & Preprocessing
+// PyTorch DataLoader/Dataset equivalent
+//
+// Performance: Multi-threaded loading, prefetching
+
+import "ai/tensor" as tensor
+import "fs" as fs
+import "thread" as thread
+import "random" as random
+import "collections" as collections
+
+// ============================================================================
+// DATASET TRAIT
+// ============================================================================
+
+/// Dataset trait (PyTorch Dataset equivalent)
+pub trait Dataset {
+    /// Get item by index
+    fn get(self, index: u64) -> (tensor.Tensor, tensor.Tensor)
+    
+    /// Get dataset length
+    fn len(self) -> u64
+}
+
+// ============================================================================
+// DATALOADER
+// ============================================================================
+
+/// DataLoader for batching and shuffling (PyTorch DataLoader equivalent)
+pub struct DataLoader {
+    dataset: Box<dyn Dataset>,
+    batch_size: u64,
+    shuffle: bool,
+    num_workers: u64,
+    drop_last: bool,
+    indices: [u64],
+    current_index: u64,
+}
+
+impl DataLoader {
+    pub fn new(
+        dataset: Box<dyn Dataset>,
+        batch_size: u64 = 32,
+        shuffle: bool = false,
+        num_workers: u64 = 0,
+        drop_last: bool = false
+    ) -> DataLoader {
+        let len = dataset.len()
+        let indices = (0..len).collect()
+        
+        DataLoader {
+            dataset: dataset,
+            batch_size: batch_size,
+            shuffle: shuffle,
+            num_workers: num_workers,
+            drop_last: drop_last,
+            indices: indices,
+            current_index: 0,
+        }
+    }
+    
+    /// Reset and shuffle for new epoch
+    pub fn reset(self) {
+        self.current_index = 0
+        if self.shuffle {
+            random.shuffle(&mut self.indices)
+        }
+    }
+    
+    /// Get next batch
+    pub fn next_batch(self) -> Option<(tensor.Tensor, tensor.Tensor)> {
+        if self.current_index >= self.indices.len() {
+            return None
+        }
+        
+        let end_idx = min(self.current_index + self.batch_size, self.indices.len())
+        let batch_indices = self.indices[self.current_index..end_idx]
+        
+        if self.drop_last && batch_indices.len() < self.batch_size {
+            return None
+        }
+        
+        // Load batch
+        let mut inputs = []
+        let mut targets = []
+        
+        for idx in batch_indices {
+            let (input, target) = self.dataset.get(idx)
+            inputs.push(input)
+            targets.push(target)
+        }
+        
+        self.current_index = end_idx
+        
+        // Stack into batch tensors
+        let batch_inputs = tensor.stack(inputs, dim: 0)
+        let batch_targets = tensor.stack(targets, dim: 0)
+        
+        Some((batch_inputs, batch_targets))
+    }
+    
+    /// Iterate over all batches
+    pub fn iter(self) -> DataLoaderIterator {
+        self.reset()
+        DataLoaderIterator { loader: self }
+    }
+}
+
+pub struct DataLoaderIterator {
+    loader: DataLoader,
+}
+
+impl Iterator for DataLoaderIterator {
+    type Item = (tensor.Tensor, tensor.Tensor)
+    
+    fn next(self) -> Option<(tensor.Tensor, tensor.Tensor)> {
+        self.loader.next_batch()
+    }
+}
+
+// ============================================================================
+// BUILT-IN DATASETS
+// ============================================================================
+
+/// Tensor dataset (simple wrapper)
+pub struct TensorDataset {
+    inputs: tensor.Tensor,
+    targets: tensor.Tensor,
+}
+
+impl TensorDataset {
+    pub fn new(inputs: tensor.Tensor, targets: tensor.Tensor) -> TensorDataset {
+        assert(inputs.shape()[0] == targets.shape()[0], "Input and target size mismatch")
+        TensorDataset { inputs: inputs, targets: targets }
+    }
+}
+
+impl Dataset for TensorDataset {
+    fn get(self, index: u64) -> (tensor.Tensor, tensor.Tensor) {
+        let input = self.inputs[index]
+        let target = self.targets[index]
+        (input, target)
+    }
+    
+    fn len(self) -> u64 {
+        self.inputs.shape()[0]
+    }
+}
+
+/// CSV dataset
+pub struct CSVDataset {
+    data: [[f32]],
+    input_cols: [u64],
+    target_col: u64,
+}
+
+impl CSVDataset {
+    @native("data::csv::load")
+    pub fn from_csv(path: str, input_cols: [u64], target_col: u64, skip_header: bool = true) -> Result<CSVDataset, str> {
+        // Load CSV, parse numerical data
+    }
+}
+
+impl Dataset for CSVDataset {
+    fn get(self, index: u64) -> (tensor.Tensor, tensor.Tensor) {
+        let row = self.data[index]
+        let inputs = self.input_cols.map(|col| row[col])
+        let target = row[self.target_col]
+        
+        (tensor.from_array(inputs), tensor.from_array([target]))
+    }
+    
+    fn len(self) -> u64 {
+        self.data.len() as u64
+    }
+}
+
+/// Image folder dataset (ImageNet style)
+pub struct ImageFolderDataset {
+    image_paths: [str],
+    labels: [u64],
+    transform: Option<Box<dyn Transform>>,
+}
+
+impl ImageFolderDataset {
+    @native("data::image::load_folder")
+    pub fn new(root: str, transform: Option<Box<dyn Transform>> = None) -> Result<ImageFolderDataset, str> {
+        // Load image folder structure
+        // root/class1/*.jpg, root/class2/*.jpg, etc.
+    }
+}
+
+impl Dataset for ImageFolderDataset {
+    @native("data::image::get_item")
+    fn get(self, index: u64) -> (tensor.Tensor, tensor.Tensor) {
+        // Load image, apply transforms, return (image, label)
+    }
+    
+    fn len(self) -> u64 {
+        self.image_paths.len() as u64
+    }
+}
+
+// ============================================================================
+// TRANSFORMS
+// ============================================================================
+
+pub trait Transform {
+    fn apply(self, input: tensor.Tensor) -> tensor.Tensor
+}
+
+/// Compose multiple transforms
+pub struct Compose {
+    transforms: [Box<dyn Transform>],
+}
+
+impl Compose {
+    pub fn new(transforms: [Box<dyn Transform>]) -> Compose {
+        Compose { transforms: transforms }
+    }
+}
+
+impl Transform for Compose {
+    fn apply(self, input: tensor.Tensor) -> tensor.Tensor {
+        let mut result = input
+        for transform in self.transforms {
+            result = transform.apply(result)
+        }
+        result
+    }
+}
+
+/// Normalize transform
+pub struct Normalize {
+    mean: [f32],
+    std: [f32],
+}
+
+impl Normalize {
+    pub fn new(mean: [f32], std: [f32]) -> Normalize {
+        Normalize { mean: mean, std: std }
+    }
+}
+
+impl Transform for Normalize {
+    @native("data::transform::normalize")
+    fn apply(self, input: tensor.Tensor) -> tensor.Tensor {
+        // (input - mean) / std
+    }
+}
+
+/// Resize transform
+pub struct Resize {
+    size: (u64, u64),
+}
+
+impl Resize {
+    pub fn new(size: (u64, u64)) -> Resize {
+        Resize { size: size }
+    }
+}
+
+impl Transform for Resize {
+    @native("data::transform::resize")
+    fn apply(self, input: tensor.Tensor) -> tensor.Tensor {
+        // Bilinear interpolation
+    }
+}
+
+/// Random horizontal flip
+pub struct RandomHorizontalFlip {
+    p: f32,
+}
+
+impl RandomHorizontalFlip {
+    pub fn new(p: f32 = 0.5) -> RandomHorizontalFlip {
+        RandomHorizontalFlip { p: p }
+    }
+}
+
+impl Transform for RandomHorizontalFlip {
+    @native("data::transform::random_flip")
+    fn apply(self, input: tensor.Tensor) -> tensor.Tensor {
+        if random.random_f32() < self.p {
+            // Flip horizontally
+            input.flip(dims: [2])
+        } else {
+            input
+        }
+    }
+}
+
+/// Random crop
+pub struct RandomCrop {
+    size: (u64, u64),
+}
+
+impl RandomCrop {
+    pub fn new(size: (u64, u64)) -> RandomCrop {
+        RandomCrop { size: size }
+    }
+}
+
+impl Transform for RandomCrop {
+    @native("data::transform::random_crop")
+    fn apply(self, input: tensor.Tensor) -> tensor.Tensor {
+        // Random crop to size
+    }
+}
+
+/// To tensor (convert image to tensor)
+pub struct ToTensor {}
+
+impl ToTensor {
+    pub fn new() -> ToTensor {
+        ToTensor {}
+    }
+}
+
+impl Transform for ToTensor {
+    @native("data::transform::to_tensor")
+    fn apply(self, input: tensor.Tensor) -> tensor.Tensor {
+        // Convert HWC to CHW, scale [0, 255] -> [0, 1]
+    }
+}
+
+// ============================================================================
+// DATA AUGMENTATION
+// ============================================================================
+
+pub mod augmentation {
+    /// Random rotation
+    @native("data::augment::rotate")
+    pub fn random_rotation(image: tensor.Tensor, degrees: f32) -> tensor.Tensor {
+        // Random rotation within [-degrees, degrees]
+    }
+    
+    /// Color jitter
+    @native("data::augment::color_jitter")
+    pub fn color_jitter(
+        image: tensor.Tensor,
+        brightness: f32 = 0.0,
+        contrast: f32 = 0.0,
+        saturation: f32 = 0.0,
+        hue: f32 = 0.0
+    ) -> tensor.Tensor {
+        // Random brightness, contrast, saturation, hue changes
+    }
+    
+    /// Mixup augmentation
+    pub fn mixup(
+        batch1: (tensor.Tensor, tensor.Tensor),
+        batch2: (tensor.Tensor, tensor.Tensor),
+        alpha: f32 = 1.0
+    ) -> (tensor.Tensor, tensor.Tensor) {
+        let lam = random.beta(alpha, alpha)
+        let (x1, y1) = batch1
+        let (x2, y2) = batch2
+        
+        let mixed_x = x1 * lam + x2 * (1.0 - lam)
+        let mixed_y = y1 * lam + y2 * (1.0 - lam)
+        
+        (mixed_x, mixed_y)
+    }
+    
+    /// Cutout augmentation
+    @native("data::augment::cutout")
+    pub fn cutout(image: tensor.Tensor, n_holes: u64 = 1, length: u64 = 16) -> tensor.Tensor {
+        // Random rectangular cutout
+    }
+}
+
+// ============================================================================
+// SAMPLERS
+// ============================================================================
+
+/// Random sampler
+pub struct RandomSampler {
+    data_source: u64,
+}
+
+impl RandomSampler {
+    pub fn new(data_source: u64) -> RandomSampler {
+        RandomSampler { data_source: data_source }
+    }
+    
+    pub fn sample(self) -> [u64] {
+        let mut indices = (0..self.data_source).collect()
+        random.shuffle(&mut indices)
+        indices
+    }
+}
+
+/// Sequential sampler
+pub struct SequentialSampler {
+    data_source: u64,
+}
+
+impl SequentialSampler {
+    pub fn new(data_source: u64) -> SequentialSampler {
+        SequentialSampler { data_source: data_source }
+    }
+    
+    pub fn sample(self) -> [u64] {
+        (0..self.data_source).collect()
+    }
+}
+
+/// Weighted random sampler (for imbalanced datasets)
+pub struct WeightedRandomSampler {
+    weights: [f32],
+    num_samples: u64,
+    replacement: bool,
+}
+
+impl WeightedRandomSampler {
+    pub fn new(weights: [f32], num_samples: u64, replacement: bool = true) -> WeightedRandomSampler {
+        WeightedRandomSampler {
+            weights: weights,
+            num_samples: num_samples,
+            replacement: replacement,
+        }
+    }
+    
+    @native("data::sampler::weighted")
+    pub fn sample(self) -> [u64] {
+        // Sample indices according to weights
+    }
+}
+
+// ============================================================================
+// UTILITIES
+// ============================================================================
+
+/// Split dataset into train/val/test
+pub fn train_test_split(
+    dataset: Box<dyn Dataset>,
+    train_ratio: f32 = 0.8,
+    val_ratio: f32 = 0.1,
+    test_ratio: f32 = 0.1,
+    shuffle: bool = true
+) -> (TensorDataset, TensorDataset, TensorDataset) {
+    assert(train_ratio + val_ratio + test_ratio == 1.0, "Ratios must sum to 1")
+    
+    let n = dataset.len()
+    let mut indices = (0..n).collect()
+    
+    if shuffle {
+        random.shuffle(&mut indices)
+    }
+    
+    let train_end = (n as f32 * train_ratio) as u64
+    let val_end = train_end + (n as f32 * val_ratio) as u64
+    
+    // TODO: Extract subsets
+    // (train_dataset, val_dataset, test_dataset)
+}
+
+/// Prefetch data in background thread
+@native("data::prefetch::start")
+pub fn prefetch(loader: DataLoader, num_prefetch: u64 = 2) -> PrefetchLoader {
+    // Background thread loads next batches
+}
+
+pub struct PrefetchLoader {
+    // Background loader
+}

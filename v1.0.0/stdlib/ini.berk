@@ -1,0 +1,434 @@
+// ============================================================================
+// INI.BERK - INI Configuration File Parser & Writer
+// ============================================================================
+// BERK Standard Library v1.5
+// 
+// Python configparser + Rust ini + Go ini tasarımlarından esinlenildi
+//
+// Özellikler:
+// - Section-based configuration
+// - Key-value pairs (name=value)
+// - Comments (# or ;)
+// - Multi-line values
+// - Type coercion (string, int, float, bool)
+// - Default values
+// - Case-insensitive sections/keys (configurable)
+// - Whitespace handling
+// - Inline comments
+// - Array values (comma-separated)
+// - Variable interpolation (${section:key})
+// - Include files (@include other.ini)
+//
+// INI Format:
+//   # Comment line
+//   [section]
+//   key = value
+//   another_key = another value
+//   
+//   [another_section]
+//   number = 42
+//   flag = true
+//   list = item1, item2, item3
+//
+// Kullanım:
+//   kullan ini
+//   
+//   değişken config = ini::yukle("config.ini")
+//   değişken port = config.get("server", "port", varsayılan: 8080)
+//   değişken debug = config.get_bool("app", "debug", varsayılan: yanlış)
+// ============================================================================
+
+modül ini
+
+kullan result
+kullan io
+
+// ============================================================================
+// INI VALUE (Configuration Value)
+// ============================================================================
+
+tip IniValue = 
+    String { value: yazı } |
+    Integer { value: tamsayı } |
+    Float { value: ondalık } |
+    Boolean { value: mantıksal } |
+    Array { items: liste[yazı] }  // Comma-separated values
+
+// ============================================================================
+// INI SECTION (Named Group of Keys)
+// ============================================================================
+
+tip IniSection = yapı yap
+    ad: yazı,
+    öğeler: eşleme[yazı, IniValue],
+    yorumlar: eşleme[yazı, yazı],  // Key -> comment
+    section_comment: yazı           // Comment before section
+son
+
+// Create new section
+fonksiyon new_section(ad: yazı) -> IniSection
+    değer IniSection {
+        ad: ad,
+        öğeler: {},
+        yorumlar: {},
+        section_comment: ""
+    }
+son
+
+// Set value in section
+fonksiyon (self: IniSection) set(key: yazı, value: IniValue) -> boş
+    self.öğeler[key] = value
+son
+
+// Get value from section
+fonksiyon (self: IniSection) get(key: yazı) -> boş?
+    değer self.öğeler.al(key)
+son
+
+// Check if key exists
+fonksiyon (self: IniSection) has(key: yazı) -> mantıksal
+    değer self.öğeler.var_mı(key)
+son
+
+// Remove key
+fonksiyon (self: IniSection) remove(key: yazı) -> boş
+    self.öğeler.sil(key)
+    self.yorumlar.sil(key)
+son
+
+// Get all keys
+fonksiyon (self: IniSection) keys() -> liste[yazı]
+    değer self.öğeler.anahtarlar()
+son
+
+// ============================================================================
+// INI CONFIG (Complete Configuration)
+// ============================================================================
+
+tip IniConfig = yapı yap
+    sections: eşleme[yazı, IniSection],
+    genel: IniSection,               // Default section (before any [section])
+    case_sensitive: mantıksal,        // Case-sensitive keys/sections
+    allow_duplicates: mantıksal,      // Allow duplicate keys (last wins)
+    interpolation: mantıksal,         // Enable ${section:key} interpolation
+    inline_comments: mantıksal,       // Allow inline comments (# or ; after value)
+    multi_line: mantıksal             // Allow multi-line values (indent-based)
+son
+
+// Create new config with defaults
+fonksiyon new_config() -> IniConfig
+    değer IniConfig {
+        sections: {},
+        genel: new_section("GENEL"),
+        case_sensitive: yanlış,
+        allow_duplicates: doğru,
+        interpolation: doğru,
+        inline_comments: doğru,
+        multi_line: doğru
+    }
+son
+
+// ============================================================================
+// PARSING (File -> IniConfig)
+// ============================================================================
+
+// Load INI from file
+@native
+fonksiyon yukle(path: yazı) -> Sonuç[IniConfig, yazı]
+
+// Parse INI from string
+@native
+fonksiyon parse(content: yazı) -> Sonuç[IniConfig, yazı]
+
+// Parse with custom options
+@native
+fonksiyon parse_with_options(content: yazı, options: IniConfig) -> Sonuç[IniConfig, yazı]
+
+// ============================================================================
+// WRITING (IniConfig -> File)
+// ============================================================================
+
+// Save INI to file
+@native
+fonksiyon kaydet(config: IniConfig, path: yazı) -> Sonuç[boş, yazı]
+
+// Convert to string
+@native
+fonksiyon to_string(config: IniConfig) -> yazı
+
+// Convert to string with pretty formatting
+@native
+fonksiyon to_string_pretty(config: IniConfig, indent: tamsayı) -> yazı
+
+// ============================================================================
+// ACCESS METHODS (Get/Set Values)
+// ============================================================================
+
+// Get value as string
+fonksiyon (self: IniConfig) get(section: yazı, key: yazı, varsayılan: yazı) -> yazı
+    değişken sec = self.sections.al(section)
+    eğer sec.yok_mu():
+        değer varsayılan
+    son
+    
+    değişken val = sec.al()?.get(key)
+    eğer val.yok_mu():
+        değer varsayılan
+    son
+    
+    eşle val.al()?
+        String { value } -> değer value
+        Integer { value } -> değer value.yazıya()
+        Float { value } -> değer value.yazıya()
+        Boolean { value } -> değer eğer value { "true" } yoksa { "false" }
+        Array { items } -> değer items.birleştir(", ")
+    son
+son
+
+// Get value as integer
+fonksiyon (self: IniConfig) get_int(section: yazı, key: yazı, varsayılan: tamsayı) -> tamsayı
+    değişken str_val = self.get(section, key, varsayılan.yazıya())
+    değer str_val.tamsayıya() veya varsayılan
+son
+
+// Get value as float
+fonksiyon (self: IniConfig) get_float(section: yazı, key: yazı, varsayılan: ondalık) -> ondalık
+    değişken str_val = self.get(section, key, varsayılan.yazıya())
+    değer str_val.ondalığa() veya varsayılan
+son
+
+// Get value as boolean
+fonksiyon (self: IniConfig) get_bool(section: yazı, key: yazı, varsayılan: mantıksal) -> mantıksal
+    değişken str_val = self.get(section, key, eğer varsayılan { "true" } yoksa { "false" })
+    değişken lower = str_val.küçük_harf()
+    değer lower == "true" veya lower == "yes" veya lower == "1" veya lower == "on"
+son
+
+// Get value as array (comma-separated)
+fonksiyon (self: IniConfig) get_array(section: yazı, key: yazı, varsayılan: liste[yazı]) -> liste[yazı]
+    değişken sec = self.sections.al(section)
+    eğer sec.yok_mu():
+        değer varsayılan
+    son
+    
+    değişken val = sec.al()?.get(key)
+    eğer val.yok_mu():
+        değer varsayılan
+    son
+    
+    eşle val.al()?
+        Array { items } -> değer items
+        String { value } -> değer value.böl(",").eşle(|s| s.trim())
+        _ -> değer varsayılan
+    son
+son
+
+// Set value (string)
+fonksiyon (self: IniConfig) set(section: yazı, key: yazı, value: yazı) -> boş
+    eğer self.sections.var_mı(section).değil():
+        self.sections[section] = new_section(section)
+    son
+    self.sections[section].set(key, String { value: value })
+son
+
+// Set integer value
+fonksiyon (self: IniConfig) set_int(section: yazı, key: yazı, value: tamsayı) -> boş
+    eğer self.sections.var_mı(section).değil():
+        self.sections[section] = new_section(section)
+    son
+    self.sections[section].set(key, Integer { value: value })
+son
+
+// Set float value
+fonksiyon (self: IniConfig) set_float(section: yazı, key: yazı, value: ondalık) -> boş
+    eğer self.sections.var_mı(section).değil():
+        self.sections[section] = new_section(section)
+    son
+    self.sections[section].set(key, Float { value: value })
+son
+
+// Set boolean value
+fonksiyon (self: IniConfig) set_bool(section: yazı, key: yazı, value: mantıksal) -> boş
+    eğer self.sections.var_mı(section).değil():
+        self.sections[section] = new_section(section)
+    son
+    self.sections[section].set(key, Boolean { value: value })
+son
+
+// Set array value
+fonksiyon (self: IniConfig) set_array(section: yazı, key: yazı, values: liste[yazı]) -> boş
+    eğer self.sections.var_mı(section).değil():
+        self.sections[section] = new_section(section)
+    son
+    self.sections[section].set(key, Array { items: values })
+son
+
+// ============================================================================
+// SECTION OPERATIONS
+// ============================================================================
+
+// Check if section exists
+fonksiyon (self: IniConfig) has_section(section: yazı) -> mantıksal
+    değer self.sections.var_mı(section)
+son
+
+// Add new section
+fonksiyon (self: IniConfig) add_section(section: yazı) -> boş
+    eğer self.sections.var_mı(section).değil():
+        self.sections[section] = new_section(section)
+    son
+son
+
+// Remove section
+fonksiyon (self: IniConfig) remove_section(section: yazı) -> boş
+    self.sections.sil(section)
+son
+
+// Get all section names
+fonksiyon (self: IniConfig) section_names() -> liste[yazı]
+    değer self.sections.anahtarlar()
+son
+
+// Get section
+fonksiyon (self: IniConfig) get_section(section: yazı) -> IniSection?
+    değer self.sections.al(section)
+son
+
+// ============================================================================
+// INTERPOLATION (Variable Substitution)
+// ============================================================================
+
+// Resolve ${section:key} references
+@native
+fonksiyon resolve_interpolation(config: IniConfig, value: yazı) -> Sonuç[yazı, yazı]
+
+// Example: value = "http://${server:host}:${server:port}/api"
+// Resolves to: "http://localhost:8080/api"
+
+// ============================================================================
+// VALIDATION
+// ============================================================================
+
+// Validate configuration (check required keys)
+tip ValidationRule = yapı yap
+    section: yazı,
+    key: yazı,
+    gerekli: mantıksal,
+    type_check: fonksiyon(IniValue) -> mantıksal  // Optional type validator
+son
+
+// Validate config against rules
+@native
+fonksiyon validate(config: IniConfig, rules: liste[ValidationRule]) -> Sonuç[boş, liste[yazı]]
+
+// ============================================================================
+// MERGE & EXTEND
+// ============================================================================
+
+// Merge two configs (other overwrites self)
+@native
+fonksiyon merge(self: IniConfig, other: IniConfig) -> IniConfig
+
+// Extend config with file (useful for @include)
+@native
+fonksiyon extend_from_file(config: IniConfig, path: yazı) -> Sonuç[boş, yazı]
+
+// ============================================================================
+// COMMENTS
+// ============================================================================
+
+// Add comment to section
+fonksiyon (self: IniConfig) set_section_comment(section: yazı, comment: yazı) -> boş
+    eğer self.sections.var_mı(section):
+        self.sections[section].section_comment = comment
+    son
+son
+
+// Add comment to key
+fonksiyon (self: IniConfig) set_key_comment(section: yazı, key: yazı, comment: yazı) -> boş
+    eğer self.sections.var_mı(section):
+        self.sections[section].yorumlar[key] = comment
+    son
+son
+
+// ============================================================================
+// UTILITY FUNCTIONS
+// ============================================================================
+
+// Normalize key (for case-insensitive mode)
+fonksiyon normalize_key(config: IniConfig, key: yazı) -> yazı
+    değer eğer config.case_sensitive { key } yoksa { key.küçük_harf() }
+son
+
+// Parse boolean value from string
+fonksiyon parse_bool(value: yazı) -> mantıksal?
+    değişken lower = value.küçük_harf().trim()
+    eşle lower
+        "true" | "yes" | "1" | "on" -> Bazı(doğru)
+        "false" | "no" | "0" | "off" -> Bazı(yanlış)
+        _ -> Yok
+    son
+son
+
+// Parse array from string (comma-separated)
+fonksiyon parse_array(value: yazı) -> liste[yazı]
+    değer value.böl(",").eşle(|s| s.trim()).süz(|s| s.boş_değil())
+son
+
+// ============================================================================
+// ÖRNEK KULLANIM (Example Usage)
+// ============================================================================
+
+// Örnek: Web sunucusu yapılandırması
+//
+// # config.ini
+// [server]
+// host = 0.0.0.0
+// port = 8080
+// debug = true
+// workers = 4
+//
+// [database]
+// url = postgresql://localhost/mydb
+// max_connections = 20
+// timeout = 30.0
+//
+// [logging]
+// level = info
+// format = json
+// files = error.log, access.log, debug.log
+//
+// # Interpolation
+// [paths]
+// root = /var/www
+// static = ${paths:root}/static
+// uploads = ${paths:root}/uploads
+//
+// --------
+//
+// kullan ini
+//
+// değişken config = ini::yukle("config.ini")?
+//
+// değişken host = config.get("server", "host", varsayılan: "localhost")
+// değişken port = config.get_int("server", "port", varsayılan: 3000)
+// değişken debug = config.get_bool("server", "debug", varsayılan: yanlış)
+// değişken workers = config.get_int("server", "workers", varsayılan: 1)
+//
+// yazı("Server: ", host, ":", port)
+// yazı("Debug mode: ", debug)
+// yazı("Workers: ", workers)
+//
+// değişken db_url = config.get("database", "url", varsayılan: "sqlite::memory:")
+// değişken max_conn = config.get_int("database", "max_connections", varsayılan: 10)
+// değişken timeout = config.get_float("database", "timeout", varsayılan: 10.0)
+//
+// değişken log_files = config.get_array("logging", "files", varsayılan: [])
+// her dosya içinde log_files:
+//     yazı("Log file: ", dosya)
+// son
+//
+// // Modify and save
+// config.set_int("server", "port", 9000)
+// config.set_bool("server", "debug", yanlış)
+// ini::kaydet(config, "config.ini")?

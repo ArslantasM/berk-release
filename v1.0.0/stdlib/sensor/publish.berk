@@ -1,0 +1,552 @@
+// ============================================================================
+// BERK SENSOR API - Yayınlama ve Bridge Entegrasyonu
+// ============================================================================
+// Sensör verilerini CAN, TCP, BLE, Modbus üzerinden yayınla
+// sensor::publish("temp", via: "can", id: 0x301)
+// ============================================================================
+
+modül sensor::publish
+
+import sensor::measurement::{Measurement, Vector3Measurement, Timestamp}
+import sensor::component::{Sensor}
+
+// ============================================================================
+// YAYINLAMA PROTOKOLLERİ
+// ============================================================================
+
+/// Yayınlama protokolü
+pub tip PublishProtocol = özyinelemeli yap
+    | CAN(sayı)              // CAN ID
+    | TCP(yazı, sayı)        // Host, Port
+    | UDP(yazı, sayı)        // Host, Port
+    | BLE(yazı)              // Characteristic UUID
+    | MQTT(yazı, yazı)       // Broker, Topic
+    | Modbus(sayı)           // Register address
+    | HTTP(yazı)             // Endpoint URL
+    | WebSocket(yazı)        // WebSocket URL
+    | Console                // Sadece konsola yaz
+son
+
+/// Veri formatı
+pub tip DataFormat = özyinelemeli yap
+    | Raw                    // Ham bytes
+    | JSON                   // JSON formatı
+    | CBOR                   // CBOR (compact binary)
+    | Protobuf               // Protocol Buffers
+    | Custom(yazı)           // Özel format adı
+son
+
+// ============================================================================
+// YAYINCI (PUBLISHER)
+// ============================================================================
+
+/// Yayınlama durumu
+pub tip PublishState = özyinelemeli yap
+    | Idle
+    | Connected
+    | Publishing
+    | Error(yazı)
+son
+
+/// Sensör yayıncısı
+pub tip Publisher = yapı yap
+    /// Yayıncı ID
+    id: yazı,
+    
+    /// Protokol
+    protocol: PublishProtocol,
+    
+    /// Veri formatı
+    format: DataFormat,
+    
+    /// Durum
+    state: PublishState,
+    
+    /// Periyodik yayın aralığı (ms, 0 = manuel)
+    interval_ms: sayı,
+    
+    /// Son yayın zamanı
+    last_publish_time: sayı,
+    
+    /// Yayın sayacı
+    publish_count: sayı,
+    
+    /// Hata sayacı
+    error_count: sayı,
+    
+    /// QoS (MQTT için)
+    qos: sayı,
+    
+    /// Retain (MQTT için)
+    retain: mantıksal,
+    
+    /// Native handle
+    _handle: sayı,
+son
+
+impl Publisher:
+    /// Yeni yayıncı oluştur
+    pub fn new(id: yazı, protocol: PublishProtocol) döndür Publisher:
+        döndür Publisher {
+            id: id,
+            protocol: protocol,
+            format: DataFormat::JSON,
+            state: PublishState::Idle,
+            interval_ms: 0,
+            last_publish_time: 0,
+            publish_count: 0,
+            error_count: 0,
+            qos: 0,
+            retain: yanlış,
+            _handle: 0,
+        }
+    son
+    
+    // ========================================================================
+    // PROTOKOL FACTORY'LERİ
+    // ========================================================================
+    
+    /// CAN yayıncısı
+    pub fn can(id: yazı, can_id: sayı) döndür Publisher:
+        döndür Publisher::new(id, PublishProtocol::CAN(can_id))
+            .with_format(DataFormat::Raw)
+    son
+    
+    /// TCP yayıncısı
+    pub fn tcp(id: yazı, host: yazı, port: sayı) döndür Publisher:
+        döndür Publisher::new(id, PublishProtocol::TCP(host, port))
+    son
+    
+    /// UDP yayıncısı
+    pub fn udp(id: yazı, host: yazı, port: sayı) döndür Publisher:
+        döndür Publisher::new(id, PublishProtocol::UDP(host, port))
+    son
+    
+    /// BLE yayıncısı
+    pub fn ble(id: yazı, characteristic: yazı) döndür Publisher:
+        döndür Publisher::new(id, PublishProtocol::BLE(characteristic))
+    son
+    
+    /// MQTT yayıncısı
+    pub fn mqtt(id: yazı, broker: yazı, topic: yazı) döndür Publisher:
+        döndür Publisher::new(id, PublishProtocol::MQTT(broker, topic))
+    son
+    
+    /// Modbus yayıncısı
+    pub fn modbus(id: yazı, register: sayı) döndür Publisher:
+        döndür Publisher::new(id, PublishProtocol::Modbus(register))
+            .with_format(DataFormat::Raw)
+    son
+    
+    /// HTTP yayıncısı
+    pub fn http(id: yazı, url: yazı) döndür Publisher:
+        döndür Publisher::new(id, PublishProtocol::HTTP(url))
+    son
+    
+    /// WebSocket yayıncısı
+    pub fn websocket(id: yazı, url: yazı) döndür Publisher:
+        döndür Publisher::new(id, PublishProtocol::WebSocket(url))
+    son
+    
+    /// Konsol yayıncısı (debug için)
+    pub fn console(id: yazı) döndür Publisher:
+        döndür Publisher::new(id, PublishProtocol::Console)
+    son
+    
+    // ========================================================================
+    // YAPILANDIRMA
+    // ========================================================================
+    
+    /// Veri formatı ayarla
+    pub fn with_format(mut self, format: DataFormat) döndür Publisher:
+        self.format = format
+        döndür self
+    son
+    
+    /// Periyodik yayın aralığı ayarla
+    pub fn with_interval(mut self, ms: sayı) döndür Publisher:
+        self.interval_ms = ms
+        döndür self
+    son
+    
+    /// QoS ayarla (MQTT için)
+    pub fn with_qos(mut self, qos: sayı) döndür Publisher:
+        self.qos = qos
+        döndür self
+    son
+    
+    /// Retain ayarla (MQTT için)
+    pub fn with_retain(mut self, retain: mantıksal) döndür Publisher:
+        self.retain = retain
+        döndür self
+    son
+    
+    // ========================================================================
+    // BAĞLANTI
+    // ========================================================================
+    
+    /// Bağlan
+    pub fn connect(mut self) döndür Sonuç[void, yazı]:
+        eşleştir self.protocol:
+            PublishProtocol::CAN(_):
+                // Native: can_connect
+                self.state = PublishState::Connected
+            PublishProtocol::TCP(host, port):
+                // Native: tcp_connect(host, port)
+                self.state = PublishState::Connected
+            PublishProtocol::UDP(_, _):
+                // UDP bağlantısız
+                self.state = PublishState::Connected
+            PublishProtocol::BLE(_):
+                // Native: ble_connect
+                self.state = PublishState::Connected
+            PublishProtocol::MQTT(broker, _):
+                // Native: mqtt_connect(broker)
+                self.state = PublishState::Connected
+            PublishProtocol::Modbus(_):
+                // Native: modbus_connect
+                self.state = PublishState::Connected
+            PublishProtocol::HTTP(_):
+                // HTTP bağlantısız
+                self.state = PublishState::Connected
+            PublishProtocol::WebSocket(url):
+                // Native: ws_connect(url)
+                self.state = PublishState::Connected
+            PublishProtocol::Console:
+                self.state = PublishState::Connected
+        son
+        
+        döndür Tamam(())
+    son
+    
+    /// Bağlantıyı kes
+    pub fn disconnect(mut self) döndür void:
+        // Native: protocol_disconnect(self._handle)
+        self.state = PublishState::Idle
+    son
+    
+    /// Bağlı mı?
+    pub fn is_connected(self) döndür mantıksal:
+        döndür self.state == PublishState::Connected
+    son
+    
+    // ========================================================================
+    // YAYINLAMA
+    // ========================================================================
+    
+    /// Measurement yayınla
+    pub fn publish_measurement(mut self, m: Measurement) döndür Sonuç[void, yazı]:
+        eğer self.state != PublishState::Connected:
+            döndür Hata("Not connected")
+        son
+        
+        self.state = PublishState::Publishing
+        
+        // Veriyi formatla
+        değişken data = self.format_measurement(m)
+        
+        // Protokole göre gönder
+        değişken result = self.send_data(data)
+        
+        eğer result.is_ok():
+            self.publish_count = self.publish_count + 1
+            self.last_publish_time = Timestamp::now().monotonic
+        yoksa:
+            self.error_count = self.error_count + 1
+        son
+        
+        self.state = PublishState::Connected
+        döndür result
+    son
+    
+    /// Vector3 yayınla
+    pub fn publish_vector(mut self, v: Vector3Measurement) döndür Sonuç[void, yazı]:
+        eğer self.state != PublishState::Connected:
+            döndür Hata("Not connected")
+        son
+        
+        self.state = PublishState::Publishing
+        
+        değişken data = self.format_vector(v)
+        değişken result = self.send_data(data)
+        
+        eğer result.is_ok():
+            self.publish_count = self.publish_count + 1
+            self.last_publish_time = Timestamp::now().monotonic
+        yoksa:
+            self.error_count = self.error_count + 1
+        son
+        
+        self.state = PublishState::Connected
+        döndür result
+    son
+    
+    /// Ham veri yayınla
+    pub fn publish_raw(mut self, data: Liste[sayı]) döndür Sonuç[void, yazı]:
+        eğer self.state != PublishState::Connected:
+            döndür Hata("Not connected")
+        son
+        
+        döndür self.send_data(data)
+    son
+    
+    /// String yayınla
+    pub fn publish_string(mut self, s: yazı) döndür Sonuç[void, yazı]:
+        döndür self.publish_raw(s.as_bytes())
+    son
+    
+    // ========================================================================
+    // FORMATLAMA
+    // ========================================================================
+    
+    fn format_measurement(self, m: Measurement) döndür Liste[sayı]:
+        eşleştir self.format:
+            DataFormat::JSON:
+                döndür m.to_json().as_bytes()
+            DataFormat::Raw:
+                // 4-byte float olarak
+                döndür self.float_to_bytes(m.value)
+            DataFormat::CBOR:
+                // CBOR encoding
+                döndür m.to_json().as_bytes()  // Placeholder
+            _:
+                döndür m.to_json().as_bytes()
+        son
+    son
+    
+    fn format_vector(self, v: Vector3Measurement) döndür Liste[sayı]:
+        eşleştir self.format:
+            DataFormat::JSON:
+                döndür v.to_json().as_bytes()
+            DataFormat::Raw:
+                // 12 bytes (3 x 4-byte float)
+                değişken mut data: Liste[sayı] = []
+                data.extend(self.float_to_bytes(v.x))
+                data.extend(self.float_to_bytes(v.y))
+                data.extend(self.float_to_bytes(v.z))
+                döndür data
+            _:
+                döndür v.to_json().as_bytes()
+        son
+    son
+    
+    fn float_to_bytes(self, value: ondalık) döndür Liste[sayı]:
+        // IEEE 754 float32 bytes (little-endian)
+        // Native implementation needed
+        döndür [0, 0, 0, 0]
+    son
+    
+    // ========================================================================
+    // GÖNDERİM
+    // ========================================================================
+    
+    fn send_data(self, data: Liste[sayı]) döndür Sonuç[void, yazı]:
+        eşleştir self.protocol:
+            PublishProtocol::CAN(can_id):
+                // Native: can_send(can_id, data)
+                döndür Tamam(())
+            
+            PublishProtocol::TCP(_, _):
+                // Native: tcp_send(self._handle, data)
+                döndür Tamam(())
+            
+            PublishProtocol::UDP(host, port):
+                // Native: udp_send(host, port, data)
+                döndür Tamam(())
+            
+            PublishProtocol::BLE(char_uuid):
+                // Native: ble_notify(char_uuid, data)
+                döndür Tamam(())
+            
+            PublishProtocol::MQTT(_, topic):
+                // Native: mqtt_publish(topic, data, self.qos, self.retain)
+                döndür Tamam(())
+            
+            PublishProtocol::Modbus(register):
+                // Native: modbus_write_registers(register, data)
+                döndür Tamam(())
+            
+            PublishProtocol::HTTP(url):
+                // Native: http_post(url, data)
+                döndür Tamam(())
+            
+            PublishProtocol::WebSocket(_):
+                // Native: ws_send(self._handle, data)
+                döndür Tamam(())
+            
+            PublishProtocol::Console:
+                // Debug: konsola yaz
+                yazdır("PUBLISH: {}", yazı::from_bytes(data))
+                döndür Tamam(())
+        son
+    son
+son
+
+// ============================================================================
+// SENSÖR BAĞLAYICI
+// ============================================================================
+
+/// Sensör-Yayıncı bağlantısı
+pub tip SensorBinding = yapı yap
+    /// Sensör ID
+    sensor_id: yazı,
+    
+    /// Yayıncı
+    publisher: Publisher,
+    
+    /// Aktif mi?
+    active: mantıksal,
+    
+    /// Dönüşüm fonksiyonu
+    transform: Seçenek[fn(Measurement) döndür Measurement],
+son
+
+impl SensorBinding:
+    pub fn new(sensor_id: yazı, publisher: Publisher) döndür SensorBinding:
+        döndür SensorBinding {
+            sensor_id: sensor_id,
+            publisher: publisher,
+            active: yanlış,
+            transform: Hiçbiri,
+        }
+    son
+    
+    /// Dönüşüm ekle
+    pub fn with_transform(mut self, f: fn(Measurement) döndür Measurement) döndür SensorBinding:
+        self.transform = Bazı(f)
+        döndür self
+    son
+    
+    /// Başlat
+    pub fn start(mut self) döndür Sonuç[void, yazı]:
+        self.publisher.connect()?
+        self.active = doğru
+        döndür Tamam(())
+    son
+    
+    /// Durdur
+    pub fn stop(mut self) döndür void:
+        self.active = yanlış
+        self.publisher.disconnect()
+    son
+    
+    /// Yayınla
+    pub fn publish(mut self, m: Measurement) döndür Sonuç[void, yazı]:
+        eğer !self.active:
+            döndür Hata("Binding not active")
+        son
+        
+        değişken transformed = eğer self.transform.is_some():
+            self.transform.unwrap()(m)
+        yoksa:
+            m
+        son
+        
+        döndür self.publisher.publish_measurement(transformed)
+    son
+son
+
+// ============================================================================
+// YAYINLAMA YÖNETİCİSİ
+// ============================================================================
+
+/// Merkezi yayınlama yöneticisi
+pub tip PublishManager = yapı yap
+    /// Kayıtlı bağlantılar
+    bindings: Liste[SensorBinding],
+    
+    /// Varsayılan format
+    default_format: DataFormat,
+son
+
+impl PublishManager:
+    pub fn new() döndür PublishManager:
+        döndür PublishManager {
+            bindings: [],
+            default_format: DataFormat::JSON,
+        }
+    son
+    
+    /// Bağlantı ekle
+    pub fn add_binding(mut self, binding: SensorBinding) döndür void:
+        self.bindings.push(binding)
+    son
+    
+    /// Sensörü CAN'a bağla
+    pub fn bind_to_can(mut self, sensor_id: yazı, can_id: sayı) döndür void:
+        değişken publisher = Publisher::can(sensor_id.clone(), can_id)
+        değişken binding = SensorBinding::new(sensor_id, publisher)
+        self.bindings.push(binding)
+    son
+    
+    /// Sensörü MQTT'ye bağla
+    pub fn bind_to_mqtt(mut self, sensor_id: yazı, broker: yazı, topic: yazı) döndür void:
+        değişken publisher = Publisher::mqtt(sensor_id.clone(), broker, topic)
+        değişken binding = SensorBinding::new(sensor_id, publisher)
+        self.bindings.push(binding)
+    son
+    
+    /// Sensörü BLE'ye bağla
+    pub fn bind_to_ble(mut self, sensor_id: yazı, characteristic: yazı) döndür void:
+        değişken publisher = Publisher::ble(sensor_id.clone(), characteristic)
+        değişken binding = SensorBinding::new(sensor_id, publisher)
+        self.bindings.push(binding)
+    son
+    
+    /// Tüm bağlantıları başlat
+    pub fn start_all(mut self) döndür Sonuç[void, yazı]:
+        döngü i in 0..self.bindings.len():
+            self.bindings[i].start()?
+        son
+        döndür Tamam(())
+    son
+    
+    /// Tüm bağlantıları durdur
+    pub fn stop_all(mut self) döndür void:
+        döngü i in 0..self.bindings.len():
+            self.bindings[i].stop()
+        son
+    son
+    
+    /// Belirli sensörün verilerini yayınla
+    pub fn publish(mut self, sensor_id: yazı, m: Measurement) döndür void:
+        döngü i in 0..self.bindings.len():
+            eğer self.bindings[i].sensor_id == sensor_id:
+                değişken _ = self.bindings[i].publish(m.clone())
+            son
+        son
+    son
+son
+
+// ============================================================================
+// CONVENIENCE FUNCTIONS
+// ============================================================================
+
+/// Sensörü belirli protokole yayınla
+pub fn publish(sensor_id: yazı, measurement: Measurement, protocol: PublishProtocol) döndür Sonuç[void, yazı]:
+    değişken mut publisher = Publisher::new(sensor_id, protocol)
+    publisher.connect()?
+    publisher.publish_measurement(measurement)?
+    publisher.disconnect()
+    döndür Tamam(())
+son
+
+/// CAN'a yayınla
+pub fn publish_can(sensor_id: yazı, measurement: Measurement, can_id: sayı) döndür Sonuç[void, yazı]:
+    döndür publish(sensor_id, measurement, PublishProtocol::CAN(can_id))
+son
+
+/// MQTT'ye yayınla
+pub fn publish_mqtt(sensor_id: yazı, measurement: Measurement, broker: yazı, topic: yazı) döndür Sonuç[void, yazı]:
+    döndür publish(sensor_id, measurement, PublishProtocol::MQTT(broker, topic))
+son
+
+/// BLE'ye yayınla
+pub fn publish_ble(sensor_id: yazı, measurement: Measurement, characteristic: yazı) döndür Sonuç[void, yazı]:
+    döndür publish(sensor_id, measurement, PublishProtocol::BLE(characteristic))
+son
+
+/// Konsola yayınla (debug)
+pub fn publish_console(sensor_id: yazı, measurement: Measurement) döndür void:
+    yazdır("[{}] {} {}", sensor_id, measurement.value, measurement.unit.symbol())
+son

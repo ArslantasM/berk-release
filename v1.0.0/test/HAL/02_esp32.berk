@@ -1,0 +1,129 @@
+/// ═══════════════════════════════════════════════════════════════════════════
+/// BERK HAL - ESP32 Platformu Demo
+/// Hardware Abstraction Layer - WiFi ve Bluetooth
+/// ═══════════════════════════════════════════════════════════════════════════
+
+kullan std::io
+kullan std::esp32
+
+yaz("============================================================")
+yaz("         HAL Demo: ESP32 Platformu                          ")
+yaz("============================================================")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 1: ESP32 Ozellikleri
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 1: ESP32 Ozellikleri ---")
+
+yaz("\n   Teknik Ozellikler:")
+yaz("   - CPU: Dual-core Xtensa LX6 @ 240 MHz")
+yaz("   - RAM: 520 KB SRAM")
+yaz("   - Flash: 4 MB (harici)")
+yaz("   - WiFi: 802.11 b/g/n")
+yaz("   - Bluetooth: v4.2 BR/EDR + BLE")
+yaz("   - GPIO: 34 adet")
+yaz("   - ADC: 18 kanal (12-bit)")
+yaz("   - DAC: 2 kanal (8-bit)")
+yaz("   - PWM: 16 kanal")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 2: WiFi Islemleri
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 2: WiFi Islemleri ---")
+
+değişken ssid = "MyNetwork"
+değişken password = "********"
+
+yaz("\n   WiFi Station Modu:")
+yaz("   - WiFi.begin(\"", ssid, "\", password)")
+yaz("   - WiFi.status() -> Baglanti durumu")
+yaz("   - WiFi.localIP() -> IP adresi")
+
+yaz("\n   WiFi Access Point Modu:")
+yaz("   - WiFi.softAP(\"ESP32_AP\", password)")
+yaz("   - WiFi.softAPIP() -> AP IP adresi")
+
+yaz("\n   Ornek IP: 192.168.1.100")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 3: Bluetooth Islemleri
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 3: Bluetooth Islemleri ---")
+
+yaz("\n   Bluetooth Classic:")
+yaz("   - SerialBT.begin(\"ESP32_BT\")")
+yaz("   - SerialBT.available()")
+yaz("   - SerialBT.read()")
+yaz("   - SerialBT.write(data)")
+
+yaz("\n   Bluetooth Low Energy (BLE):")
+yaz("   - BLEDevice::init(\"ESP32_BLE\")")
+yaz("   - BLEServer::createService(UUID)")
+yaz("   - BLECharacteristic::setValue(data)")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 4: Cok Cekirdekli Islem
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 4: Cok Cekirdekli Islem ---")
+
+yaz("\n   Gorev (Task) Yonetimi:")
+yaz("   - xTaskCreatePinnedToCore(task, name, stack, param, priority, handle, core)")
+yaz("   - Core 0: Protokol islemleri (WiFi, BT)")
+yaz("   - Core 1: Uygulama kodu")
+
+yaz("\n   Ornek Gorev Dagitimi:")
+yaz("   ┌─────────────────┬─────────────────┐")
+yaz("   │     Core 0      │     Core 1      │")
+yaz("   ├─────────────────┼─────────────────┤")
+yaz("   │ WiFi Stack      │ Ana Uygulama    │")
+yaz("   │ TCP/IP          │ Sensor Okuma    │")
+yaz("   │ Bluetooth       │ Motor Kontrol   │")
+yaz("   └─────────────────┴─────────────────┘")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 5: Deep Sleep
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 5: Deep Sleep ---")
+
+yaz("\n   Guc Modlari:")
+yaz("   - Active: ~240mA @ 240MHz")
+yaz("   - Modem Sleep: ~20mA")
+yaz("   - Light Sleep: ~0.8mA")
+yaz("   - Deep Sleep: ~10uA")
+yaz("   - Hibernation: ~2.5uA")
+
+yaz("\n   Deep Sleep Uyanma Kaynaklari:")
+yaz("   - Timer: esp_sleep_enable_timer_wakeup(us)")
+yaz("   - GPIO: esp_sleep_enable_ext0_wakeup(pin, level)")
+yaz("   - Touch: esp_sleep_enable_touchpad_wakeup()")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 6: Web Server Ornegi
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 6: Web Server Ornegi ---")
+
+yaz("\n   Basit HTTP Server:")
+yaz("   ┌─────────────────────────────────────┐")
+yaz("   │ GET /           -> Ana sayfa        │")
+yaz("   │ GET /api/sensor -> JSON veri        │")
+yaz("   │ POST /api/led   -> LED kontrol      │")
+yaz("   └─────────────────────────────────────┘")
+
+fonksiyon sensor_json() yap
+    yaz("\n   Ornek JSON yanit:")
+    yaz("   {")
+    yaz("     \"sicaklik\": 25.5,")
+    yaz("     \"nem\": 60,")
+    yaz("     \"zaman\": 1702700000")
+    yaz("   }")
+son
+
+sensor_json()
+
+yaz("\n[OK] ESP32 HAL demosu tamamlandi!")

@@ -1,0 +1,121 @@
+// =============================================================================
+// BERK Hardware Bridge - Modbus Sıcaklık Sensörü
+// Endüstriyel sensör okuma örneği
+// =============================================================================
+
+kullan std::modbus
+kullan std::time
+
+yazdır("=== Modbus Sıcaklık Monitörü ===\n")
+
+// -----------------------------------------------------------------------------
+// Yapılandırma
+// -----------------------------------------------------------------------------
+
+sabit PORT = "COM4"        // RS485 adaptör portu
+sabit BAUD = 9600          // Baud rate
+sabit SLAVE_ID = 1         // Sensör slave ID
+sabit TEMP_REG = 0         // Sıcaklık register adresi
+sabit HUMID_REG = 1        // Nem register adresi
+sabit INTERVAL = 2000      // Okuma aralığı (ms)
+
+// Alarm limitleri
+sabit TEMP_HIGH = 30.0     // Yüksek sıcaklık alarmı
+sabit TEMP_LOW = 10.0      // Düşük sıcaklık alarmı
+sabit HUMID_HIGH = 80.0    // Yüksek nem alarmı
+
+// -----------------------------------------------------------------------------
+// Ana Program
+// -----------------------------------------------------------------------------
+
+yazdır("🌡️  Sıcaklık/Nem Sensörü")
+yazdır("-" * 40)
+yazdır("Port: {}", PORT)
+yazdır("Slave ID: {}", SLAVE_ID)
+yazdır("Okuma aralığı: {} ms", INTERVAL)
+yazdır("")
+
+dene yap
+    // Sensöre bağlan
+    yazdır("🔌 Bağlanılıyor...")
+    olsun sensor = modbus::connect(PORT, BAUD, SLAVE_ID)
+    yazdır("✓ Bağlantı başarılı!")
+    
+    // Timeout ayarla
+    modbus::set_timeout(sensor, 1000)
+    
+    // Bağlantı kontrolü
+    eğer modbus::is_connected(sensor) ise
+        yazdır("✓ Sensor iletişim kuruldu")
+    son
+    
+    yazdır("")
+    yazdır("📊 Ölçümler başlıyor...")
+    yazdır("   Çıkmak için Ctrl+C")
+    yazdır("-" * 50)
+    yazdır("{:^12} {:^12} {:^12} {:^12}", "Zaman", "Sıcaklık", "Nem", "Durum")
+    yazdır("-" * 50)
+    
+    // Okuma sayacı
+    olsun okuma_sayisi = 0
+    olsun hata_sayisi = 0
+    
+    // Ana döngü
+    döngü yap
+        dene yap
+            // Sıcaklık oku (x10 format, örn: 235 = 23.5°C)
+            olsun temp_raw = modbus::read_holding_registers(sensor, TEMP_REG, 1)
+            olsun sicaklik = temp_raw[0] / 10.0
+            
+            // Nem oku (x10 format)
+            olsun humid_raw = modbus::read_holding_registers(sensor, HUMID_REG, 1)
+            olsun nem = humid_raw[0] / 10.0
+            
+            // Zaman damgası
+            olsun zaman = time::now_formatted("%H:%M:%S")
+            
+            // Durum belirleme
+            olsun durum = "✓ Normal"
+            eğer sicaklik > TEMP_HIGH ise
+                durum = "🔥 SICAK!"
+            yoksa eğer sicaklik < TEMP_LOW ise
+                durum = "❄️ SOĞUK!"
+            yoksa eğer nem > HUMID_HIGH ise
+                durum = "💧 NEMLI!"
+            son
+            
+            // Ekrana yazdır
+            yazdır("{:^12} {:^10.1f}°C {:^10.1f}% {:^12}", 
+                   zaman, sicaklik, nem, durum)
+            
+            okuma_sayisi = okuma_sayisi + 1
+            
+        yakala err yap
+            olsun zaman = time::now_formatted("%H:%M:%S")
+            yazdır("{:^12} {:^12} {:^12} ❌ HATA", zaman, "---", "---")
+            hata_sayisi = hata_sayisi + 1
+            
+            // Çok fazla hata varsa bağlantıyı yeniden dene
+            eğer hata_sayisi > 5 ise
+                yazdır("\n⚠️  Çok fazla hata! Bağlantı kontrol ediliyor...")
+                hata_sayisi = 0
+            son
+        son
+        
+        bekle(INTERVAL)
+    son
+    
+    // Temizlik
+    modbus::disconnect(sensor)
+    yazdır("\n✓ Bağlantı kapatıldı.")
+    yazdır("  Toplam okuma: {}", okuma_sayisi)
+    
+yakala hata yap
+    yazdır("\n❌ BAĞLANTI HATASI: {}", hata)
+    yazdır("")
+    yazdır("Kontrol edin:")
+    yazdır("  1. RS485 adaptör bağlı mı?")
+    yazdır("  2. A/B kablolarını doğru mu?")
+    yazdır("  3. Slave ID {} doğru mu?", SLAVE_ID)
+    yazdır("  4. Baud rate {} doğru mu?", BAUD)
+son

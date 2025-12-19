@@ -1,0 +1,268 @@
+// stdlib/embedded/bal/uart.berk
+// Backend Abstraction Layer - UART Interface
+// Platform-independent UART (Universal Asynchronous Receiver/Transmitter) API
+
+import "embedded/bal/time" as time
+
+/// UART baud rates (bits per second)
+pub enum BaudRate {
+    Baud9600,
+    Baud19200,
+    Baud38400,
+    Baud57600,
+    Baud115200,
+    Baud230400,
+    Baud460800,
+    Baud921600,
+    Custom(u32),    // Custom baud rate
+}
+
+/// UART data bits
+pub enum DataBits {
+    Bits5,
+    Bits6,
+    Bits7,
+    Bits8,      // Most common
+    Bits9,
+}
+
+/// UART parity
+pub enum Parity {
+    None,       // No parity (most common)
+    Even,       // Even parity
+    Odd,        // Odd parity
+}
+
+/// UART stop bits
+pub enum StopBits {
+    One,        // 1 stop bit (standard)
+    OneAndHalf, // 1.5 stop bits
+    Two,        // 2 stop bits
+}
+
+/// UART flow control
+pub enum FlowControl {
+    None,       // No flow control
+    RTS_CTS,    // Hardware flow control
+    XON_XOFF,   // Software flow control
+}
+
+/// UART error types
+pub enum Error {
+    FrameError,     // Invalid frame
+    ParityError,    // Parity mismatch
+    OverrunError,   // Data overrun
+    NoiseError,     // Noise detected
+    BreakError,     // Break condition
+    Timeout,        // Operation timeout
+}
+
+pub type Result<T> = stdlib.result.Result<T, Error>
+
+/// UART configuration
+pub struct Config {
+    uart: u8,           // UART number (0, 1, 2, etc.)
+    tx_pin: u8,         // Transmit pin
+    rx_pin: u8,         // Receive pin
+    baud_rate: BaudRate,
+    data_bits: DataBits,
+    parity: Parity,
+    stop_bits: StopBits,
+    flow_control: FlowControl,
+    rx_buffer_size: u32,    // RX buffer size (bytes)
+    tx_buffer_size: u32,    // TX buffer size (bytes)
+}
+
+/// UART HAL interface that platforms must implement
+pub interface UART_HAL {
+    /// Initialize UART
+    fn init(config: Config) -> Result<()>
+    
+    /// Deinitialize UART
+    fn deinit(uart: u8)
+    
+    /// Write single byte
+    fn write_byte(uart: u8, data: u8) -> Result<()>
+    
+    /// Write multiple bytes
+    fn write(uart: u8, data: &[u8]) -> Result<u32>  // Returns bytes written
+    
+    /// Write string
+    fn write_string(uart: u8, text: &str) -> Result<()>
+    
+    /// Read single byte (blocking with timeout)
+    fn read_byte(uart: u8, timeout_ms: u32) -> Result<u8>
+    
+    /// Read multiple bytes (blocking with timeout)
+    fn read(uart: u8, buffer: &mut [u8], timeout_ms: u32) -> Result<u32>  // Returns bytes read
+    
+    /// Check if data available to read
+    fn available(uart: u8) -> u32  // Number of bytes in RX buffer
+    
+    /// Peek next byte without removing from buffer
+    fn peek(uart: u8) -> Result<u8>
+    
+    /// Clear RX buffer
+    fn flush_rx(uart: u8)
+    
+    /// Wait for TX buffer to empty
+    fn flush_tx(uart: u8)
+    
+    /// Set baud rate
+    fn set_baud_rate(uart: u8, baud_rate: BaudRate) -> Result<()>
+    
+    /// Enable/disable RX interrupt
+    fn set_rx_interrupt(uart: u8, enabled: bool)
+    
+    /// Attach RX interrupt handler
+    fn on_receive(uart: u8, handler: fn(data: u8))
+}
+
+// High-level convenience functions
+
+/// Initialize UART with default settings (115200 8N1)
+pub fn init_default(uart: u8, tx_pin: u8, rx_pin: u8) -> Result<()> {
+    let config = Config {
+        uart: uart,
+        tx_pin: tx_pin,
+        rx_pin: rx_pin,
+        baud_rate: BaudRate.Baud115200,
+        data_bits: DataBits.Bits8,
+        parity: Parity.None,
+        stop_bits: StopBits.One,
+        flow_control: FlowControl.None,
+        rx_buffer_size: 256,
+        tx_buffer_size: 256,
+    }
+    UART_HAL.init(config)
+}
+
+/// Print string with newline
+pub fn println(uart: u8, text: &str) -> Result<()> {
+    UART_HAL.write_string(uart, text)?
+    UART_HAL.write_string(uart, "\r\n")
+}
+
+/// Print formatted string
+pub fn printf(uart: u8, format: &str, args: &[any]) -> Result<()> {
+    let text = string.format(format, args)
+    UART_HAL.write_string(uart, &text)
+}
+
+/// Read line until newline (blocking)
+pub fn read_line(uart: u8, timeout_ms: u32) -> Result<string> {
+    let mut line = string.new()
+    let start = time.millis()
+    
+    loop {
+        if time.millis() - start > timeout_ms {
+            return Err(Error.Timeout)
+        }
+        
+        match UART_HAL.read_byte(uart, 100) {
+            Ok(byte) => {
+                if byte == '\n' as u8 || byte == '\r' as u8 {
+                    return Ok(line)
+                }
+                line.push(byte as char)
+            },
+            Err(Error.Timeout) => continue,
+            Err(e) => return Err(e),
+        }
+    }
+}
+
+/// Read until delimiter
+pub fn read_until(uart: u8, delimiter: u8, timeout_ms: u32) -> Result<[u8]> {
+    let mut buffer = []
+    let start = time.millis()
+    
+    loop {
+        if time.millis() - start > timeout_ms {
+            return Err(Error.Timeout)
+        }
+        
+        match UART_HAL.read_byte(uart, 100) {
+            Ok(byte) => {
+                if byte == delimiter {
+                    return Ok(buffer)
+                }
+                buffer.push(byte)
+            },
+            Err(Error.Timeout) => continue,
+            Err(e) => return Err(e),
+        }
+    }
+}
+
+/// Read exact number of bytes
+pub fn read_exact(uart: u8, count: u32, timeout_ms: u32) -> Result<[u8]> {
+    let mut buffer: [u8; count] = [0; count]
+    let bytes_read = UART_HAL.read(uart, &mut buffer, timeout_ms)?
+    
+    if bytes_read < count {
+        Err(Error.Timeout)
+    } else {
+        Ok(buffer)
+    }
+}
+
+/// Check if string available (ends with delimiter)
+pub fn has_line(uart: u8) -> bool {
+    let available = UART_HAL.available(uart)
+    if available == 0 {
+        return false
+    }
+    
+    // Peek through buffer for newline
+    for i in 0..available {
+        match UART_HAL.peek(uart) {
+            Ok(byte) => {
+                if byte == '\n' as u8 || byte == '\r' as u8 {
+                    return true
+                }
+            },
+            Err(_) => return false,
+        }
+    }
+    false
+}
+
+/// Echo received characters back
+pub fn echo_mode(uart: u8) {
+    loop {
+        match UART_HAL.read_byte(uart, 1000) {
+            Ok(byte) => {
+                let _ = UART_HAL.write_byte(uart, byte)
+            },
+            Err(_) => continue,
+        }
+    }
+}
+
+/// Send AT command and wait for response
+pub fn send_at_command(uart: u8, command: &str, timeout_ms: u32) -> Result<string> {
+    UART_HAL.flush_rx(uart)
+    UART_HAL.write_string(uart, command)?
+    UART_HAL.write_string(uart, "\r\n")?
+    read_line(uart, timeout_ms)
+}
+
+/// Hexdump received data (for debugging)
+pub fn hexdump(uart: u8, count: u32) {
+    IO.println("UART Hexdump:")
+    let mut buffer: [u8; count] = [0; count]
+    
+    match UART_HAL.read(uart, &mut buffer, 5000) {
+        Ok(bytes_read) => {
+            for i in 0..bytes_read {
+                IO.print(buffer[i].to_hex() + " ")
+                if (i + 1) % 16 == 0 {
+                    IO.println("")
+                }
+            }
+            IO.println("")
+        },
+        Err(e) => IO.eprintln("Read error: " + e.to_string()),
+    }
+}

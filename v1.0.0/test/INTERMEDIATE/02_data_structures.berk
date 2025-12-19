@@ -1,0 +1,114 @@
+/// ═══════════════════════════════════════════════════════════════════════════
+/// BERK Programlama Dili - Veri Yapilari
+/// Seviye: Orta (Intermediate)
+/// ═══════════════════════════════════════════════════════════════════════════
+
+kullan std::io
+
+yaz("============================================================")
+yaz("              Veri Yapilari / Data Structures               ")
+yaz("============================================================")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 1: Dizilerle Calisma
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 1: Dizilerle Calisma ---")
+
+değişken sayilar = [64, 34, 25, 12, 22, 11, 90]
+yaz("\n   Orijinal dizi: ", sayilar)
+yaz("   Eleman sayisi: ", sayilar.len())
+yaz("   Ilk eleman: ", sayilar.first())
+yaz("   Son eleman: ", sayilar.last())
+yaz("   Toplam: ", sayilar.sum())
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 2: Ortalama Hesaplama
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 2: Ortalama Hesaplama ---")
+
+değişken notlar = [85, 92, 78, 96, 88, 73, 95]
+yaz("\n   Notlar: ", notlar)
+
+değişken toplam = notlar.sum()
+değişken adet = notlar.len()
+değişken ortalama = toplam / adet
+
+yaz("   Toplam: ", toplam)
+yaz("   Adet: ", adet)
+yaz("   Ortalama: ", ortalama)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 3: Metin Dizileri
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 3: Metin Dizileri ---")
+
+değişken isimler = ["Ali", "Ayse", "Mehmet", "Fatma", "Ahmet"]
+yaz("\n   Isimler: ", isimler)
+yaz("   Eleman sayisi: ", isimler.len())
+
+yaz("\n   Isim listesi:")
+için isim in isimler yap
+    yaz("   - ", isim)
+son
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 4: Dizi Birlestirme
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 4: Dizi Birlestirme ---")
+
+değişken kelimeler = ["BERK", "programlama", "dili"]
+yaz("\n   Kelimeler: ", kelimeler)
+
+değişken cumle = kelimeler.join(" ")
+yaz("   Birlesik: ", cumle)
+
+değişken csv = kelimeler.join(",")
+yaz("   CSV: ", csv)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 5: Ters Cevir
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 5: Ters Cevir ---")
+
+değişken sira = [1, 2, 3, 4, 5]
+yaz("\n   Orijinal: ", sira)
+yaz("   Ters: ", sira.reverse())
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 6: Sayac ve Akumulator
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 6: Sayac ve Akumulator ---")
+
+// Kare toplami hesapla
+fonksiyon kare_toplami(n: tamsayı) -> tamsayı yap
+    değişken toplam = 0
+    için i içinde 1..=n yap
+        toplam = toplam + (i * i)
+    son
+    dön toplam
+son
+
+// Faktoryel hesapla
+fonksiyon faktoriyel(n: tamsayı) -> tamsayı yap
+    değişken sonuc = 1
+    için i içinde 1..=n yap
+        sonuc = sonuc * i
+    son
+    dön sonuc
+son
+
+yaz("\n   Kare toplami (1^2 + 2^2 + ... + 5^2):")
+yaz("   kare_toplami(5) = ", kare_toplami(5))
+
+yaz("\n   Faktoriyel hesaplama:")
+için i içinde 1..8 yap
+    yaz("   ", i, "! = ", faktoriyel(i))
+son
+
+yaz("\n[OK] Veri yapilari demosu tamamlandi!")

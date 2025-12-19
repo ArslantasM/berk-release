@@ -1,0 +1,622 @@
+//! # Mesh Module
+//!
+//! 3D mesh utilities (Pure BERK implementation).
+//!
+//! 3D mesh araçları (Saf BERK implementasyonu).
+//!
+//! ## Features / Özellikler
+//!
+//! - **Data structures**: Vertices, faces, normals / Veri yapıları
+//! - **STL export**: ASCII format (3D printing) / STL dışa aktarım
+//! - **Primitives**: Cube, sphere, cylinder, cone, plane / Temel şekiller
+//! - **Normals**: Per-vertex, per-face / Normaller
+//! - **Bounding box**: AABB utilities / Sınır kutusu
+//! - **Transformations**: Rotate, scale, translate / Dönüştürmeler
+//! - **Mesh types**: Triangle, quad / Mesh tipleri
+//!
+//! ## Example / Örnek
+//!
+//! ```berk
+//! kullan mesh
+//!
+//! değişken cube = mesh.generate_cube(1.0)
+//! değişken sphere = mesh.generate_sphere(1.0, segments: 32)
+//! mesh.export_stl(cube, "cube.stl")
+//! ```
+//!
+//! Pure BERK - Zero dependencies
+
+modül mesh
+
+kullan math_3d
+
+// ============================================================================
+// MESH DATA STRUCTURES
+// ============================================================================
+
+tip Vertex = yapı yap
+    position: Vec3,
+    normal: Vec3,
+    uv: Vec2
+son
+
+tip Triangle = yapı yap
+    v0: tamsayı,  // Vertex index
+    v1: tamsayı,
+    v2: tamsayı
+son
+
+tip Mesh = yapı yap
+    vertices: liste[Vertex],
+    triangles: liste[Triangle],
+    name: yazı
+son
+
+tip BoundingBox = yapı yap
+    min: Vec3,
+    max: Vec3
+son
+
+// ============================================================================
+// MESH CONSTRUCTORS
+// ============================================================================
+
+fonksiyon mesh_new(name: yazı) -> Mesh
+yap
+    dön Mesh yap
+        vertices: [],
+        triangles: [],
+        name: name
+    son
+son
+
+fonksiyon mesh_add_vertex(mesh: Mesh, v: Vertex) -> tamsayı
+yap
+    liste_ekle(mesh.vertices, v)
+    dön liste_uzunluk(mesh.vertices) - 1
+son
+
+fonksiyon mesh_add_triangle(mesh: Mesh, v0: tamsayı, v1: tamsayı, v2: tamsayı)
+yap
+    liste_ekle(mesh.triangles, Triangle yap v0: v0, v1: v1, v2: v2 son)
+son
+
+// ============================================================================
+// PRIMITIVE GENERATION - CUBE
+// ============================================================================
+
+fonksiyon mesh_cube(size: ondalık) -> Mesh
+yap
+    değişken mesh = mesh_new("Cube")
+    değişken half = size / 2.0
+    
+    // 8 vertices (corners of cube)
+    değişken positions = [
+        vec3(-half, -half, -half),  // 0: left-bottom-back
+        vec3(half, -half, -half),   // 1: right-bottom-back
+        vec3(half, half, -half),    // 2: right-top-back
+        vec3(-half, half, -half),   // 3: left-top-back
+        vec3(-half, -half, half),   // 4: left-bottom-front
+        vec3(half, -half, half),    // 5: right-bottom-front
+        vec3(half, half, half),     // 6: right-top-front
+        vec3(-half, half, half)     // 7: left-top-front
+    ]
+    
+    // 6 faces (front, back, top, bottom, left, right)
+    // Each face has unique normals, so we need 24 vertices (4 per face)
+    
+    // Front face (+Z)
+    mesh_add_quad(mesh, positions[4], positions[5], positions[6], positions[7], vec3_forward())
+    
+    // Back face (-Z)
+    mesh_add_quad(mesh, positions[1], positions[0], positions[3], positions[2], vec3_back())
+    
+    // Top face (+Y)
+    mesh_add_quad(mesh, positions[3], positions[7], positions[6], positions[2], vec3_up())
+    
+    // Bottom face (-Y)
+    mesh_add_quad(mesh, positions[4], positions[0], positions[1], positions[5], vec3_down())
+    
+    // Right face (+X)
+    mesh_add_quad(mesh, positions[5], positions[1], positions[2], positions[6], vec3_right())
+    
+    // Left face (-X)
+    mesh_add_quad(mesh, positions[0], positions[4], positions[7], positions[3], vec3_left())
+    
+    dön mesh
+son
+
+fonksiyon mesh_add_quad(mesh: Mesh, p0: Vec3, p1: Vec3, p2: Vec3, p3: Vec3, normal: Vec3)
+yap
+    // Add 4 vertices
+    değişken i0 = mesh_add_vertex(mesh, Vertex yap
+        position: p0, normal: normal, uv: vec2(0.0, 0.0)
+    son)
+    değişken i1 = mesh_add_vertex(mesh, Vertex yap
+        position: p1, normal: normal, uv: vec2(1.0, 0.0)
+    son)
+    değişken i2 = mesh_add_vertex(mesh, Vertex yap
+        position: p2, normal: normal, uv: vec2(1.0, 1.0)
+    son)
+    değişken i3 = mesh_add_vertex(mesh, Vertex yap
+        position: p3, normal: normal, uv: vec2(0.0, 1.0)
+    son)
+    
+    // Add 2 triangles (quad = 2 tris)
+    mesh_add_triangle(mesh, i0, i1, i2)
+    mesh_add_triangle(mesh, i0, i2, i3)
+son
+
+// ============================================================================
+// PRIMITIVE GENERATION - SPHERE (UV Sphere)
+// ============================================================================
+
+fonksiyon mesh_sphere(radius: ondalık, segments: tamsayı, rings: tamsayı) -> Mesh
+yap
+    değişken mesh = mesh_new("Sphere")
+    
+    // Generate vertices
+    için ring = 0 .. (rings + 1) yap
+        değişken phi = PI * ondalık_cast(ring) / ondalık_cast(rings)
+        değişken sin_phi = math::sin(phi)
+        değişken cos_phi = math::cos(phi)
+        
+        için seg = 0 .. (segments + 1) yap
+            değişken theta = TAU * ondalık_cast(seg) / ondalık_cast(segments)
+            değişken sin_theta = math::sin(theta)
+            değişken cos_theta = math::cos(theta)
+            
+            // Spherical coordinates to Cartesian
+            değişken x = sin_phi * cos_theta
+            değişken y = cos_phi
+            değişken z = sin_phi * sin_theta
+            
+            değişken pos = vec3(x * radius, y * radius, z * radius)
+            değişken normal = vec3(x, y, z)
+            değişken uv = vec2(
+                ondalık_cast(seg) / ondalık_cast(segments),
+                ondalık_cast(ring) / ondalık_cast(rings)
+            )
+            
+            mesh_add_vertex(mesh, Vertex yap
+                position: pos,
+                normal: normal,
+                uv: uv
+            son)
+        son
+    son
+    
+    // Generate triangles
+    için ring = 0 .. rings yap
+        için seg = 0 .. segments yap
+            değişken current = ring * (segments + 1) + seg
+            değişken next = current + segments + 1
+            
+            // Two triangles per quad
+            mesh_add_triangle(mesh, current, next, current + 1)
+            mesh_add_triangle(mesh, current + 1, next, next + 1)
+        son
+    son
+    
+    dön mesh
+son
+
+// ============================================================================
+// PRIMITIVE GENERATION - CYLINDER
+// ============================================================================
+
+fonksiyon mesh_cylinder(radius: ondalık, height: ondalık, segments: tamsayı) -> Mesh
+yap
+    değişken mesh = mesh_new("Cylinder")
+    değişken half_height = height / 2.0
+    
+    // Generate side vertices
+    için seg = 0 .. (segments + 1) yap
+        değişken theta = TAU * ondalık_cast(seg) / ondalık_cast(segments)
+        değişken cos_theta = math::cos(theta)
+        değişken sin_theta = math::sin(theta)
+        
+        değişken x = cos_theta * radius
+        değişken z = sin_theta * radius
+        
+        // Bottom vertex
+        mesh_add_vertex(mesh, Vertex yap
+            position: vec3(x, -half_height, z),
+            normal: vec3(cos_theta, 0.0, sin_theta),
+            uv: vec2(ondalık_cast(seg) / ondalık_cast(segments), 0.0)
+        son)
+        
+        // Top vertex
+        mesh_add_vertex(mesh, Vertex yap
+            position: vec3(x, half_height, z),
+            normal: vec3(cos_theta, 0.0, sin_theta),
+            uv: vec2(ondalık_cast(seg) / ondalık_cast(segments), 1.0)
+        son)
+    son
+    
+    // Generate side triangles
+    için seg = 0 .. segments yap
+        değişken bottom_current = seg * 2
+        değişken bottom_next = (seg + 1) * 2
+        değişken top_current = bottom_current + 1
+        değişken top_next = bottom_next + 1
+        
+        mesh_add_triangle(mesh, bottom_current, bottom_next, top_current)
+        mesh_add_triangle(mesh, top_current, bottom_next, top_next)
+    son
+    
+    // Generate caps
+    değişken base_vertex_count = liste_uzunluk(mesh.vertices)
+    
+    // Bottom cap center
+    değişken bottom_center = mesh_add_vertex(mesh, Vertex yap
+        position: vec3(0.0, -half_height, 0.0),
+        normal: vec3_down(),
+        uv: vec2(0.5, 0.5)
+    son)
+    
+    // Top cap center
+    değişken top_center = mesh_add_vertex(mesh, Vertex yap
+        position: vec3(0.0, half_height, 0.0),
+        normal: vec3_up(),
+        uv: vec2(0.5, 0.5)
+    son)
+    
+    // Cap edge vertices
+    için seg = 0 .. (segments + 1) yap
+        değişken theta = TAU * ondalık_cast(seg) / ondalık_cast(segments)
+        değişken x = math::cos(theta) * radius
+        değişken z = math::sin(theta) * radius
+        
+        // Bottom cap edge
+        mesh_add_vertex(mesh, Vertex yap
+            position: vec3(x, -half_height, z),
+            normal: vec3_down(),
+            uv: vec2(0.5 + x / (2.0 * radius), 0.5 + z / (2.0 * radius))
+        son)
+        
+        // Top cap edge
+        mesh_add_vertex(mesh, Vertex yap
+            position: vec3(x, half_height, z),
+            normal: vec3_up(),
+            uv: vec2(0.5 + x / (2.0 * radius), 0.5 + z / (2.0 * radius))
+        son)
+    son
+    
+    // Bottom cap triangles
+    için seg = 0 .. segments yap
+        değişken current = base_vertex_count + 2 + seg * 2
+        değişken next = current + 2
+        mesh_add_triangle(mesh, bottom_center, next, current)
+    son
+    
+    // Top cap triangles
+    için seg = 0 .. segments yap
+        değişken current = base_vertex_count + 3 + seg * 2
+        değişken next = current + 2
+        mesh_add_triangle(mesh, top_center, current, next)
+    son
+    
+    dön mesh
+son
+
+// ============================================================================
+// PRIMITIVE GENERATION - CONE
+// ============================================================================
+
+fonksiyon mesh_cone(radius: ondalık, height: ondalık, segments: tamsayı) -> Mesh
+yap
+    değişken mesh = mesh_new("Cone")
+    değişken half_height = height / 2.0
+    
+    // Apex vertex (top center)
+    değişken apex = mesh_add_vertex(mesh, Vertex yap
+        position: vec3(0.0, half_height, 0.0),
+        normal: vec3_up(),
+        uv: vec2(0.5, 1.0)
+    son)
+    
+    // Generate base vertices
+    için seg = 0 .. (segments + 1) yap
+        değişken theta = TAU * ondalık_cast(seg) / ondalık_cast(segments)
+        değişken x = math::cos(theta) * radius
+        değişken z = math::sin(theta) * radius
+        
+        // Calculate normal for smooth shading
+        değişken slant = vec3_normalize(vec3(x, radius, z))
+        
+        mesh_add_vertex(mesh, Vertex yap
+            position: vec3(x, -half_height, z),
+            normal: slant,
+            uv: vec2(ondalık_cast(seg) / ondalık_cast(segments), 0.0)
+        son)
+    son
+    
+    // Generate side triangles (cone surface)
+    için seg = 0 .. segments yap
+        değişken current = 1 + seg
+        değişken next = 1 + seg + 1
+        mesh_add_triangle(mesh, apex, next, current)
+    son
+    
+    // Base cap
+    değişken base_center = mesh_add_vertex(mesh, Vertex yap
+        position: vec3(0.0, -half_height, 0.0),
+        normal: vec3_down(),
+        uv: vec2(0.5, 0.5)
+    son)
+    
+    // Base cap vertices
+    değişken base_start = liste_uzunluk(mesh.vertices)
+    için seg = 0 .. (segments + 1) yap
+        değişken theta = TAU * ondalık_cast(seg) / ondalık_cast(segments)
+        değişken x = math::cos(theta) * radius
+        değişken z = math::sin(theta) * radius
+        
+        mesh_add_vertex(mesh, Vertex yap
+            position: vec3(x, -half_height, z),
+            normal: vec3_down(),
+            uv: vec2(0.5 + x / (2.0 * radius), 0.5 + z / (2.0 * radius))
+        son)
+    son
+    
+    // Base cap triangles
+    için seg = 0 .. segments yap
+        değişken current = base_start + seg
+        değişken next = current + 1
+        mesh_add_triangle(mesh, base_center, next, current)
+    son
+    
+    dön mesh
+son
+
+// ============================================================================
+// PRIMITIVE GENERATION - PLANE
+// ============================================================================
+
+fonksiyon mesh_plane(width: ondalık, depth: ondalık, width_segments: tamsayı, depth_segments: tamsayı) -> Mesh
+yap
+    değişken mesh = mesh_new("Plane")
+    değişken half_width = width / 2.0
+    değişken half_depth = depth / 2.0
+    
+    // Generate vertices
+    için z = 0 .. (depth_segments + 1) yap
+        için x = 0 .. (width_segments + 1) yap
+            değişken px = -half_width + (ondalık_cast(x) / ondalık_cast(width_segments)) * width
+            değişken pz = -half_depth + (ondalık_cast(z) / ondalık_cast(depth_segments)) * depth
+            
+            mesh_add_vertex(mesh, Vertex yap
+                position: vec3(px, 0.0, pz),
+                normal: vec3_up(),
+                uv: vec2(
+                    ondalık_cast(x) / ondalık_cast(width_segments),
+                    ondalık_cast(z) / ondalık_cast(depth_segments)
+                )
+            son)
+        son
+    son
+    
+    // Generate triangles
+    için z = 0 .. depth_segments yap
+        için x = 0 .. width_segments yap
+            değişken i0 = z * (width_segments + 1) + x
+            değişken i1 = i0 + 1
+            değişken i2 = (z + 1) * (width_segments + 1) + x
+            değişken i3 = i2 + 1
+            
+            mesh_add_triangle(mesh, i0, i2, i1)
+            mesh_add_triangle(mesh, i1, i2, i3)
+        son
+    son
+    
+    dön mesh
+son
+
+// ============================================================================
+// NORMAL CALCULATION
+// ============================================================================
+
+fonksiyon mesh_calculate_normals(mesh: Mesh)
+yap
+    // Reset all normals to zero
+    için i = 0 .. liste_uzunluk(mesh.vertices) yap
+        mesh.vertices[i].normal = vec3_zero()
+    son
+    
+    // Accumulate face normals
+    için tri_idx = 0 .. liste_uzunluk(mesh.triangles) yap
+        değişken tri = mesh.triangles[tri_idx]
+        
+        değişken v0 = mesh.vertices[tri.v0].position
+        değişken v1 = mesh.vertices[tri.v1].position
+        değişken v2 = mesh.vertices[tri.v2].position
+        
+        // Calculate face normal
+        değişken edge1 = vec3_sub(v1, v0)
+        değişken edge2 = vec3_sub(v2, v0)
+        değişken normal = vec3_normalize(vec3_cross(edge1, edge2))
+        
+        // Accumulate to vertex normals
+        mesh.vertices[tri.v0].normal = vec3_add(mesh.vertices[tri.v0].normal, normal)
+        mesh.vertices[tri.v1].normal = vec3_add(mesh.vertices[tri.v1].normal, normal)
+        mesh.vertices[tri.v2].normal = vec3_add(mesh.vertices[tri.v2].normal, normal)
+    son
+    
+    // Normalize all vertex normals
+    için i = 0 .. liste_uzunluk(mesh.vertices) yap
+        mesh.vertices[i].normal = vec3_normalize(mesh.vertices[i].normal)
+    son
+son
+
+// ============================================================================
+// BOUNDING BOX
+// ============================================================================
+
+fonksiyon mesh_calculate_bounding_box(mesh: Mesh) -> BoundingBox
+yap
+    eğer liste_uzunluk(mesh.vertices) == 0 ise yap
+        dön BoundingBox yap
+            min: vec3_zero(),
+            max: vec3_zero()
+        son
+    son
+    
+    değişken first_pos = mesh.vertices[0].position
+    değişken min = first_pos
+    değişken max = first_pos
+    
+    için i = 1 .. liste_uzunluk(mesh.vertices) yap
+        değişken pos = mesh.vertices[i].position
+        
+        min.x = math::min(min.x, pos.x)
+        min.y = math::min(min.y, pos.y)
+        min.z = math::min(min.z, pos.z)
+        
+        max.x = math::max(max.x, pos.x)
+        max.y = math::max(max.y, pos.y)
+        max.z = math::max(max.z, pos.z)
+    son
+    
+    dön BoundingBox yap min: min, max: max son
+son
+
+fonksiyon bbox_center(bbox: BoundingBox) -> Vec3
+yap
+    dön vec3(
+        (bbox.min.x + bbox.max.x) / 2.0,
+        (bbox.min.y + bbox.max.y) / 2.0,
+        (bbox.min.z + bbox.max.z) / 2.0
+    )
+son
+
+fonksiyon bbox_size(bbox: BoundingBox) -> Vec3
+yap
+    dön vec3_sub(bbox.max, bbox.min)
+son
+
+// ============================================================================
+// MESH TRANSFORMATIONS
+// ============================================================================
+
+fonksiyon mesh_transform(mesh: Mesh, matrix: Mat4)
+yap
+    için i = 0 .. liste_uzunluk(mesh.vertices) yap
+        // Transform position
+        mesh.vertices[i].position = mat4_mul_vec3(matrix, mesh.vertices[i].position, 1.0)
+        
+        // Transform normal (use inverse transpose for correct normal transformation)
+        // For simplicity, assume uniform scale or orthogonal transformations
+        mesh.vertices[i].normal = vec3_normalize(
+            mat4_mul_vec3(matrix, mesh.vertices[i].normal, 0.0)
+        )
+    son
+son
+
+fonksiyon mesh_translate(mesh: Mesh, translation: Vec3)
+yap
+    mesh_transform(mesh, mat4_translate_vec(translation))
+son
+
+fonksiyon mesh_scale(mesh: Mesh, scale: ondalık)
+yap
+    mesh_transform(mesh, mat4_scale_uniform(scale))
+son
+
+fonksiyon mesh_rotate_x(mesh: Mesh, angle_rad: ondalık)
+yap
+    mesh_transform(mesh, mat4_rotate_x(angle_rad))
+son
+
+fonksiyon mesh_rotate_y(mesh: Mesh, angle_rad: ondalık)
+yap
+    mesh_transform(mesh, mat4_rotate_y(angle_rad))
+son
+
+fonksiyon mesh_rotate_z(mesh: Mesh, angle_rad: ondalık)
+yap
+    mesh_transform(mesh, mat4_rotate_z(angle_rad))
+son
+
+// ============================================================================
+// STL ASCII EXPORT
+// ============================================================================
+
+fonksiyon mesh_export_stl_ascii(mesh: Mesh, filepath: yazı) -> Sonuç[Hiçbiri, yazı]
+yap
+    değişken output = "solid " + mesh.name + "\n"
+    
+    // Write each triangle
+    için tri_idx = 0 .. liste_uzunluk(mesh.triangles) yap
+        değişken tri = mesh.triangles[tri_idx]
+        
+        değişken v0 = mesh.vertices[tri.v0]
+        değişken v1 = mesh.vertices[tri.v1]
+        değişken v2 = mesh.vertices[tri.v2]
+        
+        // Calculate face normal
+        değişken edge1 = vec3_sub(v1.position, v0.position)
+        değişken edge2 = vec3_sub(v2.position, v0.position)
+        değişken normal = vec3_normalize(vec3_cross(edge1, edge2))
+        
+        // Write facet
+        output = output + "  facet normal " + 
+            vec3_to_stl_string(normal) + "\n"
+        output = output + "    outer loop\n"
+        output = output + "      vertex " + vec3_to_stl_string(v0.position) + "\n"
+        output = output + "      vertex " + vec3_to_stl_string(v1.position) + "\n"
+        output = output + "      vertex " + vec3_to_stl_string(v2.position) + "\n"
+        output = output + "    endloop\n"
+        output = output + "  endfacet\n"
+    son
+    
+    output = output + "endsolid " + mesh.name + "\n"
+    
+    // Write to file
+    değişken write_result = dosya_yaz(filepath, output)
+    eğer write_result.hata_mı() ise yap
+        dön Hata("Failed to write STL file: " + write_result.hata_unwrap())
+    son
+    
+    dön Tamam(Hiçbiri)
+son
+
+fonksiyon vec3_to_stl_string(v: Vec3) -> yazı
+yap
+    dön ondalık_to_string(v.x) + " " +
+         ondalık_to_string(v.y) + " " +
+         ondalık_to_string(v.z)
+son
+
+// ============================================================================
+// MESH MERGING
+// ============================================================================
+
+fonksiyon mesh_merge(meshes: liste[Mesh]) -> Mesh
+yap
+    değişken result = mesh_new("Merged")
+    
+    için mesh_idx = 0 .. liste_uzunluk(meshes) yap
+        değişken source = meshes[mesh_idx]
+        değişken vertex_offset = liste_uzunluk(result.vertices)
+        
+        // Copy vertices
+        için v_idx = 0 .. liste_uzunluk(source.vertices) yap
+            liste_ekle(result.vertices, source.vertices[v_idx])
+        son
+        
+        // Copy triangles with adjusted indices
+        için t_idx = 0 .. liste_uzunluk(source.triangles) yap
+            değişken tri = source.triangles[t_idx]
+            mesh_add_triangle(result,
+                tri.v0 + vertex_offset,
+                tri.v1 + vertex_offset,
+                tri.v2 + vertex_offset
+            )
+        son
+    son
+    
+    dön result
+son
+
+son  // modül mesh

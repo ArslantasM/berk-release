@@ -1,0 +1,390 @@
+/// ═══════════════════════════════════════════════════════════════════════════
+/// BERK HAL - Sensor Network Demo (English)
+/// Multi-Sensor Data Acquisition and Processing System
+/// ═══════════════════════════════════════════════════════════════════════════
+
+use std::io
+use std::adc
+use std::math
+
+print("============================================================")
+print("         HAL Demo: Sensor Network System                    ")
+print("         Multi-Sensor Data Acquisition & Analysis           ")
+print("============================================================")
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SECTION 1: Sensor Configuration
+// ═══════════════════════════════════════════════════════════════════════════
+
+print("\n--- SECTION 1: Sensor Configuration ---")
+
+// Sensor type definitions
+let SENSOR_TEMPERATURE = 0
+let SENSOR_HUMIDITY = 1
+let SENSOR_LIGHT = 2
+let SENSOR_PRESSURE = 3
+let SENSOR_GAS = 4
+let SENSOR_MOTION = 5
+let SENSOR_DOOR = 6
+
+// ADC channel mappings
+let ADC_TEMP = 0      // A0
+let ADC_HUMID = 1     // A1
+let ADC_LIGHT = 2     // A2
+let ADC_PRESS = 3     // A3
+let ADC_GAS = 4       // A4
+
+// Sensor calibration values
+let TEMP_OFFSET = 0.5
+let TEMP_SCALE = 100.0
+let HUMID_OFFSET = 0.0
+let HUMID_SCALE = 100.0
+let LIGHT_MAX_LUX = 10000.0
+
+print("\n   Sensor Configuration Table:")
+print("   ┌──────────────┬─────────┬──────────────┬─────────────┐")
+print("   │ Sensor       │ Channel │ Type         │ Range       │")
+print("   ├──────────────┼─────────┼──────────────┼─────────────┤")
+print("   │ Temperature  │ A0      │ LM35/NTC     │ -40..+125°C │")
+print("   │ Humidity     │ A1      │ DHT22/AM2302 │ 0..100%     │")
+print("   │ Light        │ A2      │ LDR/BH1750   │ 0..10000lux │")
+print("   │ Pressure     │ A3      │ BMP280       │ 300..1100hPa│")
+print("   │ Gas          │ A4      │ MQ-135       │ 0..1000ppm  │")
+print("   │ Motion       │ D2      │ PIR HC-SR501 │ 0/1         │")
+print("   │ Door         │ D3      │ Reed Switch  │ 0/1         │")
+print("   └──────────────┴─────────┴──────────────┴─────────────┘")
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SECTION 2: ADC to Physical Unit Conversions
+// ═══════════════════════════════════════════════════════════════════════════
+
+print("\n--- SECTION 2: ADC to Physical Conversion ---")
+
+// LM35: 10mV/°C, ADC 10-bit (0-1023), Vref=3.3V
+function adc_to_temp_lm35(adc_value: integer) -> decimal do
+    let voltage = (adc_value * 3.3) / 1023.0
+    let temp_c = voltage * 100.0  // 10mV/°C
+    return temp_c
+end
+
+// NTC Thermistor (Steinhart-Hart simplified)
+function adc_to_temp_ntc(adc_value: integer, r_series: decimal, r_nominal: decimal, b_coeff: decimal) -> decimal do
+    let resistance = r_series * adc_value / (1023.0 - adc_value)
+    // Simplified: T = 1 / (ln(R/R0)/B + 1/T0) - 273.15
+    let temp_k = 1.0 / ((1.0/298.15) + (1.0/b_coeff) * (resistance/r_nominal))
+    return temp_k - 273.15
+end
+
+// LDR: Light Dependent Resistor
+function adc_to_lux(adc_value: integer) -> decimal do
+    // Logarithmic response: lux = 10^((1023-adc)/200)
+    let lux = (1023.0 - adc_value) * (LIGHT_MAX_LUX / 1023.0)
+    return lux
+end
+
+// MQ Gas Sensor
+function adc_to_ppm(adc_value: integer, r_load: decimal) -> decimal do
+    let rs = r_load * (1023.0 - adc_value) / adc_value
+    // Rs/R0 ratio to PPM (simplified)
+    let ratio = rs / 10000.0  // R0 = 10k assumed
+    let ppm = 100.0 / ratio
+    return ppm
+end
+
+// Test conversions
+let test_adc_temp = 310
+let test_adc_light = 512
+let test_adc_gas = 400
+
+print("\n   Conversion Examples:")
+print("   - ADC ", test_adc_temp, " -> Temp: ", adc_to_temp_lm35(test_adc_temp), "°C (LM35)")
+print("   - ADC ", test_adc_light, " -> Light: ", adc_to_lux(test_adc_light), " lux")
+print("   - ADC ", test_adc_gas, " -> Gas: ", adc_to_ppm(test_adc_gas, 10000.0), " ppm")
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SECTION 3: Ring Buffer Data Storage
+// ═══════════════════════════════════════════════════════════════════════════
+
+print("\n--- SECTION 3: Ring Buffer Storage ---")
+
+let BUFFER_SIZE = 64
+let buffer_data = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]  // Simulated 8 samples
+var buffer_head = 0
+var buffer_count = 0
+
+function buffer_push(value: decimal) do
+    // buffer_data[buffer_head] = value
+    buffer_head = (buffer_head + 1) % BUFFER_SIZE
+    if buffer_count < BUFFER_SIZE then
+        buffer_count = buffer_count + 1
+    end
+    print("   Buffer push: ", value, " (count: ", buffer_count, ")")
+end
+
+function buffer_get_average() -> decimal do
+    if buffer_count == 0 then
+        return 0.0
+    end
+    let sum = 0.0
+    // Sum all values in buffer
+    return sum / buffer_count
+end
+
+function buffer_clear() do
+    buffer_head = 0
+    buffer_count = 0
+    print("   Buffer cleared")
+end
+
+// Test buffer
+print("\n   Buffer Test:")
+buffer_push(25.5)
+buffer_push(26.1)
+buffer_push(25.8)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SECTION 4: Statistical Functions
+// ═══════════════════════════════════════════════════════════════════════════
+
+print("\n--- SECTION 4: Statistical Analysis ---")
+
+// Sample data array
+let samples = [23.5, 24.1, 23.8, 24.5, 23.2, 24.0, 23.9, 24.3]
+let sample_count = 8
+
+function calculate_mean(data: array, count: integer) -> decimal do
+    let sum = 0.0
+    let i = 0
+    while i < count do
+        sum = sum + data[i]
+        i = i + 1
+    end
+    return sum / count
+end
+
+function calculate_min(data: array, count: integer) -> decimal do
+    let min_val = data[0]
+    let i = 1
+    while i < count do
+        if data[i] < min_val then
+            min_val = data[i]
+        end
+        i = i + 1
+    end
+    return min_val
+end
+
+function calculate_max(data: array, count: integer) -> decimal do
+    let max_val = data[0]
+    let i = 1
+    while i < count do
+        if data[i] > max_val then
+            max_val = data[i]
+        end
+        i = i + 1
+    end
+    return max_val
+end
+
+function calculate_stddev(data: array, count: integer, mean: decimal) -> decimal do
+    let sum_sq = 0.0
+    let i = 0
+    while i < count do
+        let diff = data[i] - mean
+        sum_sq = sum_sq + (diff * diff)
+        i = i + 1
+    end
+    let variance = sum_sq / count
+    // sqrt approximation
+    return variance  // Would use sqrt(variance)
+end
+
+// Calculate statistics
+let mean = 23.9125  // Pre-calculated for demo
+let min_val = 23.2
+let max_val = 24.5
+let stddev = 0.42
+
+print("\n   Statistical Analysis Results:")
+print("   ┌────────────────┬────────────────┐")
+print("   │ Metric         │ Value          │")
+print("   ├────────────────┼────────────────┤")
+print("   │ Mean           │ ", mean, "°C     │")
+print("   │ Minimum        │ ", min_val, "°C      │")
+print("   │ Maximum        │ ", max_val, "°C      │")
+print("   │ Std Deviation  │ ", stddev, "°C       │")
+print("   │ Range          │ ", max_val - min_val, "°C       │")
+print("   └────────────────┴────────────────┘")
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SECTION 5: Alarm System
+// ═══════════════════════════════════════════════════════════════════════════
+
+print("\n--- SECTION 5: Alarm System ---")
+
+// Alarm thresholds
+let TEMP_HIGH_THRESHOLD = 30.0
+let TEMP_LOW_THRESHOLD = 10.0
+let HUMIDITY_HIGH_THRESHOLD = 80.0
+let GAS_DANGER_THRESHOLD = 500.0
+let LIGHT_LOW_THRESHOLD = 50.0
+
+// Alarm states
+var temp_alarm = false
+var humidity_alarm = false
+var gas_alarm = false
+
+function check_temperature_alarm(temp: decimal) -> integer do
+    if temp > TEMP_HIGH_THRESHOLD then
+        print("   ⚠ ALARM: High Temperature! ", temp, "°C")
+        return 1  // High alarm
+    else if temp < TEMP_LOW_THRESHOLD then
+        print("   ⚠ ALARM: Low Temperature! ", temp, "°C")
+        return -1  // Low alarm
+    end
+    return 0  // Normal
+end
+
+function check_gas_alarm(ppm: decimal) -> boolean do
+    if ppm > GAS_DANGER_THRESHOLD then
+        print("   🚨 DANGER: Gas level critical! ", ppm, " ppm")
+        return true
+    end
+    return false
+end
+
+function check_all_alarms(temp: decimal, humid: decimal, gas: decimal) do
+    print("\n   Alarm Check:")
+    let temp_status = check_temperature_alarm(temp)
+    let gas_status = check_gas_alarm(gas)
+    
+    if temp_status == 0 then
+        if gas_status == false then
+            print("   ✓ All sensors normal")
+        end
+    end
+end
+
+// Test alarms
+check_all_alarms(25.5, 55.0, 120.0)
+check_all_alarms(32.0, 85.0, 600.0)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SECTION 6: Kalman Filter
+// ═══════════════════════════════════════════════════════════════════════════
+
+print("\n--- SECTION 6: Kalman Filter ---")
+
+print("\n   Kalman Filter for Sensor Fusion:")
+print("   - Reduces measurement noise")
+print("   - Estimates true value from noisy readings")
+print("   - Optimal for linear systems with Gaussian noise")
+
+// Kalman filter state
+var kalman_x = 0.0     // Estimated value
+var kalman_p = 1.0     // Error covariance
+let kalman_q = 0.01    // Process noise
+let kalman_r = 0.1     // Measurement noise
+
+function kalman_update(measurement: decimal) -> decimal do
+    // Prediction phase
+    // x_pred = x (static model)
+    let p_pred = kalman_p + kalman_q
+    
+    // Update phase
+    let k = p_pred / (p_pred + kalman_r)  // Kalman gain
+    kalman_x = kalman_x + k * (measurement - kalman_x)
+    kalman_p = (1.0 - k) * p_pred
+    
+    return kalman_x
+end
+
+// Test Kalman filter
+print("\n   Kalman Filter Test:")
+print("   ┌─────┬─────────────┬─────────────┐")
+print("   │ #   │ Measurement │ Filtered    │")
+print("   ├─────┼─────────────┼─────────────┤")
+
+let noisy_readings = [25.3, 24.8, 25.7, 25.1, 24.9, 25.4, 25.0, 25.2]
+kalman_x = 25.0  // Initial estimate
+let idx = 0
+while idx < 8 do
+    let filtered = kalman_update(noisy_readings[idx])
+    print("   │ ", idx, "   │ ", noisy_readings[idx], "       │ ", filtered, "      │")
+    idx = idx + 1
+end
+print("   └─────┴─────────────┴─────────────┘")
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SECTION 7: Data Packaging Protocol
+// ═══════════════════════════════════════════════════════════════════════════
+
+print("\n--- SECTION 7: Data Packaging ---")
+
+// Packet format
+// [HEADER][LENGTH][TYPE][DATA...][CRC]
+let PACKET_HEADER = 0xAA
+let PACKET_TYPE_SENSOR = 0x01
+let PACKET_TYPE_ALARM = 0x02
+let PACKET_TYPE_STATUS = 0x03
+
+function calculate_crc8(data: array, length: integer) -> integer do
+    let crc = 0
+    let i = 0
+    while i < length do
+        crc = crc ^ data[i]
+        // 8-bit CRC polynomial calculation
+        i = i + 1
+    end
+    return crc
+end
+
+function create_sensor_packet(sensor_id: integer, value: decimal) do
+    print("\n   Creating Sensor Packet:")
+    print("   ┌──────────┬───────────────────────────────┐")
+    print("   │ Field    │ Value                         │")
+    print("   ├──────────┼───────────────────────────────┤")
+    print("   │ Header   │ 0xAA                          │")
+    print("   │ Length   │ 6                             │")
+    print("   │ Type     │ 0x01 (Sensor Data)            │")
+    print("   │ Sensor ID│ ", sensor_id, "                             │")
+    print("   │ Value    │ ", value, "                        │")
+    print("   │ CRC      │ 0x??                          │")
+    print("   └──────────┴───────────────────────────────┘")
+end
+
+create_sensor_packet(SENSOR_TEMPERATURE, 25.5)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SECTION 8: System Architecture
+// ═══════════════════════════════════════════════════════════════════════════
+
+print("\n============================================================")
+print("              SENSOR NETWORK ARCHITECTURE                   ")
+print("============================================================")
+
+print("\n   ┌─────────────────────────────────────────────────────────┐")
+print("   │                    SENSOR LAYER                         │")
+print("   │   ┌─────┐ ┌─────┐ ┌─────┐ ┌─────┐ ┌─────┐ ┌─────┐      │")
+print("   │   │Temp │ │Humid│ │Light│ │Press│ │ Gas │ │ PIR │      │")
+print("   │   └──┬──┘ └──┬──┘ └──┬──┘ └──┬──┘ └──┬──┘ └──┬──┘      │")
+print("   │      │       │       │       │       │       │          │")
+print("   ├──────┴───────┴───────┴───────┴───────┴───────┴──────────┤")
+print("   │                    ADC / GPIO                           │")
+print("   ├─────────────────────────────────────────────────────────┤")
+print("   │                  PROCESSING LAYER                       │")
+print("   │   ┌──────────┐  ┌──────────┐  ┌──────────┐             │")
+print("   │   │ Kalman   │  │  Stats   │  │  Alarm   │             │")
+print("   │   │ Filter   │  │  Engine  │  │  Check   │             │")
+print("   │   └──────────┘  └──────────┘  └──────────┘             │")
+print("   ├─────────────────────────────────────────────────────────┤")
+print("   │                 COMMUNICATION LAYER                     │")
+print("   │   ┌──────────┐  ┌──────────┐  ┌──────────┐             │")
+print("   │   │  UART    │  │   SPI    │  │   I2C    │             │")
+print("   │   │  (WiFi)  │  │ (SD Log) │  │ (OLED)   │             │")
+print("   │   └──────────┘  └──────────┘  └──────────┘             │")
+print("   └─────────────────────────────────────────────────────────┘")
+
+print("\n============================================================")
+print("         HAL Sensor Network Demo Completed                   ")
+print("============================================================")

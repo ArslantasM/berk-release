@@ -1,0 +1,547 @@
+// ============================================================================
+// BERK GUI Framework - Base Widget
+// ============================================================================
+// Tüm widget'ların temel sınıfı
+// ============================================================================
+
+modül gui::widgets::core::widget
+
+kullan gui::core::event::{Event, EventHandler}
+kullan gui::rendering::canvas::Canvas
+kullan gui::style::theme::Theme
+kullan gui::style::colors::Color
+kullan gui::layout::box_model::{BoxModel, EdgeInsets}
+kullan gui::layout::constraints::{Size, Constraints}
+kullan gui::animation::tween::Animation
+
+// ============================================================================
+// WIDGET TRAIT
+// ============================================================================
+
+/// Tüm widget'ların uygulaması gereken temel özellik (trait)
+pub özellik Widget:
+    /// Widget ID'si
+    fn id(self) döndür yazı
+    
+    /// Widget boyutunu ölç
+    fn measure(self, constraints: Constraints) döndür Size
+    
+    /// Widget'ı yerleştir
+    fn layout(mut self, x: ondalık, y: ondalık, width: ondalık, height: ondalık) döndür void
+    
+    /// Widget'ı çiz
+    fn render(self, canvas: Canvas) döndür void
+    
+    /// Güncelle (her frame)
+    fn update(mut self) döndür void:
+        // Varsayılan: hiçbir şey yapma
+    son
+    
+    /// Olay işle
+    fn handle_event(mut self, event: Event) döndür void:
+        // Varsayılan: hiçbir şey yapma
+    son
+    
+    /// Tema uygula
+    fn apply_theme(mut self, theme: Theme) döndür void:
+        // Varsayılan: hiçbir şey yapma
+    son
+    
+    /// Widget görünür mü?
+    fn is_visible(self) döndür mantıksal:
+        döndür doğru
+    son
+    
+    /// Widget etkin mi?
+    fn is_enabled(self) döndür mantıksal:
+        döndür doğru
+    son
+    
+    /// Widget'ın bounding box'ı
+    fn bounds(self) döndür Rect
+    
+    /// Hit test - nokta widget içinde mi?
+    fn hit_test(self, x: ondalık, y: ondalık) döndür mantıksal:
+        değişken b = self.bounds()
+        döndür x >= b.x && x <= b.x + b.width &&
+               y >= b.y && y <= b.y + b.height
+    son
+son
+
+// ============================================================================
+// BASE WIDGET
+// ============================================================================
+
+/// Widget için temel yapı (composition için)
+pub tip WidgetBase = yapı yap
+    /// Benzersiz ID
+    id: yazı,
+    
+    /// Konum
+    x: ondalık,
+    y: ondalık,
+    
+    /// Boyut
+    width: ondalık,
+    height: ondalık,
+    
+    /// Minimum boyut
+    min_width: Seçenek[ondalık],
+    min_height: Seçenek[ondalık],
+    
+    /// Maksimum boyut
+    max_width: Seçenek[ondalık],
+    max_height: Seçenek[ondalık],
+    
+    /// Tercih edilen boyut
+    preferred_width: Seçenek[ondalık],
+    preferred_height: Seçenek[ondalık],
+    
+    /// Box model (margin, padding, border)
+    box_model: BoxModel,
+    
+    /// Görünürlük
+    visible: mantıksal,
+    
+    /// Etkinlik
+    enabled: mantıksal,
+    
+    /// Odaklanabilir mi?
+    focusable: mantıksal,
+    
+    /// Odakta mı?
+    focused: mantıksal,
+    
+    /// Üzerinde fare var mı?
+    hovered: mantıksal,
+    
+    /// Basılı mı?
+    pressed: mantıksal,
+    
+    /// Tema
+    theme: Seçenek[Theme],
+    
+    /// Arka plan rengi
+    background_color: Seçenek[Color],
+    
+    /// Kenarlık rengi
+    border_color: Seçenek[Color],
+    
+    /// Kenarlık genişliği
+    border_width: ondalık,
+    
+    /// Köşe yuvarlaklığı
+    border_radius: ondalık,
+    
+    /// Gölge
+    shadow: Seçenek[Shadow],
+    
+    /// Opaklık (0.0 - 1.0)
+    opacity: ondalık,
+    
+    /// Cursor tipi
+    cursor: CursorType,
+    
+    /// Tooltip
+    tooltip: Seçenek[yazı],
+    
+    /// Aktif animasyonlar
+    animations: liste[Animation],
+    
+    /// Ebeveyn widget
+    parent: Seçenek[WidgetRef],
+    
+    /// Çocuk widgetlar
+    children: liste[WidgetRef],
+    
+    /// Kullanıcı verisi
+    user_data: Seçenek[herhangi]
+son
+
+/// Widget referansı (heap-allocated)
+pub tip WidgetRef = yapı yap
+    ptr: tamsayı  // Opaque pointer
+son
+
+/// Gölge
+pub tip Shadow = yapı yap
+    color: Color,
+    blur_radius: ondalık,
+    offset_x: ondalık,
+    offset_y: ondalık,
+    spread: ondalık
+son
+
+/// Dikdörtgen
+pub tip Rect = yapı yap
+    x: ondalık,
+    y: ondalık,
+    width: ondalık,
+    height: ondalık
+son
+
+/// Cursor tipi
+pub tip CursorType = enum yap
+    Default,
+    Pointer,      // El işareti
+    Text,         // Metin imleci
+    Crosshair,    // Artı işareti
+    Move,         // Taşıma
+    NotAllowed,   // Yasak
+    Grab,         // Tutma
+    Grabbing,     // Tutuyor
+    ResizeN,      // Kuzey yeniden boyutlandırma
+    ResizeS,      // Güney
+    ResizeE,      // Doğu
+    ResizeW,      // Batı
+    ResizeNE,
+    ResizeNW,
+    ResizeSE,
+    ResizeSW,
+    ResizeEW,     // Yatay
+    ResizeNS,     // Dikey
+    Wait,         // Bekleme
+    Progress,     // İlerleme
+    Help,         // Yardım
+    None          // Görünmez
+son
+
+// ============================================================================
+// WIDGET BASE IMPLEMENTATION
+// ============================================================================
+
+impl WidgetBase:
+    /// Yeni widget base oluştur
+    pub fn new(id: yazı) döndür WidgetBase:
+        döndür WidgetBase yap
+            id: id,
+            x: 0.0,
+            y: 0.0,
+            width: 0.0,
+            height: 0.0,
+            min_width: boş,
+            min_height: boş,
+            max_width: boş,
+            max_height: boş,
+            preferred_width: boş,
+            preferred_height: boş,
+            box_model: BoxModel::default(),
+            visible: doğru,
+            enabled: doğru,
+            focusable: yanlış,
+            focused: yanlış,
+            hovered: yanlış,
+            pressed: yanlış,
+            theme: boş,
+            background_color: boş,
+            border_color: boş,
+            border_width: 0.0,
+            border_radius: 0.0,
+            shadow: boş,
+            opacity: 1.0,
+            cursor: CursorType::Default,
+            tooltip: boş,
+            animations: [],
+            parent: boş,
+            children: [],
+            user_data: boş
+        son
+    son
+    
+    /// Benzersiz ID oluştur
+    pub fn generate_id() döndür yazı:
+        döndür __native_generate_widget_id()
+    son
+    
+    /// Bounds al
+    pub fn bounds(self) döndür Rect:
+        döndür Rect yap
+            x: self.x,
+            y: self.y,
+            width: self.width,
+            height: self.height
+        son
+    son
+    
+    /// Content bounds (padding hariç)
+    pub fn content_bounds(self) döndür Rect:
+        değişken p = self.box_model.padding
+        döndür Rect yap
+            x: self.x + p.left,
+            y: self.y + p.top,
+            width: self.width - p.left - p.right,
+            height: self.height - p.top - p.bottom
+        son
+    son
+    
+    /// Hit test
+    pub fn hit_test(self, x: ondalık, y: ondalık) döndür mantıksal:
+        döndür x >= self.x && x <= self.x + self.width &&
+               y >= self.y && y <= self.y + self.height
+    son
+    
+    /// Çocuk ekle
+    pub fn add_child(mut self, child: WidgetRef) döndür void:
+        self.children.push(child)
+    son
+    
+    /// Çocuk kaldır
+    pub fn remove_child(mut self, child_id: yazı) döndür void:
+        self.children = self.children.filter(fn(c):
+            c.id() != child_id
+        )
+    son
+    
+    /// Animasyon ekle
+    pub fn add_animation(mut self, animation: Animation) döndür void:
+        self.animations.push(animation)
+    son
+    
+    /// Animasyonları güncelle
+    pub fn update_animations(mut self) döndür void:
+        // Tamamlanan animasyonları kaldır
+        self.animations = self.animations.filter(fn(a):
+            a.update()
+            !a.is_complete()
+        )
+    son
+    
+    /// Temel olay işleme
+    pub fn handle_base_event(mut self, event: Event) döndür mantıksal:
+        eşle event.tür:
+            EventType::MouseEnter => yap
+                self.hovered = doğru
+                döndür doğru
+            son,
+            
+            EventType::MouseLeave => yap
+                self.hovered = yanlış
+                self.pressed = yanlış
+                döndür doğru
+            son,
+            
+            EventType::MouseDown(button, x, y) => yap
+                eğer button == MouseButton::Left && self.hit_test(x, y):
+                    self.pressed = doğru
+                    eğer self.focusable:
+                        self.focused = doğru
+                    son
+                    döndür doğru
+                son
+            son,
+            
+            EventType::MouseUp(button, x, y) => yap
+                eğer button == MouseButton::Left:
+                    self.pressed = yanlış
+                    döndür doğru
+                son
+            son,
+            
+            _ => yap
+                // İşlenmedi
+            son
+        son
+        
+        döndür yanlış
+    son
+son
+
+// ============================================================================
+// WIDGET STATE
+// ============================================================================
+
+/// Widget durumu (state machine)
+pub tip WidgetState = enum yap
+    Normal,     // Varsayılan durum
+    Hovered,    // Fare üzerinde
+    Pressed,    // Basılı
+    Focused,    // Odakta
+    Disabled,   // Devre dışı
+    Selected,   // Seçili
+    Checked,    // İşaretli (checkbox)
+    Expanded,   // Genişletilmiş
+    Collapsed,  // Daraltılmış
+    Loading,    // Yükleniyor
+    Error,      // Hata durumu
+    Success     // Başarı durumu
+son
+
+impl WidgetBase:
+    /// Aktif durumu al
+    pub fn state(self) döndür WidgetState:
+        eğer !self.enabled:
+            döndür WidgetState::Disabled
+        son
+        
+        eğer self.pressed:
+            döndür WidgetState::Pressed
+        son
+        
+        eğer self.focused:
+            döndür WidgetState::Focused
+        son
+        
+        eğer self.hovered:
+            döndür WidgetState::Hovered
+        son
+        
+        döndür WidgetState::Normal
+    son
+son
+
+// ============================================================================
+// WIDGET BUILDER TRAIT
+// ============================================================================
+
+/// Fluent API için builder pattern
+pub özellik WidgetBuilder[T]:
+    /// ID ayarla
+    fn id(mut self, id: yazı) döndür T
+    
+    /// Boyut ayarla
+    fn size(mut self, width: ondalık, height: ondalık) döndür T
+    
+    /// Genişlik ayarla
+    fn width(mut self, width: ondalık) döndür T
+    
+    /// Yükseklik ayarla
+    fn height(mut self, height: ondalık) döndür T
+    
+    /// Minimum boyut
+    fn min_size(mut self, width: ondalık, height: ondalık) döndür T
+    
+    /// Maksimum boyut
+    fn max_size(mut self, width: ondalık, height: ondalık) döndür T
+    
+    /// Padding
+    fn padding(mut self, value: ondalık) döndür T
+    
+    /// Margin
+    fn margin(mut self, value: ondalık) döndür T
+    
+    /// Arka plan rengi
+    fn background(mut self, color: Color) döndür T
+    
+    /// Kenarlık
+    fn border(mut self, width: ondalık, color: Color) döndür T
+    
+    /// Köşe yuvarlaklığı
+    fn border_radius(mut self, radius: ondalık) döndür T
+    
+    /// Gölge
+    fn shadow(mut self, shadow: Shadow) döndür T
+    
+    /// Opaklık
+    fn opacity(mut self, opacity: ondalık) döndür T
+    
+    /// Görünürlük
+    fn visible(mut self, visible: mantıksal) döndür T
+    
+    /// Etkinlik
+    fn enabled(mut self, enabled: mantıksal) döndür T
+    
+    /// Tooltip
+    fn tooltip(mut self, text: yazı) döndür T
+    
+    /// Cursor
+    fn cursor(mut self, cursor: CursorType) döndür T
+son
+
+// ============================================================================
+// SHADOW IMPLEMENTATION
+// ============================================================================
+
+impl Shadow:
+    /// Yeni gölge
+    pub fn new(color: Color, blur: ondalık, x: ondalık, y: ondalık) döndür Shadow:
+        döndür Shadow yap
+            color: color,
+            blur_radius: blur,
+            offset_x: x,
+            offset_y: y,
+            spread: 0.0
+        son
+    son
+    
+    /// Hafif gölge
+    pub fn light() döndür Shadow:
+        döndür Shadow yap
+            color: Color::rgba(0, 0, 0, 32),
+            blur_radius: 4.0,
+            offset_x: 0.0,
+            offset_y: 2.0,
+            spread: 0.0
+        son
+    son
+    
+    /// Orta gölge
+    pub fn medium() döndür Shadow:
+        döndür Shadow yap
+            color: Color::rgba(0, 0, 0, 48),
+            blur_radius: 8.0,
+            offset_x: 0.0,
+            offset_y: 4.0,
+            spread: 0.0
+        son
+    son
+    
+    /// Ağır gölge
+    pub fn heavy() döndür Shadow:
+        döndür Shadow yap
+            color: Color::rgba(0, 0, 0, 64),
+            blur_radius: 16.0,
+            offset_x: 0.0,
+            offset_y: 8.0,
+            spread: 2.0
+        son
+    son
+son
+
+// ============================================================================
+// RECT IMPLEMENTATION
+// ============================================================================
+
+impl Rect:
+    pub fn new(x: ondalık, y: ondalık, width: ondalık, height: ondalık) döndür Rect:
+        döndür Rect yap x: x, y: y, width: width, height: height son
+    son
+    
+    pub fn zero() döndür Rect:
+        döndür Rect yap x: 0.0, y: 0.0, width: 0.0, height: 0.0 son
+    son
+    
+    /// Kesişim kontrolü
+    pub fn intersects(self, other: Rect) döndür mantıksal:
+        döndür self.x < other.x + other.width &&
+               self.x + self.width > other.x &&
+               self.y < other.y + other.height &&
+               self.y + self.height > other.y
+    son
+    
+    /// İçerme kontrolü
+    pub fn contains(self, x: ondalık, y: ondalık) döndür mantıksal:
+        döndür x >= self.x && x <= self.x + self.width &&
+               y >= self.y && y <= self.y + self.height
+    son
+    
+    /// Merkez noktası
+    pub fn center(self) döndür (ondalık, ondalık):
+        döndür (self.x + self.width / 2.0, self.y + self.height / 2.0)
+    son
+    
+    /// Genişlet
+    pub fn inflate(self, amount: ondalık) döndür Rect:
+        döndür Rect yap
+            x: self.x - amount,
+            y: self.y - amount,
+            width: self.width + amount * 2.0,
+            height: self.height + amount * 2.0
+        son
+    son
+son
+
+// ============================================================================
+// NATIVE BINDINGS
+// ============================================================================
+
+dış fn __native_generate_widget_id() döndür yazı

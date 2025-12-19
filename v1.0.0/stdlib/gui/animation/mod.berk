@@ -1,0 +1,27 @@
+// ============================================================================
+// BERK GUI Framework - Animation System
+// ============================================================================
+// Synfig'den ilham alan profesyonel animasyon motoru
+// ============================================================================
+
+modül gui::animation
+
+// Alt modülleri dışa aktar
+pub kullan gui::animation::time::*
+pub kullan gui::animation::interpolation::*
+pub kullan gui::animation::waypoint::*
+pub kullan gui::animation::curve::*
+pub kullan gui::animation::tween::*
+pub kullan gui::animation::keyframe::*
+pub kullan gui::animation::timeline::*
+pub kullan gui::animation::spring::*
+pub kullan gui::animation::easing::*
+pub kullan gui::animation::animator::*
+pub kullan gui::animation::sequence::*
+pub kullan gui::animation::transition::*
+pub kullan gui::animation::path::*
+
+// ============================================================================
+// VERSİYON
+// ============================================================================
+pub const ANIMATION_VERSION: yazı = "1.0.0"

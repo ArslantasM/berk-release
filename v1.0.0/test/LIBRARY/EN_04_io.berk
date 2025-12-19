@@ -1,0 +1,137 @@
+/// ═══════════════════════════════════════════════════════════════════════════
+/// BERK Library Demo - IO Module (English Version)
+/// Input/Output operations
+/// ═══════════════════════════════════════════════════════════════════════════
+
+use std::io
+
+print("============================================================")
+print("         Library Demo: IO (Input/Output) Module             ")
+print("============================================================")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 1: Basic Output
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 1: Basic Output ---")
+
+print("   Hello World!")
+print("   This is a BERK output example")
+print("   Special characters: @#$%^&*()")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 2: Variable Printing
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 2: Variable Printing ---")
+
+let name = "BERK"
+let version = 1
+let decimal = 3.14159
+let status = true
+
+print("   String: ", name)
+print("   Integer: ", version)
+print("   Decimal: ", decimal)
+print("   Boolean: ", status)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 3: Multiple Parameters
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 3: Multiple Parameters ---")
+
+let x = 10
+let y = 20
+let z = x + y
+
+print("   x = ", x, ", y = ", y, ", sum = ", z)
+
+let person = "John"
+let age = 25
+print("   Name: ", person, " - Age: ", age)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 4: Formatted Output
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 4: Formatted Output ---")
+
+print("   ┌────────────────────────────────┐")
+print("   │     BERK Programming Language  │")
+print("   │     Version: 1.0.0             │")
+print("   │     License: MIT               │")
+print("   └────────────────────────────────┘")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 5: Table Output
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 5: Table Output ---")
+
+print("   ┌──────┬─────────────┬──────────┐")
+print("   │  No  │  Product    │  Price   │")
+print("   ├──────┼─────────────┼──────────┤")
+print("   │  1   │  Apple      │  5.50    │")
+print("   │  2   │  Pear       │  7.25    │")
+print("   │  3   │  Banana     │  12.00   │")
+print("   └──────┴─────────────┴──────────┘")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 6: Log Levels
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 6: Log Levels ---")
+
+fn log_info(message: string) do
+    print("   [INFO] ", message)
+end
+
+fn log_warn(message: string) do
+    print("   [WARN] ", message)
+end
+
+fn log_error(message: string) do
+    print("   [ERROR] ", message)
+end
+
+fn log_debug(message: string) do
+    print("   [DEBUG] ", message)
+end
+
+log_info("Application started")
+log_debug("Loading configuration...")
+log_warn("Using deprecated API")
+log_error("Connection failed!")
+log_info("Application terminated")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 7: Progress Display
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 7: Progress Display ---")
+
+fn draw_progress(percent: int) do
+    let filled = percent / 10
+    let empty = 10 - filled
+    
+    if percent == 25 then
+        print("   [##........] 25%")
+    end
+    if percent == 50 then
+        print("   [#####.....] 50%")
+    end
+    if percent == 75 then
+        print("   [#######...] 75%")
+    end
+    if percent == 100 then
+        print("   [##########] 100% Complete!")
+    end
+end
+
+draw_progress(25)
+draw_progress(50)
+draw_progress(75)
+draw_progress(100)
+
+print("\n[OK] IO library demo completed!")

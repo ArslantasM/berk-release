@@ -1,0 +1,536 @@
+// ============================================================================
+// BERK SENSOR API - IMU Fusion Filtreleri
+// ============================================================================
+// Complementary, Madgwick AHRS, Mahony AHRS
+// NOT: Bu filtreler Kalman'dan daha pratik ve çoğu durumda daha iyi!
+// ============================================================================
+
+modül sensor::filter::fusion
+
+import math::{sin, cos, sqrt, atan2, asin}
+
+// ============================================================================
+// COMPLEMENTARY FİLTRE
+// ============================================================================
+
+/// Complementary Filter (Tamamlayıcı Filtre)
+/// IMU fusion için EN YAYGIN pratik çözüm
+/// 
+/// Accelerometer: Drift yok ama gürültülü
+/// Gyroscope: Smooth ama drift var
+/// → Complementary: İkisinin avantajını birleştir
+pub tip ComplementaryFilter = yapı yap
+    /// Gyroscope güven oranı (0.95-0.99 tipik)
+    alpha: ondalık,
+    /// Mevcut açı (radyan)
+    angle: ondalık,
+    /// Başlatıldı mı?
+    initialized: mantıksal,
+son
+
+impl ComplementaryFilter:
+    /// Yeni complementary filtre
+    /// alpha: Gyroscope güven oranı (0-1)
+    /// Tipik: 0.98 (%98 gyro, %2 acc)
+    pub fn new(alpha: ondalık) döndür ComplementaryFilter:
+        döndür ComplementaryFilter {
+            alpha: alpha.clamp(0.5, 0.999),
+            angle: 0.0,
+            initialized: yanlış,
+        }
+    son
+    
+    /// Preset: Standart (iyi denge)
+    pub fn standard() döndür ComplementaryFilter:
+        döndür ComplementaryFilter::new(0.98)
+    son
+    
+    /// Preset: Hızlı tepki (daha fazla gyro)
+    pub fn fast() döndür ComplementaryFilter:
+        döndür ComplementaryFilter::new(0.995)
+    son
+    
+    /// Preset: Kararlı (daha fazla accelerometer)
+    pub fn stable() döndür ComplementaryFilter:
+        döndür ComplementaryFilter::new(0.90)
+    son
+    
+    /// 1-eksen açı güncelleme
+    /// acc_angle: Accelerometer'dan hesaplanan açı (rad)
+    /// gyro_rate: Gyroscope açısal hız (rad/s)
+    /// dt: Zaman farkı (saniye)
+    pub fn update(mut self, acc_angle: ondalık, gyro_rate: ondalık, dt: ondalık) döndür ondalık:
+        eğer !self.initialized:
+            self.angle = acc_angle
+            self.initialized = doğru
+            döndür self.angle
+        son
+        
+        // Complementary fusion:
+        // angle = α × (angle + gyro × dt) + (1-α) × acc_angle
+        self.angle = self.alpha * (self.angle + gyro_rate * dt) + 
+                     (1.0 - self.alpha) * acc_angle
+        
+        döndür self.angle
+    son
+    
+    /// Açıyı derece olarak al
+    pub fn get_angle_deg(self) döndür ondalık:
+        döndür self.angle * 180.0 / 3.14159265359
+    son
+    
+    /// Açıyı radyan olarak al
+    pub fn get_angle_rad(self) döndür ondalık:
+        döndür self.angle
+    son
+    
+    /// Reset
+    pub fn reset(mut self) döndür void:
+        self.angle = 0.0
+        self.initialized = yanlış
+    son
+son
+
+// ============================================================================
+// 2-EKSEN COMPLEMENTARY FİLTRE
+// ============================================================================
+
+/// 2 eksen complementary (pitch + roll)
+pub tip ComplementaryFilter2D = yapı yap
+    alpha: ondalık,
+    pitch: ondalık,
+    roll: ondalık,
+    initialized: mantıksal,
+son
+
+impl ComplementaryFilter2D:
+    pub fn new(alpha: ondalık) döndür ComplementaryFilter2D:
+        döndür ComplementaryFilter2D {
+            alpha: alpha.clamp(0.5, 0.999),
+            pitch: 0.0,
+            roll: 0.0,
+            initialized: yanlış,
+        }
+    son
+    
+    pub fn standard() döndür ComplementaryFilter2D:
+        döndür ComplementaryFilter2D::new(0.98)
+    son
+    
+    /// Accelerometer ve gyro ile güncelle
+    /// acc: (ax, ay, az) - ivme vektörü
+    /// gyro: (gx, gy, gz) - açısal hız (rad/s)
+    /// dt: zaman farkı (s)
+    pub fn update(
+        mut self,
+        acc: (ondalık, ondalık, ondalık),
+        gyro: (ondalık, ondalık, ondalık),
+        dt: ondalık
+    ) döndür (ondalık, ondalık):
+        değişken (ax, ay, az) = acc
+        değişken (gx, gy, gz) = gyro
+        
+        // Accelerometer'dan açı hesapla
+        değişken acc_pitch = atan2(ax, sqrt(ay * ay + az * az))
+        değişken acc_roll = atan2(ay, sqrt(ax * ax + az * az))
+        
+        eğer !self.initialized:
+            self.pitch = acc_pitch
+            self.roll = acc_roll
+            self.initialized = doğru
+            döndür (self.pitch, self.roll)
+        son
+        
+        // Gyro integration + complementary fusion
+        self.pitch = self.alpha * (self.pitch + gy * dt) + (1.0 - self.alpha) * acc_pitch
+        self.roll = self.alpha * (self.roll + gx * dt) + (1.0 - self.alpha) * acc_roll
+        
+        döndür (self.pitch, self.roll)
+    son
+    
+    pub fn get_pitch_deg(self) döndür ondalık:
+        döndür self.pitch * 180.0 / 3.14159265359
+    son
+    
+    pub fn get_roll_deg(self) döndür ondalık:
+        döndür self.roll * 180.0 / 3.14159265359
+    son
+son
+
+// ============================================================================
+// MADGWICK AHRS
+// ============================================================================
+
+/// Madgwick AHRS Algoritması
+/// Quaternion tabanlı, drift-free, computationally efficient
+/// IMU (6-DOF) veya MARG (9-DOF) için
+pub tip MadgwickAHRS = yapı yap
+    /// Beta (algoritma kazancı, 0.01-0.5)
+    beta: ondalık,
+    /// Quaternion [w, x, y, z]
+    q0: ondalık,
+    q1: ondalık,
+    q2: ondalık,
+    q3: ondalık,
+    /// Sample period (saniye)
+    sample_period: ondalık,
+son
+
+impl MadgwickAHRS:
+    pub fn new(beta: ondalık) döndür MadgwickAHRS:
+        döndür MadgwickAHRS {
+            beta: beta.clamp(0.01, 1.0),
+            q0: 1.0,
+            q1: 0.0,
+            q2: 0.0,
+            q3: 0.0,
+            sample_period: 0.01,  // 100Hz varsayılan
+        }
+    son
+    
+    /// Preset: IMU için optimize
+    pub fn for_imu() döndür MadgwickAHRS:
+        döndür MadgwickAHRS::new(0.1)
+    son
+    
+    /// Preset: MARG (magnetometer dahil) için
+    pub fn for_marg() döndür MadgwickAHRS:
+        döndür MadgwickAHRS::new(0.041)
+    son
+    
+    /// Sample rate ayarla
+    pub fn with_sample_rate(mut self, rate_hz: ondalık) döndür MadgwickAHRS:
+        self.sample_period = 1.0 / rate_hz
+        döndür self
+    son
+    
+    /// 1/sqrt(x) hızlı yaklaşık hesaplama
+    fn inv_sqrt(x: ondalık) döndür ondalık:
+        döndür 1.0 / sqrt(x)
+    son
+    
+    /// IMU güncelleme (6-DOF: accelerometer + gyroscope)
+    pub fn update_imu(
+        mut self,
+        gx: ondalık, gy: ondalık, gz: ondalık,  // Gyro (rad/s)
+        ax: ondalık, ay: ondalık, az: ondalık   // Accel (normalized)
+    ) döndür void:
+        değişken q0 = self.q0
+        değişken q1 = self.q1
+        değişken q2 = self.q2
+        değişken q3 = self.q3
+        
+        // Rate of change of quaternion from gyroscope
+        değişken qDot1 = 0.5 * (-q1 * gx - q2 * gy - q3 * gz)
+        değişken qDot2 = 0.5 * (q0 * gx + q2 * gz - q3 * gy)
+        değişken qDot3 = 0.5 * (q0 * gy - q1 * gz + q3 * gx)
+        değişken qDot4 = 0.5 * (q0 * gz + q1 * gy - q2 * gx)
+        
+        // Compute feedback only if accelerometer measurement valid
+        değişken norm = sqrt(ax * ax + ay * ay + az * az)
+        eğer norm > 0.0:
+            // Normalise accelerometer measurement
+            değişken recip_norm = 1.0 / norm
+            değişken ax_n = ax * recip_norm
+            değişken ay_n = ay * recip_norm
+            değişken az_n = az * recip_norm
+            
+            // Auxiliary variables
+            değişken _2q0 = 2.0 * q0
+            değişken _2q1 = 2.0 * q1
+            değişken _2q2 = 2.0 * q2
+            değişken _2q3 = 2.0 * q3
+            değişken _4q0 = 4.0 * q0
+            değişken _4q1 = 4.0 * q1
+            değişken _4q2 = 4.0 * q2
+            değişken _8q1 = 8.0 * q1
+            değişken _8q2 = 8.0 * q2
+            değişken q0q0 = q0 * q0
+            değişken q1q1 = q1 * q1
+            değişken q2q2 = q2 * q2
+            değişken q3q3 = q3 * q3
+            
+            // Gradient descent algorithm corrective step
+            değişken s0 = _4q0 * q2q2 + _2q2 * ax_n + _4q0 * q1q1 - _2q1 * ay_n
+            değişken s1 = _4q1 * q3q3 - _2q3 * ax_n + 4.0 * q0q0 * q1 - _2q0 * ay_n - _4q1 + _8q1 * q1q1 + _8q1 * q2q2 + _4q1 * az_n
+            değişken s2 = 4.0 * q0q0 * q2 + _2q0 * ax_n + _4q2 * q3q3 - _2q3 * ay_n - _4q2 + _8q2 * q1q1 + _8q2 * q2q2 + _4q2 * az_n
+            değişken s3 = 4.0 * q1q1 * q3 - _2q1 * ax_n + 4.0 * q2q2 * q3 - _2q2 * ay_n
+            
+            // Normalise step magnitude
+            değişken step_norm = MadgwickAHRS::inv_sqrt(s0 * s0 + s1 * s1 + s2 * s2 + s3 * s3)
+            değişken s0_n = s0 * step_norm
+            değişken s1_n = s1 * step_norm
+            değişken s2_n = s2 * step_norm
+            değişken s3_n = s3 * step_norm
+            
+            // Apply feedback step
+            qDot1 = qDot1 - self.beta * s0_n
+            qDot2 = qDot2 - self.beta * s1_n
+            qDot3 = qDot3 - self.beta * s2_n
+            qDot4 = qDot4 - self.beta * s3_n
+        son
+        
+        // Integrate rate of change of quaternion
+        self.q0 = q0 + qDot1 * self.sample_period
+        self.q1 = q1 + qDot2 * self.sample_period
+        self.q2 = q2 + qDot3 * self.sample_period
+        self.q3 = q3 + qDot4 * self.sample_period
+        
+        // Normalise quaternion
+        değişken qnorm = MadgwickAHRS::inv_sqrt(
+            self.q0 * self.q0 + self.q1 * self.q1 + 
+            self.q2 * self.q2 + self.q3 * self.q3
+        )
+        self.q0 = self.q0 * qnorm
+        self.q1 = self.q1 * qnorm
+        self.q2 = self.q2 * qnorm
+        self.q3 = self.q3 * qnorm
+    son
+    
+    /// Euler açıları al (radyan)
+    pub fn get_euler(self) döndür (ondalık, ondalık, ondalık):
+        değişken q0 = self.q0
+        değişken q1 = self.q1
+        değişken q2 = self.q2
+        değişken q3 = self.q3
+        
+        // Roll (x-axis rotation)
+        değişken sinr_cosp = 2.0 * (q0 * q1 + q2 * q3)
+        değişken cosr_cosp = 1.0 - 2.0 * (q1 * q1 + q2 * q2)
+        değişken roll = atan2(sinr_cosp, cosr_cosp)
+        
+        // Pitch (y-axis rotation)
+        değişken sinp = 2.0 * (q0 * q2 - q3 * q1)
+        değişken pitch = eğer sinp.abs() >= 1.0:
+            eğer sinp > 0.0:
+                1.5707963  // π/2
+            yoksa:
+                -1.5707963
+            son
+        yoksa:
+            asin(sinp)
+        son
+        
+        // Yaw (z-axis rotation)
+        değişken siny_cosp = 2.0 * (q0 * q3 + q1 * q2)
+        değişken cosy_cosp = 1.0 - 2.0 * (q2 * q2 + q3 * q3)
+        değişken yaw = atan2(siny_cosp, cosy_cosp)
+        
+        döndür (roll, pitch, yaw)
+    son
+    
+    /// Euler açıları (derece)
+    pub fn get_euler_deg(self) döndür (ondalık, ondalık, ondalık):
+        değişken (roll, pitch, yaw) = self.get_euler()
+        değişken to_deg = 180.0 / 3.14159265359
+        döndür (roll * to_deg, pitch * to_deg, yaw * to_deg)
+    son
+    
+    /// Quaternion al
+    pub fn get_quaternion(self) döndür (ondalık, ondalık, ondalık, ondalık):
+        döndür (self.q0, self.q1, self.q2, self.q3)
+    son
+    
+    /// Reset
+    pub fn reset(mut self) döndür void:
+        self.q0 = 1.0
+        self.q1 = 0.0
+        self.q2 = 0.0
+        self.q3 = 0.0
+    son
+son
+
+// ============================================================================
+// MAHONY AHRS
+// ============================================================================
+
+/// Mahony AHRS Algoritması
+/// PI controller tabanlı, daha tunable
+pub tip MahonyAHRS = yapı yap
+    /// Proportional gain
+    kp: ondalık,
+    /// Integral gain
+    ki: ondalık,
+    /// Quaternion
+    q0: ondalık,
+    q1: ondalık,
+    q2: ondalık,
+    q3: ondalık,
+    /// Integral error terms
+    ex_int: ondalık,
+    ey_int: ondalık,
+    ez_int: ondalık,
+    /// Sample period
+    sample_period: ondalık,
+son
+
+impl MahonyAHRS:
+    pub fn new(kp: ondalık, ki: ondalık) döndür MahonyAHRS:
+        döndür MahonyAHRS {
+            kp: kp,
+            ki: ki,
+            q0: 1.0,
+            q1: 0.0,
+            q2: 0.0,
+            q3: 0.0,
+            ex_int: 0.0,
+            ey_int: 0.0,
+            ez_int: 0.0,
+            sample_period: 0.01,
+        }
+    son
+    
+    /// Preset: Standart
+    pub fn standard() döndür MahonyAHRS:
+        döndür MahonyAHRS::new(2.0, 0.005)
+    son
+    
+    /// Sample rate ayarla
+    pub fn with_sample_rate(mut self, rate_hz: ondalık) döndür MahonyAHRS:
+        self.sample_period = 1.0 / rate_hz
+        döndür self
+    son
+    
+    /// IMU güncelleme
+    pub fn update_imu(
+        mut self,
+        gx: ondalık, gy: ondalık, gz: ondalık,
+        ax: ondalık, ay: ondalık, az: ondalık
+    ) döndür void:
+        değişken q0 = self.q0
+        değişken q1 = self.q1
+        değişken q2 = self.q2
+        değişken q3 = self.q3
+        
+        // Normalise accelerometer
+        değişken norm = sqrt(ax * ax + ay * ay + az * az)
+        eğer norm == 0.0:
+            döndür
+        son
+        değişken recip_norm = 1.0 / norm
+        değişken ax_n = ax * recip_norm
+        değişken ay_n = ay * recip_norm
+        değişken az_n = az * recip_norm
+        
+        // Estimated direction of gravity
+        değişken vx = 2.0 * (q1 * q3 - q0 * q2)
+        değişken vy = 2.0 * (q0 * q1 + q2 * q3)
+        değişken vz = q0 * q0 - q1 * q1 - q2 * q2 + q3 * q3
+        
+        // Error is cross product between estimated and measured
+        değişken ex = ay_n * vz - az_n * vy
+        değişken ey = az_n * vx - ax_n * vz
+        değişken ez = ax_n * vy - ay_n * vx
+        
+        // Compute and apply integral feedback
+        eğer self.ki > 0.0:
+            self.ex_int = self.ex_int + ex * self.sample_period
+            self.ey_int = self.ey_int + ey * self.sample_period
+            self.ez_int = self.ez_int + ez * self.sample_period
+        son
+        
+        // Apply proportional and integral feedback
+        değişken gx_adj = gx + self.kp * ex + self.ki * self.ex_int
+        değişken gy_adj = gy + self.kp * ey + self.ki * self.ey_int
+        değişken gz_adj = gz + self.kp * ez + self.ki * self.ez_int
+        
+        // Integrate rate of change
+        değişken half_dt = 0.5 * self.sample_period
+        self.q0 = q0 + (-q1 * gx_adj - q2 * gy_adj - q3 * gz_adj) * half_dt
+        self.q1 = q1 + (q0 * gx_adj + q2 * gz_adj - q3 * gy_adj) * half_dt
+        self.q2 = q2 + (q0 * gy_adj - q1 * gz_adj + q3 * gx_adj) * half_dt
+        self.q3 = q3 + (q0 * gz_adj + q1 * gy_adj - q2 * gx_adj) * half_dt
+        
+        // Normalise quaternion
+        değişken qnorm = sqrt(
+            self.q0 * self.q0 + self.q1 * self.q1 + 
+            self.q2 * self.q2 + self.q3 * self.q3
+        )
+        eğer qnorm > 0.0:
+            self.q0 = self.q0 / qnorm
+            self.q1 = self.q1 / qnorm
+            self.q2 = self.q2 / qnorm
+            self.q3 = self.q3 / qnorm
+        son
+    son
+    
+    /// Euler açıları (derece)
+    pub fn get_euler_deg(self) döndür (ondalık, ondalık, ondalık):
+        // Same as Madgwick
+        değişken q0 = self.q0
+        değişken q1 = self.q1
+        değişken q2 = self.q2
+        değişken q3 = self.q3
+        
+        değişken sinr_cosp = 2.0 * (q0 * q1 + q2 * q3)
+        değişken cosr_cosp = 1.0 - 2.0 * (q1 * q1 + q2 * q2)
+        değişken roll = atan2(sinr_cosp, cosr_cosp)
+        
+        değişken sinp = 2.0 * (q0 * q2 - q3 * q1)
+        değişken pitch = eğer sinp.abs() >= 1.0:
+            eğer sinp > 0.0: 1.5707963 yoksa: -1.5707963 son
+        yoksa:
+            asin(sinp)
+        son
+        
+        değişken siny_cosp = 2.0 * (q0 * q3 + q1 * q2)
+        değişken cosy_cosp = 1.0 - 2.0 * (q2 * q2 + q3 * q3)
+        değişken yaw = atan2(siny_cosp, cosy_cosp)
+        
+        değişken to_deg = 180.0 / 3.14159265359
+        döndür (roll * to_deg, pitch * to_deg, yaw * to_deg)
+    son
+    
+    pub fn get_quaternion(self) döndür (ondalık, ondalık, ondalık, ondalık):
+        döndür (self.q0, self.q1, self.q2, self.q3)
+    son
+    
+    pub fn reset(mut self) döndür void:
+        self.q0 = 1.0
+        self.q1 = 0.0
+        self.q2 = 0.0
+        self.q3 = 0.0
+        self.ex_int = 0.0
+        self.ey_int = 0.0
+        self.ez_int = 0.0
+    son
+son
+
+// ============================================================================
+// CONVENIENCE FUNCTIONS
+// ============================================================================
+
+/// Complementary filtre oluştur
+pub fn complementary(alpha: ondalık) döndür ComplementaryFilter:
+    döndür ComplementaryFilter::new(alpha)
+son
+
+/// 2D Complementary filtre oluştur
+pub fn complementary_2d(alpha: ondalık) döndür ComplementaryFilter2D:
+    döndür ComplementaryFilter2D::new(alpha)
+son
+
+/// Madgwick AHRS oluştur
+pub fn madgwick(beta: ondalık) döndür MadgwickAHRS:
+    döndür MadgwickAHRS::new(beta)
+son
+
+/// Mahony AHRS oluştur
+pub fn mahony(kp: ondalık, ki: ondalık) döndür MahonyAHRS:
+    döndür MahonyAHRS::new(kp, ki)
+son
+
+// ============================================================================
+// KARŞILAŞTIRMA TABLOSU
+// ============================================================================
+//
+// | Algoritma       | CPU  | RAM  | Accuracy | Drift | Tuning   |
+// |-----------------|------|------|----------|-------|----------|
+// | Complementary   | ★    | ★    | ★★★      | ★★    | Kolay    |
+// | Madgwick        | ★★   | ★★   | ★★★★     | ★★★★  | Orta     |
+// | Mahony          | ★★   | ★★   | ★★★★     | ★★★★  | Esnek    |
+// | Kalman (6x6)    | ★★★★ | ★★★★ | ★★★★★    | ★★★★★ | Zor      |
+//
+// Sonuç: Çoğu uygulama için Complementary veya Madgwick yeterli!
+//
+// ============================================================================

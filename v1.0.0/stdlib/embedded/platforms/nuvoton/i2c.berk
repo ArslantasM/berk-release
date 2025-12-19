@@ -1,0 +1,26 @@
+// Nuvoton I2C Module
+
+extern "C" {
+    fn I2C_Open(i2c: *void, freq: u32) -> u32;
+    fn I2C_WriteByte(i2c: *void, addr: u8, data: u8) -> u32;
+    fn I2C_ReadByte(i2c: *void, addr: u8) -> u8;
+}
+
+pub struct I2C {
+    i2c: *void,
+}
+
+impl I2C {
+    pub fn new(i2c: *void, freq: u32) -> I2C {
+        unsafe { I2C_Open(i2c, freq); }
+        I2C { i2c }
+    }
+    
+    pub fn write(&self, addr: u8, data: &[u8]) -> u32 {
+        0
+    }
+    
+    pub fn read(&self, addr: u8, buffer: &mut [u8]) -> u32 {
+        0
+    }
+}

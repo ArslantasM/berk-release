@@ -1,0 +1,664 @@
+//! # Rules Module
+//!
+//! Rules engine and expert system (AI reasoning).
+//!
+//! Kural motoru ve uzman sistem (AI akıl yürütme).
+//!
+//! ## Features / Özellikler
+//!
+//! - **Production rules**: IF-THEN patterns / Üretim kuralları
+//! - **Forward chaining**: Data-driven / İleriye zincirleme
+//! - **Backward chaining**: Goal-driven / Geriye zincirleme
+//! - **Conflict resolution**: Strategies / Çatışma çözümü
+//! - **Working memory**: Fact base / Çalışma belleği
+//! - **Inference**: Engine / Çıkarım motoru
+//! - **Priority**: Rule salience / Kural önceliği
+//! - **Fuzzy logic**: Rules / Bulanık mantık
+//! - **Explanation**: Why/how / Açıklama
+//! - **Pattern matching**: Rete algorithm / Desen eşleştirme
+//!
+//! ## Example / Örnek
+//!
+//! ```berk
+//! kullan rules
+//!
+//! değişken engine = rules.create_engine()
+//! rules.add_rule(engine, "eğer sicaklik > 30 ise klima_aç")
+//! rules.add_fact(engine, "sicaklik", 35)
+//! değişken sonuc = rules.infer(engine)
+//! ```
+//!
+//! Backend: Custom inference (CLIPS/Drools inspired)
+
+modül rules
+
+kullan result
+kullan collections
+
+// ============================================================================
+// FACT (Working Memory)
+// ============================================================================
+
+tip Fact = yapı yap
+    id: tamsayı,
+    name: yazı,
+    attributes: HashMap[yazı, Value],
+    confidence: ondalık,  // 0.0-1.0 for fuzzy logic
+    timestamp: tamsayı
+son
+
+tip Value = Null | Bool { val: mantıksal } | Int { val: tamsayı } | 
+            Float { val: ondalık } | String { val: yazı } | List { val: liste[Value] }
+
+// Create fact
+fonksiyon fact_new(name: yazı) -> Fact
+yap
+    dön Fact {
+        id: 0,
+        name: name,
+        attributes: hashmap_new(),
+        confidence: 1.0,
+        timestamp: time::now_millis()
+    }
+son
+
+// Set attribute
+fonksiyon fact_set(fact: Fact, key: yazı, value: Value) -> Fact
+yap
+    değişken attrs = fact.attributes
+    hashmap_insert(attrs, key, value)
+    dön Fact {
+        id: fact.id,
+        name: fact.name,
+        attributes: attrs,
+        confidence: fact.confidence,
+        timestamp: fact.timestamp
+    }
+son
+
+// Get attribute
+fonksiyon fact_get(fact: Fact, key: yazı) -> Seçenek[Value]
+yap
+    dön hashmap_get(fact.attributes, key)
+son
+
+// ============================================================================
+// RULE (Production Rule)
+// ============================================================================
+
+tip Rule = yapı yap
+    id: tamsayı,
+    name: yazı,
+    conditions: liste[Condition],
+    actions: liste[Action],
+    salience: tamsayı,  // Priority (higher = higher priority)
+    enabled: mantıksal
+son
+
+tip Condition = yapı yap
+    fact_type: yazı,
+    pattern: Pattern,
+    binding: Seçenek[yazı]  // Variable binding (e.g., "?x")
+son
+
+tip Pattern = yapı yap
+    attribute: yazı,
+    operator: Operator,
+    value: Value
+son
+
+tip Operator = "Eq" | "Ne" | "Gt" | "Lt" | "Gte" | "Lte" | "Contains" | "Matches"
+
+tip Action = AssertFact | RetractFact | ModifyFact | Execute | Print
+
+tip AssertFact = yapı yap
+    fact: Fact
+son
+
+tip RetractFact = yapı yap
+    fact_id: tamsayı
+son
+
+tip ModifyFact = yapı yap
+    fact_id: tamsayı,
+    attribute: yazı,
+    value: Value
+son
+
+tip Execute = yapı yap
+    function: fonksiyon() -> boş
+son
+
+tip Print = yapı yap
+    message: yazı
+son
+
+// Create rule
+fonksiyon rule_new(name: yazı) -> Rule
+yap
+    dön Rule {
+        id: 0,
+        name: name,
+        conditions: [],
+        actions: [],
+        salience: 0,
+        enabled: doğru
+    }
+son
+
+// Add condition
+fonksiyon rule_add_condition(rule: Rule, cond: Condition) -> Rule
+yap
+    değişken conds = rule.conditions
+    liste_ekle(conds, cond)
+    dön Rule {
+        id: rule.id,
+        name: rule.name,
+        conditions: conds,
+        actions: rule.actions,
+        salience: rule.salience,
+        enabled: rule.enabled
+    }
+son
+
+// Add action
+fonksiyon rule_add_action(rule: Rule, action: Action) -> Rule
+yap
+    değişken acts = rule.actions
+    liste_ekle(acts, action)
+    dön Rule {
+        id: rule.id,
+        name: rule.name,
+        conditions: rule.conditions,
+        actions: acts,
+        salience: rule.salience,
+        enabled: rule.enabled
+    }
+son
+
+// Set priority
+fonksiyon rule_set_salience(rule: Rule, salience: tamsayı) -> Rule
+yap
+    dön Rule {
+        id: rule.id,
+        name: rule.name,
+        conditions: rule.conditions,
+        actions: rule.actions,
+        salience: salience,
+        enabled: rule.enabled
+    }
+son
+
+// ============================================================================
+// RULE ENGINE (Knowledge Base + Inference)
+// ============================================================================
+
+tip RuleEngine = yapı yap
+    handle: tamsayı,
+    facts: liste[Fact],
+    rules: liste[Rule],
+    agenda: liste[Activation],  // Matched rules ready to fire
+    strategy: ConflictResolution,
+    trace_enabled: mantıksal
+son
+
+tip Activation = yapı yap
+    rule: Rule,
+    matched_facts: liste[Fact],
+    timestamp: tamsayı
+son
+
+tip ConflictResolution = "Salience" | "LIFO" | "FIFO" | "Random" | "Complexity"
+
+// Create rule engine
+@native
+fonksiyon engine_new() -> RuleEngine
+
+// Add fact to working memory
+@native
+fonksiyon engine_assert_fact(engine: RuleEngine, fact: Fact) -> RuleEngine
+
+// Remove fact from working memory
+@native
+fonksiyon engine_retract_fact(engine: RuleEngine, fact_id: tamsayı) -> RuleEngine
+
+// Modify existing fact
+@native
+fonksiyon engine_modify_fact(engine: RuleEngine, fact_id: tamsayı, key: yazı, value: Value) -> RuleEngine
+
+// Add rule to knowledge base
+@native
+fonksiyon engine_add_rule(engine: RuleEngine, rule: Rule) -> RuleEngine
+
+// Remove rule
+@native
+fonksiyon engine_remove_rule(engine: RuleEngine, rule_id: tamsayı) -> RuleEngine
+
+// Get all facts
+fonksiyon engine_get_facts(engine: RuleEngine) -> liste[Fact]
+yap
+    dön engine.facts
+son
+
+// Query facts by type
+@native
+fonksiyon engine_query_facts(engine: RuleEngine, fact_type: yazı) -> liste[Fact]
+
+// ============================================================================
+// INFERENCE (Forward Chaining)
+// ============================================================================
+
+// Run inference (forward chaining - match all rules)
+@native
+fonksiyon engine_run(engine: RuleEngine) -> RuleEngine
+
+// Run one step (fire one rule)
+@native
+fonksiyon engine_step(engine: RuleEngine) -> RuleEngine
+
+// Run until no more rules match
+@native
+fonksiyon engine_run_until_halt(engine: RuleEngine) -> RuleEngine
+
+// Run with max iterations
+@native
+fonksiyon engine_run_max(engine: RuleEngine, max_iterations: tamsayı) -> RuleEngine
+
+// Check if any rules can fire
+@native
+fonksiyon engine_has_activations(engine: RuleEngine) -> mantıksal
+
+// Get current agenda
+fonksiyon engine_get_agenda(engine: RuleEngine) -> liste[Activation]
+yap
+    dön engine.agenda
+son
+
+// ============================================================================
+// BACKWARD CHAINING (Goal-Driven)
+// ============================================================================
+
+tip Goal = yapı yap
+    fact_type: yazı,
+    pattern: Pattern
+son
+
+// Query with backward chaining
+@native
+fonksiyon engine_query_goal(engine: RuleEngine, goal: Goal) -> Sonuç[liste[Fact], yazı]
+
+// Prove goal (returns true if provable)
+@native
+fonksiyon engine_prove(engine: RuleEngine, goal: Goal) -> mantıksal
+
+// ============================================================================
+// CONFLICT RESOLUTION
+// ============================================================================
+
+// Set conflict resolution strategy
+@native
+fonksiyon engine_set_strategy(engine: RuleEngine, strategy: ConflictResolution) -> RuleEngine
+
+// Get next rule to fire (according to strategy)
+@native
+fonksiyon engine_next_activation(engine: RuleEngine) -> Seçenek[Activation]
+
+// ============================================================================
+// PATTERN MATCHING (Rete Algorithm)
+// ============================================================================
+
+// Match rule conditions against facts
+@native
+fonksiyon engine_match_rule(engine: RuleEngine, rule: Rule) -> liste[liste[Fact]]
+
+// Evaluate condition
+@native
+fonksiyon evaluate_condition(cond: Condition, fact: Fact) -> mantıksal
+
+// Evaluate pattern
+fonksiyon evaluate_pattern(pattern: Pattern, value: Value) -> mantıksal
+yap
+    eşleşme pattern.operator yap
+        "Eq" => dön value == pattern.value,
+        "Ne" => dön value != pattern.value,
+        "Gt" => dön value > pattern.value,
+        "Lt" => dön value < pattern.value,
+        "Gte" => dön value >= pattern.value,
+        "Lte" => dön value <= pattern.value,
+        _ => dön yanlış
+    son
+son
+
+// ============================================================================
+// FUZZY LOGIC
+// ============================================================================
+
+tip FuzzySet = yapı yap
+    name: yazı,
+    membership_fn: fonksiyon(ondalık) -> ondalık  // Input -> membership degree [0,1]
+son
+
+tip FuzzyRule = yapı yap
+    name: yazı,
+    antecedents: liste[FuzzyCondition],  // IF part
+    consequent: FuzzyConsequent          // THEN part
+son
+
+tip FuzzyCondition = yapı yap
+    variable: yazı,
+    fuzzy_set: FuzzySet
+son
+
+tip FuzzyConsequent = yapı yap
+    variable: yazı,
+    fuzzy_set: FuzzySet
+son
+
+// Triangular membership function
+fonksiyon fuzzy_triangular(a: ondalık, b: ondalık, c: ondalık) -> fonksiyon(ondalık) -> ondalık
+yap
+    dön fonksiyon(x: ondalık) -> ondalık yap
+        eğer x <= a veya x >= c yap
+            dön 0.0
+        son eğer_değilse x <= b yap
+            dön (x - a) / (b - a)
+        son değilse yap
+            dön (c - x) / (c - b)
+        son
+    son
+son
+
+// Trapezoidal membership function
+fonksiyon fuzzy_trapezoidal(a: ondalık, b: ondalık, c: ondalık, d: ondalık) -> fonksiyon(ondalık) -> ondalık
+yap
+    dön fonksiyon(x: ondalık) -> ondalık yap
+        eğer x <= a veya x >= d yap
+            dön 0.0
+        son eğer_değilse x <= b yap
+            dön (x - a) / (b - a)
+        son eğer_değilse x <= c yap
+            dön 1.0
+        son değilse yap
+            dön (d - x) / (d - c)
+        son
+    son
+son
+
+// Gaussian membership function
+@native
+fonksiyon fuzzy_gaussian(mean: ondalık, stddev: ondalık) -> fonksiyon(ondalık) -> ondalık
+
+// Evaluate fuzzy rule
+@native
+fonksiyon fuzzy_evaluate(rule: FuzzyRule, inputs: HashMap[yazı, ondalık]) -> ondalık
+
+// Defuzzification (centroid method)
+@native
+fonksiyon fuzzy_defuzzify(fuzzy_value: ondalık, fuzzy_set: FuzzySet) -> ondalık
+
+// ============================================================================
+// RULE EXPLANATION (Why/How)
+// ============================================================================
+
+tip Explanation = yapı yap
+    rule_name: yazı,
+    matched_facts: liste[Fact],
+    actions_taken: liste[Action],
+    reasoning: yazı
+son
+
+// Explain why fact was asserted
+@native
+fonksiyon engine_explain_fact(engine: RuleEngine, fact_id: tamsayı) -> Seçenek[Explanation]
+
+// Explain how goal was proved
+@native
+fonksiyon engine_explain_goal(engine: RuleEngine, goal: Goal) -> liste[Explanation]
+
+// Get rule firing history
+@native
+fonksiyon engine_get_history(engine: RuleEngine) -> liste[Explanation]
+
+// ============================================================================
+// RULE VALIDATION
+// ============================================================================
+
+tip ValidationError = yapı yap
+    rule_name: yazı,
+    error_type: ErrorType,
+    message: yazı
+son
+
+tip ErrorType = "Syntax" | "SemanticError" | "UnreachableRule" | "ConflictingRule" | "CircularDependency"
+
+// Validate rule
+@native
+fonksiyon validate_rule(rule: Rule) -> liste[ValidationError]
+
+// Validate entire knowledge base
+@native
+fonksiyon validate_knowledge_base(engine: RuleEngine) -> liste[ValidationError]
+
+// Check for unreachable rules
+@native
+fonksiyon check_unreachable_rules(engine: RuleEngine) -> liste[yazı]
+
+// Check for conflicting rules
+@native
+fonksiyon check_rule_conflicts(engine: RuleEngine) -> liste[(yazı, yazı)]
+
+// ============================================================================
+// RULE PERSISTENCE
+// ============================================================================
+
+// Save knowledge base to file
+@native
+fonksiyon engine_save(engine: RuleEngine, path: yazı) -> Sonuç[boş, yazı]
+
+// Load knowledge base from file
+@native
+fonksiyon engine_load(path: yazı) -> Sonuç[RuleEngine, yazı]
+
+// Export rules to CLIPS format
+@native
+fonksiyon engine_export_clips(engine: RuleEngine, path: yazı) -> Sonuç[boş, yazı]
+
+// Import from CLIPS format
+@native
+fonksiyon engine_import_clips(path: yazı) -> Sonuç[RuleEngine, yazı]
+
+// ============================================================================
+// RULE BUILDER (Fluent API)
+// ============================================================================
+
+tip RuleBuilder = yapı yap
+    rule: Rule
+son
+
+// Create builder
+fonksiyon builder() -> RuleBuilder
+yap
+    dön RuleBuilder { rule: rule_new("unnamed") }
+son
+
+// Set name
+fonksiyon builder_name(builder: RuleBuilder, name: yazı) -> RuleBuilder
+yap
+    değişken r = builder.rule
+    r.name = name
+    dön RuleBuilder { rule: r }
+son
+
+// Add condition (fluent)
+fonksiyon builder_when(builder: RuleBuilder, fact_type: yazı, attr: yazı, op: Operator, val: Value) -> RuleBuilder
+yap
+    değişken cond = Condition {
+        fact_type: fact_type,
+        pattern: Pattern { attribute: attr, operator: op, value: val },
+        binding: Hiçbiri
+    }
+    değişken r = rule_add_condition(builder.rule, cond)
+    dön RuleBuilder { rule: r }
+son
+
+// Add action (fluent)
+fonksiyon builder_then_assert(builder: RuleBuilder, fact: Fact) -> RuleBuilder
+yap
+    değişken action = AssertFact { fact: fact }
+    değişken r = rule_add_action(builder.rule, action)
+    dön RuleBuilder { rule: r }
+son
+
+// Set priority
+fonksiyon builder_priority(builder: RuleBuilder, salience: tamsayı) -> RuleBuilder
+yap
+    değişken r = rule_set_salience(builder.rule, salience)
+    dön RuleBuilder { rule: r }
+son
+
+// Build rule
+fonksiyon builder_build(builder: RuleBuilder) -> Rule
+yap
+    dön builder.rule
+son
+
+// ============================================================================
+// COMMON RULE PATTERNS
+// ============================================================================
+
+// Classification rule
+fonksiyon rule_classify(name: yazı, input_attr: yazı, threshold: ondalık, output_class: yazı) -> Rule
+yap
+    değişken rule = rule_new(name)
+    
+    değişken cond = Condition {
+        fact_type: "input",
+        pattern: Pattern { 
+            attribute: input_attr, 
+            operator: "Gt", 
+            value: Float { val: threshold } 
+        },
+        binding: Hiçbiri
+    }
+    rule = rule_add_condition(rule, cond)
+    
+    değişken result_fact = fact_new("classification")
+    result_fact = fact_set(result_fact, "class", String { val: output_class })
+    
+    değişken action = AssertFact { fact: result_fact }
+    rule = rule_add_action(rule, action)
+    
+    dön rule
+son
+
+// Threshold rule
+fonksiyon rule_threshold(name: yazı, fact_type: yazı, attr: yazı, min: ondalık, max: ondalık, action: Action) -> Rule
+yap
+    değişken rule = rule_new(name)
+    
+    değişken cond1 = Condition {
+        fact_type: fact_type,
+        pattern: Pattern { attribute: attr, operator: "Gte", value: Float { val: min } },
+        binding: Hiçbiri
+    }
+    rule = rule_add_condition(rule, cond1)
+    
+    değişken cond2 = Condition {
+        fact_type: fact_type,
+        pattern: Pattern { attribute: attr, operator: "Lte", value: Float { val: max } },
+        binding: Hiçbiri
+    }
+    rule = rule_add_condition(rule, cond2)
+    
+    rule = rule_add_action(rule, action)
+    
+    dön rule
+son
+
+// ============================================================================
+// DEBUGGING & TRACING
+// ============================================================================
+
+// Enable trace
+@native
+fonksiyon engine_set_trace(engine: RuleEngine, enabled: mantıksal) -> RuleEngine
+
+// Print current state
+@native
+fonksiyon engine_print_state(engine: RuleEngine) -> boş
+
+// Print agenda
+@native
+fonksiyon engine_print_agenda(engine: RuleEngine) -> boş
+
+// Print facts
+@native
+fonksiyon engine_print_facts(engine: RuleEngine) -> boş
+
+// ============================================================================
+// PERFORMANCE OPTIMIZATION
+// ============================================================================
+
+// Reset engine (clear facts, keep rules)
+@native
+fonksiyon engine_reset(engine: RuleEngine) -> RuleEngine
+
+// Clear all (facts + rules)
+@native
+fonksiyon engine_clear(engine: RuleEngine) -> RuleEngine
+
+// Optimize rule network (compile Rete network)
+@native
+fonksiyon engine_optimize(engine: RuleEngine) -> RuleEngine
+
+// Get performance stats
+tip EngineStats = yapı yap
+    total_facts: tamsayı,
+    total_rules: tamsayı,
+    rules_fired: tamsayı,
+    avg_match_time_ms: ondalık
+son
+
+@native
+fonksiyon engine_stats(engine: RuleEngine) -> EngineStats
+
+// ============================================================================
+// TURKISH ALIASES
+// ============================================================================
+
+fonksiyon motor_oluştur() -> RuleEngine
+yap
+    dön engine_new()
+son
+
+fonksiyon kural_ekle(motor: RuleEngine, kural: Rule) -> RuleEngine
+yap
+    dön engine_add_rule(motor, kural)
+son
+
+fonksiyon gerçek_ekle(motor: RuleEngine, gerçek: Fact) -> RuleEngine
+yap
+    dön engine_assert_fact(motor, gerçek)
+son
+
+fonksiyon çalıştır(motor: RuleEngine) -> RuleEngine
+yap
+    dön engine_run(motor)
+son
+
+fonksiyon kural_oluştur(isim: yazı) -> Rule
+yap
+    dön rule_new(isim)
+son
+
+fonksiyon gerçek_oluştur(isim: yazı) -> Fact
+yap
+    dön fact_new(isim)
+son
+
+fonksiyon doğrula(motor: RuleEngine) -> liste[ValidationError]
+yap
+    dön validate_knowledge_base(motor)
+son
+
+son  // modül rules

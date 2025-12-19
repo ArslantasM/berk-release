@@ -1,0 +1,180 @@
+// stdlib/embedded/bal/gpio.berk
+// Backend Abstraction Layer - GPIO Interface
+// Platform-independent GPIO API
+
+import "embedded/bal/time" as time
+
+/// GPIO pin mode configurations
+pub enum Mode {
+    Input,              // Digital input
+    Output,             // Digital output (push-pull)
+    InputPullup,        // Input with pull-up resistor
+    InputPulldown,      // Input with pull-down resistor
+    OutputOpenDrain,    // Open-drain output
+    Alternate,          // Alternate function (I2C, SPI, etc.)
+    Analog,             // Analog input/output
+}
+
+/// GPIO pin logic level
+pub enum Level {
+    Low,    // 0V (GND)
+    High,   // VCC (3.3V or 5V)
+}
+
+/// GPIO interrupt trigger modes
+pub enum Trigger {
+    RisingEdge,     // 0 → 1 transition
+    FallingEdge,    // 1 → 0 transition
+    BothEdges,      // Any transition
+    LowLevel,       // Continuous low
+    HighLevel,      // Continuous high
+}
+
+/// GPIO drive strength (current capability)
+pub enum DriveStrength {
+    Low,        // 2mA (low power)
+    Medium,     // 5mA (default)
+    High,       // 10mA (high current)
+    VeryHigh,   // 20mA (max current)
+}
+
+/// GPIO configuration structure
+pub struct Config {
+    pin: u8,
+    mode: Mode,
+    level: Level,
+    drive_strength: DriveStrength,
+    pull_enabled: bool,
+}
+
+/// GPIO HAL interface that platforms must implement
+pub interface GPIO_HAL {
+    /// Initialize GPIO subsystem (enable clock, etc.)
+    fn init()
+    
+    /// Configure single GPIO pin
+    fn configure(pin: u8, mode: Mode)
+    
+    /// Configure GPIO pin with full options
+    fn configure_advanced(config: Config)
+    
+    /// Set GPIO pin output level
+    fn write(pin: u8, level: Level)
+    
+    /// Read GPIO pin input level
+    fn read(pin: u8) -> Level
+    
+    /// Toggle GPIO pin output
+    fn toggle(pin: u8)
+    
+    /// Set drive strength for output pin
+    fn set_drive_strength(pin: u8, strength: DriveStrength)
+    
+    /// Enable/disable pull-up resistor
+    fn set_pullup(pin: u8, enabled: bool)
+    
+    /// Enable/disable pull-down resistor
+    fn set_pulldown(pin: u8, enabled: bool)
+    
+    /// Attach interrupt handler to GPIO pin
+    fn attach_interrupt(pin: u8, trigger: Trigger, handler: fn())
+    
+    /// Detach interrupt handler from GPIO pin
+    fn detach_interrupt(pin: u8)
+    
+    /// Enable interrupt for GPIO pin
+    fn enable_interrupt(pin: u8)
+    
+    /// Disable interrupt for GPIO pin
+    fn disable_interrupt(pin: u8)
+}
+
+// High-level convenience functions (platform-independent)
+
+/// Initialize GPIO pin as output
+pub fn init_output(pin: u8) {
+    GPIO_HAL.init()
+    GPIO_HAL.configure(pin, Mode.Output)
+}
+
+/// Initialize GPIO pin as input
+pub fn init_input(pin: u8, pullup: bool) {
+    GPIO_HAL.init()
+    if pullup {
+        GPIO_HAL.configure(pin, Mode.InputPullup)
+    } else {
+        GPIO_HAL.configure(pin, Mode.Input)
+    }
+}
+
+/// Set GPIO pin HIGH
+pub fn set_high(pin: u8) {
+    GPIO_HAL.write(pin, Level.High)
+}
+
+/// Set GPIO pin LOW
+pub fn set_low(pin: u8) {
+    GPIO_HAL.write(pin, Level.Low)
+}
+
+/// Read GPIO pin state as boolean
+pub fn is_high(pin: u8) -> bool {
+    GPIO_HAL.read(pin) == Level.High
+}
+
+/// Read GPIO pin state as boolean
+pub fn is_low(pin: u8) -> bool {
+    GPIO_HAL.read(pin) == Level.Low
+}
+
+/// Pulse GPIO pin (HIGH → LOW or LOW → HIGH)
+pub fn pulse(pin: u8, duration_us: u32) {
+    GPIO_HAL.toggle(pin)
+    time.delay_us(duration_us)
+    GPIO_HAL.toggle(pin)
+}
+
+/// Wait for GPIO pin to reach specified level (with timeout)
+pub fn wait_for_level(pin: u8, level: Level, timeout_ms: u32) -> bool {
+    let start = time.millis()
+    loop {
+        if GPIO_HAL.read(pin) == level {
+            return true
+        }
+        if time.millis() - start > timeout_ms {
+            return false
+        }
+        time.delay_us(10)
+    }
+}
+
+/// Blink LED pattern
+pub fn blink_pattern(pin: u8, pattern: &[u32]) {
+    for duration in pattern {
+        GPIO_HAL.toggle(pin)
+        time.sleep_ms(*duration)
+    }
+}
+
+/// Read multiple GPIO pins as byte
+pub fn read_port(pins: &[u8]) -> u8 {
+    let mut result: u8 = 0
+    for i in 0..pins.len() {
+        if GPIO_HAL.read(pins[i]) == Level.High {
+            result |= 1 << i
+        }
+    }
+    result
+}
+
+/// Write byte to multiple GPIO pins
+pub fn write_port(pins: &[u8], value: u8) {
+    for i in 0..pins.len() {
+        let level = if (value >> i) & 1 != 0 {
+            Level.High
+        } else {
+            Level.Low
+        }
+        GPIO_HAL.write(pins[i], level)
+    }
+}

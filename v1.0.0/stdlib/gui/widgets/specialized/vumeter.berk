@@ -1,0 +1,1097 @@
+// ============================================================================
+// BERK GUI Framework - VU Meter Widget
+// ============================================================================
+// Profesyonel seviye VU (Volume Unit) meter widget'ı
+// Analog, dijital, LED bar ve spektrum analizör modları
+// Audio-reactive animasyonlar ve skeuomorphic tasarım desteği
+// ============================================================================
+
+modül gui::widgets::specialized::vumeter
+
+kullan gui::widgets::core::widget::{Widget, WidgetBase, Rect, Shadow}
+kullan gui::rendering::canvas::{Canvas, Path, LinearGradient, RadialGradient, ColorStop, FillStyle}
+kullan gui::style::colors::Color
+kullan gui::style::theme::Theme
+kullan gui::materials::material::Material
+kullan gui::materials::metal::Metal
+kullan gui::effects::lighting::{Light, LightType}
+kullan gui::effects::reflection::Reflection
+kullan gui::animation::spring::Spring
+kullan gui::animation::tween::Tween
+kullan gui::layout::constraints::{Size, Constraints}
+
+// ============================================================================
+// VU METER TYPES
+// ============================================================================
+
+/// VU Meter tipi
+pub tip VUMeterType = enum yap
+    /// Klasik analog VU (iğneli)
+    Analog,
+    
+    /// LED bar (dikey)
+    VerticalLED,
+    
+    /// LED bar (yatay)
+    HorizontalLED,
+    
+    /// Arc tipi LED
+    ArcLED,
+    
+    /// Dijital bargraph
+    DigitalBar,
+    
+    /// Vintage analog (örn: Neve, SSL)
+    VintageAnalog,
+    
+    /// Modern dijital
+    DigitalPeak,
+    
+    /// Spektrum analizör (tek kanal)
+    SpectrumBar
+son
+
+/// VU Meter stili
+pub tip VUMeterStyle = enum yap
+    /// Modern flat
+    Flat,
+    
+    /// Studio/Pro Audio
+    Studio,
+    
+    /// Vintage (1970s)
+    Vintage,
+    
+    /// Hi-Fi
+    HiFi,
+    
+    /// DJ/Club
+    DJ,
+    
+    /// Broadcast
+    Broadcast,
+    
+    /// Custom
+    Custom
+son
+
+// ============================================================================
+// VU METER WIDGET
+// ============================================================================
+
+/// Profesyonel VU Meter widget
+pub tip VUMeter = yapı yap
+    /// Temel widget özellikleri
+    base: WidgetBase,
+    
+    /// VU Meter tipi
+    meter_type: VUMeterType,
+    
+    /// Stil
+    style: VUMeterStyle,
+    
+    // === AUDIO LEVELS ===
+    
+    /// Sol kanal seviyesi (0.0 - 1.0)
+    level_left: ondalık,
+    
+    /// Sağ kanal seviyesi (0.0 - 1.0)
+    level_right: ondalık,
+    
+    /// Peak seviyesi (sol)
+    peak_left: ondalık,
+    
+    /// Peak seviyesi (sağ)
+    peak_right: ondalık,
+    
+    /// Peak hold süresi (ms)
+    peak_hold_time: tamsayı,
+    
+    /// Peak düşme hızı
+    peak_decay_rate: ondalık,
+    
+    /// Son peak zamanı
+    last_peak_time_left: tamsayı,
+    last_peak_time_right: tamsayı,
+    
+    // === SCALE ===
+    
+    /// dB ölçeği mi (logaritmik)?
+    use_db_scale: mantıksal,
+    
+    /// Minimum dB (-60 tipik)
+    min_db: ondalık,
+    
+    /// Maximum dB (+6 tipik)
+    max_db: ondalık,
+    
+    /// 0 dB referans değeri
+    reference_db: ondalık,
+    
+    // === LED SETTINGS (for LED types) ===
+    
+    /// LED sayısı
+    led_count: tamsayı,
+    
+    /// LED boyutu
+    led_size: ondalık,
+    
+    /// LED aralığı
+    led_gap: ondalık,
+    
+    /// LED şekli
+    led_shape: LEDShape,
+    
+    /// LED renk gradyanı
+    led_colors: liste[LEDColorStop],
+    
+    /// LED parlaklık efekti
+    led_glow: mantıksal,
+    
+    // === ANALOG SETTINGS (for analog types) ===
+    
+    /// İğne rengi
+    needle_color: Color,
+    
+    /// İğne boyutu
+    needle_length: ondalık,
+    
+    /// İğne fizik motoru
+    needle_physics: Seçenek[Spring],
+    
+    /// Dial arka plan
+    dial_background: Seçenek[Material],
+    
+    /// VU etiketleri göster
+    show_vu_labels: mantıksal,
+    
+    // === CHANNEL ===
+    
+    /// Stereo mu?
+    stereo: mantıksal,
+    
+    /// Kanal etiketi
+    channel_label: yazı,
+    
+    // === APPEARANCE ===
+    
+    /// Arka plan rengi
+    background_color: Color,
+    
+    /// Çerçeve malzemesi
+    bezel_material: Seçenek[Material],
+    
+    /// Cam efekti
+    glass_effect: mantıksal,
+    
+    // === ANIMATION ===
+    
+    /// Animasyon etkin
+    animate: mantıksal,
+    
+    /// Smooth interpolation
+    smoothing: ondalık,
+    
+    /// Attack hızı (ms)
+    attack_time: ondalık,
+    
+    /// Release hızı (ms)
+    release_time: ondalık,
+    
+    // === INTERNAL STATE ===
+    
+    /// Smoothed level (sol)
+    smoothed_left: ondalık,
+    
+    /// Smoothed level (sağ)
+    smoothed_right: ondalık
+son
+
+/// LED şekli
+pub tip LEDShape = enum yap
+    Rectangle,
+    RoundedRect,
+    Circle,
+    Diamond,
+    Custom(path: Path)
+son
+
+/// LED renk durağı
+pub tip LEDColorStop = yapı yap
+    /// Pozisyon (0.0 - 1.0)
+    position: ondalık,
+    
+    /// Yanık renk
+    on_color: Color,
+    
+    /// Sönük renk
+    off_color: Color
+son
+
+// ============================================================================
+// VU METER IMPLEMENTATION
+// ============================================================================
+
+impl VUMeter:
+    /// Analog VU meter oluştur
+    pub fn analog() döndür VUMeter:
+        döndür VUMeter::new(VUMeterType::Analog)
+    son
+    
+    /// Vintage analog (Neve/SSL tarzı)
+    pub fn vintage_analog() döndür VUMeter:
+        döndür VUMeter::new(VUMeterType::VintageAnalog)
+    son
+    
+    /// Dikey LED bar
+    pub fn vertical_led() döndür VUMeter:
+        döndür VUMeter::new(VUMeterType::VerticalLED)
+    son
+    
+    /// Yatay LED bar
+    pub fn horizontal_led() döndür VUMeter:
+        döndür VUMeter::new(VUMeterType::HorizontalLED)
+    son
+    
+    /// Arc LED bar
+    pub fn arc_led() döndür VUMeter:
+        döndür VUMeter::new(VUMeterType::ArcLED)
+    son
+    
+    /// Dijital peak meter
+    pub fn digital_peak() döndür VUMeter:
+        döndür VUMeter::new(VUMeterType::DigitalPeak)
+    son
+    
+    /// Temel VU meter oluştur
+    pub fn new(meter_type: VUMeterType) döndür VUMeter:
+        döndür VUMeter yap
+            base: WidgetBase::new(WidgetBase::generate_id()),
+            meter_type: meter_type,
+            style: VUMeterStyle::Studio,
+            level_left: 0.0,
+            level_right: 0.0,
+            peak_left: 0.0,
+            peak_right: 0.0,
+            peak_hold_time: 1000,
+            peak_decay_rate: 0.02,
+            last_peak_time_left: 0,
+            last_peak_time_right: 0,
+            use_db_scale: doğru,
+            min_db: -60.0,
+            max_db: 6.0,
+            reference_db: 0.0,
+            led_count: 20,
+            led_size: 10.0,
+            led_gap: 2.0,
+            led_shape: LEDShape::RoundedRect,
+            led_colors: VUMeter::default_led_colors(),
+            led_glow: doğru,
+            needle_color: Color::black(),
+            needle_length: 0.85,
+            needle_physics: boş,
+            dial_background: boş,
+            show_vu_labels: doğru,
+            stereo: yanlış,
+            channel_label: "",
+            background_color: Color::hex("#1a1a1a"),
+            bezel_material: boş,
+            glass_effect: yanlış,
+            animate: doğru,
+            smoothing: 0.15,
+            attack_time: 10.0,
+            release_time: 300.0,
+            smoothed_left: 0.0,
+            smoothed_right: 0.0
+        son
+    son
+    
+    // === BUILDER METHODS ===
+    
+    /// Stil ayarla
+    pub fn style(mut self, style: VUMeterStyle) döndür VUMeter:
+        self.style = style
+        self.apply_style_preset()
+        döndür self
+    son
+    
+    /// Stereo mod
+    pub fn stereo(mut self, enabled: mantıksal) döndür VUMeter:
+        self.stereo = enabled
+        döndür self
+    son
+    
+    /// Kanal etiketi
+    pub fn channel_label(mut self, label: yazı) döndür VUMeter:
+        self.channel_label = label
+        döndür self
+    son
+    
+    /// Sol kanal seviyesi
+    pub fn set_level_left(mut self, level: ondalık) döndür void:
+        değişken clamped = clamp(level, 0.0, 1.0)
+        self.level_left = clamped
+        
+        // Peak güncelle
+        eğer clamped > self.peak_left:
+            self.peak_left = clamped
+            self.last_peak_time_left = current_time_ms()
+        son
+    son
+    
+    /// Sağ kanal seviyesi
+    pub fn set_level_right(mut self, level: ondalık) döndür void:
+        değişken clamped = clamp(level, 0.0, 1.0)
+        self.level_right = clamped
+        
+        // Peak güncelle
+        eğer clamped > self.peak_right:
+            self.peak_right = clamped
+            self.last_peak_time_right = current_time_ms()
+        son
+    son
+    
+    /// Mono seviye (her iki kanal)
+    pub fn set_level(mut self, level: ondalık) döndür void:
+        self.set_level_left(level)
+        self.set_level_right(level)
+    son
+    
+    /// dB cinsinden seviye ayarla
+    pub fn set_level_db(mut self, db: ondalık) döndür void:
+        değişken linear = db_to_linear(db, self.min_db, self.max_db)
+        self.set_level(linear)
+    son
+    
+    /// dB aralığı
+    pub fn db_range(mut self, min: ondalık, max: ondalık) döndür VUMeter:
+        self.min_db = min
+        self.max_db = max
+        döndür self
+    son
+    
+    /// LED sayısı
+    pub fn led_count(mut self, count: tamsayı) döndür VUMeter:
+        self.led_count = count
+        döndür self
+    son
+    
+    /// LED boyutu
+    pub fn led_size(mut self, size: ondalık) döndür VUMeter:
+        self.led_size = size
+        döndür self
+    son
+    
+    /// LED glow efekti
+    pub fn led_glow(mut self, enabled: mantıksal) döndür VUMeter:
+        self.led_glow = enabled
+        döndür self
+    son
+    
+    /// LED renkleri (özel)
+    pub fn led_colors(mut self, colors: liste[LEDColorStop]) döndür VUMeter:
+        self.led_colors = colors
+        döndür self
+    son
+    
+    /// Cam efekti
+    pub fn glass(mut self, enabled: mantıksal) döndür VUMeter:
+        self.glass_effect = enabled
+        döndür self
+    son
+    
+    /// Arka plan malzemesi
+    pub fn background_material(mut self, material: Material) döndür VUMeter:
+        self.dial_background = Bazı(material)
+        döndür self
+    son
+    
+    /// Çerçeve malzemesi
+    pub fn bezel(mut self, material: Material) döndür VUMeter:
+        self.bezel_material = Bazı(material)
+        döndür self
+    son
+    
+    /// İğne fizik motoru
+    pub fn needle_physics(mut self, spring: Spring) döndür VUMeter:
+        self.needle_physics = Bazı(spring)
+        döndür self
+    son
+    
+    /// Peak hold süresi (ms)
+    pub fn peak_hold(mut self, time: tamsayı) döndür VUMeter:
+        self.peak_hold_time = time
+        döndür self
+    son
+    
+    /// Attack/Release süreleri
+    pub fn dynamics(mut self, attack: ondalık, release: ondalık) döndür VUMeter:
+        self.attack_time = attack
+        self.release_time = release
+        döndür self
+    son
+    
+    // === PRESET STYLES ===
+    
+    fn apply_style_preset(mut self) döndür void:
+        eşle self.style:
+            VUMeterStyle::Studio => yap
+                self.background_color = Color::hex("#2a2a2a")
+                self.led_colors = VUMeter::studio_led_colors()
+                self.bezel_material = Bazı(Metal::brushed_aluminum())
+            son,
+            
+            VUMeterStyle::Vintage => yap
+                self.background_color = Color::hex("#f5e6c8")
+                self.needle_color = Color::hex("#8b0000")
+                eğer self.meter_type == VUMeterType::Analog:
+                    self.dial_background = Bazı(Material::paper(Color::hex("#f5e6c8")))
+                son
+            son,
+            
+            VUMeterStyle::HiFi => yap
+                self.background_color = Color::hex("#0a0a0a")
+                self.led_colors = VUMeter::hifi_led_colors()
+                self.led_glow = doğru
+            son,
+            
+            VUMeterStyle::DJ => yap
+                self.background_color = Color::hex("#000000")
+                self.led_colors = VUMeter::dj_led_colors()
+                self.led_glow = doğru
+            son,
+            
+            VUMeterStyle::Broadcast => yap
+                self.background_color = Color::hex("#333333")
+                self.led_colors = VUMeter::broadcast_led_colors()
+                self.led_count = 24
+            son,
+            
+            _ => ()
+        son
+    son
+    
+    /// Varsayılan LED renkleri
+    fn default_led_colors() döndür liste[LEDColorStop]:
+        döndür [
+            LEDColorStop yap position: 0.0, on_color: Color::hex("#00ff00"), off_color: Color::hex("#003300") son,
+            LEDColorStop yap position: 0.6, on_color: Color::hex("#00ff00"), off_color: Color::hex("#003300") son,
+            LEDColorStop yap position: 0.75, on_color: Color::hex("#ffff00"), off_color: Color::hex("#333300") son,
+            LEDColorStop yap position: 0.85, on_color: Color::hex("#ff6600"), off_color: Color::hex("#331100") son,
+            LEDColorStop yap position: 0.95, on_color: Color::hex("#ff0000"), off_color: Color::hex("#330000") son
+        ]
+    son
+    
+    /// Studio LED renkleri
+    fn studio_led_colors() döndür liste[LEDColorStop]:
+        döndür [
+            LEDColorStop yap position: 0.0, on_color: Color::hex("#22cc22"), off_color: Color::hex("#0a2a0a") son,
+            LEDColorStop yap position: 0.7, on_color: Color::hex("#22cc22"), off_color: Color::hex("#0a2a0a") son,
+            LEDColorStop yap position: 0.8, on_color: Color::hex("#cccc22"), off_color: Color::hex("#2a2a0a") son,
+            LEDColorStop yap position: 0.9, on_color: Color::hex("#cc2222"), off_color: Color::hex("#2a0a0a") son
+        ]
+    son
+    
+    /// Hi-Fi LED renkleri
+    fn hifi_led_colors() döndür liste[LEDColorStop]:
+        döndür [
+            LEDColorStop yap position: 0.0, on_color: Color::hex("#00d4ff"), off_color: Color::hex("#002233") son,
+            LEDColorStop yap position: 1.0, on_color: Color::hex("#00d4ff"), off_color: Color::hex("#002233") son
+        ]
+    son
+    
+    /// DJ LED renkleri (RGB spektrum)
+    fn dj_led_colors() döndür liste[LEDColorStop]:
+        döndür [
+            LEDColorStop yap position: 0.0, on_color: Color::hex("#ff00ff"), off_color: Color::hex("#220022") son,
+            LEDColorStop yap position: 0.33, on_color: Color::hex("#00ffff"), off_color: Color::hex("#002222") son,
+            LEDColorStop yap position: 0.66, on_color: Color::hex("#ffff00"), off_color: Color::hex("#222200") son,
+            LEDColorStop yap position: 1.0, on_color: Color::hex("#ff0000"), off_color: Color::hex("#220000") son
+        ]
+    son
+    
+    /// Broadcast LED renkleri
+    fn broadcast_led_colors() döndür liste[LEDColorStop]:
+        döndür [
+            LEDColorStop yap position: 0.0, on_color: Color::hex("#00aa00"), off_color: Color::hex("#001100") son,
+            LEDColorStop yap position: 0.6, on_color: Color::hex("#00aa00"), off_color: Color::hex("#001100") son,
+            LEDColorStop yap position: 0.75, on_color: Color::hex("#aaaa00"), off_color: Color::hex("#111100") son,
+            LEDColorStop yap position: 0.90, on_color: Color::hex("#ff3300"), off_color: Color::hex("#110000") son,
+            LEDColorStop yap position: 1.0, on_color: Color::hex("#ff0000"), off_color: Color::hex("#110000") son
+        ]
+    son
+    
+    /// LED rengi al (pozisyona göre)
+    fn get_led_color(self, position: ondalık, is_on: mantıksal) döndür Color:
+        // İlk durağı bul
+        değişken lower: Seçenek[LEDColorStop] = boş
+        değişken upper: Seçenek[LEDColorStop] = boş
+        
+        için i içinde 0..self.led_colors.len():
+            eğer self.led_colors[i].position <= position:
+                lower = Bazı(self.led_colors[i])
+            son
+            eğer self.led_colors[i].position >= position ve upper == boş:
+                upper = Bazı(self.led_colors[i])
+                kır
+            son
+        son
+        
+        // Interpolate
+        eşle (lower, upper):
+            (Bazı(l), Bazı(u)) => yap
+                değişken t = eğer u.position > l.position:
+                    (position - l.position) / (u.position - l.position)
+                değilse:
+                    0.0
+                son
+                
+                eğer is_on:
+                    döndür l.on_color.lerp(u.on_color, t)
+                değilse:
+                    döndür l.off_color.lerp(u.off_color, t)
+                son
+            son,
+            (Bazı(l), boş) => yap
+                döndür eğer is_on: l.on_color değilse: l.off_color son
+            son,
+            (boş, Bazı(u)) => yap
+                döndür eğer is_on: u.on_color değilse: u.off_color son
+            son,
+            _ => döndür eğer is_on: Color::green() değilse: Color::hex("#003300") son
+        son
+    son
+son
+
+// ============================================================================
+// WIDGET TRAIT IMPLEMENTATION
+// ============================================================================
+
+impl Widget için VUMeter:
+    fn id(self) döndür yazı:
+        döndür self.base.id
+    son
+    
+    fn measure(self, constraints: Constraints) döndür Size:
+        eşle self.meter_type:
+            VUMeterType::Analog | VUMeterType::VintageAnalog => yap
+                // Analog: yarı daire, geniş
+                döndür Size yap width: constraints.max_width, height: constraints.max_width * 0.6 son
+            son,
+            
+            VUMeterType::VerticalLED => yap
+                // Dikey: dar, uzun
+                değişken width = eğer self.stereo: 60.0 değilse: 30.0 son
+                döndür Size yap width: width, height: constraints.max_height son
+            son,
+            
+            VUMeterType::HorizontalLED | VUMeterType::DigitalBar | VUMeterType::DigitalPeak => yap
+                // Yatay: geniş, kısa
+                döndür Size yap width: constraints.max_width, height: 40.0 son
+            son,
+            
+            VUMeterType::ArcLED => yap
+                // Arc: kare
+                değişken size = min(constraints.max_width, constraints.max_height)
+                döndür Size yap width: size, height: size * 0.6 son
+            son,
+            
+            _ => döndür Size yap width: 200.0, height: 100.0 son
+        son
+    son
+    
+    fn layout(mut self, x: ondalık, y: ondalık, width: ondalık, height: ondalık) döndür void:
+        self.base.x = x
+        self.base.y = y
+        self.base.width = width
+        self.base.height = height
+    son
+    
+    fn bounds(self) döndür Rect:
+        döndür self.base.bounds()
+    son
+    
+    fn update(mut self) döndür void:
+        // Smoothing
+        eğer self.animate:
+            değişken now = current_time_ms()
+            
+            // Sol kanal
+            eğer self.level_left > self.smoothed_left:
+                // Attack
+                self.smoothed_left = lerp_time(self.smoothed_left, self.level_left, self.attack_time)
+            değilse:
+                // Release
+                self.smoothed_left = lerp_time(self.smoothed_left, self.level_left, self.release_time)
+            son
+            
+            // Sağ kanal
+            eğer self.level_right > self.smoothed_right:
+                self.smoothed_right = lerp_time(self.smoothed_right, self.level_right, self.attack_time)
+            değilse:
+                self.smoothed_right = lerp_time(self.smoothed_right, self.level_right, self.release_time)
+            son
+            
+            // Peak decay
+            eğer now - self.last_peak_time_left > self.peak_hold_time:
+                self.peak_left = max(0.0, self.peak_left - self.peak_decay_rate)
+            son
+            eğer now - self.last_peak_time_right > self.peak_hold_time:
+                self.peak_right = max(0.0, self.peak_right - self.peak_decay_rate)
+            son
+        değilse:
+            self.smoothed_left = self.level_left
+            self.smoothed_right = self.level_right
+        son
+        
+        self.base.update_animations()
+    son
+    
+    fn render(self, canvas: Canvas) döndür void:
+        canvas.save()
+        
+        // Arka plan
+        canvas.set_fill_color(self.background_color)
+        canvas.fill_rect(self.base.x, self.base.y, self.base.width, self.base.height)
+        
+        // Tip bazlı render
+        eşle self.meter_type:
+            VUMeterType::Analog | VUMeterType::VintageAnalog => yap
+                self.render_analog(canvas)
+            son,
+            
+            VUMeterType::VerticalLED => yap
+                self.render_vertical_led(canvas)
+            son,
+            
+            VUMeterType::HorizontalLED => yap
+                self.render_horizontal_led(canvas)
+            son,
+            
+            VUMeterType::ArcLED => yap
+                self.render_arc_led(canvas)
+            son,
+            
+            VUMeterType::DigitalBar | VUMeterType::DigitalPeak => yap
+                self.render_digital_bar(canvas)
+            son,
+            
+            _ => ()
+        son
+        
+        // Çerçeve
+        eğer değişken material = self.bezel_material:
+            material.apply_to_border(canvas, self.base.x, self.base.y, self.base.width, self.base.height, 4.0)
+        son
+        
+        // Cam efekti
+        eğer self.glass_effect:
+            self.render_glass(canvas)
+        son
+        
+        canvas.restore()
+    son
+son
+
+// ============================================================================
+// RENDER METHODS
+// ============================================================================
+
+impl VUMeter:
+    /// Analog VU meter render
+    fn render_analog(self, canvas: Canvas) döndür void:
+        değişken cx = self.base.x + self.base.width / 2.0
+        değişken cy = self.base.y + self.base.height * 0.85
+        değişken radius = min(self.base.width, self.base.height) * 0.7
+        
+        // Dial arka plan
+        eğer değişken material = self.dial_background:
+            material.apply_to_arc(canvas, cx, cy, radius, -150.0, -30.0)
+        değilse:
+            // Basit dial
+            canvas.set_fill_color(Color::hex("#f5f5dc"))
+            canvas.fill_path(
+                Path::new()
+                    .move_to(cx, cy)
+                    .arc(cx, cy, radius, deg_to_rad(-150.0), deg_to_rad(-30.0))
+                    .close()
+            )
+        son
+        
+        // VU ölçeği
+        self.render_vu_scale(canvas, cx, cy, radius)
+        
+        // İğne
+        self.render_analog_needle(canvas, cx, cy, radius, self.smoothed_left)
+        
+        // Stereo ise sağ kanal da çiz (ikinci iğne)
+        eğer self.stereo:
+            canvas.set_global_alpha(0.5)
+            self.render_analog_needle(canvas, cx, cy, radius, self.smoothed_right)
+            canvas.set_global_alpha(1.0)
+        son
+        
+        // VU etiketi
+        eğer self.show_vu_labels:
+            canvas.set_fill_color(Color::black())
+            canvas.set_font(Font::new("Arial", 12.0).bold())
+            canvas.fill_text("VU", cx, cy - 20.0)
+        son
+    son
+    
+    /// VU ölçeği render
+    fn render_vu_scale(self, canvas: Canvas, cx: ondalık, cy: ondalık, radius: ondalık) döndür void:
+        // VU ölçeği: -20 -10 -7 -5 -3 -2 -1 0 +1 +2 +3
+        değişken vu_marks = [
+            (-20.0, "-20"),
+            (-10.0, "-10"),
+            (-7.0, "-7"),
+            (-5.0, "-5"),
+            (-3.0, "-3"),
+            (-2.0, "-2"),
+            (-1.0, "-1"),
+            (0.0, "0"),
+            (1.0, "+1"),
+            (2.0, "+2"),
+            (3.0, "+3")
+        ]
+        
+        canvas.set_stroke_color(Color::black())
+        canvas.set_fill_color(Color::black())
+        
+        için (db, label) içinde vu_marks:
+            // VU scale: -20 to +3 = 120 degree arc (-150 to -30)
+            değişken normalized = (db + 20.0) / 23.0
+            değişken angle = deg_to_rad(-150.0 + normalized * 120.0)
+            
+            değişken inner_r = radius * 0.85
+            değişken outer_r = radius * 0.95
+            
+            değişken x1 = cx + cos(angle) * inner_r
+            değişken y1 = cy + sin(angle) * inner_r
+            değişken x2 = cx + cos(angle) * outer_r
+            değişken y2 = cy + sin(angle) * outer_r
+            
+            canvas.set_line_width(eğer db == 0.0: 2.0 değilse: 1.0 son)
+            canvas.stroke_path(Path::new().move_to(x1, y1).line_to(x2, y2))
+            
+            // Etiket
+            değişken label_r = radius * 0.75
+            değişken lx = cx + cos(angle) * label_r
+            değişken ly = cy + sin(angle) * label_r
+            canvas.set_font(Font::new("Arial", 8.0))
+            canvas.fill_text(label, lx, ly)
+        son
+        
+        // 0 dB kırmızı bölge
+        canvas.set_fill_color(Color::rgba(255, 0, 0, 64))
+        canvas.fill_path(
+            Path::new()
+                .move_to(cx, cy)
+                .arc(cx, cy, radius * 0.95, deg_to_rad(-30.0 - 15.65), deg_to_rad(-30.0))  // +0 to +3
+                .close()
+        )
+    son
+    
+    /// Analog iğne render
+    fn render_analog_needle(self, canvas: Canvas, cx: ondalık, cy: ondalık, radius: ondalık, level: ondalık) döndür void:
+        // Level'ı açıya çevir
+        değişken normalized = eğer self.use_db_scale:
+            linear_to_db_normalized(level, self.min_db, self.max_db)
+        değilse:
+            level
+        son
+        
+        değişken angle = deg_to_rad(-150.0 + normalized * 120.0)
+        değişken needle_len = radius * self.needle_length
+        
+        // Gölge
+        canvas.set_stroke_color(Color::rgba(0, 0, 0, 64))
+        canvas.set_line_width(3.0)
+        değişken sx = cx + cos(angle) * needle_len + 2.0
+        değişken sy = cy + sin(angle) * needle_len + 2.0
+        canvas.stroke_path(Path::new().move_to(cx + 2.0, cy + 2.0).line_to(sx, sy))
+        
+        // İğne
+        canvas.set_stroke_color(self.needle_color)
+        canvas.set_line_width(2.0)
+        değişken nx = cx + cos(angle) * needle_len
+        değişken ny = cy + sin(angle) * needle_len
+        canvas.stroke_path(Path::new().move_to(cx, cy).line_to(nx, ny))
+        
+        // Pivot
+        canvas.set_fill_color(Color::hex("#333333"))
+        canvas.fill_circle(cx, cy, 6.0)
+        canvas.set_fill_color(Color::hex("#666666"))
+        canvas.fill_circle(cx - 1.0, cy - 1.0, 2.0)
+    son
+    
+    /// Dikey LED bar render
+    fn render_vertical_led(self, canvas: Canvas) döndür void:
+        değişken x = self.base.x + 5.0
+        değişken y = self.base.y + self.base.height - 5.0 - self.led_size
+        değişken led_width = eğer self.stereo: (self.base.width - 15.0) / 2.0 değilse: self.base.width - 10.0 son
+        
+        // Sol kanal
+        self.render_led_bar_vertical(canvas, x, y, led_width, self.smoothed_left, self.peak_left)
+        
+        // Sağ kanal
+        eğer self.stereo:
+            self.render_led_bar_vertical(canvas, x + led_width + 5.0, y, led_width, self.smoothed_right, self.peak_right)
+        son
+    son
+    
+    fn render_led_bar_vertical(self, canvas: Canvas, x: ondalık, y: ondalık, width: ondalık, level: ondalık, peak: ondalık) döndür void:
+        değişken lit_count = (level * self.led_count).floor()
+        değişken peak_index = (peak * self.led_count).floor()
+        
+        için i içinde 0..self.led_count:
+            değişken position = i / self.led_count
+            değişken is_lit = i < lit_count
+            değişken is_peak = i == peak_index
+            
+            değişken color = self.get_led_color(position, is_lit veya is_peak)
+            
+            değişken led_y = y - (i * (self.led_size + self.led_gap))
+            
+            // Glow efekti
+            eğer self.led_glow ve (is_lit veya is_peak):
+                canvas.set_shadow(color, 8.0, 0.0, 0.0)
+            son
+            
+            canvas.set_fill_color(color)
+            
+            eşle self.led_shape:
+                LEDShape::Rectangle => yap
+                    canvas.fill_rect(x, led_y, width, self.led_size)
+                son,
+                LEDShape::RoundedRect => yap
+                    canvas.fill_rounded_rect(x, led_y, width, self.led_size, 2.0)
+                son,
+                LEDShape::Circle => yap
+                    canvas.fill_circle(x + width / 2.0, led_y + self.led_size / 2.0, self.led_size / 2.0)
+                son,
+                _ => canvas.fill_rect(x, led_y, width, self.led_size)
+            son
+            
+            eğer self.led_glow:
+                canvas.clear_shadow()
+            son
+        son
+    son
+    
+    /// Yatay LED bar render
+    fn render_horizontal_led(self, canvas: Canvas) döndür void:
+        değişken x = self.base.x + 5.0
+        değişken y = self.base.y + 5.0
+        değişken led_height = eğer self.stereo: (self.base.height - 15.0) / 2.0 değilse: self.base.height - 10.0 son
+        
+        // Sol/Mono kanal
+        self.render_led_bar_horizontal(canvas, x, y, led_height, self.smoothed_left, self.peak_left)
+        
+        // Sağ kanal
+        eğer self.stereo:
+            self.render_led_bar_horizontal(canvas, x, y + led_height + 5.0, led_height, self.smoothed_right, self.peak_right)
+        son
+    son
+    
+    fn render_led_bar_horizontal(self, canvas: Canvas, x: ondalık, y: ondalık, height: ondalık, level: ondalık, peak: ondalık) döndür void:
+        değişken lit_count = (level * self.led_count).floor()
+        değişken peak_index = (peak * self.led_count).floor()
+        
+        için i içinde 0..self.led_count:
+            değişken position = i / self.led_count
+            değişken is_lit = i < lit_count
+            değişken is_peak = i == peak_index
+            
+            değişken color = self.get_led_color(position, is_lit veya is_peak)
+            
+            değişken led_x = x + (i * (self.led_size + self.led_gap))
+            
+            eğer self.led_glow ve (is_lit veya is_peak):
+                canvas.set_shadow(color, 8.0, 0.0, 0.0)
+            son
+            
+            canvas.set_fill_color(color)
+            
+            eşle self.led_shape:
+                LEDShape::Rectangle => canvas.fill_rect(led_x, y, self.led_size, height),
+                LEDShape::RoundedRect => canvas.fill_rounded_rect(led_x, y, self.led_size, height, 2.0),
+                LEDShape::Circle => canvas.fill_circle(led_x + self.led_size / 2.0, y + height / 2.0, min(self.led_size, height) / 2.0),
+                _ => canvas.fill_rect(led_x, y, self.led_size, height)
+            son
+            
+            eğer self.led_glow:
+                canvas.clear_shadow()
+            son
+        son
+    son
+    
+    /// Arc LED render
+    fn render_arc_led(self, canvas: Canvas) döndür void:
+        değişken cx = self.base.x + self.base.width / 2.0
+        değişken cy = self.base.y + self.base.height * 0.9
+        değişken radius = min(self.base.width, self.base.height) * 0.8
+        
+        değişken lit_count = (self.smoothed_left * self.led_count).floor()
+        değişken peak_index = (self.peak_left * self.led_count).floor()
+        
+        değişken arc_span = 140.0  // -160 to -20 degrees
+        değişken led_arc = arc_span / self.led_count
+        
+        için i içinde 0..self.led_count:
+            değişken position = i / self.led_count
+            değişken is_lit = i < lit_count
+            değişken is_peak = i == peak_index
+            
+            değişken color = self.get_led_color(position, is_lit veya is_peak)
+            
+            değişken start_angle = -160.0 + (i * led_arc)
+            değişken end_angle = start_angle + led_arc - 2.0  // Gap
+            
+            eğer self.led_glow ve (is_lit veya is_peak):
+                canvas.set_shadow(color, 8.0, 0.0, 0.0)
+            son
+            
+            canvas.set_fill_color(color)
+            canvas.fill_path(
+                Path::new()
+                    .arc(cx, cy, radius * 0.85, deg_to_rad(start_angle), deg_to_rad(end_angle))
+                    .arc_reverse(cx, cy, radius * 0.7, deg_to_rad(end_angle), deg_to_rad(start_angle))
+                    .close()
+            )
+            
+            eğer self.led_glow:
+                canvas.clear_shadow()
+            son
+        son
+    son
+    
+    /// Dijital bar render
+    fn render_digital_bar(self, canvas: Canvas) döndür void:
+        değişken padding = 5.0
+        değişken bar_height = eğer self.stereo: (self.base.height - 15.0) / 2.0 değilse: self.base.height - 10.0 son
+        değişken bar_width = self.base.width - 10.0
+        
+        // Sol/Mono
+        self.render_digital_channel(canvas, self.base.x + padding, self.base.y + padding, bar_width, bar_height, self.smoothed_left, self.peak_left, "L")
+        
+        // Sağ
+        eğer self.stereo:
+            self.render_digital_channel(canvas, self.base.x + padding, self.base.y + padding + bar_height + 5.0, bar_width, bar_height, self.smoothed_right, self.peak_right, "R")
+        son
+    son
+    
+    fn render_digital_channel(self, canvas: Canvas, x: ondalık, y: ondalık, width: ondalık, height: ondalık, level: ondalık, peak: ondalık, label: yazı) döndür void:
+        // Arka plan
+        canvas.set_fill_color(Color::hex("#111111"))
+        canvas.fill_rect(x, y, width, height)
+        
+        // Level bar (gradient)
+        değişken bar_width_actual = level * width
+        
+        değişken gradient = LinearGradient yap
+            x0: x, y0: y, x1: x + width, y1: y,
+            stops: [
+                ColorStop yap offset: 0.0, color: Color::hex("#00ff00") son,
+                ColorStop yap offset: 0.7, color: Color::hex("#ffff00") son,
+                ColorStop yap offset: 0.9, color: Color::hex("#ff0000") son
+            ]
+        son
+        
+        canvas.set_fill_style(FillStyle::LinearGradient(gradient))
+        canvas.fill_rect(x, y, bar_width_actual, height)
+        
+        // Peak indicator
+        değişken peak_x = x + peak * width - 2.0
+        canvas.set_fill_color(Color::white())
+        canvas.fill_rect(peak_x, y, 3.0, height)
+        
+        // Label
+        canvas.set_fill_color(Color::white())
+        canvas.set_font(Font::new("Arial", 10.0))
+        canvas.fill_text(label, x - 15.0, y + height / 2.0)
+        
+        // dB marks
+        eğer self.use_db_scale:
+            self.render_db_marks(canvas, x, y, width, height)
+        son
+    son
+    
+    fn render_db_marks(self, canvas: Canvas, x: ondalık, y: ondalık, width: ondalık, height: ondalık) döndür void:
+        değişken db_marks = [-40.0, -30.0, -20.0, -10.0, -6.0, -3.0, 0.0, 3.0, 6.0]
+        
+        canvas.set_stroke_color(Color::rgba(255, 255, 255, 128))
+        canvas.set_line_width(1.0)
+        canvas.set_font(Font::new("Arial", 7.0))
+        
+        için db içinde db_marks:
+            değişken normalized = (db - self.min_db) / (self.max_db - self.min_db)
+            değişken mark_x = x + normalized * width
+            
+            canvas.stroke_path(Path::new().move_to(mark_x, y).line_to(mark_x, y + height))
+            canvas.set_fill_color(Color::rgba(255, 255, 255, 128))
+            canvas.fill_text(db.to_string(), mark_x, y + height + 8.0)
+        son
+    son
+    
+    /// Cam efekti
+    fn render_glass(self, canvas: Canvas) döndür void:
+        değişken gradient = LinearGradient yap
+            x0: self.base.x, y0: self.base.y,
+            x1: self.base.x, y1: self.base.y + self.base.height * 0.5,
+            stops: [
+                ColorStop yap offset: 0.0, color: Color::rgba(255, 255, 255, 40) son,
+                ColorStop yap offset: 0.5, color: Color::rgba(255, 255, 255, 10) son,
+                ColorStop yap offset: 1.0, color: Color::transparent() son
+            ]
+        son
+        
+        canvas.set_fill_style(FillStyle::LinearGradient(gradient))
+        canvas.fill_rect(self.base.x, self.base.y, self.base.width, self.base.height * 0.5)
+    son
+son
+
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+fn deg_to_rad(degrees: ondalık) döndür ondalık:
+    döndür degrees * 3.14159265359 / 180.0
+son
+
+fn clamp(value: ondalık, min: ondalık, max: ondalık) döndür ondalık:
+    eğer value < min: döndür min son
+    eğer value > max: döndür max son
+    döndür value
+son
+
+fn lerp(a: ondalık, b: ondalık, t: ondalık) döndür ondalık:
+    döndür a + (b - a) * t
+son
+
+fn lerp_time(current: ondalık, target: ondalık, time_ms: ondalık) döndür ondalık:
+    // Basit exponential smoothing
+    değişken t = 1.0 - exp(-16.0 / time_ms)
+    döndür lerp(current, target, t)
+son
+
+fn db_to_linear(db: ondalık, min_db: ondalık, max_db: ondalık) döndür ondalık:
+    eğer db <= min_db: döndür 0.0 son
+    eğer db >= max_db: döndür 1.0 son
+    döndür (db - min_db) / (max_db - min_db)
+son
+
+fn linear_to_db_normalized(linear: ondalık, min_db: ondalık, max_db: ondalık) döndür ondalık:
+    eğer linear <= 0.0: döndür 0.0 son
+    değişken db = 20.0 * log10(linear)
+    döndür clamp((db - min_db) / (max_db - min_db), 0.0, 1.0)
+son
+
+fn current_time_ms() döndür tamsayı:
+    // Platform native time
+    döndür @native_current_time_ms()
+son
+
+// Native bindings
+dışsal fn @native_current_time_ms() döndür tamsayı

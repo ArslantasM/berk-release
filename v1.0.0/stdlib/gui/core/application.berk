@@ -1,0 +1,440 @@
+// ============================================================================
+// BERK GUI Framework - Application Module
+// ============================================================================
+// Uygulama yaşam döngüsü yönetimi
+// ============================================================================
+
+modül gui::core::application
+
+kullan gui::core::window::Window
+kullan gui::core::event::{Event, EventLoop}
+kullan gui::style::theme::Theme
+
+// ============================================================================
+// APPLICATION - Ana Uygulama Sınıfı
+// ============================================================================
+
+/// GUI uygulaması için ana sınıf
+/// Uygulama yaşam döngüsünü, pencere yönetimini ve olay döngüsünü yönetir
+pub tip Application = yapı yap
+    /// Uygulama adı
+    name: yazı,
+    
+    /// Uygulama sürümü
+    version: yazı,
+    
+    /// Aktif tema
+    theme: Theme,
+    
+    /// Pencere listesi
+    windows: liste[Window],
+    
+    /// Olay döngüsü
+    event_loop: EventLoop,
+    
+    /// Çalışma durumu
+    running: mantıksal,
+    
+    /// Kare hızı (FPS)
+    target_fps: tamsayı,
+    
+    /// Arka plan rengi (varsayılan pencere rengi)
+    default_background: Color,
+    
+    /// Platform bilgisi
+    platform: PlatformInfo,
+    
+    /// Uygulama ayarları
+    settings: ApplicationSettings
+son
+
+/// Platform bilgisi
+pub tip PlatformInfo = yapı yap
+    os: yazı,               // "Windows", "Linux", "macOS", "Web"
+    os_version: yazı,       // "10.0.19041", "5.15.0", etc.
+    backend: RenderBackend, // OpenGL, Vulkan, DirectX, Metal
+    dpi_scale: ondalık,     // HiDPI ölçek faktörü
+    gpu_name: yazı          // GPU adı
+son
+
+/// Render backend seçenekleri
+pub tip RenderBackend = enum yap
+    OpenGL,
+    Vulkan,
+    DirectX11,
+    DirectX12,
+    Metal,
+    WebGL,
+    WebGPU,
+    Software  // Yazılım renderer (fallback)
+son
+
+/// Uygulama ayarları
+pub tip ApplicationSettings = yapı yap
+    /// VSync etkin mi?
+    vsync: mantıksal,
+    
+    /// Multi-sample anti-aliasing (MSAA) seviyesi
+    msaa: tamsayı,  // 0, 2, 4, 8, 16
+    
+    /// Çift tamponlama
+    double_buffer: mantıksal,
+    
+    /// Erişilebilirlik modu
+    accessibility_mode: mantıksal,
+    
+    /// Animasyonları devre dışı bırak
+    reduce_motion: mantıksal,
+    
+    /// Yüksek kontrast modu
+    high_contrast: mantıksal,
+    
+    /// Dil
+    locale: yazı,
+    
+    /// RTL (sağdan sola) mod
+    rtl: mantıksal
+son
+
+// ============================================================================
+// BUILDER PATTERN
+// ============================================================================
+
+/// ApplicationBuilder - fluent API ile uygulama oluşturma
+pub tip ApplicationBuilder = yapı yap
+    name: yazı,
+    version: yazı,
+    theme: Seçenek[Theme],
+    settings: ApplicationSettings,
+    target_fps: tamsayı
+son
+
+impl ApplicationBuilder:
+    /// Yeni builder oluştur
+    pub fn new(name: yazı) döndür ApplicationBuilder:
+        döndür ApplicationBuilder yap
+            name: name,
+            version: "1.0.0",
+            theme: boş,
+            settings: ApplicationSettings::default(),
+            target_fps: 60
+        son
+    son
+    
+    /// Sürüm ayarla
+    pub fn version(mut self, version: yazı) döndür ApplicationBuilder:
+        self.version = version
+        döndür self
+    son
+    
+    /// Tema ayarla
+    pub fn theme(mut self, theme: Theme) döndür ApplicationBuilder:
+        self.theme = Bazı(theme)
+        döndür self
+    son
+    
+    /// Dark tema kullan
+    pub fn dark_theme(mut self) döndür ApplicationBuilder:
+        self.theme = Bazı(Theme::dark())
+        döndür self
+    son
+    
+    /// Light tema kullan
+    pub fn light_theme(mut self) döndür ApplicationBuilder:
+        self.theme = Bazı(Theme::light())
+        döndür self
+    son
+    
+    /// Hedef FPS ayarla
+    pub fn fps(mut self, fps: tamsayı) döndür ApplicationBuilder:
+        self.target_fps = fps
+        döndür self
+    son
+    
+    /// VSync etkinleştir/devre dışı bırak
+    pub fn vsync(mut self, enabled: mantıksal) döndür ApplicationBuilder:
+        self.settings.vsync = enabled
+        döndür self
+    son
+    
+    /// MSAA seviyesi ayarla
+    pub fn msaa(mut self, level: tamsayı) döndür ApplicationBuilder:
+        self.settings.msaa = level
+        döndür self
+    son
+    
+    /// Erişilebilirlik modu
+    pub fn accessibility(mut self, enabled: mantıksal) döndür ApplicationBuilder:
+        self.settings.accessibility_mode = enabled
+        döndür self
+    son
+    
+    /// Dil ayarla
+    pub fn locale(mut self, locale: yazı) döndür ApplicationBuilder:
+        self.settings.locale = locale
+        döndür self
+    son
+    
+    /// RTL modu
+    pub fn rtl(mut self, enabled: mantıksal) döndür ApplicationBuilder:
+        self.settings.rtl = enabled
+        döndür self
+    son
+    
+    /// Uygulamayı oluştur
+    pub fn build(self) döndür Application:
+        değişken theme = eşle self.theme:
+            Bazı(t) => t,
+            boş => Theme::system()  // Sistem temasını kullan
+        son
+        
+        döndür Application yap
+            name: self.name,
+            version: self.version,
+            theme: theme,
+            windows: [],
+            event_loop: EventLoop::new(),
+            running: yanlış,
+            target_fps: self.target_fps,
+            default_background: theme.colors.background,
+            platform: PlatformInfo::detect(),
+            settings: self.settings
+        son
+    son
+son
+
+// ============================================================================
+// APPLICATION IMPLEMENTATION
+// ============================================================================
+
+impl Application:
+    /// Yeni uygulama oluştur (basit versiyon)
+    pub fn new(name: yazı) döndür Application:
+        döndür ApplicationBuilder::new(name).build()
+    son
+    
+    /// Builder ile uygulama oluştur
+    pub fn builder(name: yazı) döndür ApplicationBuilder:
+        döndür ApplicationBuilder::new(name)
+    son
+    
+    /// Pencere oluştur ve ekle
+    pub fn create_window(mut self, title: yazı, width: tamsayı, height: tamsayı) döndür Window:
+        değişken window = Window::new(title, width, height)
+        window.set_theme(self.theme)
+        self.windows.push(window)
+        döndür window
+    son
+    
+    /// Pencere ekle
+    pub fn add_window(mut self, window: Window) döndür void:
+        self.windows.push(window)
+    son
+    
+    /// Ana pencereyi al
+    pub fn main_window(self) döndür Seçenek[Window]:
+        eğer self.windows.len() > 0:
+            döndür Bazı(self.windows[0])
+        son
+        döndür boş
+    son
+    
+    /// Tema değiştir
+    pub fn set_theme(mut self, theme: Theme) döndür void:
+        self.theme = theme
+        self.default_background = theme.colors.background
+        
+        // Tüm pencerelere temayı uygula
+        için window içinde self.windows:
+            window.set_theme(theme)
+        son
+    son
+    
+    /// Dark/Light tema toggle
+    pub fn toggle_theme(mut self) döndür void:
+        eğer self.theme.is_dark:
+            self.set_theme(Theme::light())
+        değilse:
+            self.set_theme(Theme::dark())
+        son
+    son
+    
+    /// Uygulamayı çalıştır (ana döngü)
+    pub fn run(mut self) döndür tamsayı:
+        self.running = doğru
+        
+        // Pencereler yoksa varsayılan pencere oluştur
+        eğer self.windows.is_empty():
+            self.create_window(self.name, 800, 600)
+        son
+        
+        // Tüm pencereleri göster
+        için window içinde self.windows:
+            window.show()
+        son
+        
+        // Ana olay döngüsü
+        süre self.running:
+            // Olayları işle
+            için event içinde self.event_loop.poll():
+                self.handle_event(event)
+            son
+            
+            // Tüm pencereleri güncelle
+            için window içinde self.windows:
+                window.update()
+            son
+            
+            // Tüm pencereleri render et
+            için window içinde self.windows:
+                window.render()
+            son
+            
+            // FPS kontrolü
+            self.event_loop.wait_for_frame(self.target_fps)
+        son
+        
+        // Temizlik
+        self.cleanup()
+        
+        döndür 0
+    son
+    
+    /// Tek frame çalıştır (manuel kontrol için)
+    pub fn run_frame(mut self) döndür mantıksal:
+        eğer !self.running:
+            döndür yanlış
+        son
+        
+        // Olayları işle
+        için event içinde self.event_loop.poll():
+            self.handle_event(event)
+        son
+        
+        // Güncelle ve render et
+        için window içinde self.windows:
+            window.update()
+            window.render()
+        son
+        
+        döndür self.running
+    son
+    
+    /// Olay işle
+    fn handle_event(mut self, event: Event) döndür void:
+        eşle event.tür:
+            EventType::Quit => yap
+                self.running = yanlış
+            son,
+            
+            EventType::WindowClose(window_id) => yap
+                // Pencereyi kapat
+                self.close_window(window_id)
+                
+                // Son pencere kapandıysa uygulamayı kapat
+                eğer self.windows.is_empty():
+                    self.running = yanlış
+                son
+            son,
+            
+            EventType::ThemeChanged => yap
+                // Sistem teması değişti
+                eğer self.settings.follow_system_theme:
+                    self.set_theme(Theme::system())
+                son
+            son,
+            
+            _ => yap
+                // Pencereye yönlendir
+                eğer event.window_id >= 0:
+                    eğer değişken window = self.get_window(event.window_id):
+                        window.handle_event(event)
+                    son
+                son
+            son
+        son
+    son
+    
+    /// Pencere kapat
+    pub fn close_window(mut self, window_id: tamsayı) döndür void:
+        self.windows = self.windows.filter(fn(w): w.id != window_id)
+    son
+    
+    /// Pencere bul
+    pub fn get_window(self, window_id: tamsayı) döndür Seçenek[Window]:
+        için window içinde self.windows:
+            eğer window.id == window_id:
+                döndür Bazı(window)
+            son
+        son
+        döndür boş
+    son
+    
+    /// Uygulamadan çık
+    pub fn quit(mut self) döndür void:
+        self.running = yanlış
+    son
+    
+    /// Temizlik
+    fn cleanup(mut self) döndür void:
+        // Tüm pencereleri kapat
+        için window içinde self.windows:
+            window.close()
+        son
+        self.windows.clear()
+        
+        // Event loop temizle
+        self.event_loop.shutdown()
+    son
+    
+    /// Çalışıyor mu?
+    pub fn is_running(self) döndür mantıksal:
+        döndür self.running
+    son
+    
+    /// Platform bilgisi
+    pub fn platform_info(self) döndür PlatformInfo:
+        döndür self.platform
+    son
+    
+    /// DPI ölçek faktörü
+    pub fn dpi_scale(self) döndür ondalık:
+        döndür self.platform.dpi_scale
+    son
+son
+
+// ============================================================================
+// DEFAULT IMPLEMENTATIONS
+// ============================================================================
+
+impl ApplicationSettings:
+    /// Varsayılan ayarlar
+    pub fn default() döndür ApplicationSettings:
+        döndür ApplicationSettings yap
+            vsync: doğru,
+            msaa: 4,
+            double_buffer: doğru,
+            accessibility_mode: yanlış,
+            reduce_motion: yanlış,
+            high_contrast: yanlış,
+            locale: "tr-TR",
+            rtl: yanlış
+        son
+    son
+son
+
+impl PlatformInfo:
+    /// Platform bilgisini algıla
+    pub fn detect() döndür PlatformInfo:
+        // Native call ile platform bilgisi alınır
+        döndür __native_detect_platform()
+    son
+son
+
+// ============================================================================
+// NATIVE BINDINGS
+// ============================================================================
+
+dış fn __native_detect_platform() döndür PlatformInfo
+dış fn __native_init_backend(backend: RenderBackend) döndür mantıksal
+dış fn __native_shutdown_backend() döndür void

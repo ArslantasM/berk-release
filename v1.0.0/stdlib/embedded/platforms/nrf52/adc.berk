@@ -1,0 +1,66 @@
+// nRF52 ADC Module (SAADC - Successive Approximation ADC)
+// Hardware Abstraction Layer for nRF52 ADC
+//
+// nRF52 SAADC Features:
+// - 12-bit resolution (up to 16-bit with oversampling)
+// - 8 single-ended or 4 differential channels
+// - Programmable gain (1/6 to 4x)
+// - Internal reference (0.6V) or VDD/4
+// - 200 kSPS max sample rate
+// - Internal temperature sensor
+// - EasyDMA for continuous sampling
+//
+// nRF5 SDK: nrf_drv_saadc.h
+
+extern "C" {
+    fn nrf_drv_saadc_init(config: *void, event_handler: *void) -> u32;
+    fn nrf_drv_saadc_uninit();
+    fn nrf_drv_saadc_channel_init(channel: u8, config: *void) -> u32;
+    fn nrf_drv_saadc_sample() -> u32;
+    fn nrf_drv_saadc_sample_convert(channel: u8, value: *i16) -> u32;
+}
+
+const SAADC_CHANNEL_0: u8 = 0;
+const SAADC_CHANNEL_1: u8 = 1;
+const SAADC_CHANNEL_2: u8 = 2;
+const SAADC_CHANNEL_3: u8 = 3;
+const SAADC_CHANNEL_4: u8 = 4;
+const SAADC_CHANNEL_5: u8 = 5;
+const SAADC_CHANNEL_6: u8 = 6;
+const SAADC_CHANNEL_7: u8 = 7;
+
+const ADC_VREF: f32 = 0.6;  // Internal reference voltage
+const ADC_RESOLUTION: u16 = 4096;  // 12-bit
+
+pub struct ADC {
+    channel: u8,
+    gain: f32,
+}
+
+impl ADC {
+    pub fn new(channel: u8) -> ADC {
+        ADC { channel, gain: 1.0 }
+    }
+    
+    pub fn read_raw(&self) -> i16 {
+        let mut value: i16 = 0;
+        unsafe {
+            nrf_drv_saadc_sample_convert(self.channel, &mut value as *mut i16);
+        }
+        value
+    }
+    
+    pub fn read_voltage(&self) -> f32 {
+        let raw = self.read_raw() as f32;
+        (raw / ADC_RESOLUTION as f32) * ADC_VREF * self.gain
+    }
+    
+    pub fn read_percent(&self) -> f32 {
+        let raw = self.read_raw() as f32;
+        (raw / ADC_RESOLUTION as f32) * 100.0
+    }
+}
+
+pub fn init_temp_sensor() -> ADC {
+    ADC::new(SAADC_CHANNEL_0)
+}

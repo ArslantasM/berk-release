@@ -1,0 +1,95 @@
+// stdlib/embedded/platforms/stm32f4/time.berk
+// STM32F4 Time Implementation using SysTick
+// Provides millisecond and microsecond timing
+
+import "embedded/bal/time" as TIME_BAL
+
+// FFI to STM32 HAL time functions
+extern "C" {
+    fn HAL_GetTick() -> u32;
+    fn HAL_Delay(ms: u32);
+    fn HAL_IncTick();
+}
+
+// Microsecond timing variables (using DWT cycle counter)
+static mut CYCLES_PER_US: u32 = 168;  // Default for STM32F4 @ 168MHz
+
+// DWT (Data Watchpoint and Trace) registers for precise timing
+const DWT_CONTROL: *mut u32 = 0xE0001000 as *mut u32;
+const DWT_CYCCNT: *mut u32 = 0xE0001004 as *mut u32;
+const DEM_CR: *mut u32 = 0xE000EDFC as *mut u32;
+
+/// Initialize microsecond timing (call once at startup)
+pub fn init_us_timing(system_clock_mhz: u32) {
+    unsafe {
+        CYCLES_PER_US = system_clock_mhz;
+        
+        // Enable DWT
+        *DEM_CR |= 0x01000000;
+        
+        // Reset cycle counter
+        *DWT_CYCCNT = 0;
+        
+        // Enable cycle counter
+        *DWT_CONTROL |= 1;
+    }
+}
+
+/// TIME_HAL implementation for STM32F4
+pub struct STM32F4_TimeHAL;
+
+impl TIME_BAL.TIME_HAL for STM32F4_TimeHAL {
+    fn millis() -> u32 {
+        unsafe { HAL_GetTick() }
+    }
+    
+    fn micros() -> u32 {
+        unsafe {
+            let cycles = *DWT_CYCCNT;
+            cycles / CYCLES_PER_US
+        }
+    }
+    
+    fn delay_ms(ms: u32) {
+        unsafe { HAL_Delay(ms); }
+    }
+    
+    fn delay_us(us: u32) {
+        unsafe {
+            let start = *DWT_CYCCNT;
+            let cycles_to_wait = us * CYCLES_PER_US;
+            
+            while (*DWT_CYCCNT - start) < cycles_to_wait {
+                // Busy wait
+            }
+        }
+    }
+}
+
+// Export the HAL instance
+pub const TIME_HAL: STM32F4_TimeHAL = STM32F4_TimeHAL;
+
+// Convenience functions
+pub fn millis() -> u32 {
+    TIME_HAL.millis()
+}
+
+pub fn micros() -> u32 {
+    TIME_HAL.micros()
+}
+
+pub fn delay_ms(ms: u32) {
+    TIME_HAL.delay_ms(ms)
+}
+
+pub fn delay_us(us: u32) {
+    TIME_HAL.delay_us(us)
+}
+
+// SysTick interrupt handler (must be called every 1ms)
+#[no_mangle]
+pub extern "C" fn SysTick_Handler() {
+    unsafe {
+        HAL_IncTick();
+    }
+}

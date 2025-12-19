@@ -1,0 +1,336 @@
+// stdlib/ai/optim.berk
+// Optimization Algorithms
+// PyTorch optim equivalent
+//
+// Includes: SGD, Adam, AdamW, RMSprop, etc.
+
+import "ai/tensor" as tensor
+import "collections" as collections
+
+/// Base optimizer trait
+pub trait Optimizer {
+    /// Perform single optimization step
+    fn step(self)
+    
+    /// Zero all gradients
+    fn zero_grad(self)
+    
+    /// Get optimizer state
+    fn state_dict(self) -> collections.HashMap<str, tensor.Tensor>
+    
+    /// Load optimizer state
+    fn load_state_dict(self, state: collections.HashMap<str, tensor.Tensor>)
+}
+
+// ============================================================================
+// SGD (Stochastic Gradient Descent)
+// ============================================================================
+
+pub struct SGD {
+    params: [tensor.Tensor],
+    lr: f32,
+    momentum: f32,
+    dampening: f32,
+    weight_decay: f32,
+    nesterov: bool,
+    velocity: collections.HashMap<u64, tensor.Tensor>,  // Momentum buffers
+}
+
+impl SGD {
+    pub fn new(
+        params: [tensor.Tensor],
+        lr: f32 = 0.01,
+        momentum: f32 = 0.0,
+        dampening: f32 = 0.0,
+        weight_decay: f32 = 0.0,
+        nesterov: bool = false
+    ) -> SGD {
+        SGD {
+            params: params,
+            lr: lr,
+            momentum: momentum,
+            dampening: dampening,
+            weight_decay: weight_decay,
+            nesterov: nesterov,
+            velocity: collections.HashMap.new(),
+        }
+    }
+    
+    @native("optim::sgd::step")
+    pub fn step(self) {
+        for (i, param) in self.params.enumerate() {
+            if let Some(grad) = param.grad() {
+                // L2 weight decay
+                let mut d_p = grad
+                if self.weight_decay != 0.0 {
+                    d_p = d_p + param * self.weight_decay
+                }
+                
+                // Momentum
+                if self.momentum != 0.0 {
+                    let buf = if let Some(v) = self.velocity.get(i) {
+                        v * self.momentum + d_p * (1.0 - self.dampening)
+                    } else {
+                        d_p.clone()
+                    }
+                    self.velocity.insert(i, buf)
+                    
+                    if self.nesterov {
+                        d_p = d_p + buf * self.momentum
+                    } else {
+                        d_p = buf
+                    }
+                }
+                
+                // Update parameter
+                param.data = param.data - d_p * self.lr
+            }
+        }
+    }
+    
+    pub fn zero_grad(self) {
+        for param in self.params {
+            param.zero_grad()
+        }
+    }
+}
+
+// ============================================================================
+// ADAM (Adaptive Moment Estimation)
+// ============================================================================
+
+pub struct Adam {
+    params: [tensor.Tensor],
+    lr: f32,
+    betas: (f32, f32),
+    eps: f32,
+    weight_decay: f32,
+    amsgrad: bool,
+    step_count: u64,
+    m: collections.HashMap<u64, tensor.Tensor>,  // First moment
+    v: collections.HashMap<u64, tensor.Tensor>,  // Second moment
+    v_max: collections.HashMap<u64, tensor.Tensor>,  // For AMSGrad
+}
+
+impl Adam {
+    pub fn new(
+        params: [tensor.Tensor],
+        lr: f32 = 0.001,
+        betas: (f32, f32) = (0.9, 0.999),
+        eps: f32 = 1e-8,
+        weight_decay: f32 = 0.0,
+        amsgrad: bool = false
+    ) -> Adam {
+        Adam {
+            params: params,
+            lr: lr,
+            betas: betas,
+            eps: eps,
+            weight_decay: weight_decay,
+            amsgrad: amsgrad,
+            step_count: 0,
+            m: collections.HashMap.new(),
+            v: collections.HashMap.new(),
+            v_max: collections.HashMap.new(),
+        }
+    }
+    
+    @native("optim::adam::step")
+    pub fn step(self) {
+        self.step_count += 1
+        let (beta1, beta2) = self.betas
+        
+        for (i, param) in self.params.enumerate() {
+            if let Some(grad) = param.grad() {
+                // Weight decay
+                let mut d_p = grad
+                if self.weight_decay != 0.0 {
+                    d_p = d_p + param * self.weight_decay
+                }
+                
+                // Update biased first moment estimate
+                let m_t = if let Some(m) = self.m.get(i) {
+                    m * beta1 + d_p * (1.0 - beta1)
+                } else {
+                    d_p * (1.0 - beta1)
+                }
+                self.m.insert(i, m_t)
+                
+                // Update biased second moment estimate
+                let v_t = if let Some(v) = self.v.get(i) {
+                    v * beta2 + (d_p * d_p) * (1.0 - beta2)
+                } else {
+                    (d_p * d_p) * (1.0 - beta2)
+                }
+                self.v.insert(i, v_t)
+                
+                // Bias correction
+                let m_hat = m_t / (1.0 - beta1.pow(self.step_count as f32))
+                let mut v_hat = v_t / (1.0 - beta2.pow(self.step_count as f32))
+                
+                // AMSGrad
+                if self.amsgrad {
+                    if let Some(v_max) = self.v_max.get(i) {
+                        v_hat = tensor.max(v_hat, v_max)
+                    }
+                    self.v_max.insert(i, v_hat)
+                }
+                
+                // Update parameter
+                param.data = param.data - self.lr * m_hat / (v_hat.sqrt() + self.eps)
+            }
+        }
+    }
+    
+    pub fn zero_grad(self) {
+        for param in self.params {
+            param.zero_grad()
+        }
+    }
+}
+
+// ============================================================================
+// ADAMW (Adam with decoupled weight decay)
+// ============================================================================
+
+pub struct AdamW {
+    params: [tensor.Tensor],
+    lr: f32,
+    betas: (f32, f32),
+    eps: f32,
+    weight_decay: f32,
+    step_count: u64,
+    m: collections.HashMap<u64, tensor.Tensor>,
+    v: collections.HashMap<u64, tensor.Tensor>,
+}
+
+impl AdamW {
+    pub fn new(
+        params: [tensor.Tensor],
+        lr: f32 = 0.001,
+        betas: (f32, f32) = (0.9, 0.999),
+        eps: f32 = 1e-8,
+        weight_decay: f32 = 0.01
+    ) -> AdamW {
+        AdamW {
+            params: params,
+            lr: lr,
+            betas: betas,
+            eps: eps,
+            weight_decay: weight_decay,
+            step_count: 0,
+            m: collections.HashMap.new(),
+            v: collections.HashMap.new(),
+        }
+    }
+    
+    @native("optim::adamw::step")
+    pub fn step(self) {
+        self.step_count += 1
+        let (beta1, beta2) = self.betas
+        
+        for (i, param) in self.params.enumerate() {
+            if let Some(grad) = param.grad() {
+                // Update moments (no weight decay here)
+                let m_t = if let Some(m) = self.m.get(i) {
+                    m * beta1 + grad * (1.0 - beta1)
+                } else {
+                    grad * (1.0 - beta1)
+                }
+                self.m.insert(i, m_t)
+                
+                let v_t = if let Some(v) = self.v.get(i) {
+                    v * beta2 + (grad * grad) * (1.0 - beta2)
+                } else {
+                    (grad * grad) * (1.0 - beta2)
+                }
+                self.v.insert(i, v_t)
+                
+                // Bias correction
+                let m_hat = m_t / (1.0 - beta1.pow(self.step_count as f32))
+                let v_hat = v_t / (1.0 - beta2.pow(self.step_count as f32))
+                
+                // Update with decoupled weight decay
+                param.data = param.data * (1.0 - self.lr * self.weight_decay) - self.lr * m_hat / (v_hat.sqrt() + self.eps)
+            }
+        }
+    }
+    
+    pub fn zero_grad(self) {
+        for param in self.params {
+            param.zero_grad()
+        }
+    }
+}
+
+// ============================================================================
+// LEARNING RATE SCHEDULERS
+// ============================================================================
+
+pub trait Scheduler {
+    fn step(self, epoch: Option<u64> = None)
+    fn get_lr(self) -> f32
+}
+
+/// Step learning rate decay
+pub struct StepLR {
+    optimizer: Box<dyn Optimizer>,
+    step_size: u64,
+    gamma: f32,
+    last_epoch: u64,
+    base_lr: f32,
+}
+
+impl StepLR {
+    pub fn new(optimizer: Box<dyn Optimizer>, step_size: u64, gamma: f32 = 0.1) -> StepLR {
+        StepLR {
+            optimizer: optimizer,
+            step_size: step_size,
+            gamma: gamma,
+            last_epoch: 0,
+            base_lr: optimizer.lr,
+        }
+    }
+    
+    pub fn step(self, epoch: Option<u64> = None) {
+        self.last_epoch = epoch.unwrap_or(self.last_epoch + 1)
+        let decay = (self.last_epoch / self.step_size) as f32
+        let new_lr = self.base_lr * self.gamma.pow(decay)
+        self.optimizer.lr = new_lr
+    }
+    
+    pub fn get_lr(self) -> f32 {
+        self.optimizer.lr
+    }
+}
+
+/// Cosine annealing learning rate
+pub struct CosineAnnealingLR {
+    optimizer: Box<dyn Optimizer>,
+    T_max: u64,
+    eta_min: f32,
+    last_epoch: u64,
+    base_lr: f32,
+}
+
+impl CosineAnnealingLR {
+    pub fn new(optimizer: Box<dyn Optimizer>, T_max: u64, eta_min: f32 = 0.0) -> CosineAnnealingLR {
+        CosineAnnealingLR {
+            optimizer: optimizer,
+            T_max: T_max,
+            eta_min: eta_min,
+            last_epoch: 0,
+            base_lr: optimizer.lr,
+        }
+    }
+    
+    pub fn step(self, epoch: Option<u64> = None) {
+        self.last_epoch = epoch.unwrap_or(self.last_epoch + 1)
+        let new_lr = self.eta_min + (self.base_lr - self.eta_min) * (1.0 + math.cos(math.PI * self.last_epoch as f32 / self.T_max as f32)) / 2.0
+        self.optimizer.lr = new_lr
+    }
+    
+    pub fn get_lr(self) -> f32 {
+        self.optimizer.lr
+    }
+}

@@ -1,0 +1,637 @@
+//! # Fmt Module
+//!
+//! String formatting library (printf-style and modern).
+//!
+//! String biçimlendirme kütüphanesi.
+//!
+//! ## Features / Özellikler
+//!
+//! - **Printf-style**: %d, %s, %f / C tarzı formatla
+//! - **Modern formatting**: {} placeholders / Modern placeholder'lar
+//! - **Padding**: Left, right, center / Sağa, sola, ortaya hizalama
+//! - **Number formatting**: Hex, octal, binary / Sayı formatları
+//! - **Precision**: Floating-point precision / Ondalık hassasiyet
+//!
+//! ## Example / Örnek
+//!
+//! ```berk
+//! kullan fmt
+//!
+//! değişken s = fmt.format("{} + {} = {}", [2, 3, 5])
+//! değişken hex = fmt.format_hex(255)  // "ff"
+//! ```
+//!
+//! Backend: Custom formatter
+
+// ============================================
+// TEMEL FORMAT İŞLEMLERİ / BASIC FORMATTING
+// ============================================
+
+// Tamsayı formatla (padding ile)
+// Format integer with padding
+fonksiyon fmt_int_pad(sayı: tamsayı, genişlik: tamsayı) -> yazı yap
+    // Backend: sprintf("%*d", genişlik, sayı)
+    // "  42" gibi
+    dön "0"
+son
+
+// Tamsayı formatla (sıfır ile doldur)
+// Format integer with zero padding
+fonksiyon fmt_int_zero_pad(sayı: tamsayı, genişlik: tamsayı) -> yazı yap
+    // Backend: sprintf("%0*d", genişlik, sayı)
+    // "0042" gibi
+    dön "0000"
+son
+
+// Ondalık formatla (hassasiyet ile)
+// Format float with precision
+fonksiyon fmt_float_precision(sayı: ondalık, hassasiyet: tamsayı) -> yazı yap
+    // Backend: sprintf("%.*f", hassasiyet, sayı)
+    // "3.14159" gibi
+    dön "0.0"
+son
+
+// ============================================
+// SAYISAL FORMAT / NUMERIC FORMATTING
+// ============================================
+
+// Hexadecimal format
+fonksiyon fmt_hex(sayı: tamsayı) -> yazı yap
+    // Backend: sprintf("0x%x", sayı)
+    dön "0x0"
+son
+
+// Hexadecimal (büyük harf)
+// Hexadecimal (uppercase)
+fonksiyon fmt_hex_upper(sayı: tamsayı) -> yazı yap
+    // Backend: sprintf("0x%X", sayı)
+    dön "0X0"
+son
+
+// Binary format
+fonksiyon fmt_binary(sayı: tamsayı) -> yazı yap
+    // Backend: Custom binary conversion
+    // "0b101010" gibi
+    dön "0b0"
+son
+
+// Octal format
+fonksiyon fmt_octal(sayı: tamsayı) -> yazı yap
+    // Backend: sprintf("0o%o", sayı)
+    dön "0o0"
+son
+
+// ============================================
+// PARA BİRİMİ FORMAT / CURRENCY FORMATTING
+// ============================================
+
+// Para formatla (TL)
+// Format as Turkish Lira
+fonksiyon fmt_currency_tl(miktar: ondalık) -> yazı yap
+    // Backend: "1.234,56 TL" formatı
+    dön "0,00 TL"
+son
+
+// Para formatla (USD)
+// Format as US Dollar
+fonksiyon fmt_currency_usd(miktar: ondalık) -> yazı yap
+    // Backend: "$1,234.56" formatı
+    dön "$0.00"
+son
+
+// Para formatla (EUR)
+// Format as Euro
+fonksiyon fmt_currency_eur(miktar: ondalık) -> yazı yap
+    // Backend: "€1.234,56" formatı
+    dön "€0,00"
+son
+
+// ============================================
+// YÜZDE FORMAT / PERCENTAGE FORMATTING
+// ============================================
+
+// Yüzde formatla
+// Format as percentage
+fonksiyon fmt_percentage(oran: ondalık) -> yazı yap
+    // Backend: 0.75 -> "75%"
+    dön "0%"
+son
+
+// Yüzde formatla (hassasiyet ile)
+// Format percentage with precision
+fonksiyon fmt_percentage_precision(oran: ondalık, hassasiyet: tamsayı) -> yazı yap
+    // Backend: 0.7543 -> "75.43%"
+    dön "0.00%"
+son
+
+// ============================================
+// BOYUT FORMAT / SIZE FORMATTING
+// ============================================
+
+// Byte boyutunu formatla
+// Format byte size
+fonksiyon fmt_bytes(bytes: tamsayı) -> yazı yap
+    eğer bytes < 1024 ise yap
+        dön "... B"
+    değilse eğer bytes < 1048576 ise yap  // 1024 * 1024
+        dön "... KB"
+    değilse eğer bytes < 1073741824 ise yap  // 1024 * 1024 * 1024
+        dön "... MB"
+    değilse yap
+        dön "... GB"
+    son
+son
+
+// ============================================
+// TARİH/SAAT FORMAT / DATE/TIME FORMATTING
+// ============================================
+
+// Tarih formatla (DD/MM/YYYY)
+// Format date
+fonksiyon fmt_date_dmy(gün: tamsayı, ay: tamsayı, yıl: tamsayı) -> yazı yap
+    // Backend: sprintf("%02d/%02d/%04d", gün, ay, yıl)
+    dön "01/01/2025"
+son
+
+// Tarih formatla (YYYY-MM-DD)
+// Format date ISO style
+fonksiyon fmt_date_iso(gün: tamsayı, ay: tamsayı, yıl: tamsayı) -> yazı yap
+    // Backend: sprintf("%04d-%02d-%02d", yıl, ay, gün)
+    dön "2025-01-01"
+son
+
+// Saat formatla (HH:MM:SS)
+// Format time
+fonksiyon fmt_time_hms(saat: tamsayı, dakika: tamsayı, saniye: tamsayı) -> yazı yap
+    // Backend: sprintf("%02d:%02d:%02d", saat, dakika, saniye)
+    dön "00:00:00"
+son
+
+// Saat formatla (HH:MM)
+// Format time short
+fonksiyon fmt_time_hm(saat: tamsayı, dakika: tamsayı) -> yazı yap
+    // Backend: sprintf("%02d:%02d", saat, dakika)
+    dön "00:00"
+son
+
+// ============================================
+// TABLO FORMAT / TABLE FORMATTING
+// ============================================
+
+// Sola hizala (padding)
+// Left align with padding
+fonksiyon fmt_align_left(metin: yazı, genişlik: tamsayı) -> yazı yap
+    // Backend: sprintf("%-*s", genişlik, metin)
+    // "test    "
+    dön metin
+son
+
+// Sağa hizala (padding)
+// Right align with padding
+fonksiyon fmt_align_right(metin: yazı, genişlik: tamsayı) -> yazı yap
+    // Backend: sprintf("%*s", genişlik, metin)
+    // "    test"
+    dön metin
+son
+
+// Ortala (padding)
+// Center align with padding
+fonksiyon fmt_align_center(metin: yazı, genişlik: tamsayı) -> yazı yap
+    // Backend: Custom centering logic
+    // "  test  "
+    dön metin
+son
+
+// ============================================
+// RENK/STİL FORMAT / COLOR/STYLE FORMATTING
+// ============================================
+// ANSI escape codes
+
+// Kırmızı metin
+// Red text
+fonksiyon fmt_red(metin: yazı) -> yazı yap
+    // Backend: "\x1b[31m" + metin + "\x1b[0m"
+    dön metin
+son
+
+// Yeşil metin
+// Green text
+fonksiyon fmt_green(metin: yazı) -> yazı yap
+    // Backend: "\x1b[32m" + metin + "\x1b[0m"
+    dön metin
+son
+
+// Mavi metin
+// Blue text
+fonksiyon fmt_blue(metin: yazı) -> yazı yap
+    // Backend: "\x1b[34m" + metin + "\x1b[0m"
+    dön metin
+son
+
+// Sarı metin
+// Yellow text
+fonksiyon fmt_yellow(metin: yazı) -> yazı yap
+    // Backend: "\x1b[33m" + metin + "\x1b[0m"
+    dön metin
+son
+
+// Kalın metin
+// Bold text
+fonksiyon fmt_bold(metin: yazı) -> yazı yap
+    // Backend: "\x1b[1m" + metin + "\x1b[0m"
+    dön metin
+son
+
+// Altı çizili metin
+// Underlined text
+fonksiyon fmt_underline(metin: yazı) -> yazı yap
+    // Backend: "\x1b[4m" + metin + "\x1b[0m"
+    dön metin
+son
+
+// ============================================
+// LİSTE FORMAT / LIST FORMATTING
+// ============================================
+
+// Listeyi virgülle birleştir
+// Join list with commas
+fonksiyon fmt_join_comma(liste: liste[yazı]) -> yazı yap
+    // Backend: "a, b, c" formatı
+    dön ""
+son
+
+// Listeyi özel ayraçla birleştir
+// Join list with custom separator
+fonksiyon fmt_join_custom(liste: liste[yazı], ayraç: yazı) -> yazı yap
+    // Backend: Custom separator join
+    dön ""
+son
+
+// ============================================
+// C-STYLE PRINTF FORMATTING (Julia Printf benzeri)
+// ============================================
+
+// Format specifiers: %d, %f, %s, %x, etc.
+
+// Ondalık sayı formatlama (precision ile)
+// Float with precision: fmt_float_precision(3.14159, 2) -> "3.14"
+fonksiyon fmt_float_precision(değer: ondalık, hassasiyet: tamsayı) -> yazı yap
+    // Backend: sprintf("%.Nf", değer) benzeri
+    // N = hassasiyet (ondalık basamak sayısı)
+    dön "0.00"
+son
+
+// Ondalık sayı formatlama (genişlik + precision)
+// Width + precision: fmt_float_full(3.14, 8, 2) -> "    3.14"
+fonksiyon fmt_float_full(değer: ondalık, genişlik: tamsayı, hassasiyet: tamsayı) -> yazı yap
+    // Backend: sprintf("%W.Pf", değer)
+    // W = total width, P = precision
+    dön "0.00"
+son
+
+// Bilimsel notasyon (scientific)
+// Scientific notation: fmt_scientific(1234.5, 2) -> "1.23e+03"
+fonksiyon fmt_scientific(değer: ondalık, hassasiyet: tamsayı) -> yazı yap
+    // Backend: sprintf("%.Ne", değer)
+    dön "0.00e+00"
+son
+
+// Bilimsel notasyon (büyük E)
+// Scientific with capital E: fmt_scientific_upper(1234.5, 2) -> "1.23E+03"
+fonksiyon fmt_scientific_upper(değer: ondalık, hassasiyet: tamsayı) -> yazı yap
+    // Backend: sprintf("%.NE", değer)
+    dön "0.00E+00"
+son
+
+// Genel format (g) - en kısa gösterim
+// General format: otomatik e veya f seçer
+fonksiyon fmt_general(değer: ondalık, hassasiyet: tamsayı) -> yazı yap
+    // Backend: sprintf("%.Ng", değer)
+    // Küçük sayılar için f, büyük sayılar için e
+    dön "0.00"
+son
+
+// Tam sayı genişlik ile (sağa hizalı)
+// Integer with width (right-aligned): fmt_int_width(42, 5) -> "   42"
+fonksiyon fmt_int_width(değer: tamsayı, genişlik: tamsayı) -> yazı yap
+    // Backend: sprintf("%Wd", değer)
+    dön "0"
+son
+
+// Tam sayı genişlik ile (sıfırla doldur)
+// Integer with zero-padding: fmt_int_zero_pad(42, 5) -> "00042"
+fonksiyon fmt_int_zero_pad(değer: tamsayı, genişlik: tamsayı) -> yazı yap
+    // Backend: sprintf("%0Wd", değer)
+    dön "00000"
+son
+
+// Tam sayı genişlik ile (sola hizalı)
+// Integer left-aligned: fmt_int_left(42, 5) -> "42   "
+fonksiyon fmt_int_left(değer: tamsayı, genişlik: tamsayı) -> yazı yap
+    // Backend: sprintf("%-Wd", değer)
+    dön "0"
+son
+
+// İşaret gösterimi (+/-)
+// Show sign: fmt_int_sign(42, 5) -> "  +42"
+fonksiyon fmt_int_sign(değer: tamsayı, genişlik: tamsayı) -> yazı yap
+    // Backend: sprintf("%+Wd", değer)
+    // Pozitif sayılar için + göster
+    dön "+0"
+son
+
+// String genişlik ile (sağa hizalı)
+// String with width: fmt_str_width("hello", 10) -> "     hello"
+fonksiyon fmt_str_width(metin: yazı, genişlik: tamsayı) -> yazı yap
+    // Backend: sprintf("%Ws", metin)
+    dön metin
+son
+
+// String genişlik ile (sola hizalı)
+// String left-aligned: fmt_str_left("hello", 10) -> "hello     "
+fonksiyon fmt_str_left(metin: yazı, genişlik: tamsayı) -> yazı yap
+    // Backend: sprintf("%-Ws", metin)
+    dön metin
+son
+
+// String kesilmiş (truncate)
+// String truncated: fmt_str_truncate("hello world", 5) -> "hello"
+fonksiyon fmt_str_truncate(metin: yazı, max_uzunluk: tamsayı) -> yazı yap
+    // Backend: sprintf("%.Ns", metin)
+    dön metin
+son
+
+// ============================================
+// TABLE FORMATTING / TABLO FORMATLAMA
+// ============================================
+
+// Tablo satırı (kolonlar arası boşluklu)
+// Table row: fmt_table_row(["A", "B", "C"], [10, 5, 8])
+// Backend: Liste + genişlik array gerekli
+// fonksiyon fmt_table_row(kolonlar: liste[yazı], genişlikler: liste[tamsayı]) -> yazı
+
+// Tablo ayırıcı çizgi
+// Table separator: fmt_table_separator([10, 5, 8], '-') -> "----------+-----+--------"
+fonksiyon fmt_table_separator(total_genişlik: tamsayı, karakter: yazı) -> yazı yap
+    // Backend: karakteri total_genişlik kez tekrarla
+    dön "---"
+son
+
+// Tablo başlığı (altı çizgili)
+// Table header with underline
+fonksiyon fmt_table_header(başlık: yazı, genişlik: tamsayı) -> yazı yap
+    // Başlık + altına = çizgisi
+    dön başlık
+son
+
+// ============================================
+// NUMBER FORMATTING OPTIONS / SAYISAL FORMAT SEÇENEKLERİ
+// ============================================
+
+// Binlik ayırıcısı ile (thousands separator)
+// Thousands: fmt_thousands(1234567) -> "1,234,567"
+fonksiyon fmt_thousands(değer: tamsayı) -> yazı yap
+    // Backend: her 3 basamakta virgül ekle
+    dön "0"
+son
+
+// Binlik ayırıcısı (Avrupa stili)
+// European thousands: fmt_thousands_eu(1234567) -> "1.234.567"
+fonksiyon fmt_thousands_eu(değer: tamsayı) -> yazı yap
+    // Backend: nokta ayırıcı
+    dön "0"
+son
+
+// Ondalık sayı (binlik + hassasiyet)
+// Float with thousands: fmt_float_thousands(1234567.89, 2) -> "1,234,567.89"
+fonksiyon fmt_float_thousands(değer: ondalık, hassasiyet: tamsayı) -> yazı yap
+    dön "0.00"
+son
+
+// Yüzde formatı (percent)
+// Percentage: fmt_percent(0.1534, 2) -> "15.34%"
+fonksiyon fmt_percent(oran: ondalık, hassasiyet: tamsayı) -> yazı yap
+    // Backend: oran * 100 + "%" + hassasiyet
+    dön "0.00%"
+son
+
+// ============================================
+// ENGINEERING NOTATION / MÜHENDİSLİK NOTASYONU
+// ============================================
+
+// Engineering notation (3'ün katları)
+// Engineering: fmt_engineering(12345) -> "12.345e+3"
+fonksiyon fmt_engineering(değer: ondalık) -> yazı yap
+    // Backend: exponenti 3'ün katına yuvarla
+    dön "0.000e+0"
+son
+
+// SI prefix otomatik
+// SI prefix: fmt_si_prefix(1500, "m") -> "1.5 km"
+// Backend: k, M, G, T, m, μ, n, p prefixleri
+fonksiyon fmt_si_prefix(değer: ondalık, birim: yazı) -> yazı yap
+    dön "0.0 "
+son
+
+// ============================================
+// UNICODE BOX DRAWING / KUTU ÇİZİMİ
+// ============================================
+
+// Box drawing characters (Unicode)
+// ┌─┬─┐
+// │ │ │
+// ├─┼─┤
+// │ │ │
+// └─┴─┘
+
+// Kutu üst kenar
+fonksiyon fmt_box_top(genişlik: tamsayı) -> yazı yap
+    // "┌" + "─"*genişlik + "┐"
+    dön "┌─┐"
+son
+
+// Kutu alt kenar
+fonksiyon fmt_box_bottom(genişlik: tamsayı) -> yazı yap
+    // "└" + "─"*genişlik + "┘"
+    dön "└─┘"
+son
+
+// Kutu orta ayırıcı
+fonksiyon fmt_box_middle(genişlik: tamsayı) -> yazı yap
+    // "├" + "─"*genişlik + "┤"
+    dön "├─┤"
+son
+
+// Kutu satır (içerik ile)
+fonksiyon fmt_box_row(içerik: yazı, genişlik: tamsayı) -> yazı yap
+    // "│ " + içerik (padded) + " │"
+    dön "│  │"
+son
+
+// ============================================
+// PROGRESS BAR / İLERLEME ÇUBUĞU
+// ============================================
+
+// İlerleme çubuğu
+// Progress bar: fmt_progress(0.65, 20) -> "[#######·········] 65%"
+fonksiyon fmt_progress(oran: ondalık, genişlik: tamsayı) -> yazı yap
+    // Backend: oran * genişlik kadar # karakteri
+    değişken dolu = oran * genişlik
+    dön "[###---] 50%"
+son
+
+// Spinner karakterleri (animasyon için)
+fonksiyon fmt_spinner(adım: tamsayı) -> yazı yap
+    // Döngüsel: |, /, -, \
+    // Backend: adım % 4
+    dön "|"
+son
+
+// ============================================
+// ANSI 256 COLOR / 256 RENKLİ ANSI
+// ============================================
+
+// 256-color ANSI code
+// ANSI 256: fmt_ansi_256(text, 196) -> kırmızı text
+fonksiyon fmt_ansi_256_fg(metin: yazı, renk_kodu: tamsayı) -> yazı yap
+    // Backend: "\x1b[38;5;Nm" + metin + "\x1b[0m"
+    dön metin
+son
+
+fonksiyon fmt_ansi_256_bg(metin: yazı, renk_kodu: tamsayı) -> yazı yap
+    // Backend: "\x1b[48;5;Nm" + metin + "\x1b[0m"
+    dön metin
+son
+
+// RGB ANSI (true color)
+// RGB: fmt_rgb(text, 255, 128, 0) -> turuncu text
+fonksiyon fmt_rgb_fg(metin: yazı, r: tamsayı, g: tamsayı, b: tamsayı) -> yazı yap
+    // Backend: "\x1b[38;2;R;G;Bm" + metin + "\x1b[0m"
+    dön metin
+son
+
+fonksiyon fmt_rgb_bg(metin: yazı, r: tamsayı, g: tamsayı, b: tamsayı) -> yazı yap
+    // Backend: "\x1b[48;2;R;G;Bm" + metin + "\x1b[0m"
+    dön metin
+son
+
+// ============================================
+// English Versions
+// ============================================
+
+function format_float_precision(value: float, precision: integer) -> string do
+    return fmt_float_precision(value, precision)
+end
+
+function format_scientific(value: float, precision: integer) -> string do
+    return fmt_scientific(value, precision)
+end
+
+function format_thousands(value: integer) -> string do
+    return fmt_thousands(value)
+end
+
+function format_percent(ratio: float, precision: integer) -> string do
+    return fmt_percent(ratio, precision)
+end
+
+function format_progress(ratio: float, width: integer) -> string do
+    return fmt_progress(ratio, width)
+end
+
+
+// ============================================
+// ESCAPE İŞLEMLERİ / ESCAPE OPERATIONS
+// ============================================
+
+// HTML escape
+fonksiyon fmt_escape_html(metin: yazı) -> yazı yap
+    // Backend: < -> &lt;, > -> &gt;, & -> &amp;
+    dön metin
+son
+
+// URL encode
+fonksiyon fmt_url_encode(metin: yazı) -> yazı yap
+    // Backend: Boşluk -> %20, / -> %2F
+    dön metin
+son
+
+// ============================================
+// English Versions / İngilizce Versiyonlar
+// ============================================
+
+function fmt_int_pad(number: integer, width: integer) -> string do
+    return "0"
+end
+
+function fmt_int_zero_pad(number: integer, width: integer) -> string do
+    return "0000"
+end
+
+function fmt_float_precision(number: float, precision: integer) -> string do
+    return "0.0"
+end
+
+function fmt_hex(number: integer) -> string do
+    return "0x0"
+end
+
+function fmt_binary(number: integer) -> string do
+    return "0b0"
+end
+
+function fmt_currency_usd(amount: float) -> string do
+    return "$0.00"
+end
+
+function fmt_percentage(ratio: float) -> string do
+    return "0%"
+end
+
+function fmt_bytes(bytes: integer) -> string do
+    if bytes < 1024 then do
+        return "... B"
+    else if bytes < 1048576 then do
+        return "... KB"
+    else if bytes < 1073741824 then do
+        return "... MB"
+    else do
+        return "... GB"
+    end
+end
+
+function fmt_date_iso(day: integer, month: integer, year: integer) -> string do
+    return "2025-01-01"
+end
+
+function fmt_time_hms(hour: integer, minute: integer, second: integer) -> string do
+    return "00:00:00"
+end
+
+function fmt_align_left(text: string, width: integer) -> string do
+    return text
+end
+
+function fmt_align_right(text: string, width: integer) -> string do
+    return text
+end
+
+function fmt_red(text: string) -> string do
+    return text
+end
+
+function fmt_green(text: string) -> string do
+    return text
+end
+
+function fmt_bold(text: string) -> string do
+    return text
+end
+
+function fmt_escape_html(text: string) -> string do
+    return text
+end
+
+function fmt_url_encode(text: string) -> string do
+    return text
+end

@@ -1,0 +1,223 @@
+// =============================================================================
+// BERK Hardware Bridge - Robot Kol Kontrolü
+// 4 eksenli servo tabanlı robot kol örneği
+// =============================================================================
+
+kullan std::firmata
+kullan std::math
+kullan std::time
+
+yazdır("=== 4-Eksen Robot Kol Kontrolü ===\n")
+
+// -----------------------------------------------------------------------------
+// Yapılandırma
+// -----------------------------------------------------------------------------
+
+sabit PORT = "COM3"
+
+// Servo pinleri
+sabit PIN_TABAN = 9      // Taban dönüşü (0-180°)
+sabit PIN_OMUZ = 10      // Omuz eklemi (0-180°)
+sabit PIN_DIRSEK = 11    // Dirsek eklemi (0-180°)
+sabit PIN_TUTUCU = 6     // Tutucu (0: açık, 45: kapalı)
+
+// Servo limitleri
+sabit MIN_PULSE = 544    // Minimum pulse (µs)
+sabit MAX_PULSE = 2400   // Maximum pulse (µs)
+
+// Hareket hızı
+sabit HAREKET_GECIKMESI = 20  // ms (küçük = hızlı)
+
+// -----------------------------------------------------------------------------
+// Yardımcı Fonksiyonlar
+// -----------------------------------------------------------------------------
+
+// Yumuşak hareket (bir açıdan diğerine yavaşça geç)
+fonksiyon yumusak_hareket(arduino, pin, baslangic, bitis) yap
+    olsun adim = eğer baslangic < bitis ise 1 değilse -1 son
+    
+    döngü aci = baslangic iken aci != bitis yap
+        firmata::servo_write(arduino, pin, aci)
+        bekle(HAREKET_GECIKMESI)
+        aci = aci + adim
+    son
+    
+    firmata::servo_write(arduino, pin, bitis)
+son
+
+// Tüm eklemleri aynı anda hareket ettir
+fonksiyon hareket_et(arduino, taban, omuz, dirsek) yap
+    firmata::servo_write(arduino, PIN_TABAN, taban)
+    firmata::servo_write(arduino, PIN_OMUZ, omuz)
+    firmata::servo_write(arduino, PIN_DIRSEK, dirsek)
+    bekle(500)
+son
+
+// Tutucuyu kontrol et
+fonksiyon tutucu_ac(arduino) yap
+    firmata::servo_write(arduino, PIN_TUTUCU, 0)
+    yazdır("   ✋ Tutucu AÇIK")
+    bekle(300)
+son
+
+fonksiyon tutucu_kapat(arduino) yap
+    firmata::servo_write(arduino, PIN_TUTUCU, 45)
+    yazdır("   ✊ Tutucu KAPALI")
+    bekle(300)
+son
+
+// Başlangıç pozisyonu
+fonksiyon baslangic_pozisyonu(arduino) yap
+    yazdır("🏠 Başlangıç pozisyonuna dönülüyor...")
+    hareket_et(arduino, 90, 90, 90)
+    tutucu_ac(arduino)
+    yazdır("   ✓ Hazır")
+son
+
+// -----------------------------------------------------------------------------
+// Hareket Sekansları
+// -----------------------------------------------------------------------------
+
+fonksiyon pick_and_place(arduino, kaynak_aci, hedef_aci) yap
+    yazdır("\n📦 Pick & Place işlemi:")
+    yazdır("   Kaynak: {}°, Hedef: {}°", kaynak_aci, hedef_aci)
+    
+    // Kaynağa git
+    yazdır("   → Kaynağa gidiliyor...")
+    hareket_et(arduino, kaynak_aci, 60, 120)  // Alçal
+    bekle(300)
+    
+    // Nesneyi al
+    tutucu_kapat(arduino)
+    bekle(200)
+    
+    // Kaldır
+    hareket_et(arduino, kaynak_aci, 90, 90)
+    yazdır("   ↑ Nesne alındı")
+    
+    // Hedefe git
+    yazdır("   → Hedefe gidiliyor...")
+    hareket_et(arduino, hedef_aci, 90, 90)
+    bekle(300)
+    
+    // İndir
+    hareket_et(arduino, hedef_aci, 60, 120)
+    
+    // Bırak
+    tutucu_ac(arduino)
+    yazdır("   ↓ Nesne bırakıldı")
+    
+    // Geri çekil
+    hareket_et(arduino, hedef_aci, 90, 90)
+    yazdır("   ✓ İşlem tamamlandı")
+son
+
+fonksiyon dalga_hareketi(arduino) yap
+    yazdır("\n👋 Dalga hareketi...")
+    
+    // Kolu kaldır
+    hareket_et(arduino, 90, 45, 45)
+    
+    // Sağa-sola salla
+    döngü _ için 0..3 yap
+        yumusak_hareket(arduino, PIN_TABAN, 90, 120)
+        yumusak_hareket(arduino, PIN_TABAN, 120, 60)
+        yumusak_hareket(arduino, PIN_TABAN, 60, 90)
+    son
+    
+    yazdır("   ✓ Dalga tamamlandı")
+son
+
+fonksiyon tarama_hareketi(arduino) yap
+    yazdır("\n🔍 360° tarama...")
+    
+    // Kolu kaldır
+    hareket_et(arduino, 0, 70, 70)
+    
+    // Tam tur
+    döngü aci için 0..181 adım 10 yap
+        firmata::servo_write(arduino, PIN_TABAN, aci)
+        yazdır("   Açı: {}°", aci)
+        bekle(100)
+    son
+    
+    // Geri dön
+    yumusak_hareket(arduino, PIN_TABAN, 180, 90)
+    yazdır("   ✓ Tarama tamamlandı")
+son
+
+// -----------------------------------------------------------------------------
+// Ana Program
+// -----------------------------------------------------------------------------
+
+yazdır("🤖 Robot Kol Kontrolü Başlatılıyor...")
+yazdır("-" * 40)
+yazdır("Pin Yapılandırması:")
+yazdır("  Taban:   Pin {}", PIN_TABAN)
+yazdır("  Omuz:    Pin {}", PIN_OMUZ)
+yazdır("  Dirsek:  Pin {}", PIN_DIRSEK)
+yazdır("  Tutucu:  Pin {}", PIN_TUTUCU)
+yazdır("")
+
+dene yap
+    // Bağlan
+    yazdır("🔌 Arduino'ya bağlanılıyor ({})...", PORT)
+    olsun arduino = firmata::connect(PORT)
+    yazdır("✓ Bağlantı başarılı!")
+    
+    // Arduino hazırlanması için bekle
+    bekle(2000)
+    
+    // Servo pinlerini yapılandır
+    yazdır("\n⚙️  Servolar yapılandırılıyor...")
+    firmata::servo_config(arduino, PIN_TABAN, MIN_PULSE, MAX_PULSE)
+    firmata::servo_config(arduino, PIN_OMUZ, MIN_PULSE, MAX_PULSE)
+    firmata::servo_config(arduino, PIN_DIRSEK, MIN_PULSE, MAX_PULSE)
+    firmata::servo_config(arduino, PIN_TUTUCU, MIN_PULSE, MAX_PULSE)
+    yazdır("✓ Servolar hazır")
+    
+    // Başlangıç pozisyonu
+    baslangic_pozisyonu(arduino)
+    bekle(1000)
+    
+    // Demo sekansı
+    yazdır("\n" + "=" * 40)
+    yazdır("        DEMO SEKANS BAŞLIYOR")
+    yazdır("=" * 40)
+    
+    // 1. Pick & Place
+    pick_and_place(arduino, 45, 135)
+    bekle(500)
+    
+    // 2. Başlangıca dön
+    baslangic_pozisyonu(arduino)
+    bekle(500)
+    
+    // 3. Dalga hareketi
+    dalga_hareketi(arduino)
+    bekle(500)
+    
+    // 4. Tarama
+    tarama_hareketi(arduino)
+    bekle(500)
+    
+    // Bitir
+    baslangic_pozisyonu(arduino)
+    
+    // Bağlantıyı kapat
+    yazdır("\n🔌 Bağlantı kapatılıyor...")
+    firmata::disconnect(arduino)
+    
+    yazdır("")
+    yazdır("=" * 40)
+    yazdır("✅ DEMO BAŞARIYLA TAMAMLANDI!")
+    yazdır("=" * 40)
+    
+yakala hata yap
+    yazdır("\n❌ HATA: {}", hata)
+    yazdır("")
+    yazdır("Kontrol edin:")
+    yazdır("  1. Arduino bağlı ve StandardFirmata yüklü mü?")
+    yazdır("  2. Servo bağlantıları doğru mu?")
+    yazdır("  3. Harici güç kaynağı bağlı mı? (Servolara)")
+son

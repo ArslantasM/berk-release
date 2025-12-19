@@ -1,0 +1,123 @@
+/// ═══════════════════════════════════════════════════════════════════════════
+/// BERK HAL - Arduino Platform Demo (English Version)
+/// Hardware Abstraction Layer - AVR Microcontrollers
+/// ═══════════════════════════════════════════════════════════════════════════
+
+use std::io
+use std::arduino
+
+print("============================================================")
+print("         HAL Demo: Arduino Platform                         ")
+print("============================================================")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 1: Arduino Features
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 1: Arduino Features ---")
+
+print("\n   Supported Boards:")
+print("   - Arduino Uno (ATmega328P)")
+print("   - Arduino Mega (ATmega2560)")
+print("   - Arduino Nano (ATmega328)")
+print("   - Arduino Leonardo (ATmega32U4)")
+
+print("\n   Technical Specifications (Uno):")
+print("   - CPU: AVR ATmega328P @ 16 MHz")
+print("   - RAM: 2 KB SRAM")
+print("   - Flash: 32 KB")
+print("   - Digital IO: 14 pins")
+print("   - Analog Input: 6 pins")
+print("   - PWM: 6 channels")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 2: GPIO Operations
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 2: GPIO Operations ---")
+
+let LED_PIN = 13
+let BUTTON_PIN = 2
+
+print("   LED Pin: ", LED_PIN)
+print("   Button Pin: ", BUTTON_PIN)
+
+print("\n   Pin Modes:")
+print("   - INPUT:  Read digital signal")
+print("   - OUTPUT: Write digital signal")
+print("   - INPUT_PULLUP: Internal pull-up")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 3: Analog/Digital IO
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 3: Analog/Digital IO ---")
+
+print("\n   Digital Operations:")
+print("   - digitalWrite(pin, HIGH/LOW)")
+print("   - digitalRead(pin) -> HIGH/LOW")
+
+print("\n   Analog Operations:")
+print("   - analogRead(pin) -> 0-1023")
+print("   - analogWrite(pin, 0-255) [PWM]")
+
+let analog_value = 512
+let voltage = (analog_value * 5) / 1023
+print("\n   Sample Reading:")
+print("   - ADC Value: ", analog_value)
+print("   - Voltage: ~2.5V")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 4: Timing Functions
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 4: Timing Functions ---")
+
+print("\n   Delay Functions:")
+print("   - delay(ms): Wait in milliseconds")
+print("   - delayMicroseconds(us): Wait in microseconds")
+
+print("\n   Time Functions:")
+print("   - millis(): Elapsed time in ms")
+print("   - micros(): Elapsed time in us")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 5: Serial Communication
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 5: Serial Communication ---")
+
+let baud_rate = 9600
+print("   Baud Rate: ", baud_rate)
+
+print("\n   Serial Functions:")
+print("   - Serial.begin(baud)")
+print("   - Serial.print(data)")
+print("   - Serial.println(data)")
+print("   - Serial.read()")
+print("   - Serial.available()")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 6: LED Blink Example
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 6: LED Blink Algorithm ---")
+
+print("\n   LED Blink Pseudocode:")
+print("   1. Set LED_PIN as OUTPUT")
+print("   2. Loop:")
+print("      a. digitalWrite(LED_PIN, HIGH)")
+print("      b. delay(1000)")
+print("      c. digitalWrite(LED_PIN, LOW)")
+print("      d. delay(1000)")
+
+fn blink_count(times: int) -> int do
+    return times * 2
+end
+
+let blink_times = 5
+let total_changes = blink_count(blink_times)
+print("\n   Blink Count: ", blink_times)
+print("   Total State Changes: ", total_changes)
+
+print("\n[OK] Arduino HAL demo completed!")

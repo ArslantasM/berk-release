@@ -1,0 +1,280 @@
+// stdlib/ai/metrics.berk
+// Machine Learning Evaluation Metrics
+// Classification, Regression, Ranking metrics
+// 
+// Özellikler:
+// - Classification metrics (accuracy, precision, recall, F1)
+// - Confusion matrix
+// - ROC curve, AUC
+// - Regression metrics (MSE, MAE, R²)
+// - Ranking metrics (NDCG, MAP)
+
+import "ai/tensor" as tensor
+import "collections" as coll
+
+/// Classification metrics
+pub mod classification {
+    use tensor.Tensor
+    use coll.Map
+    
+    /// Confusion matrix
+    @native("metrics::confusion_matrix")
+    pub fn confusion_matrix(y_true: Tensor, y_pred: Tensor, num_classes: u32) -> Tensor {
+        // Returns (num_classes, num_classes) matrix
+    }
+    
+    /// Accuracy
+    @native("metrics::accuracy")
+    pub fn accuracy(y_true: Tensor, y_pred: Tensor) -> f32 {}
+    
+    /// Precision
+    @native("metrics::precision")
+    pub fn precision(y_true: Tensor, y_pred: Tensor, average: str = "macro") -> f32 {
+        // average: "macro", "micro", "weighted", "binary"
+    }
+    
+    /// Recall (Sensitivity)
+    @native("metrics::recall")
+    pub fn recall(y_true: Tensor, y_pred: Tensor, average: str = "macro") -> f32 {}
+    
+    /// F1 Score
+    @native("metrics::f1_score")
+    pub fn f1_score(y_true: Tensor, y_pred: Tensor, average: str = "macro") -> f32 {}
+    
+    /// F-beta Score
+    @native("metrics::fbeta_score")
+    pub fn fbeta_score(y_true: Tensor, y_pred: Tensor, beta: f32, average: str = "macro") -> f32 {}
+    
+    /// Classification report
+    @native("metrics::classification_report")
+    pub fn classification_report(
+        y_true: Tensor,
+        y_pred: Tensor,
+        labels: [str]
+    ) -> Map<str, Map<str, f32>> {
+        // Returns dict with precision, recall, f1-score for each class
+    }
+    
+    /// Matthews Correlation Coefficient
+    @native("metrics::matthews_corrcoef")
+    pub fn matthews_corrcoef(y_true: Tensor, y_pred: Tensor) -> f32 {}
+    
+    /// Cohen's Kappa
+    @native("metrics::cohen_kappa")
+    pub fn cohen_kappa(y_true: Tensor, y_pred: Tensor) -> f32 {}
+}
+
+/// ROC and AUC metrics
+pub mod roc {
+    use tensor.Tensor
+    
+    /// ROC curve
+    @native("metrics::roc_curve")
+    pub fn roc_curve(y_true: Tensor, y_scores: Tensor) -> (Tensor, Tensor, Tensor) {
+        // Returns (fpr, tpr, thresholds)
+    }
+    
+    /// AUC (Area Under Curve)
+    @native("metrics::auc")
+    pub fn auc(x: Tensor, y: Tensor) -> f32 {
+        // Trapezoidal integration
+    }
+    
+    /// ROC-AUC Score
+    @native("metrics::roc_auc_score")
+    pub fn roc_auc_score(y_true: Tensor, y_scores: Tensor, average: str = "macro") -> f32 {
+        // Multi-class support
+    }
+    
+    /// Precision-Recall curve
+    @native("metrics::precision_recall_curve")
+    pub fn precision_recall_curve(y_true: Tensor, y_scores: Tensor) -> (Tensor, Tensor, Tensor) {
+        // Returns (precision, recall, thresholds)
+    }
+    
+    /// Average Precision Score
+    @native("metrics::average_precision_score")
+    pub fn average_precision_score(y_true: Tensor, y_scores: Tensor) -> f32 {}
+}
+
+/// Regression metrics
+pub mod regression {
+    use tensor.Tensor
+    
+    /// Mean Squared Error
+    @native("metrics::mse")
+    pub fn mse(y_true: Tensor, y_pred: Tensor) -> f32 {}
+    
+    /// Root Mean Squared Error
+    @native("metrics::rmse")
+    pub fn rmse(y_true: Tensor, y_pred: Tensor) -> f32 {}
+    
+    /// Mean Absolute Error
+    @native("metrics::mae")
+    pub fn mae(y_true: Tensor, y_pred: Tensor) -> f32 {}
+    
+    /// Mean Absolute Percentage Error
+    @native("metrics::mape")
+    pub fn mape(y_true: Tensor, y_pred: Tensor) -> f32 {}
+    
+    /// R² Score (Coefficient of Determination)
+    @native("metrics::r2_score")
+    pub fn r2_score(y_true: Tensor, y_pred: Tensor) -> f32 {}
+    
+    /// Adjusted R²
+    @native("metrics::adjusted_r2_score")
+    pub fn adjusted_r2_score(y_true: Tensor, y_pred: Tensor, n_features: u32) -> f32 {}
+    
+    /// Mean Squared Log Error
+    @native("metrics::msle")
+    pub fn msle(y_true: Tensor, y_pred: Tensor) -> f32 {}
+    
+    /// Explained Variance Score
+    @native("metrics::explained_variance")
+    pub fn explained_variance(y_true: Tensor, y_pred: Tensor) -> f32 {}
+}
+
+/// Ranking metrics
+pub mod ranking {
+    use tensor.Tensor
+    
+    /// Normalized Discounted Cumulative Gain
+    @native("metrics::ndcg_score")
+    pub fn ndcg_score(y_true: Tensor, y_scores: Tensor, k: Option<u32> = None) -> f32 {
+        // NDCG@k if k is specified
+    }
+    
+    /// Discounted Cumulative Gain
+    @native("metrics::dcg_score")
+    pub fn dcg_score(y_true: Tensor, y_scores: Tensor, k: Option<u32> = None) -> f32 {}
+    
+    /// Mean Average Precision
+    @native("metrics::map_score")
+    pub fn map_score(y_true: Tensor, y_scores: Tensor, k: Option<u32> = None) -> f32 {
+        // MAP@k
+    }
+    
+    /// Mean Reciprocal Rank
+    @native("metrics::mrr_score")
+    pub fn mrr_score(y_true: Tensor, y_scores: Tensor) -> f32 {}
+}
+
+/// Clustering metrics
+pub mod clustering {
+    use tensor.Tensor
+    
+    /// Silhouette Score
+    @native("metrics::silhouette_score")
+    pub fn silhouette_score(X: Tensor, labels: Tensor) -> f32 {}
+    
+    /// Davies-Bouldin Index
+    @native("metrics::davies_bouldin_score")
+    pub fn davies_bouldin_score(X: Tensor, labels: Tensor) -> f32 {}
+    
+    /// Calinski-Harabasz Index
+    @native("metrics::calinski_harabasz_score")
+    pub fn calinski_harabasz_score(X: Tensor, labels: Tensor) -> f32 {}
+    
+    /// Adjusted Rand Index
+    @native("metrics::adjusted_rand_score")
+    pub fn adjusted_rand_score(labels_true: Tensor, labels_pred: Tensor) -> f32 {}
+    
+    /// Normalized Mutual Information
+    @native("metrics::normalized_mutual_info_score")
+    pub fn normalized_mutual_info_score(labels_true: Tensor, labels_pred: Tensor) -> f32 {}
+}
+
+/// Distance metrics
+pub mod distance {
+    use tensor.Tensor
+    
+    /// Euclidean distance
+    @native("metrics::euclidean_distance")
+    pub fn euclidean(x: Tensor, y: Tensor) -> f32 {}
+    
+    /// Manhattan distance
+    @native("metrics::manhattan_distance")
+    pub fn manhattan(x: Tensor, y: Tensor) -> f32 {}
+    
+    /// Cosine distance
+    @native("metrics::cosine_distance")
+    pub fn cosine(x: Tensor, y: Tensor) -> f32 {}
+    
+    /// Hamming distance
+    @native("metrics::hamming_distance")
+    pub fn hamming(x: Tensor, y: Tensor) -> f32 {}
+    
+    /// Pairwise distances
+    @native("metrics::pairwise_distances")
+    pub fn pairwise(X: Tensor, Y: Option<Tensor> = None, metric: str = "euclidean") -> Tensor {
+        // metric: "euclidean", "manhattan", "cosine", "hamming"
+    }
+}
+
+/// Multi-label classification metrics
+pub mod multilabel {
+    use tensor.Tensor
+    
+    /// Hamming loss
+    @native("metrics::hamming_loss")
+    pub fn hamming_loss(y_true: Tensor, y_pred: Tensor) -> f32 {}
+    
+    /// Jaccard score
+    @native("metrics::jaccard_score")
+    pub fn jaccard_score(y_true: Tensor, y_pred: Tensor, average: str = "macro") -> f32 {}
+    
+    /// Label ranking average precision
+    @native("metrics::label_ranking_avg_precision")
+    pub fn label_ranking_avg_precision(y_true: Tensor, y_scores: Tensor) -> f32 {}
+}
+
+/// Example usage:
+/// ```berk
+/// import "ai/metrics" as metrics
+/// import "ai/tensor" as tensor
+/// 
+/// // Classification metrics
+/// let y_true = tensor.from_array([0, 1, 2, 2, 1, 0, 1, 2, 0])
+/// let y_pred = tensor.from_array([0, 2, 2, 2, 1, 0, 1, 1, 0])
+/// 
+/// let acc = metrics.classification.accuracy(y_true, y_pred)
+/// let prec = metrics.classification.precision(y_true, y_pred, average: "macro")
+/// let rec = metrics.classification.recall(y_true, y_pred, average: "macro")
+/// let f1 = metrics.classification.f1_score(y_true, y_pred, average: "macro")
+/// 
+/// yaz("Accuracy: {:.4f}", acc)
+/// yaz("Precision: {:.4f}", prec)
+/// yaz("Recall: {:.4f}", rec)
+/// yaz("F1 Score: {:.4f}", f1)
+/// 
+/// // Confusion matrix
+/// let cm = metrics.classification.confusion_matrix(y_true, y_pred, num_classes: 3)
+/// yaz("Confusion Matrix:\n{}", cm)
+/// 
+/// // ROC-AUC for binary classification
+/// let y_true_binary = tensor.from_array([0, 0, 1, 1, 0, 1, 1, 0])
+/// let y_scores = tensor.from_array([0.1, 0.4, 0.35, 0.8, 0.2, 0.9, 0.65, 0.3])
+/// 
+/// let (fpr, tpr, thresholds) = metrics.roc.roc_curve(y_true_binary, y_scores)
+/// let auc_score = metrics.roc.auc(fpr, tpr)
+/// yaz("AUC: {:.4f}", auc_score)
+/// 
+/// // Regression metrics
+/// let y_true_reg = tensor.from_array([3.0, -0.5, 2.0, 7.0])
+/// let y_pred_reg = tensor.from_array([2.5, 0.0, 2.0, 8.0])
+/// 
+/// let mse = metrics.regression.mse(y_true_reg, y_pred_reg)
+/// let mae = metrics.regression.mae(y_true_reg, y_pred_reg)
+/// let r2 = metrics.regression.r2_score(y_true_reg, y_pred_reg)
+/// 
+/// yaz("MSE: {:.4f}, MAE: {:.4f}, R²: {:.4f}", mse, mae, r2)
+/// 
+/// // Classification report
+/// let labels = ["Class 0", "Class 1", "Class 2"]
+/// let report = metrics.classification.classification_report(y_true, y_pred, labels)
+/// 
+/// for (label, scores) in report {
+///     yaz("{}: precision={:.2f}, recall={:.2f}, f1={:.2f}",
+///         label, scores["precision"], scores["recall"], scores["f1-score"])
+/// }
+/// ```

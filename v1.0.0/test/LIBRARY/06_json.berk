@@ -1,0 +1,154 @@
+/// ═══════════════════════════════════════════════════════════════════════════
+/// BERK Kutuphane Demo - JSON Modulu
+/// JSON veri islemleri
+/// ═══════════════════════════════════════════════════════════════════════════
+
+kullan std::io
+kullan std::json
+
+yaz("============================================================")
+yaz("         Kutuphane Demo: JSON Modulu                        ")
+yaz("============================================================")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 1: JSON Yapisi
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 1: JSON Yapisi ---")
+
+yaz("\n   JSON Veri Turleri:")
+yaz("   - String:  \"deger\"")
+yaz("   - Number:  42, 3.14")
+yaz("   - Boolean: true, false")
+yaz("   - Null:    null")
+yaz("   - Array:   [1, 2, 3]")
+yaz("   - Object:  {\"anahtar\": \"deger\"}")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 2: Basit JSON Ornegi
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 2: Basit JSON Ornegi ---")
+
+yaz("   {")
+yaz("     \"isim\": \"BERK\",")
+yaz("     \"versiyon\": \"1.0.0\",")
+yaz("     \"aktif\": true,")
+yaz("     \"ozellikler\": [")
+yaz("       \"Turkce syntax\",")
+yaz("       \"Cift dil destegi\",")
+yaz("       \"Embedded sistemler\"")
+yaz("     ]")
+yaz("   }")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 3: Ic Ice JSON
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 3: Ic Ice (Nested) JSON ---")
+
+yaz("   {")
+yaz("     \"kullanici\": {")
+yaz("       \"id\": 1001,")
+yaz("       \"ad\": \"Ahmet\",")
+yaz("       \"soyad\": \"Yilmaz\",")
+yaz("       \"adres\": {")
+yaz("         \"sehir\": \"Istanbul\",")
+yaz("         \"ilce\": \"Kadikoy\",")
+yaz("         \"posta_kodu\": \"34710\"")
+yaz("       },")
+yaz("       \"telefonlar\": [")
+yaz("         \"+90 532 111 2233\",")
+yaz("         \"+90 216 444 5566\"")
+yaz("       ]")
+yaz("     }")
+yaz("   }")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 4: JSON Dizi Ornegi
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 4: JSON Dizi Ornegi ---")
+
+yaz("   {")
+yaz("     \"ogrenciler\": [")
+yaz("       {\"id\": 1, \"ad\": \"Ali\", \"not\": 85},")
+yaz("       {\"id\": 2, \"ad\": \"Veli\", \"not\": 92},")
+yaz("       {\"id\": 3, \"ad\": \"Ayse\", \"not\": 78}")
+yaz("     ]")
+yaz("   }")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 5: API Response Ornegi
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 5: API Response Ornegi ---")
+
+yaz("   {")
+yaz("     \"status\": 200,")
+yaz("     \"message\": \"Basarili\",")
+yaz("     \"data\": {")
+yaz("       \"toplam\": 150,")
+yaz("       \"sayfa\": 1,")
+yaz("       \"limit\": 10,")
+yaz("       \"sonuclar\": [...]")
+yaz("     },")
+yaz("     \"timestamp\": \"2024-12-15T14:30:00Z\"")
+yaz("   }")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 6: Konfigürasyon Dosyasi Ornegi
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 6: Konfigurasyon Dosyasi ---")
+
+yaz("   {")
+yaz("     \"app\": {")
+yaz("       \"name\": \"BERK Uygulamasi\",")
+yaz("       \"port\": 8080,")
+yaz("       \"debug\": false")
+yaz("     },")
+yaz("     \"database\": {")
+yaz("       \"host\": \"localhost\",")
+yaz("       \"port\": 5432,")
+yaz("       \"name\": \"berk_db\"")
+yaz("     },")
+yaz("     \"logging\": {")
+yaz("       \"level\": \"info\",")
+yaz("       \"file\": \"/var/log/berk.log\"")
+yaz("     }")
+yaz("   }")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 7: JSON Simulasyonu
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 7: BERK ile JSON Veri ---")
+
+// Dizi olarak JSON benzeri veri
+değişken kullanici_id = 1001
+değişken kullanici_ad = "Mehmet"
+değişken kullanici_yas = 30
+değişken kullanici_aktif = doğru
+
+yaz("   Kullanici Bilgileri:")
+yaz("   - ID: ", kullanici_id)
+yaz("   - Ad: ", kullanici_ad)
+yaz("   - Yas: ", kullanici_yas)
+yaz("   - Aktif: ", kullanici_aktif)
+
+// Urun listesi
+değişken urun1_ad = "Laptop"
+değişken urun1_fiyat = 15000
+
+değişken urun2_ad = "Telefon"
+değişken urun2_fiyat = 8000
+
+yaz("\n   Urun Listesi:")
+yaz("   - ", urun1_ad, ": ", urun1_fiyat, " TL")
+yaz("   - ", urun2_ad, ": ", urun2_fiyat, " TL")
+
+değişken toplam = urun1_fiyat + urun2_fiyat
+yaz("   - Toplam: ", toplam, " TL")
+
+yaz("\n[OK] JSON kutuphane demosu tamamlandi!")

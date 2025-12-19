@@ -1,0 +1,493 @@
+// ============================================================================
+// BERK GUI Framework - Glass Material
+// ============================================================================
+// Cam ve şeffaf malzemeler
+// Buzlu cam, renkli cam, ayna ve yansıtıcı yüzeyler
+// ============================================================================
+
+modül gui::materials::glass
+
+kullan gui::materials::material::{Material, MaterialType}
+kullan gui::style::colors::Color
+kullan gui::rendering::canvas::{Canvas, Path, RadialGradient, LinearGradient, ColorStop, FillStyle}
+kullan gui::effects::lighting::Light
+
+// ============================================================================
+// GLASS FACTORY
+// ============================================================================
+
+/// Cam malzeme fabrikası
+pub tip Glass = yapı son
+
+impl Glass:
+    // ========================================================================
+    // BASIC GLASS / TEMEL CAM
+    // ========================================================================
+    
+    /// Şeffaf cam
+    pub fn clear() döndür Material:
+        değişken mat = Material::new(MaterialType::Glass, Color::rgba(255, 255, 255, 15))
+        mat.metallic = 0.0
+        mat.roughness = 0.0
+        mat.specular = 1.0
+        mat.opacity = 0.15
+        mat.ior = 1.52  // Standart cam
+        mat.clearcoat = 0.2
+        döndür mat
+    son
+    
+    /// Hafif buzlu cam
+    pub fn frosted() döndür Material:
+        değişken mat = Material::new(MaterialType::Glass, Color::rgba(255, 255, 255, 80))
+        mat.metallic = 0.0
+        mat.roughness = 0.4
+        mat.specular = 0.6
+        mat.opacity = 0.5
+        mat.ior = 1.52
+        döndür mat
+    son
+    
+    /// Yoğun buzlu cam
+    pub fn heavily_frosted() döndür Material:
+        değişken mat = Material::new(MaterialType::Glass, Color::rgba(255, 255, 255, 180))
+        mat.metallic = 0.0
+        mat.roughness = 0.8
+        mat.specular = 0.3
+        mat.opacity = 0.75
+        mat.ior = 1.52
+        döndür mat
+    son
+    
+    /// Mat cam
+    pub fn matte() döndür Material:
+        değişken mat = Material::new(MaterialType::Glass, Color::rgba(240, 240, 240, 200))
+        mat.metallic = 0.0
+        mat.roughness = 0.9
+        mat.specular = 0.15
+        mat.opacity = 0.85
+        döndür mat
+    son
+    
+    // ========================================================================
+    // COLORED GLASS / RENKLİ CAM
+    // ========================================================================
+    
+    /// Renkli cam (özel renk)
+    pub fn tinted(color: Color, opacity: ondalık) döndür Material:
+        değişken mat = Material::new(MaterialType::Glass, color.with_alpha((opacity * 255.0).floor()))
+        mat.metallic = 0.0
+        mat.roughness = 0.05
+        mat.specular = 0.9
+        mat.opacity = opacity
+        mat.ior = 1.52
+        döndür mat
+    son
+    
+    /// Yeşil cam (şişe camı)
+    pub fn green_bottle() döndür Material:
+        döndür Glass::tinted(Color::hex("#2d5a27"), 0.7)
+    son
+    
+    /// Kahverengi cam (bira şişesi)
+    pub fn amber() döndür Material:
+        döndür Glass::tinted(Color::hex("#7b3f00"), 0.75)
+    son
+    
+    /// Mavi cam
+    pub fn blue() döndür Material:
+        döndür Glass::tinted(Color::hex("#0066cc"), 0.4)
+    son
+    
+    /// Kırmızı cam
+    pub fn red() döndür Material:
+        döndür Glass::tinted(Color::hex("#cc0000"), 0.5)
+    son
+    
+    /// Duman rengi cam
+    pub fn smoke() döndür Material:
+        döndür Glass::tinted(Color::hex("#4a4a4a"), 0.6)
+    son
+    
+    /// Koyu duman
+    pub fn dark_smoke() döndür Material:
+        döndür Glass::tinted(Color::hex("#2a2a2a"), 0.8)
+    son
+    
+    // ========================================================================
+    // SPECIALTY GLASS / ÖZEL CAM
+    // ========================================================================
+    
+    /// Ayna
+    pub fn mirror() döndür Material:
+        değişken mat = Material::new(MaterialType::Glass, Color::hex("#e8e8e8"))
+        mat.metallic = 1.0
+        mat.roughness = 0.0
+        mat.specular = 1.0
+        mat.opacity = 1.0
+        döndür mat
+    son
+    
+    /// Antik ayna (hafif yeşil)
+    pub fn antique_mirror() döndür Material:
+        değişken mat = Material::new(MaterialType::Glass, Color::hex("#d0e0d0"))
+        mat.metallic = 0.9
+        mat.roughness = 0.1
+        mat.specular = 0.85
+        mat.opacity = 0.95
+        döndür mat
+    son
+    
+    /// Cam lens (gösterge camı)
+    pub fn lens() döndür Material:
+        değişken mat = Material::new(MaterialType::Glass, Color::rgba(255, 255, 255, 10))
+        mat.metallic = 0.0
+        mat.roughness = 0.0
+        mat.specular = 0.95
+        mat.opacity = 0.1
+        mat.ior = 1.6
+        mat.clearcoat = 0.3
+        döndür mat
+    son
+    
+    /// Kristal
+    pub fn crystal() döndür Material:
+        değişken mat = Material::new(MaterialType::Glass, Color::rgba(255, 255, 255, 20))
+        mat.metallic = 0.0
+        mat.roughness = 0.0
+        mat.specular = 1.0
+        mat.opacity = 0.12
+        mat.ior = 2.0  // Kristal yüksek IOR
+        mat.clearcoat = 0.4
+        döndür mat
+    son
+    
+    /// Elmas
+    pub fn diamond() döndür Material:
+        değişken mat = Material::new(MaterialType::Glass, Color::rgba(255, 255, 255, 10))
+        mat.metallic = 0.0
+        mat.roughness = 0.0
+        mat.specular = 1.0
+        mat.opacity = 0.08
+        mat.ior = 2.42  // Elmas IOR
+        döndür mat
+    son
+    
+    /// Akrilik / Plexiglas
+    pub fn acrylic() döndür Material:
+        değişken mat = Material::new(MaterialType::Glass, Color::rgba(255, 255, 255, 8))
+        mat.metallic = 0.0
+        mat.roughness = 0.02
+        mat.specular = 0.85
+        mat.opacity = 0.06
+        mat.ior = 1.49
+        döndür mat
+    son
+    
+    /// Renkli akrilik
+    pub fn colored_acrylic(color: Color) döndür Material:
+        değişken mat = Material::new(MaterialType::Glass, color.with_alpha(40))
+        mat.metallic = 0.0
+        mat.roughness = 0.05
+        mat.specular = 0.8
+        mat.opacity = 0.25
+        mat.ior = 1.49
+        döndür mat
+    son
+    
+    // ========================================================================
+    // UI GLASS EFFECTS / UI CAM EFEKTLERİ
+    // ========================================================================
+    
+    /// iOS tarzı blur cam
+    pub fn ios_blur() döndür Material:
+        değişken mat = Material::new(MaterialType::Glass, Color::rgba(255, 255, 255, 180))
+        mat.roughness = 0.7
+        mat.specular = 0.2
+        mat.opacity = 0.7
+        döndür mat
+    son
+    
+    /// Karanlık tema blur
+    pub fn dark_blur() döndür Material:
+        değişken mat = Material::new(MaterialType::Glass, Color::rgba(30, 30, 30, 200))
+        mat.roughness = 0.6
+        mat.specular = 0.15
+        mat.opacity = 0.8
+        döndür mat
+    son
+    
+    /// Glassmorphism efekti
+    pub fn glassmorphism() döndür Material:
+        değişken mat = Material::new(MaterialType::Glass, Color::rgba(255, 255, 255, 40))
+        mat.roughness = 0.5
+        mat.specular = 0.3
+        mat.opacity = 0.25
+        mat.clearcoat = 0.1
+        döndür mat
+    son
+    
+    /// Koyu glassmorphism
+    pub fn dark_glassmorphism() döndür Material:
+        değişken mat = Material::new(MaterialType::Glass, Color::rgba(0, 0, 0, 100))
+        mat.roughness = 0.5
+        mat.specular = 0.25
+        mat.opacity = 0.4
+        mat.clearcoat = 0.1
+        döndür mat
+    son
+    
+    // ========================================================================
+    // AUDIO EQUIPMENT / SES EKİPMANI
+    // ========================================================================
+    
+    /// VU meter camı
+    pub fn vu_meter_glass() döndür Material:
+        değişken mat = Glass::lens()
+        mat.clearcoat = 0.4
+        döndür mat
+    son
+    
+    /// Gauge camı (gösterge)
+    pub fn gauge_glass() döndür Material:
+        değişken mat = Glass::lens()
+        mat.ior = 1.55
+        döndür mat
+    son
+    
+    /// Amp indicator camı
+    pub fn indicator_lens() döndür Material:
+        değişken mat = Material::new(MaterialType::Glass, Color::rgba(255, 255, 255, 5))
+        mat.roughness = 0.0
+        mat.specular = 0.9
+        mat.opacity = 0.05
+        mat.clearcoat = 0.5
+        döndür mat
+    son
+son
+
+// ============================================================================
+// GLASS EFFECTS
+// ============================================================================
+
+/// Cam efektleri yardımcı yapısı
+pub tip GlassEffects = yapı son
+
+impl GlassEffects:
+    /// Cam yansıma efekti uygula
+    pub fn apply_reflection(canvas: Canvas, cx: ondalık, cy: ondalık, radius: ondalık, intensity: ondalık) döndür void:
+        // Üst yansıma (ışık kaynağından)
+        değişken reflection_gradient = RadialGradient yap
+            x0: cx - radius * 0.3, y0: cy - radius * 0.4, r0: 0.0,
+            x1: cx, y1: cy, r1: radius * 0.9,
+            stops: [
+                ColorStop yap offset: 0.0, color: Color::rgba(255, 255, 255, (intensity * 120.0).floor()) son,
+                ColorStop yap offset: 0.2, color: Color::rgba(255, 255, 255, (intensity * 60.0).floor()) son,
+                ColorStop yap offset: 0.5, color: Color::rgba(255, 255, 255, (intensity * 20.0).floor()) son,
+                ColorStop yap offset: 1.0, color: Color::transparent() son
+            ]
+        son
+        
+        canvas.set_fill_style(FillStyle::RadialGradient(reflection_gradient))
+        canvas.fill_circle(cx, cy, radius)
+    son
+    
+    /// Dikdörtgen cam yansıma
+    pub fn apply_rect_reflection(canvas: Canvas, x: ondalık, y: ondalık, w: ondalık, h: ondalık, intensity: ondalık) döndür void:
+        // Üst yarı parlak
+        değişken gradient = LinearGradient yap
+            x0: x, y0: y,
+            x1: x, y1: y + h * 0.6,
+            stops: [
+                ColorStop yap offset: 0.0, color: Color::rgba(255, 255, 255, (intensity * 80.0).floor()) son,
+                ColorStop yap offset: 0.3, color: Color::rgba(255, 255, 255, (intensity * 40.0).floor()) son,
+                ColorStop yap offset: 0.6, color: Color::rgba(255, 255, 255, (intensity * 10.0).floor()) son,
+                ColorStop yap offset: 1.0, color: Color::transparent() son
+            ]
+        son
+        
+        canvas.set_fill_style(FillStyle::LinearGradient(gradient))
+        canvas.fill_rect(x, y, w, h * 0.6)
+    son
+    
+    /// Cam kenar vurgusu
+    pub fn apply_edge_glint(canvas: Canvas, cx: ondalık, cy: ondalık, radius: ondalık, intensity: ondalık) döndür void:
+        canvas.set_stroke_color(Color::rgba(255, 255, 255, (intensity * 100.0).floor()))
+        canvas.set_line_width(1.5)
+        
+        // Üst ark parlaması
+        canvas.stroke_path(
+            Path::new()
+                .arc(cx, cy, radius - 1.0, deg_to_rad(-160.0), deg_to_rad(-20.0))
+        )
+    son
+    
+    /// Cam depth efekti (iç gölge)
+    pub fn apply_depth(canvas: Canvas, cx: ondalık, cy: ondalık, radius: ondalık, depth: ondalık) döndür void:
+        değişken inner_shadow = RadialGradient yap
+            x0: cx, y0: cy, r0: radius * 0.6,
+            x1: cx, y1: cy, r1: radius,
+            stops: [
+                ColorStop yap offset: 0.0, color: Color::transparent() son,
+                ColorStop yap offset: 0.7, color: Color::rgba(0, 0, 0, (depth * 20.0).floor()) son,
+                ColorStop yap offset: 1.0, color: Color::rgba(0, 0, 0, (depth * 50.0).floor()) son
+            ]
+        son
+        
+        canvas.set_fill_style(FillStyle::RadialGradient(inner_shadow))
+        canvas.fill_circle(cx, cy, radius)
+    son
+    
+    /// Cam üzerine toz/parmak izi efekti
+    pub fn apply_smudge(canvas: Canvas, cx: ondalık, cy: ondalık, radius: ondalık, intensity: ondalık) döndür void:
+        canvas.save()
+        canvas.set_global_alpha(intensity * 0.1)
+        
+        // Rastgele lekeler
+        için i içinde 0..5:
+            değişken angle = i * 1.2566  // 72 derece
+            değişken r = radius * (0.3 + (i % 3) * 0.2)
+            değişken sx = cx + cos(angle) * r
+            değişken sy = cy + sin(angle) * r
+            
+            canvas.set_fill_color(Color::rgba(200, 200, 200, 30))
+            canvas.fill_circle(sx, sy, 8.0 + (i % 3) * 4.0)
+        son
+        
+        canvas.restore()
+    son
+    
+    /// Yarı saydam gölge
+    pub fn apply_translucent_shadow(canvas: Canvas, x: ondalık, y: ondalık, w: ondalık, h: ondalık, blur: ondalık, opacity: ondalık) döndür void:
+        canvas.set_shadow(Color::rgba(0, 0, 0, (opacity * 100.0).floor()), blur, 0.0, blur * 0.5)
+        canvas.set_fill_color(Color::transparent())
+        canvas.fill_rect(x, y, w, h)
+        canvas.clear_shadow()
+    son
+    
+    /// Işık kırılması efekti (caustics benzeri)
+    pub fn apply_caustics(canvas: Canvas, cx: ondalık, cy: ondalık, radius: ondalık, intensity: ondalık) döndür void:
+        canvas.save()
+        canvas.set_global_alpha(intensity * 0.15)
+        
+        // Basit caustic pattern
+        için i içinde 0..8:
+            değişken angle = i * 0.7854  // 45 derece
+            değişken length = radius * 0.7
+            
+            değişken gradient = LinearGradient yap
+                x0: cx, y0: cy,
+                x1: cx + cos(angle) * length, y1: cy + sin(angle) * length,
+                stops: [
+                    ColorStop yap offset: 0.0, color: Color::rgba(255, 255, 255, 0) son,
+                    ColorStop yap offset: 0.5, color: Color::rgba(255, 255, 255, 40) son,
+                    ColorStop yap offset: 1.0, color: Color::rgba(255, 255, 255, 0) son
+                ]
+            son
+            
+            canvas.set_stroke_style(FillStyle::LinearGradient(gradient))
+            canvas.set_line_width(2.0)
+            canvas.stroke_path(
+                Path::new()
+                    .move_to(cx, cy)
+                    .line_to(cx + cos(angle) * length, cy + sin(angle) * length)
+            )
+        son
+        
+        canvas.restore()
+    son
+son
+
+// ============================================================================
+// GLASS LAYER
+// ============================================================================
+
+/// Cam katman sistemi (göstergeler için)
+pub tip GlassLayer = yapı yap
+    /// Cam malzemesi
+    material: Material,
+    
+    /// Yansıma yoğunluğu
+    reflection_intensity: ondalık,
+    
+    /// Kenar parlaması
+    edge_glint: mantıksal,
+    
+    /// Derinlik efekti
+    depth_effect: mantıksal,
+    
+    /// Caustics
+    caustics: mantıksal
+son
+
+impl GlassLayer:
+    /// Varsayılan cam katmanı
+    pub fn default() döndür GlassLayer:
+        döndür GlassLayer yap
+            material: Glass::lens(),
+            reflection_intensity: 0.5,
+            edge_glint: doğru,
+            depth_effect: doğru,
+            caustics: yanlış
+        son
+    son
+    
+    /// VU meter için cam katmanı
+    pub fn for_vu_meter() döndür GlassLayer:
+        döndür GlassLayer yap
+            material: Glass::vu_meter_glass(),
+            reflection_intensity: 0.6,
+            edge_glint: doğru,
+            depth_effect: doğru,
+            caustics: yanlış
+        son
+    son
+    
+    /// Gauge için cam katmanı
+    pub fn for_gauge() döndür GlassLayer:
+        döndür GlassLayer yap
+            material: Glass::gauge_glass(),
+            reflection_intensity: 0.4,
+            edge_glint: doğru,
+            depth_effect: yanlış,
+            caustics: yanlış
+        son
+    son
+    
+    /// Dairesel cama uygula
+    pub fn apply_to_circle(self, canvas: Canvas, cx: ondalık, cy: ondalık, radius: ondalık) döndür void:
+        canvas.save()
+        
+        // Ana cam rengi
+        self.material.apply_to_circle(canvas, cx, cy, radius, [])
+        
+        // Derinlik
+        eğer self.depth_effect:
+            GlassEffects::apply_depth(canvas, cx, cy, radius, 0.3)
+        son
+        
+        // Yansıma
+        eğer self.reflection_intensity > 0.0:
+            GlassEffects::apply_reflection(canvas, cx, cy, radius, self.reflection_intensity)
+        son
+        
+        // Kenar parlaması
+        eğer self.edge_glint:
+            GlassEffects::apply_edge_glint(canvas, cx, cy, radius, 0.6)
+        son
+        
+        // Caustics
+        eğer self.caustics:
+            GlassEffects::apply_caustics(canvas, cx, cy, radius, 0.5)
+        son
+        
+        canvas.restore()
+    son
+son
+
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+fn deg_to_rad(degrees: ondalık) döndür ondalık:
+    döndür degrees * 3.14159265359 / 180.0
+son

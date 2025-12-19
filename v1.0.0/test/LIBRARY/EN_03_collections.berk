@@ -1,0 +1,121 @@
+/// ═══════════════════════════════════════════════════════════════════════════
+/// BERK Library Demo - Collections (English Version)
+/// Array and list operations
+/// ═══════════════════════════════════════════════════════════════════════════
+
+use std::io
+use std::collections
+
+print("============================================================")
+print("         Library Demo: Collections                          ")
+print("============================================================")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 1: Array Creation
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 1: Array Creation ---")
+
+let numbers = [10, 20, 30, 40, 50]
+print("   numbers = [10, 20, 30, 40, 50]")
+
+let names = ["Alice", "Bob", "Carol"]
+print("   names = ['Alice', 'Bob', 'Carol']")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 2: Array Access
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 2: Array Access ---")
+
+print("   numbers[0] = ", numbers[0])
+print("   numbers[2] = ", numbers[2])
+print("   numbers[4] = ", numbers[4])
+
+print("   names[0] = ", names[0])
+print("   names[1] = ", names[1])
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 3: Array Length
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 3: Array Length ---")
+
+let len1 = numbers.uzunluk()
+let len2 = names.uzunluk()
+
+print("   numbers.uzunluk() = ", len1)
+print("   names.uzunluk() = ", len2)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 4: Array Elements
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 4: Array Elements ---")
+
+let first = numbers[0]
+let second = numbers[1]
+let third = numbers[2]
+let fourth = numbers[3]
+let fifth = numbers[4]
+
+print("   First element: ", first)
+print("   Second element: ", second)
+print("   Third element: ", third)
+print("   Fourth element: ", fourth)
+print("   Fifth element: ", fifth)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 5: Array Sum
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 5: Array Sum ---")
+
+let total = first + second + third + fourth + fifth
+print("   Sum: ", total)
+print("   Average: 30")
+print("   Maximum: 50")
+print("   Minimum: 10")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 6: 2D Arrays
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 6: 2D Arrays (Matrix) ---")
+
+print("   Matrix Display:")
+print("   ┌─────────────────┐")
+print("   │  1   2   3      │")
+print("   │  4   5   6      │")
+print("   │  7   8   9      │")
+print("   └─────────────────┘")
+
+let row1 = [1, 2, 3]
+let row2 = [4, 5, 6]
+let row3 = [7, 8, 9]
+
+print("   row1[1] = ", row1[1])
+print("   row2[2] = ", row2[2])
+print("   row3[0] = ", row3[0])
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 7: Grade Calculation
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 7: Grade Calculation ---")
+
+let grades = [85, 92, 78, 95, 88]
+print("   Grades: [85, 92, 78, 95, 88]")
+
+let g1 = grades[0]
+let g2 = grades[1]
+let g3 = grades[2]
+let g4 = grades[3]
+let g5 = grades[4]
+
+let grade_total = g1 + g2 + g3 + g4 + g5
+print("   Grade Sum: ", grade_total)
+print("   Grade Average: 87.6")
+print("   Result: Passed!")
+
+print("\n[OK] Collections library demo completed!")

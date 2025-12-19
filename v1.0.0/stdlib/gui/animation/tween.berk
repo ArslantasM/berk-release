@@ -1,0 +1,452 @@
+// ============================================================================
+// BERK GUI Framework - Tween Animation System
+// ============================================================================
+// Değerler arası geçiş animasyonları
+// ============================================================================
+
+modül gui::animation::tween
+
+kullan gui::animation::time::{Time, TimeRange}
+kullan gui::animation::easing::{EasingType, ease}
+kullan gui::animation::interpolation::{Interpolation, Interpolator}
+
+// ============================================================================
+// TWEEN STATE
+// ============================================================================
+
+/// Tween durumu
+pub tip TweenState = özyinelemeli yap
+    | Idle           // Başlamadı
+    | Playing        // Çalışıyor
+    | Paused         // Duraklatıldı
+    | Completed      // Tamamlandı
+    | Cancelled      // İptal edildi
+son
+
+// ============================================================================
+// TWEEN - Tek Değer Animasyonu
+// ============================================================================
+
+/// İki değer arasında animasyon yapan temel yapı
+pub tip Tween[T] = yapı yap
+    /// Başlangıç değeri
+    from: T,
+    /// Bitiş değeri
+    to: T,
+    /// Süre
+    duration: Time,
+    /// Easing fonksiyonu
+    easing: EasingType,
+    /// Başlangıç gecikmesi
+    delay: Time,
+    /// Mevcut zaman
+    current_time: Time,
+    /// Durum
+    state: TweenState,
+    /// Tekrar sayısı (0 = sonsuz)
+    repeat_count: sayı,
+    /// Kalan tekrar
+    remaining_repeats: sayı,
+    /// Yoyo (geri gel) modu
+    yoyo: mantıksal,
+    /// Yoyo'da ileri mi gidiyor?
+    forward: mantıksal,
+    /// Başlangıç callback
+    on_start: Seçenek[fn()],
+    /// Güncelleme callback
+    on_update: Seçenek[fn(T)],
+    /// Tamamlanma callback
+    on_complete: Seçenek[fn()],
+son
+
+impl Tween[T]:
+    // ========================================================================
+    // CONSTRUCTORS
+    // ========================================================================
+    
+    /// Yeni tween oluştur
+    pub fn new(from: T, to: T, duration: Time) döndür Tween[T]:
+        döndür Tween {
+            from: from,
+            to: to,
+            duration: duration,
+            easing: EasingType::Linear,
+            delay: Time::zero(),
+            current_time: Time::zero(),
+            state: TweenState::Idle,
+            repeat_count: 1,
+            remaining_repeats: 1,
+            yoyo: yanlış,
+            forward: doğru,
+            on_start: Hiçbiri,
+            on_update: Hiçbiri,
+            on_complete: Hiçbiri,
+        }
+    son
+    
+    // ========================================================================
+    // BUILDER PATTERN
+    // ========================================================================
+    
+    /// Easing ayarla
+    pub fn with_easing(mut self, easing: EasingType) döndür Tween[T]:
+        self.easing = easing
+        döndür self
+    son
+    
+    /// Gecikme ayarla
+    pub fn with_delay(mut self, delay: Time) döndür Tween[T]:
+        self.delay = delay
+        döndür self
+    son
+    
+    /// Tekrar sayısı ayarla (0 = sonsuz)
+    pub fn with_repeat(mut self, count: sayı) döndür Tween[T]:
+        self.repeat_count = count
+        self.remaining_repeats = count
+        döndür self
+    son
+    
+    /// Yoyo modu ayarla
+    pub fn with_yoyo(mut self, yoyo: mantıksal) döndür Tween[T]:
+        self.yoyo = yoyo
+        döndür self
+    son
+    
+    /// Başlangıç callback'i
+    pub fn on_start(mut self, callback: fn()) döndür Tween[T]:
+        self.on_start = Bazı(callback)
+        döndür self
+    son
+    
+    /// Güncelleme callback'i
+    pub fn on_update(mut self, callback: fn(T)) döndür Tween[T]:
+        self.on_update = Bazı(callback)
+        döndür self
+    son
+    
+    /// Tamamlanma callback'i
+    pub fn on_complete(mut self, callback: fn()) döndür Tween[T]:
+        self.on_complete = Bazı(callback)
+        döndür self
+    son
+    
+    // ========================================================================
+    // CONTROL
+    // ========================================================================
+    
+    /// Animasyonu başlat
+    pub fn start(mut self) döndür void:
+        self.state = TweenState::Playing
+        self.current_time = Time::zero()
+        self.forward = doğru
+        
+        eğer self.on_start.is_some():
+            self.on_start.unwrap()()
+        son
+    son
+    
+    /// Animasyonu duraklat
+    pub fn pause(mut self) döndür void:
+        eğer self.state == TweenState::Playing:
+            self.state = TweenState::Paused
+        son
+    son
+    
+    /// Animasyonu devam ettir
+    pub fn resume(mut self) döndür void:
+        eğer self.state == TweenState::Paused:
+            self.state = TweenState::Playing
+        son
+    son
+    
+    /// Animasyonu durdur
+    pub fn stop(mut self) döndür void:
+        self.state = TweenState::Cancelled
+    son
+    
+    /// Animasyonu sıfırla
+    pub fn reset(mut self) döndür void:
+        self.current_time = Time::zero()
+        self.state = TweenState::Idle
+        self.remaining_repeats = self.repeat_count
+        self.forward = doğru
+    son
+    
+    // ========================================================================
+    // UPDATE
+    // ========================================================================
+    
+    /// Delta time ile güncelle
+    pub fn update(mut self, delta: Time) döndür T:
+        eğer self.state != TweenState::Playing:
+            döndür self.get_value()
+        son
+        
+        // Delay kontrolü
+        eğer self.current_time.less_than(self.delay):
+            self.current_time = self.current_time.add(delta)
+            eğer self.current_time.less_than(self.delay):
+                döndür self.from
+            son
+        son
+        
+        // Zaman ilerlet
+        self.current_time = self.current_time.add(delta)
+        
+        // Normalleştirilmiş ilerleme (delay sonrası)
+        değişken elapsed = self.current_time.sub(self.delay)
+        değişken progress = elapsed.seconds() / self.duration.seconds()
+        
+        // Yoyo modunda geri sayma
+        eğer self.yoyo && !self.forward:
+            progress = 1.0 - progress
+        son
+        
+        // Clamp progress
+        progress = progress.clamp(0.0, 1.0)
+        
+        // Tamamlandı mı kontrol
+        eğer elapsed.greater_or_equal(self.duration):
+            eğer self.yoyo:
+                self.forward = !self.forward
+            son
+            
+            eğer self.remaining_repeats > 1 || self.repeat_count == 0:
+                // Tekrarla
+                eğer self.repeat_count > 0:
+                    self.remaining_repeats = self.remaining_repeats - 1
+                son
+                self.current_time = self.delay
+            değilse:
+                // Tamamlandı
+                self.state = TweenState::Completed
+                eğer self.on_complete.is_some():
+                    self.on_complete.unwrap()()
+                son
+            son
+        son
+        
+        // Değer hesapla
+        değişken value = self.calculate_value(progress)
+        
+        // Callback çağır
+        eğer self.on_update.is_some():
+            self.on_update.unwrap()(value)
+        son
+        
+        döndür value
+    son
+    
+    /// Mevcut değeri al
+    pub fn get_value(self) döndür T:
+        eğer self.state == TweenState::Idle:
+            döndür self.from
+        son
+        
+        değişken elapsed = self.current_time.sub(self.delay)
+        eğer elapsed.is_negative():
+            döndür self.from
+        son
+        
+        değişken progress = (elapsed.seconds() / self.duration.seconds()).clamp(0.0, 1.0)
+        
+        eğer self.yoyo && !self.forward:
+            progress = 1.0 - progress
+        son
+        
+        döndür self.calculate_value(progress)
+    son
+    
+    /// İlerleme değerinden son değeri hesapla
+    fn calculate_value(self, progress: ondalık) döndür T:
+        değişken eased = ease(self.easing, progress)
+        döndür self.interpolate(self.from, self.to, eased)
+    son
+    
+    /// İki değer arasında interpolasyon (T tipine göre override edilmeli)
+    fn interpolate(self, from: T, to: T, t: ondalık) döndür T:
+        // Varsayılan: lineer (sayısal tipler için)
+        // Not: Bu generic bir yaklaşımdır, gerçek implementasyon tip bazlı olacak
+        döndür from  // Placeholder
+    son
+    
+    // ========================================================================
+    // STATUS
+    // ========================================================================
+    
+    /// Durum al
+    pub fn get_state(self) döndür TweenState:
+        döndür self.state
+    son
+    
+    /// Çalışıyor mu?
+    pub fn is_playing(self) döndür mantıksal:
+        döndür self.state == TweenState::Playing
+    son
+    
+    /// Tamamlandı mı?
+    pub fn is_completed(self) döndür mantıksal:
+        döndür self.state == TweenState::Completed
+    son
+    
+    /// İlerleme yüzdesi (0-1)
+    pub fn progress(self) döndür ondalık:
+        eğer self.state == TweenState::Idle:
+            döndür 0.0
+        son
+        
+        değişken elapsed = self.current_time.sub(self.delay)
+        döndür (elapsed.seconds() / self.duration.seconds()).clamp(0.0, 1.0)
+    son
+son
+
+// ============================================================================
+// NUMBER TWEEN - Sayısal Tween
+// ============================================================================
+
+/// Ondalık sayılar için tween
+pub tip NumberTween = yapı yap
+    tween: Tween[ondalık],
+son
+
+impl NumberTween:
+    pub fn new(from: ondalık, to: ondalık, duration: Time) döndür NumberTween:
+        döndür NumberTween { tween: Tween::new(from, to, duration) }
+    son
+    
+    pub fn with_easing(mut self, easing: EasingType) döndür NumberTween:
+        self.tween = self.tween.with_easing(easing)
+        döndür self
+    son
+    
+    pub fn update(mut self, delta: Time) döndür ondalık:
+        değişken progress = self.tween.progress()
+        değişken eased = ease(self.tween.easing, progress)
+        döndür self.tween.from + (self.tween.to - self.tween.from) * eased
+    son
+son
+
+// ============================================================================
+// COLOR TWEEN - Renk Tween
+// ============================================================================
+
+/// RGBA renk için tween
+pub tip ColorTween = yapı yap
+    from_r: ondalık,
+    from_g: ondalık,
+    from_b: ondalık,
+    from_a: ondalık,
+    to_r: ondalık,
+    to_g: ondalık,
+    to_b: ondalık,
+    to_a: ondalık,
+    duration: Time,
+    easing: EasingType,
+    current_time: Time,
+    state: TweenState,
+son
+
+impl ColorTween:
+    pub fn new(from: (ondalık, ondalık, ondalık, ondalık), 
+               to: (ondalık, ondalık, ondalık, ondalık), 
+               duration: Time) döndür ColorTween:
+        döndür ColorTween {
+            from_r: from.0, from_g: from.1, from_b: from.2, from_a: from.3,
+            to_r: to.0, to_g: to.1, to_b: to.2, to_a: to.3,
+            duration: duration,
+            easing: EasingType::Linear,
+            current_time: Time::zero(),
+            state: TweenState::Idle,
+        }
+    son
+    
+    pub fn with_easing(mut self, easing: EasingType) döndür ColorTween:
+        self.easing = easing
+        döndür self
+    son
+    
+    pub fn start(mut self) döndür void:
+        self.state = TweenState::Playing
+        self.current_time = Time::zero()
+    son
+    
+    pub fn update(mut self, delta: Time) döndür (ondalık, ondalık, ondalık, ondalık):
+        eğer self.state != TweenState::Playing:
+            döndür (self.from_r, self.from_g, self.from_b, self.from_a)
+        son
+        
+        self.current_time = self.current_time.add(delta)
+        değişken progress = (self.current_time.seconds() / self.duration.seconds()).clamp(0.0, 1.0)
+        değişken t = ease(self.easing, progress)
+        
+        eğer progress >= 1.0:
+            self.state = TweenState::Completed
+        son
+        
+        döndür (
+            self.from_r + (self.to_r - self.from_r) * t,
+            self.from_g + (self.to_g - self.from_g) * t,
+            self.from_b + (self.to_b - self.from_b) * t,
+            self.from_a + (self.to_a - self.from_a) * t
+        )
+    son
+son
+
+// ============================================================================
+// VECTOR TWEEN - Vektör Tween
+// ============================================================================
+
+/// 2D vektör için tween
+pub tip Vec2Tween = yapı yap
+    from_x: ondalık,
+    from_y: ondalık,
+    to_x: ondalık,
+    to_y: ondalık,
+    duration: Time,
+    easing: EasingType,
+    current_time: Time,
+    state: TweenState,
+son
+
+impl Vec2Tween:
+    pub fn new(from: (ondalık, ondalık), to: (ondalık, ondalık), duration: Time) döndür Vec2Tween:
+        döndür Vec2Tween {
+            from_x: from.0, from_y: from.1,
+            to_x: to.0, to_y: to.1,
+            duration: duration,
+            easing: EasingType::Linear,
+            current_time: Time::zero(),
+            state: TweenState::Idle,
+        }
+    son
+    
+    pub fn with_easing(mut self, easing: EasingType) döndür Vec2Tween:
+        self.easing = easing
+        döndür self
+    son
+    
+    pub fn start(mut self) döndür void:
+        self.state = TweenState::Playing
+        self.current_time = Time::zero()
+    son
+    
+    pub fn update(mut self, delta: Time) döndür (ondalık, ondalık):
+        eğer self.state != TweenState::Playing:
+            döndür (self.from_x, self.from_y)
+        son
+        
+        self.current_time = self.current_time.add(delta)
+        değişken progress = (self.current_time.seconds() / self.duration.seconds()).clamp(0.0, 1.0)
+        değişken t = ease(self.easing, progress)
+        
+        eğer progress >= 1.0:
+            self.state = TweenState::Completed
+        son
+        
+        döndür (
+            self.from_x + (self.to_x - self.from_x) * t,
+            self.from_y + (self.to_y - self.from_y) * t
+        )
+    son
+son

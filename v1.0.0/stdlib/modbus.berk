@@ -1,0 +1,207 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// BERK Standard Library - Modbus Module
+// Hardware Bridge Phase HAL 6.0
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Endüstriyel Modbus RTU/ASCII protokolü ile PLC ve sensör iletişimi.
+// RS-485 dönüştürücü veya Modbus uyumlu cihaz gerektirir.
+//
+// Örnek:
+//   kullan std::modbus
+//   olsun plc = modbus::connect("COM4", 1, "rtu")
+//   olsun regs = modbus::read_holding_registers(plc, 0, 10)
+//   modbus::write_register(plc, 100, 1234)
+//   modbus::disconnect(plc)
+//
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Bağlantı Yönetimi
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Modbus cihazına bağlan
+/// port: Seri port adı
+/// slave_id: Slave ID (1-247)
+/// mode: "rtu" veya "ascii"
+/// Döner: Connection handle
+@native("modbus_connect")
+dpiş connect(port: Metin, slave_id: Tam, mode: Metin) -> Tam
+
+/// Modbus bağlan - Türkçe
+@native("modbus_connect")
+dpiş baglan(port: Metin, slave_id: Tam, mod: Metin) -> Tam
+
+/// Gelişmiş bağlantı yapılandırması
+/// port, slave_id, mode, baud_rate, data_bits, parity, stop_bits
+@native("modbus_connect_advanced")
+dpiş connect_advanced(port: Metin, slave_id: Tam, mode: Metin, 
+                       baud: Tam, data_bits: Tam, parity: Metin, stop_bits: Tam) -> Tam
+
+/// Gelişmiş bağlan - Türkçe
+@native("modbus_connect_advanced")
+dpiş gelismis_baglan(port: Metin, slave_id: Tam, mod: Metin,
+                      baud: Tam, veri_bit: Tam, parite: Metin, stop_bit: Tam) -> Tam
+
+/// Bağlantıyı kes
+@native("modbus_disconnect")
+dpiş disconnect(handle: Tam) -> Mantık
+
+/// Bağlantı kes - Türkçe
+@native("modbus_disconnect")
+dpiş baglanti_kes(handle: Tam) -> Mantık
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Coil İşlemleri (Fonksiyon 01, 05, 15)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Coil'leri oku (Fonksiyon 01)
+/// Döner: Boolean değerler dizisi
+@native("modbus_read_coils")
+dpiş read_coils(handle: Tam, address: Tam, count: Tam) -> Dizi
+
+/// Coil oku - Türkçe
+@native("modbus_read_coils")
+dpiş coil_oku(handle: Tam, adres: Tam, adet: Tam) -> Dizi
+
+/// Tek coil yaz (Fonksiyon 05)
+@native("modbus_write_coil")
+dpiş write_coil(handle: Tam, address: Tam, value: Mantık) -> Mantık
+
+/// Coil yaz - Türkçe
+@native("modbus_write_coil")
+dpiş coil_yaz(handle: Tam, adres: Tam, deger: Mantık) -> Mantık
+
+/// Çoklu coil yaz (Fonksiyon 15)
+@native("modbus_write_coils")
+dpiş write_coils(handle: Tam, address: Tam, values: Dizi) -> Mantık
+
+/// Çoklu coil yaz - Türkçe
+@native("modbus_write_coils")
+dpiş coilleri_yaz(handle: Tam, adres: Tam, degerler: Dizi) -> Mantık
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Discrete Input İşlemleri (Fonksiyon 02)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Discrete input oku (Fonksiyon 02)
+/// Salt-okunur dijital girişler
+@native("modbus_read_discrete_inputs")
+dpiş read_discrete_inputs(handle: Tam, address: Tam, count: Tam) -> Dizi
+
+/// Giriş oku - Türkçe
+@native("modbus_read_discrete_inputs")
+dpiş giris_oku(handle: Tam, adres: Tam, adet: Tam) -> Dizi
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Register İşlemleri (Fonksiyon 03, 04, 06, 16)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Holding register oku (Fonksiyon 03)
+/// Okuma/yazma yapılabilir 16-bit register'lar
+@native("modbus_read_holding_registers")
+dpiş read_holding_registers(handle: Tam, address: Tam, count: Tam) -> Dizi
+
+/// Holding register oku - Türkçe
+@native("modbus_read_holding_registers")
+dpiş holding_oku(handle: Tam, adres: Tam, adet: Tam) -> Dizi
+
+/// Input register oku (Fonksiyon 04)
+/// Salt-okunur 16-bit register'lar
+@native("modbus_read_input_registers")
+dpiş read_input_registers(handle: Tam, address: Tam, count: Tam) -> Dizi
+
+/// Input register oku - Türkçe
+@native("modbus_read_input_registers")
+dpiş input_oku(handle: Tam, adres: Tam, adet: Tam) -> Dizi
+
+/// Tek register yaz (Fonksiyon 06)
+@native("modbus_write_register")
+dpiş write_register(handle: Tam, address: Tam, value: Tam) -> Mantık
+
+/// Register yaz - Türkçe
+@native("modbus_write_register")
+dpiş register_yaz(handle: Tam, adres: Tam, deger: Tam) -> Mantık
+
+/// Çoklu register yaz (Fonksiyon 16)
+@native("modbus_write_registers")
+dpiş write_registers(handle: Tam, address: Tam, values: Dizi) -> Mantık
+
+/// Çoklu register yaz - Türkçe
+@native("modbus_write_registers")
+dpiş registerlari_yaz(handle: Tam, adres: Tam, degerler: Dizi) -> Mantık
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Gelişmiş Veri Tipleri
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// 32-bit float oku (2 register, IEEE 754)
+/// byte_order: "big" veya "little"
+@native("modbus_read_float")
+dpiş read_float(handle: Tam, address: Tam, byte_order: Metin) -> Ondalık
+
+/// Float oku - Türkçe
+@native("modbus_read_float")
+dpiş ondalik_oku(handle: Tam, adres: Tam, byte_sirasi: Metin) -> Ondalık
+
+/// 32-bit float yaz
+@native("modbus_write_float")
+dpiş write_float(handle: Tam, address: Tam, value: Ondalık, byte_order: Metin) -> Mantık
+
+/// Float yaz - Türkçe
+@native("modbus_write_float")
+dpiş ondalik_yaz(handle: Tam, adres: Tam, deger: Ondalık, byte_sirasi: Metin) -> Mantık
+
+/// 32-bit işaretli tamsayı oku
+@native("modbus_read_int32")
+dpiş read_int32(handle: Tam, address: Tam, byte_order: Metin) -> Tam
+
+/// Int32 oku - Türkçe
+@native("modbus_read_int32")
+dpiş tam32_oku(handle: Tam, adres: Tam, byte_sirasi: Metin) -> Tam
+
+/// 32-bit işaretli tamsayı yaz
+@native("modbus_write_int32")
+dpiş write_int32(handle: Tam, address: Tam, value: Tam, byte_order: Metin) -> Mantık
+
+/// Int32 yaz - Türkçe
+@native("modbus_write_int32")
+dpiş tam32_yaz(handle: Tam, adres: Tam, deger: Tam, byte_sirasi: Metin) -> Mantık
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Teşhis ve Tarama
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Modbus cihazlarını tara
+/// port: Seri port
+/// start_id: Başlangıç slave ID
+/// end_id: Bitiş slave ID
+/// Döner: Bulunan cihazların listesi
+@native("modbus_scan")
+dpiş scan(port: Metin, start_id: Tam, end_id: Tam) -> Dizi
+
+/// Cihaz tara - Türkçe
+@native("modbus_scan")
+dpiş tara(port: Metin, baslangic: Tam, bitis: Tam) -> Dizi
+
+/// Slave ID değiştir
+@native("modbus_set_slave_id")
+dpiş set_slave_id(handle: Tam, slave_id: Tam) -> Mantık
+
+/// Slave ID ayarla - Türkçe
+@native("modbus_set_slave_id")
+dpiş slave_ayarla(handle: Tam, slave_id: Tam) -> Mantık
+
+/// Timeout ayarla (ms)
+@native("modbus_set_timeout")
+dpiş set_timeout(handle: Tam, timeout_ms: Tam) -> Mantık
+
+/// Zaman aşımı ayarla - Türkçe
+@native("modbus_set_timeout")
+dpiş zaman_asimi(handle: Tam, ms: Tam) -> Mantık
+
+/// Bağlantı durumunu kontrol et
+@native("modbus_is_connected")
+dpiş is_connected(handle: Tam) -> Mantık
+
+/// Bağlı mı? - Türkçe
+@native("modbus_is_connected")
+dpiş bagli_mi(handle: Tam) -> Mantık

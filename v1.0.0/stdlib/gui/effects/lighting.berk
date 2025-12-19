@@ -1,0 +1,703 @@
+// ============================================================================
+// BERK GUI Framework - Lighting System
+// ============================================================================
+// Işıklandırma motoru
+// Ambient, directional, point ve spot ışıklar
+// Gölge ve highlight hesaplamaları
+// ============================================================================
+
+modül gui::effects::lighting
+
+kullan gui::style::colors::Color
+kullan gui::rendering::canvas::{Canvas, Path, RadialGradient, LinearGradient, ColorStop, FillStyle}
+
+// ============================================================================
+// LIGHT TYPES
+// ============================================================================
+
+/// Işık tipi
+pub tip LightType = enum yap
+    /// Ortam ışığı (her yere eşit)
+    Ambient,
+    
+    /// Yönlü ışık (güneş gibi)
+    Directional(angle: ondalık),  // degrees
+    
+    /// Nokta ışık
+    Point(x: ondalık, y: ondalık),
+    
+    /// Spot ışık
+    Spot(x: ondalık, y: ondalık, angle: ondalık, cone_angle: ondalık),
+    
+    /// Alan ışığı (yumuşak gölge)
+    Area(x: ondalık, y: ondalık, width: ondalık, height: ondalık)
+son
+
+// ============================================================================
+// LIGHT
+// ============================================================================
+
+/// Işık kaynağı
+pub tip Light = yapı yap
+    /// Işık tipi
+    light_type: LightType,
+    
+    /// Işık rengi
+    color: Color,
+    
+    /// Yoğunluk (0.0 - 1.0+)
+    intensity: ondalık,
+    
+    /// Zayıflama (attenuation) - point/spot için
+    attenuation: ondalık,
+    
+    /// Gölge üret
+    cast_shadows: mantıksal,
+    
+    /// Gölge yumuşaklığı
+    shadow_softness: ondalık,
+    
+    /// Speküler yoğunluk çarpanı
+    specular_multiplier: ondalık
+son
+
+impl Light:
+    /// Ambient ışık oluştur
+    pub fn ambient(intensity: ondalık) döndür Light:
+        döndür Light yap
+            light_type: LightType::Ambient,
+            color: Color::white(),
+            intensity: intensity,
+            attenuation: 0.0,
+            cast_shadows: yanlış,
+            shadow_softness: 0.0,
+            specular_multiplier: 0.0
+        son
+    son
+    
+    /// Renkli ambient
+    pub fn ambient_colored(color: Color, intensity: ondalık) döndür Light:
+        değişken light = Light::ambient(intensity)
+        light.color = color
+        döndür light
+    son
+    
+    /// Yönlü ışık oluştur
+    pub fn directional(angle: ondalık, intensity: ondalık) döndür Light:
+        döndür Light yap
+            light_type: LightType::Directional(angle),
+            color: Color::white(),
+            intensity: intensity,
+            attenuation: 0.0,
+            cast_shadows: doğru,
+            shadow_softness: 0.5,
+            specular_multiplier: 1.0
+        son
+    son
+    
+    /// Sıcak yönlü ışık (güneş)
+    pub fn sun(angle: ondalık, intensity: ondalık) döndür Light:
+        değişken light = Light::directional(angle, intensity)
+        light.color = Color::hex("#fff5e6")  // Sıcak beyaz
+        light.specular_multiplier = 1.2
+        döndür light
+    son
+    
+    /// Soğuk yönlü ışık (ay/gökyüzü)
+    pub fn sky(angle: ondalık, intensity: ondalık) döndür Light:
+        değişken light = Light::directional(angle, intensity)
+        light.color = Color::hex("#e6f0ff")  // Soğuk beyaz
+        light.specular_multiplier = 0.6
+        light.shadow_softness = 0.8
+        döndür light
+    son
+    
+    /// Nokta ışık oluştur
+    pub fn point(x: ondalık, y: ondalık, intensity: ondalık) döndür Light:
+        döndür Light yap
+            light_type: LightType::Point(x, y),
+            color: Color::white(),
+            intensity: intensity,
+            attenuation: 0.01,
+            cast_shadows: doğru,
+            shadow_softness: 0.3,
+            specular_multiplier: 1.0
+        son
+    son
+    
+    /// Renkli nokta ışık
+    pub fn point_colored(x: ondalık, y: ondalık, color: Color, intensity: ondalık) döndür Light:
+        değişken light = Light::point(x, y, intensity)
+        light.color = color
+        döndür light
+    son
+    
+    /// Spot ışık oluştur
+    pub fn spot(x: ondalık, y: ondalık, angle: ondalık, cone_angle: ondalık, intensity: ondalık) döndür Light:
+        döndür Light yap
+            light_type: LightType::Spot(x, y, angle, cone_angle),
+            color: Color::white(),
+            intensity: intensity,
+            attenuation: 0.01,
+            cast_shadows: doğru,
+            shadow_softness: 0.2,
+            specular_multiplier: 1.5
+        son
+    son
+    
+    /// Alan ışığı oluştur
+    pub fn area(x: ondalık, y: ondalık, width: ondalık, height: ondalık, intensity: ondalık) döndür Light:
+        döndür Light yap
+            light_type: LightType::Area(x, y, width, height),
+            color: Color::white(),
+            intensity: intensity,
+            attenuation: 0.005,
+            cast_shadows: doğru,
+            shadow_softness: 0.7,
+            specular_multiplier: 0.8
+        son
+    son
+    
+    // === BUILDER METHODS ===
+    
+    /// Renk ayarla
+    pub fn color(mut self, color: Color) döndür Light:
+        self.color = color
+        döndür self
+    son
+    
+    /// Yoğunluk ayarla
+    pub fn intensity(mut self, intensity: ondalık) döndür Light:
+        self.intensity = intensity
+        döndür self
+    son
+    
+    /// Zayıflama ayarla
+    pub fn attenuation(mut self, attenuation: ondalık) döndür Light:
+        self.attenuation = attenuation
+        döndür self
+    son
+    
+    /// Gölge ayarları
+    pub fn shadows(mut self, enabled: mantıksal, softness: ondalık) döndür Light:
+        self.cast_shadows = enabled
+        self.shadow_softness = softness
+        döndür self
+    son
+    
+    /// Speküler çarpan
+    pub fn specular(mut self, multiplier: ondalık) döndür Light:
+        self.specular_multiplier = multiplier
+        döndür self
+    son
+    
+    // === CALCULATION METHODS ===
+    
+    /// Bir noktadaki ışık yoğunluğunu hesapla
+    pub fn calculate_intensity_at(self, x: ondalık, y: ondalık) döndür ondalık:
+        eşle self.light_type:
+            LightType::Ambient => yap
+                döndür self.intensity
+            son,
+            
+            LightType::Directional(angle) => yap
+                // Yönlü ışık mesafeden bağımsız
+                döndür self.intensity
+            son,
+            
+            LightType::Point(lx, ly) => yap
+                değişken dx = x - lx
+                değişken dy = y - ly
+                değişken dist = sqrt(dx * dx + dy * dy)
+                değişken att = 1.0 / (1.0 + self.attenuation * dist * dist)
+                döndür self.intensity * att
+            son,
+            
+            LightType::Spot(lx, ly, dir_angle, cone) => yap
+                değişken dx = x - lx
+                değişken dy = y - ly
+                değişken dist = sqrt(dx * dx + dy * dy)
+                değişken point_angle = atan2(dy, dx) * 180.0 / 3.14159
+                
+                // Koni içinde mi kontrol et
+                değişken angle_diff = abs(normalize_angle(point_angle - dir_angle))
+                eğer angle_diff > cone / 2.0:
+                    döndür 0.0
+                son
+                
+                // Koni kenarına doğru yumuşak geçiş
+                değişken cone_factor = 1.0 - (angle_diff / (cone / 2.0))
+                değişken att = 1.0 / (1.0 + self.attenuation * dist * dist)
+                döndür self.intensity * att * cone_factor
+            son,
+            
+            LightType::Area(ax, ay, aw, ah) => yap
+                // Basit alan ışık hesaplaması
+                değişken cx = ax + aw / 2.0
+                değişken cy = ay + ah / 2.0
+                değişken dx = x - cx
+                değişken dy = y - cy
+                değişken dist = sqrt(dx * dx + dy * dy)
+                değişken att = 1.0 / (1.0 + self.attenuation * dist)
+                döndür self.intensity * att
+            son
+        son
+    son
+    
+    /// Bir noktadaki ışık yönünü hesapla (derece)
+    pub fn calculate_direction_at(self, x: ondalık, y: ondalık) döndür ondalık:
+        eşle self.light_type:
+            LightType::Ambient => döndür 0.0,
+            
+            LightType::Directional(angle) => döndür angle,
+            
+            LightType::Point(lx, ly) | LightType::Spot(lx, ly, _, _) => yap
+                değişken dx = x - lx
+                değişken dy = y - ly
+                döndür atan2(dy, dx) * 180.0 / 3.14159
+            son,
+            
+            LightType::Area(ax, ay, aw, ah) => yap
+                değişken cx = ax + aw / 2.0
+                değişken cy = ay + ah / 2.0
+                değişken dx = x - cx
+                değişken dy = y - cy
+                döndür atan2(dy, dx) * 180.0 / 3.14159
+            son
+        son
+    son
+    
+    /// Işık rengini yoğunlukla hesapla
+    pub fn get_color_at(self, x: ondalık, y: ondalık) döndür Color:
+        değişken intensity_at = self.calculate_intensity_at(x, y)
+        döndür self.color.with_brightness(intensity_at)
+    son
+son
+
+// ============================================================================
+// LIGHTING SCENE
+// ============================================================================
+
+/// Işıklandırma sahnesi (birden fazla ışık)
+pub tip LightingScene = yapı yap
+    /// Işık listesi
+    lights: liste[Light],
+    
+    /// Global ambient
+    global_ambient: ondalık,
+    
+    /// Global ambient rengi
+    ambient_color: Color,
+    
+    /// Gölge rengi
+    shadow_color: Color,
+    
+    /// Gölge yoğunluğu
+    shadow_intensity: ondalık
+son
+
+impl LightingScene:
+    /// Boş sahne oluştur
+    pub fn new() döndür LightingScene:
+        döndür LightingScene yap
+            lights: [],
+            global_ambient: 0.1,
+            ambient_color: Color::white(),
+            shadow_color: Color::black(),
+            shadow_intensity: 0.5
+        son
+    son
+    
+    /// Varsayılan stüdyo aydınlatması
+    pub fn studio() döndür LightingScene:
+        değişken scene = LightingScene::new()
+        scene.global_ambient = 0.2
+        scene.lights = [
+            Light::directional(45.0, 0.7),      // Ana ışık
+            Light::directional(135.0, 0.3),     // Dolgu ışığı
+            Light::ambient(0.1)                  // Ortam
+        ]
+        döndür scene
+    son
+    
+    /// Yukarıdan aydınlatma
+    pub fn top_down() döndür LightingScene:
+        değişken scene = LightingScene::new()
+        scene.global_ambient = 0.15
+        scene.lights = [
+            Light::directional(90.0, 0.8),      // Üstten
+            Light::ambient(0.15)
+        ]
+        döndür scene
+    son
+    
+    /// Sol üstten aydınlatma (klasik)
+    pub fn top_left() döndür LightingScene:
+        değişken scene = LightingScene::new()
+        scene.global_ambient = 0.1
+        scene.lights = [
+            Light::directional(45.0, 0.8),
+            Light::ambient(0.15)
+        ]
+        döndür scene
+    son
+    
+    /// Dramatik aydınlatma (bir nokta ışık)
+    pub fn dramatic(x: ondalık, y: ondalık) döndür LightingScene:
+        değişken scene = LightingScene::new()
+        scene.global_ambient = 0.05
+        scene.shadow_intensity = 0.7
+        scene.lights = [
+            Light::point(x, y, 1.0).attenuation(0.005),
+            Light::ambient(0.05)
+        ]
+        döndür scene
+    son
+    
+    // === BUILDER METHODS ===
+    
+    /// Işık ekle
+    pub fn add_light(mut self, light: Light) döndür LightingScene:
+        self.lights.push(light)
+        döndür self
+    son
+    
+    /// Global ambient ayarla
+    pub fn ambient(mut self, intensity: ondalık) döndür LightingScene:
+        self.global_ambient = intensity
+        döndür self
+    son
+    
+    /// Ambient rengi
+    pub fn ambient_color(mut self, color: Color) döndür LightingScene:
+        self.ambient_color = color
+        döndür self
+    son
+    
+    /// Gölge ayarları
+    pub fn shadows(mut self, color: Color, intensity: ondalık) döndür LightingScene:
+        self.shadow_color = color
+        self.shadow_intensity = intensity
+        döndür self
+    son
+    
+    // === CALCULATION METHODS ===
+    
+    /// Bir noktadaki toplam ışık yoğunluğunu hesapla
+    pub fn calculate_total_intensity_at(self, x: ondalık, y: ondalık) döndür ondalık:
+        değişken total = self.global_ambient
+        
+        için light içinde &self.lights:
+            total = total + light.calculate_intensity_at(x, y)
+        son
+        
+        döndür min(total, 1.0)
+    son
+    
+    /// Bir noktadaki bileşik ışık rengini hesapla
+    pub fn calculate_color_at(self, x: ondalık, y: ondalık) döndür Color:
+        değişken r = self.ambient_color.red() * self.global_ambient
+        değişken g = self.ambient_color.green() * self.global_ambient
+        değişken b = self.ambient_color.blue() * self.global_ambient
+        
+        için light içinde &self.lights:
+            değişken intensity = light.calculate_intensity_at(x, y)
+            r = r + light.color.red() * intensity
+            g = g + light.color.green() * intensity
+            b = b + light.color.blue() * intensity
+        son
+        
+        döndür Color::rgb(
+            min(r, 255.0).floor(),
+            min(g, 255.0).floor(),
+            min(b, 255.0).floor()
+        )
+    son
+    
+    /// Speküler highlight pozisyonu hesapla
+    pub fn calculate_specular_position(self, cx: ondalık, cy: ondalık, radius: ondalık) döndür (ondalık, ondalık):
+        // En güçlü yönlü ışığı bul
+        değişken best_angle = -45.0
+        değişken best_intensity = 0.0
+        
+        için light içinde &self.lights:
+            eşle light.light_type:
+                LightType::Directional(angle) => yap
+                    eğer light.intensity > best_intensity:
+                        best_angle = angle
+                        best_intensity = light.intensity
+                    son
+                son,
+                _ => ()
+            son
+        son
+        
+        // Highlight pozisyonu (ışığın ters yönü)
+        değişken angle_rad = deg_to_rad(best_angle + 180.0)
+        değişken hx = cx + cos(angle_rad) * radius * 0.3
+        değişken hy = cy + sin(angle_rad) * radius * 0.3
+        
+        döndür (hx, hy)
+    son
+son
+
+// ============================================================================
+// SHADOW GENERATOR
+// ============================================================================
+
+/// Gölge oluşturucu
+pub tip ShadowGenerator = yapı son
+
+impl ShadowGenerator:
+    /// Drop shadow (düşen gölge) uygula
+    pub fn drop_shadow(canvas: Canvas, x: ondalık, y: ondalık, w: ondalık, h: ondalık, offset_x: ondalık, offset_y: ondalık, blur: ondalık, color: Color) döndür void:
+        canvas.set_shadow(color, blur, offset_x, offset_y)
+    son
+    
+    /// Inner shadow (iç gölge) - dikdörtgen
+    pub fn inner_shadow_rect(canvas: Canvas, x: ondalık, y: ondalık, w: ondalık, h: ondalık, depth: ondalık, direction: ondalık) döndür void:
+        değişken angle_rad = deg_to_rad(direction)
+        değişken offset_x = cos(angle_rad) * depth
+        değişken offset_y = sin(angle_rad) * depth
+        
+        // Üst kenar gölge
+        değişken top_gradient = LinearGradient yap
+            x0: x, y0: y,
+            x1: x, y1: y + depth,
+            stops: [
+                ColorStop yap offset: 0.0, color: Color::rgba(0, 0, 0, 60) son,
+                ColorStop yap offset: 1.0, color: Color::transparent() son
+            ]
+        son
+        
+        canvas.set_fill_style(FillStyle::LinearGradient(top_gradient))
+        canvas.fill_rect(x, y, w, depth)
+        
+        // Sol kenar gölge
+        değişken left_gradient = LinearGradient yap
+            x0: x, y0: y,
+            x1: x + depth, y1: y,
+            stops: [
+                ColorStop yap offset: 0.0, color: Color::rgba(0, 0, 0, 40) son,
+                ColorStop yap offset: 1.0, color: Color::transparent() son
+            ]
+        son
+        
+        canvas.set_fill_style(FillStyle::LinearGradient(left_gradient))
+        canvas.fill_rect(x, y, depth, h)
+    son
+    
+    /// Inner shadow - daire
+    pub fn inner_shadow_circle(canvas: Canvas, cx: ondalık, cy: ondalık, radius: ondalık, depth: ondalık) döndür void:
+        değişken gradient = RadialGradient yap
+            x0: cx, y0: cy, r0: radius - depth,
+            x1: cx, y1: cy, r1: radius,
+            stops: [
+                ColorStop yap offset: 0.0, color: Color::transparent() son,
+                ColorStop yap offset: 0.5, color: Color::rgba(0, 0, 0, 30) son,
+                ColorStop yap offset: 1.0, color: Color::rgba(0, 0, 0, 60) son
+            ]
+        son
+        
+        canvas.set_fill_style(FillStyle::RadialGradient(gradient))
+        canvas.fill_circle(cx, cy, radius)
+    son
+    
+    /// Pillow efekti (kabartma görünümü)
+    pub fn pillow(canvas: Canvas, x: ondalık, y: ondalık, w: ondalık, h: ondalık, raised: mantıksal) döndür void:
+        değişken light = eğer raised: 
+            Color::rgba(255, 255, 255, 80) 
+        değilse: 
+            Color::rgba(0, 0, 0, 40) 
+        son
+        
+        değişken dark = eğer raised: 
+            Color::rgba(0, 0, 0, 40) 
+        değilse: 
+            Color::rgba(255, 255, 255, 30) 
+        son
+        
+        // Üst ve sol kenar (ışık)
+        canvas.set_stroke_color(light)
+        canvas.set_line_width(1.0)
+        canvas.stroke_path(
+            Path::new()
+                .move_to(x, y + h)
+                .line_to(x, y)
+                .line_to(x + w, y)
+        )
+        
+        // Alt ve sağ kenar (gölge)
+        canvas.set_stroke_color(dark)
+        canvas.stroke_path(
+            Path::new()
+                .move_to(x, y + h)
+                .line_to(x + w, y + h)
+                .line_to(x + w, y)
+        )
+    son
+    
+    /// Soft shadow (yumuşak gölge) - Gaussian blur simülasyonu
+    pub fn soft_shadow(canvas: Canvas, x: ondalık, y: ondalık, w: ondalık, h: ondalık, blur: ondalık, intensity: ondalık) döndür void:
+        // Katmanlı gölge ile blur simülasyonu
+        değişken layers = 5
+        
+        için i içinde 0..layers:
+            değişken layer_blur = blur * (i + 1) / layers
+            değişken alpha = (intensity * 40.0 / layers).floor()
+            
+            canvas.set_fill_color(Color::rgba(0, 0, 0, alpha))
+            canvas.fill_rounded_rect(
+                x - layer_blur / 2.0,
+                y - layer_blur / 2.0 + layer_blur,
+                w + layer_blur,
+                h + layer_blur,
+                layer_blur
+            )
+        son
+    son
+    
+    /// Glow (dış parlaklık)
+    pub fn glow(canvas: Canvas, cx: ondalık, cy: ondalık, radius: ondalık, color: Color, intensity: ondalık) döndür void:
+        değişken glow_gradient = RadialGradient yap
+            x0: cx, y0: cy, r0: radius,
+            x1: cx, y1: cy, r1: radius * 2.0,
+            stops: [
+                ColorStop yap offset: 0.0, color: color.with_alpha((intensity * 100.0).floor()) son,
+                ColorStop yap offset: 0.5, color: color.with_alpha((intensity * 40.0).floor()) son,
+                ColorStop yap offset: 1.0, color: Color::transparent() son
+            ]
+        son
+        
+        canvas.set_fill_style(FillStyle::RadialGradient(glow_gradient))
+        canvas.fill_circle(cx, cy, radius * 2.0)
+    son
+    
+    /// LED glow (led parlaklığı)
+    pub fn led_glow(canvas: Canvas, cx: ondalık, cy: ondalık, size: ondalık, color: Color, intensity: ondalık) döndür void:
+        // Çok katmanlı glow
+        için i içinde 0..3:
+            değişken layer_size = size * (1.0 + i * 0.5)
+            değişken layer_alpha = (intensity * 60.0 / (i + 1)).floor()
+            
+            değişken gradient = RadialGradient yap
+                x0: cx, y0: cy, r0: 0.0,
+                x1: cx, y1: cy, r1: layer_size,
+                stops: [
+                    ColorStop yap offset: 0.0, color: color.with_alpha(layer_alpha) son,
+                    ColorStop yap offset: 0.5, color: color.with_alpha((layer_alpha * 0.5).floor()) son,
+                    ColorStop yap offset: 1.0, color: Color::transparent() son
+                ]
+            son
+            
+            canvas.set_fill_style(FillStyle::RadialGradient(gradient))
+            canvas.fill_circle(cx, cy, layer_size)
+        son
+    son
+son
+
+// ============================================================================
+// HIGHLIGHT GENERATOR
+// ============================================================================
+
+/// Highlight (parlak nokta) oluşturucu
+pub tip HighlightGenerator = yapı son
+
+impl HighlightGenerator:
+    /// Speküler highlight
+    pub fn specular(canvas: Canvas, cx: ondalık, cy: ondalık, radius: ondalık, intensity: ondalık) döndür void:
+        değişken gradient = RadialGradient yap
+            x0: cx, y0: cy, r0: 0.0,
+            x1: cx, y1: cy, r1: radius,
+            stops: [
+                ColorStop yap offset: 0.0, color: Color::rgba(255, 255, 255, (intensity * 255.0).floor()) son,
+                ColorStop yap offset: 0.3, color: Color::rgba(255, 255, 255, (intensity * 150.0).floor()) son,
+                ColorStop yap offset: 0.7, color: Color::rgba(255, 255, 255, (intensity * 30.0).floor()) son,
+                ColorStop yap offset: 1.0, color: Color::transparent() son
+            ]
+        son
+        
+        canvas.set_fill_style(FillStyle::RadialGradient(gradient))
+        canvas.fill_circle(cx, cy, radius)
+    son
+    
+    /// Küçük parlak nokta
+    pub fn glint(canvas: Canvas, x: ondalık, y: ondalık, size: ondalık) döndür void:
+        canvas.set_fill_color(Color::rgba(255, 255, 255, 220))
+        canvas.fill_circle(x, y, size)
+        
+        // Halo
+        canvas.set_fill_color(Color::rgba(255, 255, 255, 60))
+        canvas.fill_circle(x, y, size * 2.0)
+    son
+    
+    /// Yıldız şeklinde highlight
+    pub fn star_highlight(canvas: Canvas, cx: ondalık, cy: ondalık, size: ondalık, rays: tamsayı) döndür void:
+        canvas.save()
+        canvas.set_stroke_color(Color::rgba(255, 255, 255, 180))
+        canvas.set_line_width(1.0)
+        
+        değişken angle_step = 6.28318 / rays
+        
+        için i içinde 0..rays:
+            değişken angle = i * angle_step
+            değişken end_x = cx + cos(angle) * size
+            değişken end_y = cy + sin(angle) * size
+            
+            canvas.stroke_path(
+                Path::new().move_to(cx, cy).line_to(end_x, end_y)
+            )
+        son
+        
+        canvas.restore()
+        
+        // Merkez nokta
+        canvas.set_fill_color(Color::white())
+        canvas.fill_circle(cx, cy, 2.0)
+    son
+    
+    /// Rim light (kenar ışığı)
+    pub fn rim_light(canvas: Canvas, cx: ondalık, cy: ondalık, radius: ondalık, angle: ondalık, intensity: ondalık) döndür void:
+        değişken angle_rad = deg_to_rad(angle)
+        değişken arc_start = angle - 30.0
+        değişken arc_end = angle + 30.0
+        
+        canvas.set_stroke_color(Color::rgba(255, 255, 255, (intensity * 120.0).floor()))
+        canvas.set_line_width(2.0)
+        canvas.stroke_path(
+            Path::new()
+                .arc(cx, cy, radius - 1.0, deg_to_rad(arc_start), deg_to_rad(arc_end))
+        )
+    son
+    
+    /// Fresnel efekti (kenar parlaklığı)
+    pub fn fresnel(canvas: Canvas, cx: ondalık, cy: ondalık, radius: ondalık, intensity: ondalık) döndür void:
+        değişken gradient = RadialGradient yap
+            x0: cx, y0: cy, r0: radius * 0.7,
+            x1: cx, y1: cy, r1: radius,
+            stops: [
+                ColorStop yap offset: 0.0, color: Color::transparent() son,
+                ColorStop yap offset: 0.5, color: Color::rgba(255, 255, 255, (intensity * 20.0).floor()) son,
+                ColorStop yap offset: 1.0, color: Color::rgba(255, 255, 255, (intensity * 60.0).floor()) son
+            ]
+        son
+        
+        canvas.set_fill_style(FillStyle::RadialGradient(gradient))
+        canvas.fill_circle(cx, cy, radius)
+    son
+son
+
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+fn deg_to_rad(degrees: ondalık) döndür ondalık:
+    döndür degrees * 3.14159265359 / 180.0
+son
+
+fn normalize_angle(angle: ondalık) döndür ondalık:
+    değişken a = angle % 360.0
+    eğer a < 0.0: a = a + 360.0 son
+    eğer a > 180.0: a = a - 360.0 son
+    döndür a
+son

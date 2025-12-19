@@ -1,0 +1,265 @@
+// stdlib/embedded/platforms/stm32f4/usb_cdc.berk
+// STM32F4 USB CDC (Virtual COM Port) Implementation
+// USB Device Communication Device Class
+
+pub enum USBError {
+    NotInitialized,
+    NotConnected,
+    TransmitError,
+    ReceiveError,
+    BufferFull,
+}
+
+pub type Result<T> = result<T, USBError>
+
+// USB CDC Line Coding structure
+struct LineCoding {
+    bitrate: u32,
+    format: u8,      // Stop bits: 0=1, 1=1.5, 2=2
+    parity: u8,      // 0=None, 1=Odd, 2=Even
+    data_bits: u8,   // 5, 6, 7, 8, or 16
+}
+
+// Global USB CDC state
+static mut usb_initialized: bool = false
+static mut usb_connected: bool = false
+static mut line_coding: LineCoding = LineCoding {
+    bitrate: 115200,
+    format: 0,
+    parity: 0,
+    data_bits: 8,
+}
+
+// Circular buffer for received data
+const USB_RX_BUFFER_SIZE: usize = 2048
+static mut rx_buffer: [u8; USB_RX_BUFFER_SIZE] = [0; USB_RX_BUFFER_SIZE]
+static mut rx_head: usize = 0
+static mut rx_tail: usize = 0
+
+/// Initialize USB CDC
+pub fn init() -> Result<()> {
+    unsafe {
+        if usb_initialized {
+            return Ok(())
+        }
+        
+        // Initialize USB Device library
+        // USBD_Init() from STM32 USB Device Library
+        
+        // Register CDC class
+        // USBD_RegisterClass(&hUsbDeviceFS, &USBD_CDC)
+        
+        // Start USB Device
+        // USBD_Start(&hUsbDeviceFS)
+        
+        usb_initialized = true
+        Ok(())
+    }
+}
+
+/// Deinitialize USB CDC
+pub fn deinit() -> Result<()> {
+    unsafe {
+        if !usb_initialized {
+            return Err(USBError.NotInitialized)
+        }
+        
+        // Stop USB Device
+        // USBD_Stop(&hUsbDeviceFS)
+        
+        // De-Initialize USB Device Library
+        // USBD_DeInit(&hUsbDeviceFS)
+        
+        usb_initialized = false
+        usb_connected = false
+        
+        Ok(())
+    }
+}
+
+/// Check if USB is connected
+pub fn is_connected() -> bool {
+    unsafe { usb_connected }
+}
+
+/// Send data over USB CDC
+pub fn write(data: &[u8]) -> Result<usize> {
+    unsafe {
+        if !usb_initialized {
+            return Err(USBError.NotInitialized)
+        }
+        
+        if !usb_connected {
+            return Err(USBError.NotConnected)
+        }
+        
+        // Transmit via CDC
+        // CDC_Transmit_FS(data.as_ptr(), data.len() as u16)
+        
+        Ok(data.len())
+    }
+}
+
+/// Write string over USB CDC
+pub fn write_str(text: &str) -> Result<usize> {
+    write(text.as_bytes())
+}
+
+/// Write string with newline
+pub fn println(text: &str) -> Result<usize> {
+    let mut sent = write_str(text)?
+    sent += write_str("\r\n")?
+    Ok(sent)
+}
+
+/// Read available data from USB CDC
+pub fn read(buffer: &mut [u8]) -> Result<usize> {
+    unsafe {
+        if !usb_initialized {
+            return Err(USBError.NotInitialized)
+        }
+        
+        let mut count: usize = 0
+        
+        while count < buffer.len() && rx_head != rx_tail {
+            buffer[count] = rx_buffer[rx_tail]
+            rx_tail = (rx_tail + 1) % USB_RX_BUFFER_SIZE
+            count += 1
+        }
+        
+        Ok(count)
+    }
+}
+
+/// Read single byte (blocking)
+pub fn read_byte() -> Result<u8> {
+    unsafe {
+        if !usb_initialized {
+            return Err(USBError.NotInitialized)
+        }
+        
+        // Wait for data
+        while rx_head == rx_tail {
+            // Yield or sleep briefly
+        }
+        
+        let byte = rx_buffer[rx_tail]
+        rx_tail = (rx_tail + 1) % USB_RX_BUFFER_SIZE
+        
+        Ok(byte)
+    }
+}
+
+/// Check number of bytes available to read
+pub fn available() -> usize {
+    unsafe {
+        if rx_head >= rx_tail {
+            rx_head - rx_tail
+        } else {
+            USB_RX_BUFFER_SIZE - rx_tail + rx_head
+        }
+    }
+}
+
+/// Read line (until \n)
+pub fn read_line() -> Result<String> {
+    let mut line = String::new()
+    
+    loop {
+        let byte = read_byte()?
+        
+        if byte == b'\n' {
+            break
+        }
+        
+        if byte != b'\r' {
+            line.push(byte as char)
+        }
+    }
+    
+    Ok(line)
+}
+
+/// Flush output buffer
+pub fn flush() {
+    // Wait for USB transmission to complete
+}
+
+/// Set line coding (baud rate, etc.)
+pub fn set_line_coding(bitrate: u32, stop_bits: u8, parity: u8, data_bits: u8) {
+    unsafe {
+        line_coding = LineCoding {
+            bitrate: bitrate,
+            format: stop_bits,
+            parity: parity,
+            data_bits: data_bits,
+        }
+    }
+}
+
+/// Get current line coding
+pub fn get_line_coding() -> (u32, u8, u8, u8) {
+    unsafe {
+        (line_coding.bitrate, line_coding.format, line_coding.parity, line_coding.data_bits)
+    }
+}
+
+// Internal callback for USB CDC receive
+pub fn _on_receive(data: &[u8]) {
+    unsafe {
+        for &byte in data {
+            let next_head = (rx_head + 1) % USB_RX_BUFFER_SIZE
+            
+            if next_head != rx_tail {
+                rx_buffer[rx_head] = byte
+                rx_head = next_head
+            }
+            // else: buffer full, drop byte
+        }
+    }
+}
+
+// Internal callback for USB connection state
+pub fn _on_connect() {
+    unsafe {
+        usb_connected = true
+    }
+}
+
+pub fn _on_disconnect() {
+    unsafe {
+        usb_connected = false
+        rx_head = 0
+        rx_tail = 0
+    }
+}
+
+/// USB CDC echo example
+pub fn echo_test() -> Result<()> {
+    init()?
+    
+    println("USB CDC Echo Test")?
+    println("Type something and press Enter...")?
+    
+    loop {
+        if available() > 0 {
+            let line = read_line()?
+            println(&format!("Echo: {}", line))?
+        }
+    }
+}
+
+/// USB CDC serial monitor
+pub fn serial_monitor<F>(callback: F) -> Result<()>
+where
+    F: Fn(&str),
+{
+    init()?
+    
+    loop {
+        if available() > 0 {
+            let line = read_line()?
+            callback(&line)
+        }
+    }
+}

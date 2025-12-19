@@ -1,0 +1,142 @@
+/// ═══════════════════════════════════════════════════════════════════════════
+/// BERK Intermediate Demo - Data Structures (English Version)
+/// Arrays, tuples, data organization
+/// ═══════════════════════════════════════════════════════════════════════════
+
+use std::io
+
+print("============================================================")
+print("         Intermediate Demo: Data Structures                 ")
+print("============================================================")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 1: Basic Data Structures
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 1: Basic Data Structures ---")
+
+print("\n   Supported Data Structures:")
+print("   - Arrays: [1, 2, 3]")
+print("   - Tuples: (a, b, c)")
+print("   - Strings: \"text\"")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 2: Arrays
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 2: Arrays ---")
+
+let numbers = [100, 200, 300, 400, 500]
+print("   Numbers: ", numbers)
+print("   Length: ", numbers.uzunluk())
+print("   Element [2]: ", numbers[2])
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 3: Multi-dimensional Arrays
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 3: Multi-dimensional Arrays ---")
+
+let row1 = [1, 2, 3]
+let row2 = [4, 5, 6]
+let row3 = [7, 8, 9]
+
+print("   Matrix:")
+print("   [", row1[0], ", ", row1[1], ", ", row1[2], "]")
+print("   [", row2[0], ", ", row2[1], ", ", row2[2], "]")
+print("   [", row3[0], ", ", row3[1], ", ", row3[2], "]")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 4: Statistics
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 4: Statistics ---")
+
+let data = [15, 25, 35, 45, 55]
+print("   Data: [15, 25, 35, 45, 55]")
+
+let d1 = data[0]
+let d2 = data[1]
+let d3 = data[2]
+let d4 = data[3]
+let d5 = data[4]
+
+let total = d1 + d2 + d3 + d4 + d5
+let average = total / 5
+
+print("   Sum: ", total)
+print("   Average: ", average)
+print("   Minimum: ", d1)
+print("   Maximum: ", d5)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 5: Data Grouping
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 5: Data Grouping ---")
+
+// Student data (simulated structure)
+let student1_name = "Alice"
+let student1_grade = 85
+
+let student2_name = "Bob"
+let student2_grade = 92
+
+let student3_name = "Carol"
+let student3_grade = 78
+
+print("   Student Records:")
+print("   - ", student1_name, ": ", student1_grade)
+print("   - ", student2_name, ": ", student2_grade)
+print("   - ", student3_name, ": ", student3_grade)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 6: Stack Simulation
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 6: Stack Simulation ---")
+
+print("   Stack Operations:")
+print("   - push(10) -> [10]")
+print("   - push(20) -> [10, 20]")
+print("   - push(30) -> [10, 20, 30]")
+print("   - pop() -> 30, Stack: [10, 20]")
+print("   - pop() -> 20, Stack: [10]")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 7: Queue Simulation
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 7: Queue Simulation ---")
+
+print("   Queue Operations:")
+print("   - enqueue(A) -> [A]")
+print("   - enqueue(B) -> [A, B]")
+print("   - enqueue(C) -> [A, B, C]")
+print("   - dequeue() -> A, Queue: [B, C]")
+print("   - dequeue() -> B, Queue: [C]")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 8: Practical Application
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 8: Practical Application ---")
+
+// Product inventory
+let products = ["Laptop", "Phone", "Tablet"]
+let prices = [1200, 800, 500]
+let quantities = [5, 10, 8]
+
+print("   Inventory:")
+print("   ┌────────────┬─────────┬──────────┐")
+print("   │ Product    │ Price   │ Quantity │")
+print("   ├────────────┼─────────┼──────────┤")
+print("   │ Laptop     │ $1200   │ 5        │")
+print("   │ Phone      │ $800    │ 10       │")
+print("   │ Tablet     │ $500    │ 8        │")
+print("   └────────────┴─────────┴──────────┘")
+
+let total_value = (1200 * 5) + (800 * 10) + (500 * 8)
+print("   Total Inventory Value: $", total_value)
+
+print("\n[OK] Data Structures demo completed!")

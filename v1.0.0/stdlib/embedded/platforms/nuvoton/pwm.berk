@@ -1,0 +1,30 @@
+// Nuvoton PWM Module (Enhanced for motor control)
+
+extern "C" {
+    fn PWM_ConfigOutputChannel(pwm: *void, channel: u32, freq: u32, duty: u32);
+    fn PWM_Start(pwm: *void, channel: u32);
+    fn PWM_Stop(pwm: *void, channel: u32);
+}
+
+pub struct PWM {
+    pwm: *void,
+    channel: u32,
+}
+
+impl PWM {
+    pub fn new(pwm: *void, channel: u32, freq: u32) -> PWM {
+        PWM { pwm, channel }
+    }
+    
+    pub fn set_duty_percent(&self, percent: u32) {
+        unsafe { PWM_ConfigOutputChannel(self.pwm, self.channel, 1000, percent); }
+    }
+    
+    pub fn start(&self) {
+        unsafe { PWM_Start(self.pwm, self.channel); }
+    }
+    
+    pub fn stop(&self) {
+        unsafe { PWM_Stop(self.pwm, self.channel); }
+    }
+}

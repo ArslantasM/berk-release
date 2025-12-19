@@ -1,0 +1,369 @@
+// stdlib/embedded/platforms/riscv_fe310/pwm.berk
+// SiFive FE310 PWM Implementation
+// 3 PWM peripherals (PWM0, PWM1, PWM2) with 4 comparators each
+
+kullan "embedded/bal/pwm" olarak PWM_BAL
+
+// PWM peripheral enumeration
+açık enum PwmPort yap
+    PWM0 = 0,
+    PWM1 = 1,
+    PWM2 = 2,
+son
+
+// PWM base addresses
+sabit PWM0_BASE: u32 = 0x10015000
+sabit PWM1_BASE: u32 = 0x10025000
+sabit PWM2_BASE: u32 = 0x10035000
+
+// PWM register offsets
+sabit PWM_CFG: u32 = 0x00       // Configuration register
+sabit PWM_COUNT: u32 = 0x08     // Counter register
+sabit PWM_PWMS: u32 = 0x10      // Scaled counter value
+sabit PWM_CMP0: u32 = 0x20      // Compare register 0
+sabit PWM_CMP1: u32 = 0x24      // Compare register 1
+sabit PWM_CMP2: u32 = 0x28      // Compare register 2
+sabit PWM_CMP3: u32 = 0x2C      // Compare register 3
+
+// PWM_CFG bits
+sabit PWM_CFG_SCALE: u32 = 0xF << 0         // Counter scale (0-15)
+sabit PWM_CFG_STICKY: u32 = 1 << 8          // Sticky mode
+sabit PWM_CFG_ZEROCMP: u32 = 1 << 9         // Zero comparator enable
+sabit PWM_CFG_DEGLITCH: u32 = 1 << 10       // Deglitch mode
+sabit PWM_CFG_ENALWAYS: u32 = 1 << 12       // Always enabled
+sabit PWM_CFG_ONESHOT: u32 = 1 << 13        // One-shot mode
+sabit PWM_CFG_CMP0CENTER: u32 = 1 << 16     // Center-aligned mode for CMP0
+sabit PWM_CFG_CMP1CENTER: u32 = 1 << 17     // Center-aligned mode for CMP1
+sabit PWM_CFG_CMP2CENTER: u32 = 1 << 18     // Center-aligned mode for CMP2
+sabit PWM_CFG_CMP3CENTER: u32 = 1 << 19     // Center-aligned mode for CMP3
+sabit PWM_CFG_CMP0GANG: u32 = 1 << 24       // Gang mode for CMP0
+sabit PWM_CFG_CMP1GANG: u32 = 1 << 25       // Gang mode for CMP1
+sabit PWM_CFG_CMP2GANG: u32 = 1 << 26       // Gang mode for CMP2
+sabit PWM_CFG_CMP3GANG: u32 = 1 << 27       // Gang mode for CMP3
+sabit PWM_CFG_CMP0IP: u32 = 1 << 28         // CMP0 interrupt pending
+sabit PWM_CFG_CMP1IP: u32 = 1 << 29         // CMP1 interrupt pending
+sabit PWM_CFG_CMP2IP: u32 = 1 << 30         // CMP2 interrupt pending
+sabit PWM_CFG_CMP3IP: u32 = 1 << 31         // CMP3 interrupt pending
+
+// Default PWM frequency
+açık sabit DEFAULT_PWM_FREQ: u32 = 1000  // 1 kHz
+
+// PWM clock frequency (derived from core clock)
+sabit PWM_CLOCK_HZ: u32 = 16000000  // 16 MHz (can be up to 320 MHz)
+
+harici "C" yap
+    fonksiyon volatile_read_u32(addr: *sabit u32) -> u32
+    fonksiyon volatile_write_u32(addr: *değiştir u32, value: u32)
+son
+
+fonksiyon pwm_base_address(port: PwmPort) -> u32 yap
+    seç port yap
+        durum PwmPort::PWM0 => dön PWM0_BASE,
+        durum PwmPort::PWM1 => dön PWM1_BASE,
+        durum PwmPort::PWM2 => dön PWM2_BASE,
+    son
+son
+
+fonksiyon pwm_read_reg(port: PwmPort, offset: u32) -> u32 yap
+    değişken addr = (pwm_base_address(port) + offset) olarak *sabit u32
+    dön volatile_read_u32(addr)
+son
+
+fonksiyon pwm_write_reg(port: PwmPort, offset: u32, value: u32) yap
+    değişken addr = (pwm_base_address(port) + offset) olarak *değiştir u32
+    volatile_write_u32(addr, value)
+son
+
+// Compare register offset helper
+fonksiyon cmp_offset(channel: u8) -> u32 yap
+    seç channel yap
+        durum 0 => dön PWM_CMP0,
+        durum 1 => dön PWM_CMP1,
+        durum 2 => dön PWM_CMP2,
+        durum 3 => dön PWM_CMP3,
+        durum _ => dön PWM_CMP0,
+    son
+son
+
+yapı FE310_PWM_HAL yap
+    port: PwmPort,
+    frequency: u32,
+    scale: u8,
+    period: u32,
+    initialized: bool,
+son
+
+uygula FE310_PWM_HAL yap
+    açık fonksiyon yeni(port: PwmPort, frequency: u32) -> FE310_PWM_HAL yap
+        // Calculate scale and period for desired frequency
+        // PWM frequency = PWM_CLOCK_HZ / ((2^scale) * period)
+        
+        değişken mut scale: u8 = 0
+        değişken mut period: u32 = 0
+        
+        // Find appropriate scale value (0-15)
+        için s içinde 0..16 yap
+            değişken divisor = 1u32 << s  // 2^s
+            period = PWM_CLOCK_HZ / (divisor * frequency)
+            
+            eğer period > 0 && period <= 0xFFFF yap
+                scale = s olarak u8
+                kır
+            son
+        son
+        
+        eğer period == 0 yap
+            period = 1
+        son
+        
+        // Configure PWM
+        değişken cfg = (scale olarak u32 & 0xF) | PWM_CFG_ENALWAYS
+        pwm_write_reg(port, PWM_CFG, cfg)
+        
+        // Set period (using CMP0 as period register)
+        pwm_write_reg(port, PWM_CMP0, period)
+        
+        // Reset counter
+        pwm_write_reg(port, PWM_COUNT, 0)
+        
+        dön FE310_PWM_HAL yap
+            port: port,
+            frequency: frequency,
+            scale: scale,
+            period: period,
+            initialized: doğru,
+        son
+    son
+    
+    açık fonksiyon set_duty_cycle(&kendim, channel: u8, duty_percent: u8) yap
+        eğer channel > 3 || duty_percent > 100 yap
+            dön  // Invalid parameters
+        son
+        
+        // Calculate compare value
+        // duty_percent = (cmp / period) * 100
+        değişken cmp_value = (kendim.period * duty_percent olarak u32) / 100
+        
+        // Set compare register
+        değişken offset = cmp_offset(channel)
+        pwm_write_reg(kendim.port, offset, cmp_value)
+    son
+    
+    açık fonksiyon set_duty_raw(&kendim, channel: u8, cmp_value: u32) yap
+        eğer channel > 3 yap
+            dön
+        son
+        
+        değişken offset = cmp_offset(channel)
+        pwm_write_reg(kendim.port, offset, cmp_value)
+    son
+    
+    açık fonksiyon get_duty_raw(&kendim, channel: u8) -> u32 yap
+        eğer channel > 3 yap
+            dön 0
+        son
+        
+        değişken offset = cmp_offset(channel)
+        dön pwm_read_reg(kendim.port, offset)
+    son
+    
+    açık fonksiyon enable_channel(&kendim, channel: u8) yap
+        eğer channel > 3 yap
+            dön
+        son
+        
+        // Channel is enabled by default when compare value is set
+        // Just ensure PWM is running
+        değişken cfg = pwm_read_reg(kendim.port, PWM_CFG)
+        eğer (cfg & PWM_CFG_ENALWAYS) == 0 yap
+            pwm_write_reg(kendim.port, PWM_CFG, cfg | PWM_CFG_ENALWAYS)
+        son
+    son
+    
+    açık fonksiyon disable_channel(&kendim, channel: u8) yap
+        eğer channel > 3 yap
+            dön
+        son
+        
+        // Set compare value to 0 (always low)
+        değişken offset = cmp_offset(channel)
+        pwm_write_reg(kendim.port, offset, 0)
+    son
+    
+    açık fonksiyon get_period(&kendim) -> u32 yap
+        dön kendim.period
+    son
+    
+    açık fonksiyon get_frequency(&kendim) -> u32 yap
+        dön kendim.frequency
+    son
+    
+    // Set frequency dynamically
+    açık fonksiyon set_frequency(&değiştir kendim, frequency: u32) yap
+        // Recalculate scale and period
+        değişken mut scale: u8 = 0
+        değişken mut period: u32 = 0
+        
+        için s içinde 0..16 yap
+            değişken divisor = 1u32 << s
+            period = PWM_CLOCK_HZ / (divisor * frequency)
+            
+            eğer period > 0 && period <= 0xFFFF yap
+                scale = s olarak u8
+                kır
+            son
+        son
+        
+        eğer period == 0 yap
+            period = 1
+        son
+        
+        kendim.scale = scale
+        kendim.period = period
+        kendim.frequency = frequency
+        
+        // Update configuration
+        değişken cfg = pwm_read_reg(kendim.port, PWM_CFG)
+        cfg = (cfg & !0xF) | (scale olarak u32 & 0xF)
+        pwm_write_reg(kendim.port, PWM_CFG, cfg)
+        
+        // Update period
+        pwm_write_reg(kendim.port, PWM_CMP0, period)
+    son
+    
+    // Enable center-aligned mode for a channel
+    açık fonksiyon set_center_aligned(&kendim, channel: u8, enable: bool) yap
+        eğer channel > 3 yap
+            dön
+        son
+        
+        değişken cfg = pwm_read_reg(kendim.port, PWM_CFG)
+        değişken bit = 16 + channel
+        
+        eğer enable yap
+            cfg |= 1 << bit
+        son değilse yap
+            cfg &= !(1 << bit)
+        son
+        
+        pwm_write_reg(kendim.port, PWM_CFG, cfg)
+    son
+    
+    // Enable one-shot mode
+    açık fonksiyon set_oneshot(&kendim, enable: bool) yap
+        değişken cfg = pwm_read_reg(kendim.port, PWM_CFG)
+        
+        eğer enable yap
+            cfg |= PWM_CFG_ONESHOT
+        son değilse yap
+            cfg &= !PWM_CFG_ONESHOT
+        son
+        
+        pwm_write_reg(kendim.port, PWM_CFG, cfg)
+    son
+    
+    // Get current counter value
+    açık fonksiyon get_counter(&kendim) -> u32 yap
+        dön pwm_read_reg(kendim.port, PWM_COUNT)
+    son
+    
+    // Reset counter
+    açık fonksiyon reset_counter(&kendim) yap
+        pwm_write_reg(kendim.port, PWM_COUNT, 0)
+    son
+son
+
+uygula PWM_BAL::PwmHAL için FE310_PWM_HAL yap
+    fonksiyon set_duty_cycle(&kendim, channel: u8, duty_percent: u8) yap
+        kendim.set_duty_cycle(channel, duty_percent)
+    son
+    
+    fonksiyon enable_channel(&kendim, channel: u8) yap
+        kendim.enable_channel(channel)
+    son
+    
+    fonksiyon disable_channel(&kendim, channel: u8) yap
+        kendim.disable_channel(channel)
+    son
+son
+
+açık tip PWM_HAL = FE310_PWM_HAL
+
+// Helper: RGB LED control using PWM (HiFive1 Rev B)
+açık fonksiyon rgb_led_init(freq: u32) -> PWM_HAL yap
+    // HiFive1 Rev B RGB LED is on PWM1
+    dön PWM_HAL::yeni(PwmPort::PWM1, freq)
+son
+
+açık fonksiyon rgb_led_set_color(pwm: &PWM_HAL, r: u8, g: u8, b: u8) yap
+    // HiFive1 Rev B RGB LED mapping:
+    // Red: PWM1.1 (GPIO22)
+    // Green: PWM1.2 (GPIO19)
+    // Blue: PWM1.3 (GPIO21)
+    
+    // LEDs are active low, so invert duty cycle
+    pwm.set_duty_cycle(1, 100 - ((r * 100) / 255))
+    pwm.set_duty_cycle(2, 100 - ((g * 100) / 255))
+    pwm.set_duty_cycle(3, 100 - ((b * 100) / 255))
+son
+
+// Smooth color transition
+açık fonksiyon rgb_led_fade(pwm: &PWM_HAL, from_r: u8, from_g: u8, from_b: u8, 
+                             to_r: u8, to_g: u8, to_b: u8, duration_ms: u32) yap
+    kulun crate::time::*
+    
+    değişken steps: u32 = 50  // 50 steps for smooth transition
+    değişken delay_per_step = duration_ms / steps
+    
+    için i içinde 0..=steps yap
+        değişken t = i olarak f32 / steps olarak f32
+        
+        değişken r = from_r olarak f32 + (to_r olarak f32 - from_r olarak f32) * t
+        değişken g = from_g olarak f32 + (to_g olarak f32 - from_g olarak f32) * t
+        değişken b = from_b olarak f32 + (to_b olarak f32 - from_b olarak f32) * t
+        
+        rgb_led_set_color(pwm, r olarak u8, g olarak u8, b olarak u8)
+        delay_ms(delay_per_step)
+    son
+son
+
+// Rainbow color cycle
+açık fonksiyon rgb_led_rainbow(pwm: &PWM_HAL, duration_ms: u32) yap
+    kulun crate::time::*
+    
+    değişken steps: u32 = 360
+    değişken delay_per_step = duration_ms / steps
+    
+    için hue içinde 0..360 yap
+        değişken (r, g, b) = hsv_to_rgb(hue olarak f32, 1.0, 1.0)
+        rgb_led_set_color(pwm, r, g, b)
+        delay_ms(delay_per_step)
+    son
+son
+
+// HSV to RGB conversion helper
+fonksiyon hsv_to_rgb(h: f32, s: f32, v: f32) -> (u8, u8, u8) yap
+    değişken c = v * s
+    değişken x = c * (1.0 - ((h / 60.0) % 2.0 - 1.0).abs())
+    değişken m = v - c
+    
+    değişken (r_prime, g_prime, b_prime) = eğer h < 60.0 yap
+        (c, x, 0.0)
+    son değilse eğer h < 120.0 yap
+        (x, c, 0.0)
+    son değilse eğer h < 180.0 yap
+        (0.0, c, x)
+    son değilse eğer h < 240.0 yap
+        (0.0, x, c)
+    son değilse eğer h < 300.0 yap
+        (x, 0.0, c)
+    son değilse yap
+        (c, 0.0, x)
+    son
+    
+    değişken r = ((r_prime + m) * 255.0) olarak u8
+    değişken g = ((g_prime + m) * 255.0) olarak u8
+    değişken b = ((b_prime + m) * 255.0) olarak u8
+    
+    dön (r, g, b)
+son

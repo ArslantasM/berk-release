@@ -1,0 +1,470 @@
+//! # Complex Module
+//!
+//! Complex numbers (engineering & scientific computing).
+//!
+//! Kompleks sayılar (mühendislik & bilimsel hesaplama).
+//!
+//! ## Features / Özellikler
+//!
+//! - **Representation**: Real + imaginary / Gerçek + sanal
+//! - **Arithmetic**: +, -, *, / / Aritmetik işlemler
+//! - **Trigonometric**: sin, cos, tan (complex) / Trigonometrik
+//! - **Exponential**: exp, log (complex) / Üssel fonksiyonlar
+//! - **Power**: pow, sqrt, root / Üs alma, kök
+//! - **Conversions**: Polar ↔ rectangular / Dönüştürmeler
+//!
+//! ## Example / Örnek
+//!
+//! ```berk
+//! kullan complex
+//!
+//! değişken z1 = complex.new(3.0, 4.0)  // 3 + 4i
+//! değişken z2 = complex.new(1.0, 2.0)  // 1 + 2i
+//! değişken toplam = complex.add(z1, z2)
+//! değişken polar = complex.to_polar(z1)
+//! ```
+//!
+//! Inspired by: Julia complex.jl + NumPy
+
+// ============================================================================
+// BERK STANDART KÜTÜPHANESİ - KOMPLEKS SAYILAR MODÜLÜ
+// BERK STANDARD LIBRARY - COMPLEX NUMBERS MODULE
+// ============================================================================
+//
+// HEDEF SEVİYE: Üniversite + Mühendislik
+// TARGET LEVEL: University + Engineering
+//
+// İLHAM KAYNAKLARI / INSPIRED BY:
+//   • Julia base/complex.jl - Modern complex number design
+//   • C++ std::complex
+//   • Python complex type
+//   • NumPy np.complex128
+//
+// KAPSAM / SCOPE:
+//   ✓ Complex number representation
+//   ✓ Arithmetic operations (+, -, *, /)
+//   ✓ Trigonometric functions (complex domain)
+//   ✓ Exponential and logarithm (complex)
+//   ✓ Power and root (complex)
+//   ✓ Conversions (polar ↔ rectangular)
+//
+// NOT: BERK'te struct desteği gelene kadar, kompleks sayıları
+//      iki ondalık (real, imag) olarak tuple şeklinde temsil ediyoruz
+//
+// ============================================================================
+
+kullan math  // Trigonometrik ve matematiksel fonksiyonlar
+
+// ============================================================================
+// KOMPLEKS SAYI OLUŞTURMA / COMPLEX NUMBER CREATION
+// ============================================================================
+
+// Kompleks sayı oluştur: a + bi
+// Create complex number from real and imaginary parts
+fonksiyon complex_new(re: ondalık, im: ondalık) -> (ondalık, ondalık) yap
+    dön (re, im)
+son
+
+// Gerçek sayıdan kompleks sayı
+// Real to complex
+fonksiyon complex_from_real(x: ondalık) -> (ondalık, ondalık) yap
+    dön (x, 0.0)
+son
+
+// Sanal birim: i = 0 + 1i
+// Imaginary unit
+fonksiyon complex_i() -> (ondalık, ondalık) yap
+    dön (0.0, 1.0)
+son
+
+// Polar formdan kompleks sayı: z = r·e^(iθ) = r(cos θ + i sin θ)
+// Complex from polar form (r, θ)
+fonksiyon complex_from_polar(r: ondalık, theta: ondalık) -> (ondalık, ondalık) yap
+    değişken re = r * math::cos(theta)
+    değişken im = r * math::sin(theta)
+    dön (re, im)
+son
+
+// ============================================================================
+// TEMEL ERİŞİM / BASIC ACCESS
+// ============================================================================
+
+// Gerçek kısım / Real part
+fonksiyon complex_real(z_re: ondalık, z_im: ondalık) -> ondalık yap
+    dön z_re
+son
+
+// Sanal kısım / Imaginary part
+fonksiyon complex_imag(z_re: ondalık, z_im: ondalık) -> ondalık yap
+    dön z_im
+son
+
+// Her ikisi / Both parts
+fonksiyon complex_reim(z_re: ondalık, z_im: ondalık) -> (ondalık, ondalık) yap
+    dön (z_re, z_im)
+son
+
+// ============================================================================
+// MODÜL VE FAZ / MAGNITUDE AND PHASE
+// ============================================================================
+
+// Modül (büyüklük): |z| = √(a² + b²)
+// Absolute value (magnitude)
+fonksiyon complex_abs(z_re: ondalık, z_im: ondalık) -> ondalık yap
+    dön math::hypot(z_re, z_im)
+son
+
+// Modül karesi: |z|² = a² + b²
+// Absolute value squared
+fonksiyon complex_abs2(z_re: ondalık, z_im: ondalık) -> ondalık yap
+    dön z_re * z_re + z_im * z_im
+son
+
+// Faz (açı, argument): arg(z) = atan2(b, a)
+// Phase (angle, argument)
+fonksiyon complex_angle(z_re: ondalık, z_im: ondalık) -> ondalık yap
+    dön math::atan2(z_im, z_re)
+son
+
+// Polar forma dönüştür: (r, θ)
+// Convert to polar form
+fonksiyon complex_to_polar(z_re: ondalık, z_im: ondalık) -> (ondalık, ondalık) yap
+    değişken r = complex_abs(z_re, z_im)
+    değişken theta = complex_angle(z_re, z_im)
+    dön (r, theta)
+son
+
+// ============================================================================
+// ARİTMETİK İŞLEMLER / ARITHMETIC OPERATIONS
+// ============================================================================
+
+// Toplama: (a+bi) + (c+di) = (a+c) + (b+d)i
+// Addition
+fonksiyon complex_add(a_re: ondalık, a_im: ondalık, b_re: ondalık, b_im: ondalık) -> (ondalık, ondalık) yap
+    dön (a_re + b_re, a_im + b_im)
+son
+
+// Çıkarma: (a+bi) - (c+di) = (a-c) + (b-d)i
+// Subtraction
+fonksiyon complex_sub(a_re: ondalık, a_im: ondalık, b_re: ondalık, b_im: ondalık) -> (ondalık, ondalık) yap
+    dön (a_re - b_re, a_im - b_im)
+son
+
+// Çarpma: (a+bi)(c+di) = (ac-bd) + (ad+bc)i
+// Multiplication
+fonksiyon complex_mul(a_re: ondalık, a_im: ondalık, b_re: ondalık, b_im: ondalık) -> (ondalık, ondalık) yap
+    değişken re = a_re * b_re - a_im * b_im
+    değişken im = a_re * b_im + a_im * b_re
+    dön (re, im)
+son
+
+// Bölme: (a+bi) / (c+di) = [(ac+bd) + (bc-ad)i] / (c²+d²)
+// Division
+fonksiyon complex_div(a_re: ondalık, a_im: ondalık, b_re: ondalık, b_im: ondalık) -> (ondalık, ondalık) yap
+    değişken denom = b_re * b_re + b_im * b_im
+    eğer denom == 0.0 ise dön (0.0, 0.0)  // Division by zero
+    
+    değişken re = (a_re * b_re + a_im * b_im) / denom
+    değişken im = (a_im * b_re - a_re * b_im) / denom
+    dön (re, im)
+son
+
+// Negatif: -(a+bi) = -a - bi
+// Negation
+fonksiyon complex_neg(z_re: ondalık, z_im: ondalık) -> (ondalık, ondalık) yap
+    dön (-z_re, -z_im)
+son
+
+// Eşlenik (conjugate): conj(a+bi) = a - bi
+// Complex conjugate
+fonksiyon complex_conj(z_re: ondalık, z_im: ondalık) -> (ondalık, ondalık) yap
+    dön (z_re, -z_im)
+son
+
+// Ters: 1/z = conj(z) / |z|²
+// Reciprocal
+fonksiyon complex_inv(z_re: ondalık, z_im: ondalık) -> (ondalık, ondalık) yap
+    değişken abs2 = complex_abs2(z_re, z_im)
+    eğer abs2 == 0.0 ise dön (0.0, 0.0)
+    dön (z_re / abs2, -z_im / abs2)
+son
+
+// ============================================================================
+// ÜS VE KÖK / POWER AND ROOT
+// ============================================================================
+
+// Kare: z² = (a+bi)² = (a²-b²) + 2abi
+// Square
+fonksiyon complex_square(z_re: ondalık, z_im: ondalık) -> (ondalık, ondalık) yap
+    değişken re = z_re * z_re - z_im * z_im
+    değişken im = 2.0 * z_re * z_im
+    dön (re, im)
+son
+
+// Üs (tam sayı): z^n (binary exponentiation)
+// Integer power
+fonksiyon complex_powi(z_re: ondalık, z_im: ondalık, n: tamsayı) -> (ondalık, ondalık) yap
+    eğer n == 0 ise dön (1.0, 0.0)
+    eğer n < 0 ise yap
+        // z^(-n) = 1 / z^n
+        değişken inv = complex_inv(z_re, z_im)
+        dön complex_powi(inv.0, inv.1, -n)
+    son
+    
+    // Binary exponentiation
+    değişken result_re = 1.0
+    değişken result_im = 0.0
+    değişken base_re = z_re
+    değişken base_im = z_im
+    değişken exp = n
+    
+    iken exp > 0 yap
+        eğer (exp % 2) == 1 ise yap
+            değişken temp = complex_mul(result_re, result_im, base_re, base_im)
+            result_re = temp.0
+            result_im = temp.1
+        son
+        değişken temp2 = complex_mul(base_re, base_im, base_re, base_im)
+        base_re = temp2.0
+        base_im = temp2.1
+        exp = exp / 2
+    son
+    
+    dön (result_re, result_im)
+son
+
+// Karekök: √z - principal square root
+// Square root (principal branch)
+fonksiyon complex_sqrt(z_re: ondalık, z_im: ondalık) -> (ondalık, ondalık) yap
+    değişken r = complex_abs(z_re, z_im)
+    eğer r == 0.0 ise dön (0.0, 0.0)
+    
+    // √z = √[(|z|+re)/2] + i·sign(im)·√[(|z|-re)/2]
+    değişken t = math::sqrt((r + math::abs(z_re)) / 2.0)
+    
+    eğer z_re >= 0.0 ise yap
+        değişken re_part = t
+        değişken im_part = z_im / (2.0 * t)
+        dön (re_part, im_part)
+    değilse yap
+        değişken re_part = math::abs(z_im) / (2.0 * t)
+        değişken im_sign = eğer z_im >= 0.0 ise 1.0 değilse -1.0
+        değişken im_part = im_sign * t
+        dön (re_part, im_part)
+    son
+son
+
+// ============================================================================
+// EXP VE LOG / EXPONENTIAL AND LOGARITHM
+// ============================================================================
+
+// Exponential: e^z = e^a (cos b + i sin b)
+// Euler's formula: e^(iθ) = cos θ + i sin θ
+fonksiyon complex_exp(z_re: ondalık, z_im: ondalık) -> (ondalık, ondalık) yap
+    değişken exp_re = math::exp(z_re)
+    değişken re = exp_re * math::cos(z_im)
+    değişken im = exp_re * math::sin(z_im)
+    dön (re, im)
+son
+
+// Natural logarithm: ln(z) = ln|z| + i·arg(z)
+fonksiyon complex_log(z_re: ondalık, z_im: ondalık) -> (ondalık, ondalık) yap
+    değişken r = complex_abs(z_re, z_im)
+    eğer r == 0.0 ise dön (0.0, 0.0)  // log(0) undefined
+    
+    değişken re = math::log(r)
+    değişken im = complex_angle(z_re, z_im)
+    dön (re, im)
+son
+
+// Power: z^w = e^(w·ln z) - complex exponent
+fonksiyon complex_pow(z_re: ondalık, z_im: ondalık, w_re: ondalık, w_im: ondalık) -> (ondalık, ondalık) yap
+    // z^w = e^(w·ln(z))
+    değişken log_z = complex_log(z_re, z_im)
+    değişken w_log = complex_mul(w_re, w_im, log_z.0, log_z.1)
+    dön complex_exp(w_log.0, w_log.1)
+son
+
+// ============================================================================
+// TRİGONOMETRİK FONKSİYONLAR / TRIGONOMETRIC (COMPLEX DOMAIN)
+// ============================================================================
+
+// sin(z) = (e^(iz) - e^(-iz)) / (2i)
+fonksiyon complex_sin(z_re: ondalık, z_im: ondalık) -> (ondalık, ondalık) yap
+    // sin(a+bi) = sin(a)cosh(b) + i·cos(a)sinh(b)
+    değişken re = math::sin(z_re) * math::cosh(z_im)
+    değişken im = math::cos(z_re) * math::sinh(z_im)
+    dön (re, im)
+son
+
+// cos(z) = (e^(iz) + e^(-iz)) / 2
+fonksiyon complex_cos(z_re: ondalık, z_im: ondalık) -> (ondalık, ondalık) yap
+    // cos(a+bi) = cos(a)cosh(b) - i·sin(a)sinh(b)
+    değişken re = math::cos(z_re) * math::cosh(z_im)
+    değişken im = -math::sin(z_re) * math::sinh(z_im)
+    dön (re, im)
+son
+
+// tan(z) = sin(z) / cos(z)
+fonksiyon complex_tan(z_re: ondalık, z_im: ondalık) -> (ondalık, ondalık) yap
+    değişken sin_z = complex_sin(z_re, z_im)
+    değişken cos_z = complex_cos(z_re, z_im)
+    dön complex_div(sin_z.0, sin_z.1, cos_z.0, cos_z.1)
+son
+
+// ============================================================================
+// HİPERBOLİK FONKSİYONLAR / HYPERBOLIC (COMPLEX DOMAIN)
+// ============================================================================
+
+// sinh(z) = (e^z - e^(-z)) / 2
+fonksiyon complex_sinh(z_re: ondalık, z_im: ondalık) -> (ondalık, ondalık) yap
+    // sinh(a+bi) = sinh(a)cos(b) + i·cosh(a)sin(b)
+    değişken re = math::sinh(z_re) * math::cos(z_im)
+    değişken im = math::cosh(z_re) * math::sin(z_im)
+    dön (re, im)
+son
+
+// cosh(z) = (e^z + e^(-z)) / 2
+fonksiyon complex_cosh(z_re: ondalık, z_im: ondalık) -> (ondalık, ondalık) yap
+    // cosh(a+bi) = cosh(a)cos(b) + i·sinh(a)sin(b)
+    değişken re = math::cosh(z_re) * math::cos(z_im)
+    değişken im = math::sinh(z_re) * math::sin(z_im)
+    dön (re, im)
+son
+
+// tanh(z) = sinh(z) / cosh(z)
+fonksiyon complex_tanh(z_re: ondalık, z_im: ondalık) -> (ondalık, ondalık) yap
+    değişken sinh_z = complex_sinh(z_re, z_im)
+    değişken cosh_z = complex_cosh(z_re, z_im)
+    dön complex_div(sinh_z.0, sinh_z.1, cosh_z.0, cosh_z.1)
+son
+
+// ============================================================================
+// KONTROL FONKSİYONLARI / PREDICATES
+// ============================================================================
+
+// Gerçek sayı mı? / Is real?
+fonksiyon complex_isreal(z_re: ondalık, z_im: ondalık) -> mantıksal yap
+    dön z_im == 0.0
+son
+
+// Sanal sayı mı? / Is imaginary?
+fonksiyon complex_isimag(z_re: ondalık, z_im: ondalık) -> mantıksal yap
+    dön z_re == 0.0
+son
+
+// Sıfır mı? / Is zero?
+fonksiyon complex_iszero(z_re: ondalık, z_im: ondalık) -> mantıksal yap
+    dön (z_re == 0.0) ve (z_im == 0.0)
+son
+
+// Sonlu mu? / Is finite?
+fonksiyon complex_isfinite(z_re: ondalık, z_im: ondalık) -> mantıksal yap
+    dön math::isfinite(z_re) ve math::isfinite(z_im)
+son
+
+// NaN var mı? / Has NaN?
+fonksiyon complex_isnan(z_re: ondalık, z_im: ondalık) -> mantıksal yap
+    dön math::isnan(z_re) veya math::isnan(z_im)
+son
+
+// Sonsuz mu? / Is infinite?
+fonksiyon complex_isinf(z_re: ondalık, z_im: ondalık) -> mantıksal yap
+    dön math::isinf(z_re) veya math::isinf(z_im)
+son
+
+// ============================================================================
+// KARŞILAŞTIRMA / COMPARISON
+// ============================================================================
+
+// Eşit mi? / Equal?
+fonksiyon complex_equal(a_re: ondalık, a_im: ondalık, b_re: ondalık, b_im: ondalık) -> mantıksal yap
+    dön (a_re == b_re) ve (a_im == b_im)
+son
+
+// Yaklaşık eşit mi? (epsilon tolerance)
+// Approximately equal?
+fonksiyon complex_approx_equal(a_re: ondalık, a_im: ondalık, b_re: ondalık, b_im: ondalık, eps: ondalık) -> mantıksal yap
+    değişken diff_re = math::abs(a_re - b_re)
+    değişken diff_im = math::abs(a_im - b_im)
+    dön (diff_re < eps) ve (diff_im < eps)
+son
+
+// ============================================================================
+// ÖZEL DEĞERLER / SPECIAL VALUES
+// ============================================================================
+
+// Sıfır
+fonksiyon complex_zero() -> (ondalık, ondalık) yap
+    dön (0.0, 0.0)
+son
+
+// Bir
+fonksiyon complex_one() -> (ondalık, ondalık) yap
+    dön (1.0, 0.0)
+son
+
+// Sanal birim: i
+fonksiyon complex_im() -> (ondalık, ondalık) yap
+    dön (0.0, 1.0)
+son
+
+// ============================================================================
+// YARDIMCI FONKSİYONLAR / UTILITY
+// ============================================================================
+
+// cis(θ) = e^(iθ) = cos(θ) + i·sin(θ)
+// Euler's formula
+fonksiyon complex_cis(theta: ondalık) -> (ondalık, ondalık) yap
+    dön (math::cos(theta), math::sin(theta))
+son
+
+// Sign function (phase): z/|z|
+fonksiyon complex_sign(z_re: ondalık, z_im: ondalık) -> (ondalık, ondalık) yap
+    değişken r = complex_abs(z_re, z_im)
+    eğer r == 0.0 ise dön (0.0, 0.0)
+    dön (z_re / r, z_im / r)
+son
+
+// ============================================================================
+// English Versions / İngilizce Alias'lar
+// ============================================================================
+
+function complex_create(re: float, im: float) -> (float, float) do
+    return complex_new(re, im)
+end
+
+function complex_magnitude(z_re: float, z_im: float) -> float do
+    return complex_abs(z_re, z_im)
+end
+
+function complex_conjugate(z_re: float, z_im: float) -> (float, float) do
+    return complex_conj(z_re, z_im)
+end
+
+function complex_reciprocal(z_re: float, z_im: float) -> (float, float) do
+    return complex_inv(z_re, z_im)
+end
+
+function complex_multiply(a_re: float, a_im: float, b_re: float, b_im: float) -> (float, float) do
+    return complex_mul(a_re, a_im, b_re, b_im)
+end
+
+function complex_divide(a_re: float, a_im: float, b_re: float, b_im: float) -> (float, float) do
+    return complex_div(a_re, a_im, b_re, b_im)
+end
+
+// ============================================================================
+// SONUÇ / CONCLUSION
+// ============================================================================
+// Bu modül Julia'nın complex.jl tasarımından ilham alarak oluşturuldu.
+// Kompleks sayılar elektrik mühendisliği, sinyal işleme, kuantum mekaniği,
+// kontrol sistemleri ve birçok bilimsel alanda kritik öneme sahiptir.
+//
+// This module is inspired by Julia's complex.jl design.
+// Complex numbers are critical in electrical engineering, signal processing,
+// quantum mechanics, control systems, and many scientific fields.
+//
+// Gelecek: BERK'te struct desteği gelince Complex{T} generic type
+// Future: When BERK supports structs, implement Complex{T} generic type
+// ============================================================================

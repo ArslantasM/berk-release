@@ -1,0 +1,63 @@
+// stdlib/embedded/platforms/esp32/time.berk
+// ESP32 Time Implementation using FreeRTOS
+// Provides millisecond and microsecond timing
+
+import "embedded/bal/time" as TIME_BAL
+
+// FFI to ESP32 time functions
+extern "C" {
+    fn xTaskGetTickCount() -> u32;
+    fn vTaskDelay(ticks: u32);
+    fn esp_timer_get_time() -> u64;  // Returns microseconds
+    fn ets_delay_us(us: u32);
+}
+
+const TICKS_PER_MS: u32 = 1;  // FreeRTOS configured for 1ms tick
+
+/// TIME_HAL implementation for ESP32
+pub struct ESP32_TimeHAL;
+
+impl TIME_BAL.TIME_HAL for ESP32_TimeHAL {
+    fn millis() -> u32 {
+        unsafe { xTaskGetTickCount() }
+    }
+    
+    fn micros() -> u32 {
+        unsafe { esp_timer_get_time() as u32 }
+    }
+    
+    fn delay_ms(ms: u32) {
+        unsafe { 
+            vTaskDelay(ms * TICKS_PER_MS);
+        }
+    }
+    
+    fn delay_us(us: u32) {
+        unsafe { ets_delay_us(us); }
+    }
+}
+
+// Export the HAL instance
+pub const TIME_HAL: ESP32_TimeHAL = ESP32_TimeHAL;
+
+// Convenience functions
+pub fn millis() -> u32 {
+    TIME_HAL.millis()
+}
+
+pub fn micros() -> u32 {
+    TIME_HAL.micros()
+}
+
+pub fn delay_ms(ms: u32) {
+    TIME_HAL.delay_ms(ms)
+}
+
+pub fn delay_us(us: u32) {
+    TIME_HAL.delay_us(us)
+}
+
+// Get time in microseconds (64-bit for long durations)
+pub fn micros64() -> u64 {
+    unsafe { esp_timer_get_time() }
+}

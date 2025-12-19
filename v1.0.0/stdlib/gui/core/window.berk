@@ -1,0 +1,608 @@
+// ============================================================================
+// BERK GUI Framework - Window Module
+// ============================================================================
+// Pencere yönetimi ve platform-agnostic window API
+// ============================================================================
+
+modül gui::core::window
+
+kullan gui::core::event::{Event, EventHandler}
+kullan gui::style::theme::Theme
+kullan gui::style::colors::Color
+kullan gui::widgets::core::widget::Widget
+kullan gui::rendering::context::RenderContext
+kullan gui::layout::constraints::Size
+
+// ============================================================================
+// WINDOW - Pencere Sınıfı
+// ============================================================================
+
+/// Platform-bağımsız pencere sınıfı
+pub tip Window = yapı yap
+    /// Benzersiz pencere ID
+    id: tamsayı,
+    
+    /// Pencere başlığı
+    title: yazı,
+    
+    /// Pencere boyutları
+    width: tamsayı,
+    height: tamsayı,
+    
+    /// Pencere konumu
+    x: tamsayı,
+    y: tamsayı,
+    
+    /// Minimum boyut
+    min_size: Seçenek[Size],
+    
+    /// Maksimum boyut
+    max_size: Seçenek[Size],
+    
+    /// Pencere durumu
+    state: WindowState,
+    
+    /// Pencere stilleri
+    style: WindowStyle,
+    
+    /// Tema
+    theme: Theme,
+    
+    /// Arka plan rengi
+    background: Color,
+    
+    /// İçerik widget'ı (root widget)
+    content: Seçenek[Widget],
+    
+    /// Render context
+    context: RenderContext,
+    
+    /// Olay işleyicileri
+    event_handlers: liste[EventHandler],
+    
+    /// Native handle (platform-specific)
+    native_handle: tamsayı,
+    
+    /// Kapatma işleyicisi
+    on_close: Seçenek[fn() döndür mantıksal],
+    
+    /// Boyut değişimi işleyicisi
+    on_resize: Seçenek[fn(width: tamsayı, height: tamsayı) döndür void]
+son
+
+/// Pencere durumu
+pub tip WindowState = enum yap
+    Normal,
+    Minimized,
+    Maximized,
+    Fullscreen,
+    Hidden
+son
+
+/// Pencere stili
+pub tip WindowStyle = yapı yap
+    /// Başlık çubuğu
+    title_bar: mantıksal,
+    
+    /// Yeniden boyutlandırılabilir
+    resizable: mantıksal,
+    
+    /// Simge durumuna küçültülebilir
+    minimizable: mantıksal,
+    
+    /// Tam ekran yapılabilir
+    maximizable: mantıksal,
+    
+    /// Kapatma düğmesi
+    closable: mantıksal,
+    
+    /// Kenarlık
+    bordered: mantıksal,
+    
+    /// Şeffaflık desteği
+    transparent: mantıksal,
+    
+    /// Her zaman üstte
+    always_on_top: mantıksal,
+    
+    /// Splash screen (kenarlıksız, ortada)
+    splash: mantıksal
+son
+
+/// Pencere builder
+pub tip WindowBuilder = yapı yap
+    title: yazı,
+    width: tamsayı,
+    height: tamsayı,
+    x: Seçenek[tamsayı],
+    y: Seçenek[tamsayı],
+    min_size: Seçenek[Size],
+    max_size: Seçenek[Size],
+    style: WindowStyle,
+    theme: Seçenek[Theme],
+    background: Seçenek[Color],
+    icon: Seçenek[yazı]
+son
+
+// ============================================================================
+// WINDOW STYLE DEFAULTS
+// ============================================================================
+
+impl WindowStyle:
+    /// Varsayılan pencere stili
+    pub fn default() döndür WindowStyle:
+        döndür WindowStyle yap
+            title_bar: doğru,
+            resizable: doğru,
+            minimizable: doğru,
+            maximizable: doğru,
+            closable: doğru,
+            bordered: doğru,
+            transparent: yanlış,
+            always_on_top: yanlış,
+            splash: yanlış
+        son
+    son
+    
+    /// Kenarlıksız pencere
+    pub fn borderless() döndür WindowStyle:
+        döndür WindowStyle yap
+            title_bar: yanlış,
+            resizable: yanlış,
+            minimizable: yanlış,
+            maximizable: yanlış,
+            closable: doğru,
+            bordered: yanlış,
+            transparent: yanlış,
+            always_on_top: yanlış,
+            splash: yanlış
+        son
+    son
+    
+    /// Splash screen stili
+    pub fn splash_screen() döndür WindowStyle:
+        döndür WindowStyle yap
+            title_bar: yanlış,
+            resizable: yanlış,
+            minimizable: yanlış,
+            maximizable: yanlış,
+            closable: yanlış,
+            bordered: yanlış,
+            transparent: doğru,
+            always_on_top: doğru,
+            splash: doğru
+        son
+    son
+    
+    /// Araç penceresi (utility window)
+    pub fn tool_window() döndür WindowStyle:
+        döndür WindowStyle yap
+            title_bar: doğru,
+            resizable: doğru,
+            minimizable: yanlış,
+            maximizable: yanlış,
+            closable: doğru,
+            bordered: doğru,
+            transparent: yanlış,
+            always_on_top: yanlış,
+            splash: yanlış
+        son
+    son
+son
+
+// ============================================================================
+// WINDOW BUILDER
+// ============================================================================
+
+impl WindowBuilder:
+    /// Yeni builder
+    pub fn new(title: yazı) döndür WindowBuilder:
+        döndür WindowBuilder yap
+            title: title,
+            width: 800,
+            height: 600,
+            x: boş,
+            y: boş,
+            min_size: boş,
+            max_size: boş,
+            style: WindowStyle::default(),
+            theme: boş,
+            background: boş,
+            icon: boş
+        son
+    son
+    
+    /// Boyut ayarla
+    pub fn size(mut self, width: tamsayı, height: tamsayı) döndür WindowBuilder:
+        self.width = width
+        self.height = height
+        döndür self
+    son
+    
+    /// Konum ayarla
+    pub fn position(mut self, x: tamsayı, y: tamsayı) döndür WindowBuilder:
+        self.x = Bazı(x)
+        self.y = Bazı(y)
+        döndür self
+    son
+    
+    /// Ortala
+    pub fn centered(mut self) döndür WindowBuilder:
+        // Native call ile ekran boyutunu al ve ortala
+        self.x = boş  // özel değer: ortala
+        self.y = boş
+        döndür self
+    son
+    
+    /// Minimum boyut
+    pub fn min_size(mut self, width: tamsayı, height: tamsayı) döndür WindowBuilder:
+        self.min_size = Bazı(Size yap width: width, height: height son)
+        döndür self
+    son
+    
+    /// Maksimum boyut
+    pub fn max_size(mut self, width: tamsayı, height: tamsayı) döndür WindowBuilder:
+        self.max_size = Bazı(Size yap width: width, height: height son)
+        döndür self
+    son
+    
+    /// Stil ayarla
+    pub fn style(mut self, style: WindowStyle) döndür WindowBuilder:
+        self.style = style
+        döndür self
+    son
+    
+    /// Yeniden boyutlandırılabilir
+    pub fn resizable(mut self, resizable: mantıksal) döndür WindowBuilder:
+        self.style.resizable = resizable
+        döndür self
+    son
+    
+    /// Kenarlıksız
+    pub fn borderless(mut self) döndür WindowBuilder:
+        self.style = WindowStyle::borderless()
+        döndür self
+    son
+    
+    /// Şeffaf
+    pub fn transparent(mut self, transparent: mantıksal) döndür WindowBuilder:
+        self.style.transparent = transparent
+        döndür self
+    son
+    
+    /// Her zaman üstte
+    pub fn always_on_top(mut self, on_top: mantıksal) döndür WindowBuilder:
+        self.style.always_on_top = on_top
+        döndür self
+    son
+    
+    /// Tema
+    pub fn theme(mut self, theme: Theme) döndür WindowBuilder:
+        self.theme = Bazı(theme)
+        döndür self
+    son
+    
+    /// Arka plan rengi
+    pub fn background(mut self, color: Color) döndür WindowBuilder:
+        self.background = Bazı(color)
+        döndür self
+    son
+    
+    /// İkon
+    pub fn icon(mut self, path: yazı) döndür WindowBuilder:
+        self.icon = Bazı(path)
+        döndür self
+    son
+    
+    /// Pencere oluştur
+    pub fn build(self) döndür Window:
+        değişken id = __native_generate_window_id()
+        
+        değişken theme = eşle self.theme:
+            Bazı(t) => t,
+            boş => Theme::system()
+        son
+        
+        değişken background = eşle self.background:
+            Bazı(c) => c,
+            boş => theme.colors.background
+        son
+        
+        değişken window = Window yap
+            id: id,
+            title: self.title,
+            width: self.width,
+            height: self.height,
+            x: self.x.unwrap_or(0),
+            y: self.y.unwrap_or(0),
+            min_size: self.min_size,
+            max_size: self.max_size,
+            state: WindowState::Hidden,
+            style: self.style,
+            theme: theme,
+            background: background,
+            content: boş,
+            context: RenderContext::new(self.width, self.height),
+            event_handlers: [],
+            native_handle: 0,
+            on_close: boş,
+            on_resize: boş
+        son
+        
+        // Native pencere oluştur
+        window.native_handle = __native_create_window(
+            self.title, 
+            self.width, 
+            self.height,
+            self.x.unwrap_or(-1),  // -1 = ortalanmış
+            self.y.unwrap_or(-1),
+            self.style
+        )
+        
+        // İkon ayarla
+        eğer değişken icon_path = self.icon:
+            __native_set_window_icon(window.native_handle, icon_path)
+        son
+        
+        döndür window
+    son
+son
+
+// ============================================================================
+// WINDOW IMPLEMENTATION
+// ============================================================================
+
+impl Window:
+    /// Basit pencere oluştur
+    pub fn new(title: yazı, width: tamsayı, height: tamsayı) döndür Window:
+        döndür WindowBuilder::new(title)
+            .size(width, height)
+            .centered()
+            .build()
+    son
+    
+    /// Builder ile pencere oluştur
+    pub fn builder(title: yazı) döndür WindowBuilder:
+        döndür WindowBuilder::new(title)
+    son
+    
+    /// Pencereyi göster
+    pub fn show(mut self) döndür void:
+        self.state = WindowState::Normal
+        __native_show_window(self.native_handle)
+    son
+    
+    /// Pencereyi gizle
+    pub fn hide(mut self) döndür void:
+        self.state = WindowState::Hidden
+        __native_hide_window(self.native_handle)
+    son
+    
+    /// Pencereyi kapat
+    pub fn close(mut self) döndür void:
+        // on_close callback varsa çağır
+        eğer değişken handler = self.on_close:
+            eğer !handler():
+                // Kapatma iptal edildi
+                döndür
+            son
+        son
+        
+        __native_close_window(self.native_handle)
+        self.state = WindowState::Hidden
+    son
+    
+    /// Simge durumuna küçült
+    pub fn minimize(mut self) döndür void:
+        self.state = WindowState::Minimized
+        __native_minimize_window(self.native_handle)
+    son
+    
+    /// Tam ekran yap
+    pub fn maximize(mut self) döndür void:
+        self.state = WindowState::Maximized
+        __native_maximize_window(self.native_handle)
+    son
+    
+    /// Tam ekran moduna geç
+    pub fn fullscreen(mut self, enable: mantıksal) döndür void:
+        eğer enable:
+            self.state = WindowState::Fullscreen
+            __native_set_fullscreen(self.native_handle, doğru)
+        değilse:
+            self.state = WindowState::Normal
+            __native_set_fullscreen(self.native_handle, yanlış)
+        son
+    son
+    
+    /// Normal boyuta getir
+    pub fn restore(mut self) döndür void:
+        self.state = WindowState::Normal
+        __native_restore_window(self.native_handle)
+    son
+    
+    /// Başlık değiştir
+    pub fn set_title(mut self, title: yazı) döndür void:
+        self.title = title
+        __native_set_window_title(self.native_handle, title)
+    son
+    
+    /// Boyut değiştir
+    pub fn set_size(mut self, width: tamsayı, height: tamsayı) döndür void:
+        self.width = width
+        self.height = height
+        __native_set_window_size(self.native_handle, width, height)
+        self.context.resize(width, height)
+        
+        // Resize callback
+        eğer değişken handler = self.on_resize:
+            handler(width, height)
+        son
+    son
+    
+    /// Konum değiştir
+    pub fn set_position(mut self, x: tamsayı, y: tamsayı) döndür void:
+        self.x = x
+        self.y = y
+        __native_set_window_position(self.native_handle, x, y)
+    son
+    
+    /// Ortala
+    pub fn center(mut self) döndür void:
+        __native_center_window(self.native_handle)
+        // Native'den güncellenen pozisyonu al
+        değişken pos = __native_get_window_position(self.native_handle)
+        self.x = pos.x
+        self.y = pos.y
+    son
+    
+    /// Tema ayarla
+    pub fn set_theme(mut self, theme: Theme) döndür void:
+        self.theme = theme
+        self.background = theme.colors.background
+        
+        // İçerik widget'ına temayı uygula
+        eğer değişken content = self.content:
+            content.apply_theme(theme)
+        son
+    son
+    
+    /// Arka plan rengi ayarla
+    pub fn set_background(mut self, color: Color) döndür void:
+        self.background = color
+    son
+    
+    /// İçerik widget'ı ayarla
+    pub fn set_content(mut self, widget: Widget) döndür void:
+        widget.apply_theme(self.theme)
+        self.content = Bazı(widget)
+    son
+    
+    /// İçerik al
+    pub fn content(self) döndür Seçenek[Widget]:
+        döndür self.content
+    son
+    
+    /// Olay işleyicisi ekle
+    pub fn add_event_handler(mut self, handler: EventHandler) döndür void:
+        self.event_handlers.push(handler)
+    son
+    
+    /// Kapatma işleyicisi ayarla
+    pub fn on_close(mut self, handler: fn() döndür mantıksal) döndür void:
+        self.on_close = Bazı(handler)
+    son
+    
+    /// Boyut değişimi işleyicisi
+    pub fn on_resize(mut self, handler: fn(width: tamsayı, height: tamsayı) döndür void) döndür void:
+        self.on_resize = Bazı(handler)
+    son
+    
+    /// Olay işle
+    pub fn handle_event(mut self, event: Event) döndür void:
+        // Önce pencere seviyesinde işle
+        eşle event.tür:
+            EventType::WindowResize(width, height) => yap
+                self.width = width
+                self.height = height
+                self.context.resize(width, height)
+                
+                eğer değişken handler = self.on_resize:
+                    handler(width, height)
+                son
+            son,
+            
+            EventType::WindowMove(x, y) => yap
+                self.x = x
+                self.y = y
+            son,
+            
+            _ => yap
+                // Diğer olayları işleyicilere yönlendir
+                için handler içinde self.event_handlers:
+                    handler.handle(event)
+                son
+                
+                // İçerik widget'ına yönlendir
+                eğer değişken content = self.content:
+                    content.handle_event(event)
+                son
+            son
+        son
+    son
+    
+    /// Güncelle (her frame)
+    pub fn update(mut self) döndür void:
+        eğer değişken content = self.content:
+            content.update()
+        son
+    son
+    
+    /// Render et
+    pub fn render(mut self) döndür void:
+        // Context'i temizle
+        self.context.clear(self.background)
+        
+        // İçerik widget'ını render et
+        eğer değişken content = self.content:
+            content.render(self.context)
+        son
+        
+        // Buffer'ı swap et
+        self.context.present()
+    son
+    
+    /// Boyut al
+    pub fn size(self) döndür Size:
+        döndür Size yap width: self.width, height: self.height son
+    son
+    
+    /// Konum al
+    pub fn position(self) döndür Point:
+        döndür Point yap x: self.x, y: self.y son
+    son
+    
+    /// Görünür mü?
+    pub fn is_visible(self) döndür mantıksal:
+        döndür self.state != WindowState::Hidden
+    son
+    
+    /// Tam ekran mı?
+    pub fn is_fullscreen(self) döndür mantıksal:
+        döndür self.state == WindowState::Fullscreen
+    son
+    
+    /// Maksimize mi?
+    pub fn is_maximized(self) döndür mantıksal:
+        döndür self.state == WindowState::Maximized
+    son
+son
+
+// ============================================================================
+// HELPER TYPES
+// ============================================================================
+
+pub tip Point = yapı yap
+    x: tamsayı,
+    y: tamsayı
+son
+
+// ============================================================================
+// NATIVE BINDINGS
+// ============================================================================
+
+dış fn __native_generate_window_id() döndür tamsayı
+dış fn __native_create_window(title: yazı, width: tamsayı, height: tamsayı, x: tamsayı, y: tamsayı, style: WindowStyle) döndür tamsayı
+dış fn __native_show_window(handle: tamsayı) döndür void
+dış fn __native_hide_window(handle: tamsayı) döndür void
+dış fn __native_close_window(handle: tamsayı) döndür void
+dış fn __native_minimize_window(handle: tamsayı) döndür void
+dış fn __native_maximize_window(handle: tamsayı) döndür void
+dış fn __native_restore_window(handle: tamsayı) döndür void
+dış fn __native_set_fullscreen(handle: tamsayı, enable: mantıksal) döndür void
+dış fn __native_set_window_title(handle: tamsayı, title: yazı) döndür void
+dış fn __native_set_window_size(handle: tamsayı, width: tamsayı, height: tamsayı) döndür void
+dış fn __native_set_window_position(handle: tamsayı, x: tamsayı, y: tamsayı) döndür void
+dış fn __native_center_window(handle: tamsayı) döndür void
+dış fn __native_get_window_position(handle: tamsayı) döndür Point
+dış fn __native_set_window_icon(handle: tamsayı, path: yazı) döndür void

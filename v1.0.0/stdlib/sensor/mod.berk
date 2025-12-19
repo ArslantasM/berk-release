@@ -1,0 +1,576 @@
+// ============================================================================
+// BERK SENSOR API - Ana Modül
+// ============================================================================
+//
+//   ███████╗███████╗███╗   ██╗███████╗ ██████╗ ██████╗ 
+//   ██╔════╝██╔════╝████╗  ██║██╔════╝██╔═══██╗██╔══██╗
+//   ███████╗█████╗  ██╔██╗ ██║███████╗██║   ██║██████╔╝
+//   ╚════██║██╔══╝  ██║╚██╗██║╚════██║██║   ██║██╔══██╗
+//   ███████║███████╗██║ ╚████║███████║╚██████╔╝██║  ██║
+//   ╚══════╝╚══════╝╚═╝  ╚═══╝╚══════╝ ╚═════╝ ╚═╝  ╚═╝
+//
+// Sensör = Ölçüm üreten bileşen, sürücü değil.
+// Physical World → Typed Data → Edge Logic
+// ============================================================================
+
+modül sensor
+
+// ============================================================================
+// NATIVE BAĞLANTILARI (Rust FFI)
+// ============================================================================
+
+/// Sensör oluştur
+/// @param sensor_type Sensör tipi: "temperature", "humidity", "pressure", "light", vb.
+@native
+fonksiyon native_sensor_create(sensor_type: yazı) -> sayı
+
+/// Ham değer oku
+@native
+fonksiyon native_sensor_read_raw(handle: sayı) -> ondalık
+
+/// İşlenmiş değer oku (filtrelenmiş, kalibre edilmiş)
+/// @returns [value, unit_id, confidence, timestamp]
+@native
+fonksiyon native_sensor_read(handle: sayı) -> Liste[ondalık]
+
+/// Offset ayarla
+@native
+fonksiyon native_sensor_set_offset(handle: sayı, offset: ondalık) -> mantıksal
+
+/// Ölçek ayarla
+@native
+fonksiyon native_sensor_set_scale(handle: sayı, scale: ondalık) -> mantıksal
+
+/// İki noktalı kalibrasyon
+@native
+fonksiyon native_sensor_calibrate_two_point(handle: sayı, ref1: ondalık, raw1: ondalık, ref2: ondalık, raw2: ondalık) -> mantıksal
+
+/// Filtre ayarla
+/// @param filter_type Filtre tipi: "ema", "median", "kalman", vb.
+/// @param param Filtre parametresi (örn: alpha, window_size)
+@native
+fonksiyon native_sensor_set_filter(handle: sayı, filter_type: yazı, param: ondalık) -> mantıksal
+
+/// Sensörü kaldır
+@native
+fonksiyon native_sensor_destroy(handle: sayı) -> mantıksal
+
+// Türkçe alias'lar
+pub fn olustur(sensor_type: yazı) -> sayı:
+    döndür native_sensor_create(sensor_type)
+son
+
+pub fn ham_oku(handle: sayı) -> ondalık:
+    döndür native_sensor_read_raw(handle)
+son
+
+pub fn oku(handle: sayı) -> Liste[ondalık]:
+    döndür native_sensor_read(handle)
+son
+
+pub fn offset_ayarla(handle: sayı, offset: ondalık) -> mantıksal:
+    döndür native_sensor_set_offset(handle, offset)
+son
+
+pub fn olcek_ayarla(handle: sayı, scale: ondalık) -> mantıksal:
+    döndür native_sensor_set_scale(handle, scale)
+son
+
+pub fn iki_nokta_kalibre(handle: sayı, ref1: ondalık, raw1: ondalık, ref2: ondalık, raw2: ondalık) -> mantıksal:
+    döndür native_sensor_calibrate_two_point(handle, ref1, raw1, ref2, raw2)
+son
+
+pub fn filtre_ayarla(handle: sayı, filter_type: yazı, param: ondalık) -> mantıksal:
+    döndür native_sensor_set_filter(handle, filter_type, param)
+son
+
+pub fn kaldir(handle: sayı) -> mantıksal:
+    döndür native_sensor_destroy(handle)
+son
+
+// ============================================================================
+// MODÜL İHRACATLARI
+// ============================================================================
+
+/// Ölçüm yapıları (Measurement, Unit, Timestamp, Confidence)
+pub import sensor::measurement
+
+/// Kalibrasyon katmanı
+pub import sensor::calibration
+
+/// Filtreleme (EMA, Median, Alpha-Beta, Complementary, Adaptive, ...)
+/// NOT: Kalman son seçeneğiniz olmalı! Çoğu durumda Alpha-Beta veya Complementary daha iyi.
+pub import sensor::filter
+
+/// Sensör bileşenleri (Sensor, TemperatureSensor, IMU, vb.)
+pub import sensor::component
+
+/// Olay tabanlı sensörler (PIR, Button, Touch, Hall)
+pub import sensor::event
+
+/// Streaming sensörler (Microphone, Radar, LIDAR)
+pub import sensor::stream
+
+/// Sensör füzyonu ve gruplama
+pub import sensor::fusion
+
+/// Yayınlama (CAN, TCP, BLE, MQTT entegrasyonu)
+pub import sensor::publish
+
+// ============================================================================
+// RE-EXPORT: EN SIK KULLANILAN TİPLER
+// ============================================================================
+
+// Measurement
+pub use sensor::measurement::{Measurement, Vector3Measurement, Unit, Timestamp, Confidence}
+pub use sensor::measurement::{Quaternion, OrientationMeasurement}
+
+// Calibration
+pub use sensor::calibration::{CalibrationProfile, AxisCalibration, calibrate, reset_calibration}
+
+// Filter - Genişletilmiş (Kalman alternatifleri dahil)
+pub use sensor::filter::{ema, median, moving_average, low_pass, high_pass}
+pub use sensor::filter::{MovingAverageFilter, ExponentialMovingAverage, MedianFilter, LowPassFilter, HighPassFilter}
+pub use sensor::filter::{FilterChain}
+
+// Filter - Gelişmiş (Kalman'dan daha iyi alternatifler)
+pub use sensor::filter::{alpha_beta, hampel, robust_ema, threshold_gate, rate_limiter, deadband}
+pub use sensor::filter::{AlphaBetaFilter, AlphaBetaGammaFilter, HampelFilter, RobustEMA}
+pub use sensor::filter::{ThresholdGate, RateLimiter, DeadbandFilter, LMSFilter}
+
+// Filter - Adaptif (Context-aware, sahada kazanan)
+pub use sensor::filter::{adaptive, filter_for, hybrid_chain, variance_adaptive_ema, snr_adaptive}
+pub use sensor::filter::{AdaptiveFilter, FilterContext, FilterStrategy, HybridFilterChain}
+pub use sensor::filter::{VarianceAdaptiveEMA, SNRAdaptiveFilter, FilterFactory}
+
+// Filter - IMU Fusion (Kalman yerine!)
+pub use sensor::filter::{complementary, madgwick, mahony}
+pub use sensor::filter::{ComplementaryFilter, MadgwickAHRS, MahonyAHRS}
+
+// Filter - Kalman (sadece gerektiğinde, %5 case)
+pub use sensor::filter::{kalman_1d, kalman}
+pub use sensor::filter::{KalmanFilter1D, KalmanFilter, ExtendedKalmanFilter}
+
+// Component
+pub use sensor::component::{Sensor, SensorType, SensorError}
+pub use sensor::component::{TemperatureSensor, HumiditySensor, PressureSensor, LightSensor, DistanceSensor}
+pub use sensor::component::{IMU}
+
+// Event
+pub use sensor::event::{EventSensor, SensorEvent, EventType}
+pub use sensor::event::{MotionSensor, ProximitySensor, TouchSensor, ButtonSensor, HallSensor}
+pub use sensor::event::{motion, touch, button, hall, door}
+
+// Stream
+pub use sensor::stream::{StreamSensor, AudioFrame, StreamConfig}
+pub use sensor::stream::{Microphone, RadarSensor, LidarSensor}
+pub use sensor::stream::{microphone, radar, lidar}
+
+// Fusion
+pub use sensor::fusion::{SensorGroup, EnvironmentPack, IMUFusion}
+pub use sensor::fusion::{group, environment, imu_fusion}
+
+// Publish
+pub use sensor::publish::{Publisher, PublishProtocol, DataFormat}
+pub use sensor::publish::{publish_can, publish_mqtt, publish_ble, publish_console}
+
+// Filter Guide (yardımcı)
+pub use sensor::filter::{FilterGuide, FilterBenchmarks, quick_start_filter}
+
+// ============================================================================
+// FİLTRE SEÇİM REHBERİ (ÖNEMLİ!)
+// ============================================================================
+//
+// ┌─────────────────────────────────────────────────────────────────────────┐
+// │                    KALMAN EFSANESINDEN KURTULUN!                        │
+// ├─────────────────────────────────────────────────────────────────────────┤
+// │                                                                          │
+// │   Sahada EN SIK kullanılan filtreler:                                   │
+// │                                                                          │
+// │   ████████████████████████  EMA / Moving Average         (~35%)         │
+// │   ██████████████████        Median                       (~25%)         │
+// │   ████████████████          Complementary (IMU)          (~20%)         │
+// │   ████████████              Alpha-Beta                   (~15%)         │
+// │   ████                      Kalman                       (~5%)          │
+// │                                                                          │
+// │   Kalman = Aerospace, akademik, high-end robotics (nadir)               │
+// │   Diğerleri = Endüstri, embedded, gerçek dünya (yaygın)                 │
+// │                                                                          │
+// └─────────────────────────────────────────────────────────────────────────┘
+//
+// HIZLI KARAR:
+//
+// | Sensör Tipi        | Önerilen Filtre              | Kalman? |
+// |--------------------|------------------------------|---------|
+// | Sıcaklık/Nem       | EMA / RobustEMA              | ❌      |
+// | Basınç             | MovingAverage                | ❌      |
+// | IMU (tek eksen)    | Alpha-Beta                   | ❌      |
+// | IMU (fusion)       | Complementary / Madgwick     | ❌      |
+// | Mesafe (outlier)   | Hampel + Median              | ❌      |
+// | Encoder            | Alpha-Beta-Gamma             | ❌      |
+// | Endüstriyel        | Adaptive / HybridChain       | ❌      |
+// | Aerospace          | Kalman                       | ✅      |
+//
+// ============================================================================
+
+// ============================================================================
+// HIZLI ERİŞİM FONKSİYONLARI
+// ============================================================================
+
+/// Sensör aç
+/// 
+/// # Örnek
+/// ```berk
+/// olsun temp = sensor::open(
+///     id: "temp1",
+///     tur: SensorType::Temperature,
+///     arayuz: SensorInterface::I2C(0, 0x76)
+/// )
+/// ```
+pub fn open(id: yazı, tur: SensorType, arayuz: component::SensorInterface) döndür Sensor:
+    döndür Sensor::new(id, tur, arayuz)
+son
+
+/// I2C sensör aç
+pub fn open_i2c(id: yazı, tur: SensorType, bus: sayı, address: sayı) döndür Sensor:
+    döndür component::open_i2c(id, tur, bus, address)
+son
+
+/// ADC sensör aç
+pub fn open_adc(id: yazı, tur: SensorType, adc: sayı, channel: sayı) döndür Sensor:
+    döndür component::open_adc(id, tur, adc, channel)
+son
+
+/// Sıcaklık sensörü
+pub fn temperature(id: yazı) döndür TemperatureSensor:
+    döndür component::temperature(id)
+son
+
+/// IMU sensörü
+pub fn imu(id: yazı) döndür IMU:
+    döndür component::imu(id)
+son
+
+/// Sensör grubu oluştur
+pub fn group(name: yazı) döndür SensorGroup:
+    döndür fusion::group(name)
+son
+
+/// Çevre sensör paketi
+pub fn environment() döndür EnvironmentPack:
+    döndür fusion::environment()
+son
+
+/// Olay callback'i kaydet
+pub fn on_event(sensor_id: yazı, callback: event::EventCallback) döndür void:
+    event::on_event(sensor_id, callback)
+son
+
+/// Periyodik okuma başlat
+pub fn every(sensor: Sensor, interval_ms: sayı, callback: fn(Measurement) döndür void) döndür void:
+    // Periyodik okuma task'ı başlat
+son
+
+/// Filtre oluştur
+pub fn attach_filter(sensor: Sensor, filter: FilterChain) döndür Sensor:
+    döndür sensor.with_filter(filter)
+son
+
+/// Kalibrasyon uygula
+pub fn calibrate(sensor: Sensor, offset: ondalık, gain: ondalık) döndür Sensor:
+    döndür sensor.calibrate(offset, gain)
+son
+
+/// Örnekleme hızı ayarla
+pub fn set_rate(sensor: Sensor, hz: ondalık) döndür Sensor:
+    döndür sensor.with_sample_rate(hz)
+son
+
+// ============================================================================
+// KULLANIM ÖRNEKLERİ
+// ============================================================================
+
+/*
+=== TEMEL KULLANIM ===
+
+import sensor
+
+// 1. Basit sıcaklık okuma
+olsun temp_sensor = sensor::temperature("temp1")
+temp_sensor.init()
+olsun sicaklik = temp_sensor.read()
+yaz(sicaklik.value, sicaklik.unit.symbol())  // 25.3 °C
+
+
+=== KALİBRASYON ===
+
+import sensor
+import sensor::calibration
+
+// Offset ve gain kalibrasyonu
+olsun temp = sensor::temperature("temp1")
+    .calibrate(offset: -0.4, gain: 1.02)
+temp.init()
+
+// Veya profil ile
+olsun profil = calibration::CalibrationProfile::for_scalar("temp1", -0.4, 1.02)
+olsun temp2 = sensor::temperature("temp2").with_calibration(profil)
+
+
+=== FİLTRELEME ===
+
+import sensor
+import sensor::filter
+
+// Low-pass filtre
+olsun filt = filter::lowpass(0.1)
+
+// Veya filtre zinciri
+olsun chain = filter::chain()
+    .median(5)
+    .lowpass(0.1)
+    .kalman(0.01, 0.5)
+
+olsun temp = sensor::temperature("temp1")
+    .with_filter(chain)
+
+
+=== IMU KULLANIMI ===
+
+import sensor
+import sensor::fusion
+
+// MPU6050 IMU
+olsun imu = sensor::IMU::mpu6050(0)
+imu.init()
+
+// İvme ve açısal hız oku
+olsun accel = imu.accel()
+olsun gyro = imu.gyro()
+
+yaz("İvme X:", accel.x, "g")
+yaz("Gyro Z:", gyro.z, "°/s")
+
+// Sensör füzyonu (Complementary filter)
+olsun fusion = fusion::imu_fusion()
+fusion.update_6dof(accel.x, accel.y, accel.z, gyro.x, gyro.y, gyro.z, timestamp)
+yaz("Pitch:", fusion.get_pitch(), "°")
+yaz("Roll:", fusion.get_roll(), "°")
+
+
+=== OLAY TABANLI SENSÖRLER ===
+
+import sensor::event
+
+// PIR hareket sensörü
+olsun pir = event::motion(pin: 4)
+pir.init()
+pir.on_motion(fonksiyon {
+    yaz("Hareket algılandı!")
+})
+
+// Button
+olsun btn = event::button(pin: 5)
+btn.init()
+btn.on_press(fonksiyon {
+    yaz("Butona basıldı!")
+})
+btn.on_long_press(2000, fonksiyon {
+    yaz("Uzun basma!")
+})
+
+
+=== STREAMING SENSÖRLER ===
+
+import sensor::stream
+
+// Mikrofon
+olsun mic = stream::microphone()
+mic.with_threshold(-30.0)
+mic.start()
+mic.on_sound(fonksiyon(db) {
+    yaz("Ses seviyesi:", db, "dB")
+})
+
+// LIDAR
+olsun lidar = stream::lidar()
+lidar.start()
+lidar.on_scan(fonksiyon(scan) {
+    yaz("En yakın engel:", scan.min_distance(), "m")
+})
+
+
+=== SENSÖR GRUPLARI ===
+
+import sensor
+import sensor::fusion
+
+// Çevre sensör grubu
+olsun env = sensor::environment()
+olsun veri = env.read_all()
+
+yaz("Sıcaklık:", veri.get_temperature(), "°C")
+yaz("Nem:", veri.get_humidity(), "%RH")
+yaz("Hissedilen:", veri.feels_like(), "°C")
+
+// Özel grup
+olsun grup = sensor::group("tarla")
+    .add("sicaklik1")
+    .add("nem1")
+    .add("toprak_nem")
+
+olsun okumalar = grup.read_all()
+
+
+=== YAYINLAMA (BRIDGE ENTEGRASYONU) ===
+
+import sensor
+import sensor::publish
+
+// CAN'a yayınla (endüstri/araç)
+olsun temp = sensor::temperature("temp1")
+temp.init()
+olsun m = temp.read()
+publish::publish_can("temp1", m, 0x301)
+
+// MQTT'ye yayınla (IoT/Cloud)
+publish::publish_mqtt("temp1", m, "mqtt://broker.io:1883", "sensors/temperature")
+
+// BLE'ye yayınla (mobil)
+publish::publish_ble("temp1", m, "00002A6E-0000-1000-8000-00805F9B34FB")
+
+// Sürekli yayın
+olsun publisher = publish::Publisher::mqtt("temp", "mqtt://iot.local", "farm/temp")
+    .with_interval(1000)  // 1 saniyede bir
+    .with_qos(1)
+publisher.connect()
+// ... periyodik yayın loop
+
+
+=== EDGE-FIELD-CLOUD SENARYOSu ===
+
+import sensor
+import sensor::publish
+import sensor::fusion
+
+// 1. FIELD: Sensörleri oku
+olsun env = sensor::environment()
+olsun imu = sensor::IMU::mpu6050(0)
+imu.init()
+
+// 2. EDGE: Füzyon ve filtreleme
+olsun fusion = fusion::imu_fusion()
+olsun env_data = env.read_all()
+olsun accel = imu.accel()
+olsun gyro = imu.gyro()
+fusion.update_6dof(accel.x, accel.y, accel.z, gyro.x, gyro.y, gyro.z, now())
+
+// 3. CLOUD: Yayınla
+publish::publish_mqtt("environment", env_data.to_json(), broker, "edge/environment")
+publish::publish_mqtt("orientation", fusion.get_euler().to_json(), broker, "edge/imu")
+
+*/
+
+// ============================================================================
+// MİMARİ
+// ============================================================================
+
+/*
+BERK SENSOR KATMANI MİMARİSİ:
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              APPLICATION                                     │
+│                    (AI, Analytics, Control Logic)                           │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                           sensor::publish                                    │
+│              CAN │ TCP │ UDP │ BLE │ MQTT │ Modbus │ HTTP                   │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                           sensor::fusion                                     │
+│           SensorGroup │ EnvironmentPack │ IMUFusion │ MultiSensor           │
+├─────────────────────────────────────────────────────────────────────────────┤
+│    sensor::component      │  sensor::event     │  sensor::stream            │
+│    Scalar Sensors         │  PIR, Button       │  Microphone, LIDAR         │
+│    Temperature, IMU       │  Touch, Hall       │  Radar, Camera             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                           sensor::filter                                     │
+│        MovingAverage │ Median │ LowPass │ Kalman │ Complementary            │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                         sensor::calibration                                  │
+│           Offset │ Gain │ Temperature Drift │ Cross-axis                    │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                         sensor::measurement                                  │
+│     Measurement { value, unit, timestamp, confidence, source }              │
+│     Vector3Measurement │ OrientationMeasurement │ Quaternion                │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                           HAL / BAL                                          │
+│              GPIO │ ADC │ I2C │ SPI │ UART │ PWM                            │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                         PHYSICAL SENSORS                                     │
+│     Temperature │ Humidity │ Pressure │ IMU │ LIDAR │ Microphone            │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+
+SENSÖR SINIFLANDIRMASI:
+
+┌────────────────────┬────────────────────┬────────────────────┬────────────────────┐
+│    A) SKALER       │   B) VEKTÖREL      │   C) OLAY TABANLI  │   D) STREAMING     │
+├────────────────────┼────────────────────┼────────────────────┼────────────────────┤
+│ • Sıcaklık         │ • İvmeölçer        │ • PIR (hareket)    │ • Mikrofon         │
+│ • Nem              │ • Jiroskop         │ • Button           │ • Radar            │
+│ • Basınç           │ • Manyetometre     │ • Touch            │ • LIDAR            │
+│ • Işık             │ • IMU (6/9 DOF)    │ • Hall effect      │ • Kamera           │
+│ • Mesafe           │                    │ • Switch/Door      │ • EEG/EMG          │
+│ • pH               │                    │ • Proximity        │                    │
+└────────────────────┴────────────────────┴────────────────────┴────────────────────┘
+
+
+ÖLÇÜM YAPISI:
+
+    Measurement {
+        value: 25.3,                    // Değer
+        unit: Unit::Celsius,            // Birim
+        timestamp: Timestamp::now(),    // Zaman
+        confidence: 0.95,               // Güvenilirlik
+        source: "temp1",                // Kaynak sensör
+        metadata: {...}                 // Ek veri
+    }
+
+
+VERİ AKIŞI:
+
+    Physical Sensor
+          │
+          ▼
+    ┌─────────────┐
+    │  HAL/BAL    │  (I2C, SPI, ADC, GPIO)
+    └─────────────┘
+          │
+          ▼
+    ┌─────────────┐
+    │ Calibration │  (Offset, Gain, Temp Drift)
+    └─────────────┘
+          │
+          ▼
+    ┌─────────────┐
+    │   Filter    │  (LowPass, Kalman, Median)
+    └─────────────┘
+          │
+          ▼
+    ┌─────────────┐
+    │ Measurement │  (Typed, Timestamped, Confident)
+    └─────────────┘
+          │
+          ▼
+    ┌─────────────┐
+    │   Fusion    │  (IMU, Environment, Multi-sensor)
+    └─────────────┘
+          │
+          ▼
+    ┌─────────────┐
+    │   Publish   │  (CAN, TCP, BLE, MQTT)
+    └─────────────┘
+          │
+          ▼
+    Physical World → Typed Data → Edge Logic → Cloud
+
+*/

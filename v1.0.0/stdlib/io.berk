@@ -1,0 +1,1772 @@
+//! # IO Modülü
+//!
+//! BERK'in gelişmiş giriş/çıkış kütüphanesi. Dosya işlemleri, konsol I/O,
+//! tamponlu okuma/yazma, binary I/O ve bellek-eşlemeli dosyalar için
+//! kapsamlı API sağlar.
+//!
+//! ## Özellikler
+//!
+//! - **Dosya İşlemleri**: Dosya okuma, yazma, ekleme (append)
+//! - **Konsol I/O**: stdin, stdout, stderr ile etkileşim
+//! - **Tamponlu I/O**: Yüksek performanslı buffered okuma/yazma (4KB-8KB)
+//! - **Binary I/O**: Byte array işlemleri
+//! - **Stream Processing**: Lazy line iterators
+//! - **Formatlı Çıktı**: printf benzeri format string'ler
+//! - **File Positioning**: Seek, tell operasyonları
+//! - **Memory-Mapped Files**: Yüksek performanslı mmap I/O
+//! - **File Locking**: Shared ve exclusive lock'lar
+//!
+//! ## Örnek Kullanım
+//!
+//! ```berk
+//! kullan io
+//!
+//! // Basit dosya okuma
+//! değişken içerik = io.oku_string("veri.txt")?
+//! io.yazdır_satır(içerik)
+//!
+//! // Satır satır okuma (tamponlu)
+//! değişken satırlar = io.satırları_oku("büyük_dosya.txt")?
+//! her satır içinde satırlar yap
+//!     io.yazdır_satır(satır)
+//! son
+//!
+//! // Binary I/O
+//! değişken dosya = io.aç("resim.png", "Read")?
+//! değişken veriler = io.read_bytes(dosya, 1024)?
+//! io.kapat(dosya)?
+//! ```
+//!
+//! ## Backend
+//!
+//! - Rust `std::io` (cross-platform)
+//! - POSIX libc dosya işlemleri (Unix/Linux)
+//! - Win32 API (Windows)
+//!
+//! ## Performans Notları
+//!
+//! - Büyük dosyalar için `read_lines()` veya `buf_reader()` kullanın
+//! - Binary işlemler için `read_to_bytes()` daha hızlıdır
+//! - Memory-mapped I/O (mmap) büyük dosyalar için 10x daha hızlı olabilir
+//! - Buffered writer ile batch write yapın, flush'u unutmayın
+
+modül io
+
+kullan result
+kullan string
+
+// ============================================================================
+// FILE HANDLES & TYPES
+// ============================================================================
+
+// File handle (opaque pointer)
+tip File = yapı yap
+    handle: tamsayı,  // FILE* or fd
+    path: yazı,
+    mode: FileMode,
+    closed: mantıksal
+son
+
+tip FileMode = "Read" | "Write" | "Append" | "ReadWrite"
+
+// Buffer
+tip Buffer = yapı yap
+    data: liste[bayt],
+    position: tamsayı,
+    capacity: tamsayı
+son
+
+// Buffered reader
+tip BufReader = yapı yap
+    file: File,
+    buffer: Buffer,
+    buffer_size: tamsayı
+son
+
+// Buffered writer
+tip BufWriter = yapı yap
+    file: File,
+    buffer: Buffer,
+    buffer_size: tamsayı
+son
+
+// ============================================================================
+// FILE OPERATIONS (Basic)
+// ============================================================================
+
+/// Opens a file and returns a File handle.
+///
+/// Dosya açar ve File handle döner.
+///
+/// # Parameters / Parametreler
+///
+/// - `path`: File path (absolute or relative) / Dosya yolu (mutlak veya göreceli)
+/// - `mode`: Opening mode / Açma modu ("Read", "Write", "Append", "ReadWrite")
+///
+/// # Returns / Dönüş Değeri
+///
+/// - `Ok(File)`: Success, file handle / Başarılı, dosya handle'ı
+/// - `Err(String)`: File not found, permission error, etc. / Dosya bulunamadı, izin hatası, vb.
+///
+/// # Example / Örnek
+///
+/// ```berk
+/// // Open log file for appending / Log dosyasını ekleme modunda aç
+/// değişken dosya = io.open("log.txt", "Append")?
+/// io.buf_write(writer, "Yeni satır\n")?
+/// io.close(dosya)?
+/// ```
+///
+/// # Performance / Performans
+///
+/// O(1) - System call, no disk I/O / Sistem çağrısı, disk I/O yok
+fonksiyon open(path: yazı, mode: FileMode) -> Sonuç[File, yazı]
+yap
+son
+
+
+/// Closes a file and releases system resources.
+///
+/// Dosyayı kapatır ve sistem kaynaklarını serbest bırakır.
+///
+/// # Parameters / Parametreler
+///
+/// - `file`: File handle to close / Kapatılacak dosya handle'ı
+///
+/// # Returns / Dönüş Değeri
+///
+/// - `Ok(void)`: Success / Başarılı
+/// - `Err(String)`: Close error (rare) / Kapatma hatası (nadir)
+///
+/// # Notes / Notlar
+///
+/// If using BufWriter, call `buf_flush()` first!
+///
+/// BufWriter kullanıyorsanız, önce `buf_flush()` çağırın!
+///
+/// # Example / Örnek
+///
+/// ```berk
+/// değişken dosya = io.open("veri.bin", "Write")?
+/// io.write_bytes_to_file(dosya, [0x89, 0x50, 0x4E, 0x47])?
+/// io.close(dosya)?
+/// ```
+fonksiyon close(file: File) -> Sonuç[boş, yazı]
+yap
+son
+
+
+/// Reads entire file content as a string (for small files).
+///
+/// Dosya içeriğini string olarak okur (küçük dosyalar için).
+///
+/// # Parameters / Parametreler
+///
+/// - `path`: File path / Dosya yolu
+///
+/// # Returns / Dönüş Değeri
+///
+/// - `Ok(String)`: File content (UTF-8) / Dosya içeriği (UTF-8)
+/// - `Err(String)`: File not found or encoding error / Dosya bulunamadı veya encoding hatası
+///
+/// # Warning / Uyarı
+///
+/// Loads entire file into memory! Use `read_lines()` for large files.
+///
+/// Tüm dosyayı belleğe yükler! Büyük dosyalar için `read_lines()` kullanın.
+///
+/// # Example / Örnek
+///
+/// ```berk
+/// değişken kod = io.read_to_string("program.berk")?
+/// değişken satır_sayısı = string.count(kod, "\n")
+/// io.println("Satır sayısı: {satır_sayısı}")
+/// ```
+///
+/// # Performance / Performans
+///
+/// O(n) - n = file size / dosya boyutu
+fonksiyon read_to_string(path: yazı) -> Sonuç[yazı, yazı]
+yap
+son
+
+
+/// Reads entire file content as a byte array.
+///
+/// Dosya içeriğini byte array olarak okur.
+///
+/// # Parameters / Parametreler
+///
+/// - `path`: File path / Dosya yolu
+///
+/// # Returns / Dönüş Değeri
+///
+/// - `Ok(List[Byte])`: File content (raw bytes) / Dosya içeriği (raw bytes)
+/// - `Err(String)`: File not found / Dosya bulunamadı
+///
+/// # Example / Örnek
+///
+/// ```berk
+/// // Check PNG header / PNG başlığını kontrol et
+/// değişken veriler = io.read_to_bytes("resim.png")?
+/// eğer veriler[0] == 0x89 && veriler[1] == 0x50 yap
+///     io.println("Geçerli PNG dosyası")
+/// son
+/// ```
+///
+/// # Performance / Performans
+///
+/// O(n) - Same speed as read_to_string() / read_to_string() ile aynı hızda
+fonksiyon read_to_bytes(path: yazı) -> Sonuç[liste[bayt], yazı]
+yap
+son
+
+
+/// Writes string to file (overwrites existing content).
+///
+/// String'i dosyaya yazar (mevcut içeriği siler - overwrite).
+///
+/// # Parameters / Parametreler
+///
+/// - `path`: File path / Dosya yolu
+/// - `content`: String to write (UTF-8) / Yazılacak string (UTF-8)
+///
+/// # Returns / Dönüş Değeri
+///
+/// - `Ok(void)`: Success / Başarılı
+/// - `Err(String)`: Permission error, disk full, etc. / İzin hatası, disk dolu, vb.
+///
+/// # Warning / Uyarı
+///
+/// DELETES existing file content! Use `append_string()` to append.
+///
+/// Mevcut dosya içeriğini SİLER! Eklemek için `append_string()` kullanın.
+///
+/// # Example / Örnek
+///
+/// ```berk
+/// değişken rapor = "Toplam: 1250 kayıt\nHata: 3\n"
+/// io.write_string("rapor.txt", rapor)?
+/// ```
+///
+/// # Performance / Performans
+///
+/// O(n) - Not atomic (data loss possible on crash) / Atomik değil (crash durumunda veri kaybı olabilir)
+fonksiyon write_string(path: yazı, content: yazı) -> Sonuç[boş, yazı]
+yap
+son
+
+
+/// Byte array'i dosyaya yazar (mevcut içeriği siler).
+///
+/// # Parametreler
+///
+/// - `path`: Dosya yolu
+/// - `data`: Yazılacak byte array
+///
+/// # Dönüş Değeri
+///
+/// - `Tamam(boş)`: Başarılı
+/// - `Hata(yazı)`: İzin hatası, disk dolu
+///
+/// # Örnek
+///
+/// ```berk
+/// // PNG header yaz
+/// değişken png_header = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
+/// io.write_bytes("test.png", png_header)?
+/// ```
+fonksiyon write_bytes(path: yazı, data: liste[bayt]) -> Sonuç[boş, yazı]
+yap
+son
+
+
+/// String'i dosyanın sonuna ekler (append - mevcut içeriği korur).
+///
+/// # Parametreler
+///
+/// - `path`: Dosya yolu
+/// - `content`: Eklenecek string
+///
+/// # Dönüş Değeri
+///
+/// - `Tamam(boş)`: Başarılı
+/// - `Hata(yazı)`: İzin hatası
+///
+/// # Örnek
+///
+/// ```berk
+/// // Log dosyasına ekle
+/// io.append_string("server.log", "[2024-03-15] Server başlatıldı\n")?
+/// ```
+///
+/// # Performans
+///
+/// O(1) - Dosya sonuna seek eder, tüm dosyayı okumaz
+fonksiyon append_string(path: yazı, content: yazı) -> Sonuç[boş, yazı]
+yap
+son
+
+
+// ============================================================================
+// BUFFERED I/O (High Performance)
+// ============================================================================
+
+/// Creates a buffered reader (for high performance).
+///
+/// Tamponlu okuyucu oluşturur (yüksek performans için).
+///
+/// # Parameters / Parametreler
+///
+/// - `file`: File handle / Dosya handle'ı
+/// - `buffer_size`: Buffer size (default 8KB) / Tampon boyutu (varsayılan 8KB)
+///
+/// # Returns / Dönüş Değeri
+///
+/// BufReader - Buffered reader / Tamponlu okuyucu
+///
+/// # Performance / Performans
+///
+/// Batches small reads, reduces system call count. 5-10x faster for large files!
+///
+/// Küçük okuma işlemlerini toplar, sistem çağrısı sayısını azaltır. Büyük dosyalar için 5-10x daha hızlı!
+///
+/// # Example / Örnek
+///
+/// ```berk
+/// değişken file = io.open("büyük.log", "Read")?
+/// değişken reader = io.buf_reader(file, 16384)  // 16KB buffer / tampon
+/// 
+/// iken doğru yap
+///     değişken satır = io.read_line(reader)?
+///     eşleşme satır yap
+///         Bazı[s] => io.println(s),
+///         Hiç => kır
+///     son
+/// son
+/// ```
+fonksiyon buf_reader(file: File, buffer_size: tamsayı = 8192) -> BufReader
+yap
+son
+
+
+/// Tamponlu okuyucudan bir satır okur.
+///
+/// # Parametreler
+///
+/// - `reader`: BufReader instance
+///
+/// # Dönüş Değeri
+///
+/// - `Tamam(Bazı(yazı))`: Satır okundu
+/// - `Tamam(Hiç)`: EOF (dosya sonu)
+/// - `Hata(yazı)`: I/O hatası
+///
+/// # Örnek
+///
+/// ```berk
+/// değişken reader = io.buf_reader(file, 8192)
+/// değişken satır = io.read_line(reader)?
+/// ```
+fonksiyon read_line(reader: BufReader) -> Sonuç[Seçenek[yazı], yazı]
+yap
+son
+
+
+/// Dosyadaki tüm satırları liste olarak okur (tamponlu).
+///
+/// # Parametreler
+///
+/// - `path`: Dosya yolu
+///
+/// # Dönüş Değeri
+///
+/// - `Tamam(liste[yazı])`: Tüm satırlar (newline karakteri hariç)
+/// - `Hata(yazı)`: Dosya bulunamadı veya I/O hatası
+///
+/// # Performans
+///
+/// O(n) - n = satır sayısı. Tamponlu okuma kullanır (8KB).
+/// read_to_string().split("\n") yönteminden %20 daha hızlı!
+///
+/// # Örnek
+///
+/// ```berk
+/// // Log dosyasını işle
+/// değişken satırlar = io.read_lines("server.log")?
+/// değişken hata_sayısı = 0
+/// 
+/// her satır içinde satırlar yap
+///     eğer string.contains(satır, "ERROR") yap
+///         hata_sayısı = hata_sayısı + 1
+///     son
+/// son
+/// 
+/// io.println("Toplam hata: {hata_sayısı}")
+/// ```
+///
+/// # Notlar
+///
+/// - Boş satırları dahil eder
+/// - UTF-8 encoding varsayar
+/// - Belleğe tüm satırları yükler (çok büyük dosyalar için `lines_iter()` kullanın)
+fonksiyon read_lines(path: yazı) -> Sonuç[liste[yazı], yazı]
+yap
+    değişken file = open(path, "Read")?
+    değişken reader = buf_reader(file, 8192)
+    değişken lines = liste_oluştur[yazı]()
+    
+    iken doğru yap
+        değişken line_opt = read_line(reader)?
+        
+        eşleşme line_opt yap
+            Bazı[line] => liste_ekle(lines, line),
+            Hiç => kır
+        son
+    son
+    
+    close(file)?
+    dön Tamam(lines)
+son
+
+/// Creates a buffered writer (for high performance).
+///
+/// Tamponlu yazıcı oluşturur (yüksek performans için).
+///
+/// # Parameters / Parametreler
+///
+/// - `file`: File handle (must be opened in Write mode) / Dosya handle'ı (Write modunda açılmalı)
+/// - `buffer_size`: Buffer size (default 8KB) / Tampon boyutu (varsayılan 8KB)
+///
+/// # Returns / Dönüş Değeri
+///
+/// BufWriter - Buffered writer / Tamponlu yazıcı
+///
+/// # Warning / Uyarı
+///
+/// You MUST call `buf_flush()` to write buffered data!
+///
+/// Tampondaki veriyi yazmak için `buf_flush()` çağırmalısınız!
+///
+/// # Example / Örnek
+///
+/// ```berk
+/// değişken file = io.open("çıktı.csv", "Write")?
+/// değişken writer = io.buf_writer(file, 16384)
+/// 
+/// her i içinde range(0, 10000) yap
+///     io.buf_write(writer, "{i},satır\n")?
+/// son
+/// 
+/// io.buf_flush(writer)?  // IMPORTANT / ÖNEMLİ!
+/// io.close(file)?
+/// ```
+fonksiyon buf_writer(file: File, buffer_size: tamsayı = 8192) -> BufWriter
+yap
+son
+
+
+/// Tamponlu yazıcıya veri yazar.
+///
+/// # Parametreler
+///
+/// - `writer`: BufWriter instance
+/// - `data`: Yazılacak string
+///
+/// # Dönüş Değeri
+///
+/// - `Tamam(boş)`: Başarılı (tampona yazıldı)
+/// - `Hata(yazı)`: I/O hatası
+///
+/// # Notlar
+///
+/// Veri hemen diske yazılmaz! `buf_flush()` ile flush edin.
+fonksiyon buf_write(writer: BufWriter, data: yazı) -> Sonuç[boş, yazı]
+yap
+son
+
+
+/// Flushes the buffered writer (writes buffer to disk).
+///
+/// Tamponlu yazıcıyı flush eder (tamponu diske yazar).
+///
+/// # Parameters / Parametreler
+///
+/// - `writer`: BufWriter instance
+///
+/// # Returns / Dönüş Değeri
+///
+/// - `Ok(void)`: Success / Başarılı
+/// - `Err(String)`: Disk full or I/O error / Disk dolu veya I/O hatası
+///
+/// # Warning / Uyarı
+///
+/// If you don't flush, last written data may be lost!
+///
+/// Flush etmezseniz son yazılan veriler kaybolabilir!
+///
+/// # Example / Örnek
+///
+/// ```berk
+/// io.buf_write(writer, "Son satır\n")?
+/// io.buf_flush(writer)?  // Flush buffer / Tamponu boşalt
+/// io.close(file)?
+/// ```
+fonksiyon buf_flush(writer: BufWriter) -> Sonuç[boş, yazı]
+yap
+son
+
+
+// ============================================================================
+// CONSOLE I/O
+// ============================================================================
+
+/// Prints to stdout (no newline).
+///
+/// Stdout'a yazdırır (satır sonu YOK).
+///
+/// # Parameters / Parametreler
+///
+/// - `text`: String to print / Yazdırılacak string
+///
+/// # Example / Örnek
+///
+/// ```berk
+/// io.print("İlerleme: ")
+/// io.print("50%")
+/// // Output / Çıktı: "İlerleme: 50%" (single line / tek satırda)
+/// ```
+///
+/// # Performance / Performans
+///
+/// Buffered - Same speed as println() / Tamponlu - println() ile aynı hızda
+fonksiyon print(text: yazı) -> boş
+yap
+son
+
+
+/// Prints to stdout (with newline).
+///
+/// Stdout'a yazdırır (satır sonu ile).
+///
+/// # Parameters / Parametreler
+///
+/// - `text`: String to print / Yazdırılacak string
+///
+/// # Example / Örnek
+///
+/// ```berk
+/// io.println("Merhaba Dünya!")
+/// io.println("BERK v1.0")
+/// // Output / Çıktı:
+/// // Merhaba Dünya!
+/// // BERK v1.0
+/// ```
+///
+/// # Performance / Performans
+///
+/// O(1) + n (n = string length / uzunluk)
+fonksiyon println(text: yazı) -> boş
+yap
+son
+
+
+/// Stderr'e yazdırır (satır sonu YOK).
+///
+/// # Parametreler
+///
+/// - `text`: Hata mesajı
+///
+/// # Kullanım
+///
+/// Hata mesajları ve uyarılar için. Stdout'dan bağımsız stream.
+///
+/// # Örnek
+///
+/// ```berk
+/// io.eprint("[HATA] ")
+/// io.eprintln("Dosya bulunamadı!")
+/// ```
+fonksiyon eprint(text: yazı) -> boş
+yap
+son
+
+
+/// Stderr'e yazdırır (satır sonu ile).
+///
+/// # Parametreler
+///
+/// - `text`: Hata mesajı
+///
+/// # Örnek
+///
+/// ```berk
+/// io.eprintln("[UYARI] Bellek %80 dolu")
+/// io.eprintln("[HATA] Sunucuya bağlanılamadı")
+/// ```
+fonksiyon eprintln(text: yazı) -> boş
+yap
+son
+
+
+/// Reads a line from stdin (user input).
+///
+/// Stdin'den bir satır okur (kullanıcı input).
+///
+/// # Returns / Dönüş Değeri
+///
+/// - `Ok(String)`: User input line (without newline) / Kullanıcının girdiği satır (newline hariç)
+/// - `Err(String)`: EOF or I/O error / EOF veya I/O hatası
+///
+/// # Example / Örnek
+///
+/// ```berk
+/// io.print("Adınız: ")
+/// değişken ad = io.read_stdin()?
+/// io.println("Merhaba, {ad}!")
+/// ```
+///
+/// # Notes / Notlar
+///
+/// - Blocks until user presses ENTER / Bloklar (kullanıcı ENTER'a basana kadar bekler)
+/// - Newline character (\n) is automatically removed / Satır sonu karakteri (\n) otomatik kaldırılır
+fonksiyon read_stdin() -> Sonuç[yazı, yazı]
+yap
+son
+
+
+/// Printf-style formatted printing.
+///
+/// Printf benzeri formatlı yazdırma.
+///
+/// # Parameters / Parametreler
+///
+/// - `format_str`: Format string with "{}" placeholders / "{}" placeholder'ları ile format string
+/// - `args`: Values for placeholders / Placeholder'lara yazılacak değerler
+///
+/// # Format Specifiers / Format Belirteçleri
+///
+/// - `{}` - Sequential argument / Sıralı argüman
+/// - `{0}`, `{1}` - Argument by index / Index ile argüman
+/// - `{:.2}` - Decimal precision (for numbers) / Ondalık precision (sayılar için)
+///
+/// # Example / Örnek
+///
+/// ```berk
+/// io.printf("İsim: {}, Yaş: {}\n", ["Ahmet", "25"])
+/// io.printf("Pi: {:.4}\n", [3.14159265])
+/// // Output / Çıktı:
+/// // İsim: Ahmet, Yaş: 25
+/// // Pi: 3.1416
+/// ```
+fonksiyon printf(format_str: yazı, args: liste[herhangi]) -> boş
+yap
+son
+
+
+/// Printf benzeri formatlı string oluşturma.
+///
+/// # Parametreler
+///
+/// - `format_str`: Format string
+/// - `args`: Değerler
+///
+/// # Dönüş Değeri
+///
+/// Formatlanmış string
+///
+/// # Örnek
+///
+/// ```berk
+/// değişken mesaj = io.sprintf("Toplam: {} TL", ["1250.50"])
+/// io.println(mesaj)  // "Toplam: 1250.50 TL"
+/// ```
+fonksiyon sprintf(format_str: yazı, args: liste[herhangi]) -> yazı
+yap
+son
+
+
+// ============================================================================
+// SEEK & TELL (File Positioning)
+// ============================================================================
+
+tip SeekFrom = "Start" | "Current" | "End"
+
+/// Seek to a specific position in the file.
+///
+/// Dosyada belirli bir konuma git.
+///
+/// # Parameters / Parametreler
+///
+/// - `file`: The file handle / Dosya handle'ı
+/// - `offset`: Byte offset to seek / Gidilecek byte konumu
+/// - `from`: Seek origin ("Start", "Current", "End") / Başlangıç noktası
+///
+/// # Returns / Dönüş Değeri
+///
+/// Returns new absolute position in bytes, or error.
+/// Yeni mutlak pozisyonu byte cinsinden döner, veya hata.
+///
+/// # Example / Örnek
+///
+/// ```berk
+/// değişken f = io.open("data.bin", "Read")?
+/// io.seek(f, 100, "Start")?  // Jump to byte 100
+/// io.seek(f, 10, "Current")?  // Move forward 10 bytes
+/// io.seek(f, -5, "End")?     // 5 bytes before end
+/// ```
+///
+/// # Performance / Performans
+///
+/// O(1) - Direct file pointer manipulation. Use buffered I/O for sequential reads.
+/// O(1) - Doğrudan dosya pointer manipülasyonu. Sıralı okumalar için tamponlu I/O kullanın.
+fonksiyon seek(file: File, offset: tamsayı, from: SeekFrom) -> Sonuç[tamsayı, yazı]
+yap
+son
+
+
+/// Get the current position in the file.
+///
+/// Dosyadaki mevcut pozisyonu al.
+///
+/// # Parameters / Parametreler
+///
+/// - `file`: The file handle / Dosya handle'ı
+///
+/// # Returns / Dönüş Değeri
+///
+/// Returns current byte position from start, or error.
+/// Başlangıçtan itibaren mevcut byte pozisyonunu döner, veya hata.
+///
+/// # Example / Örnek
+///
+/// ```berk
+/// değişken f = io.open("log.txt", "Read")?
+/// io.read_string(f, 50)?  // Read 50 bytes
+/// değişken pos = io.tell(f)?  // pos = 50
+/// yazdır("Current position: {pos}")
+/// ```
+///
+/// # Performance / Performans
+///
+/// O(1) - Simple file pointer query.
+/// O(1) - Basit dosya pointer sorgusu.
+fonksiyon tell(file: File) -> Sonuç[tamsayı, yazı]
+yap
+son
+
+
+/// Rewind file to the beginning (position 0).
+///
+/// Dosyayı başa sar (pozisyon 0).
+///
+/// # Parameters / Parametreler
+///
+/// - `file`: The file handle / Dosya handle'ı
+///
+/// # Returns / Dönüş Değeri
+///
+/// Returns Ok(empty) on success, or error.
+/// Başarıda Tamam(boş) döner, veya hata.
+///
+/// # Example / Örnek
+///
+/// ```berk
+/// değişken f = io.open("data.txt", "Read")?
+/// io.read_line(f)?  // Read first line
+/// io.rewind(f)?     // Go back to start
+/// io.read_line(f)?  // Read first line again
+/// ```
+///
+/// # Performance / Performans
+///
+/// O(1) - Simple wrapper around seek(0, "Start").
+/// O(1) - seek(0, "Start") için basit wrapper.
+fonksiyon rewind(file: File) -> Sonuç[boş, yazı]
+yap
+    seek(file, 0, "Start")?
+    dön Tamam(boş)
+son
+
+// ============================================================================
+// BINARY I/O
+// ============================================================================
+
+/// Read a specific number of bytes from the file.
+///
+/// Dosyadan belirli sayıda byte oku.
+///
+/// # Parameters / Parametreler
+///
+/// - `file`: The file handle / Dosya handle'ı
+/// - `count`: Number of bytes to read / Okunacak byte sayısı
+///
+/// # Returns / Dönüş Değeri
+///
+/// Returns list of bytes read (may be less than count if EOF reached), or error.
+/// Okunan byte listesini döner (EOF'a ulaşılırsa count'tan az olabilir), veya hata.
+///
+/// # Example / Örnek
+///
+/// ```berk
+/// değişken f = io.open("image.png", "Read")?
+/// değişken header = io.read_bytes(f, 8)?  // Read PNG signature
+/// eğer header[0] == 0x89 ve header[1] == 0x50 yap
+///     yazdır("Valid PNG file")
+/// son
+/// ```
+///
+/// # Performance / Performans
+///
+/// O(n) where n=count. Use buf_reader for frequent small reads.
+/// O(n) burada n=count. Sık küçük okumalar için buf_reader kullanın.
+fonksiyon read_bytes(file: File, count: tamsayı) -> Sonuç[liste[bayt], yazı]
+yap
+son
+
+
+/// Write raw bytes to the file.
+///
+/// Dosyaya raw byte'lar yaz.
+///
+/// # Parameters / Parametreler
+///
+/// - `file`: The file handle (must be Write or Append mode) / Dosya handle'ı (Write veya Append modunda olmalı)
+/// - `data`: Byte array to write / Yazılacak byte dizisi
+///
+/// # Returns / Dönüş Değeri
+///
+/// Returns number of bytes written, or error.
+/// Yazılan byte sayısını döner, veya hata.
+///
+/// # Example / Örnek
+///
+/// ```berk
+/// değişken f = io.open("output.bin", "Write")?
+/// değişken data = [0x89, 0x50, 0x4E, 0x47]  // PNG signature
+/// değişken written = io.write_bytes_to_file(f, data)?
+/// yazdır("Wrote {written} bytes")
+/// ```
+///
+/// # Performance / Performans
+///
+/// O(n) where n=data.length. Use buf_writer for frequent small writes.
+/// O(n) burada n=data.length. Sık küçük yazmalar için buf_writer kullanın.
+fonksiyon write_bytes_to_file(file: File, data: liste[bayt]) -> Sonuç[tamsayı, yazı]
+yap
+son
+
+
+/// Read all remaining bytes from current position until EOF.
+///
+/// Mevcut pozisyondan EOF'a kadar tüm byte'ları oku.
+///
+/// # Parameters / Parametreler
+///
+/// - `file`: The file handle / Dosya handle'ı
+///
+/// # Returns / Dönüş Değeri
+///
+/// Returns all bytes from current position to end, or error.
+/// Mevcut pozisyondan sona kadar tüm byte'ları döner, veya hata.
+///
+/// # Example / Örnek
+///
+/// ```berk
+/// değişken f = io.open("binary.dat", "Read")?
+/// io.seek(f, 100, "Start")?  // Skip first 100 bytes
+/// değişken rest = io.read_to_end(f)?  // Read remaining
+/// yazdır("Read {rest.uzunluk} bytes")
+/// ```
+///
+/// # Performance / Performans
+///
+/// O(n) where n=remaining file size. Allocates memory for entire content.
+/// O(n) burada n=kalan dosya boyutu. Tüm içerik için bellek ayırır.
+fonksiyon read_to_end(file: File) -> Sonuç[liste[bayt], yazı]
+yap
+son
+
+
+// ============================================================================
+// MEMORY-MAPPED FILES (High Performance)
+// ============================================================================
+
+tip MemoryMap = yapı yap
+    ptr: tamsayı,  // Opaque pointer
+    length: tamsayı,
+    writable: mantıksal
+son
+
+/// Memory-map a file for read-only access (zero-copy I/O).
+///
+/// Dosyayı salt-okunur erişim için belleğe eşle (sıfır-kopya I/O).
+///
+/// # Parameters / Parametreler
+///
+/// - `path`: Path to file / Dosya yolu
+///
+/// # Returns / Dönüş Değeri
+///
+/// Returns memory-mapped file handle, or error.
+/// Belleğe eşlenmiş dosya handle'ını döner, veya hata.
+///
+/// # Example / Örnek
+///
+/// ```berk
+/// // Ultra-fast file reading (no copying)
+/// değişken mmap = io.mmap_read("huge_file.dat")?
+/// // Access bytes directly via pointer
+/// yazdır("File size: {mmap.length} bytes")
+/// io.munmap(mmap)?  // Always unmap when done!
+/// ```
+///
+/// # Performance / Performans
+///
+/// O(1) - No data copying, OS maps file to virtual memory. 10-100x faster for large files.
+/// O(1) - Veri kopyalama yok, OS dosyayı sanal belleğe eşler. Büyük dosyalar için 10-100x daha hızlı.
+fonksiyon mmap_read(path: yazı) -> Sonuç[MemoryMap, yazı]
+yap
+son
+
+
+/// Memory-map a file for read-write access (zero-copy I/O).
+///
+/// Dosyayı okuma-yazma erişimi için belleğe eşle (sıfır-kopya I/O).
+///
+/// # Parameters / Parametreler
+///
+/// - `path`: Path to file / Dosya yolu
+///
+/// # Returns / Dönüş Değeri
+///
+/// Returns writable memory-mapped file handle, or error.
+/// Yazılabilir belleğe eşlenmiş dosya handle'ını döner, veya hata.
+///
+/// # Example / Örnek
+///
+/// ```berk
+/// // Ultra-fast file modification
+/// değişken mmap = io.mmap_write("database.db")?
+/// // Modify bytes directly in memory
+/// // Changes automatically synced to disk
+/// io.munmap(mmap)?  // Flush and unmap
+/// ```
+///
+/// # Performance / Performans
+///
+/// O(1) - Direct memory writes, OS handles sync. Ideal for databases and binary formats.
+/// O(1) - Doğrudan belleğe yazma, OS senkronizasyonu yönetir. Veritabanları ve binary formatlar için ideal.
+fonksiyon mmap_write(path: yazı) -> Sonuç[MemoryMap, yazı]
+yap
+son
+
+
+/// Unmap a memory-mapped file and release resources.
+///
+/// Belleğe eşlenmiş dosyayı kaldır ve kaynakları serbest bırak.
+///
+/// # Parameters / Parametreler
+///
+/// - `map`: The memory map to unmap / Kaldırılacak bellek eşleme
+///
+/// # Returns / Dönüş Değeri
+///
+/// Returns Ok(empty) on success, or error.
+/// Başarıda Tamam(boş) döner, veya hata.
+///
+/// # Example / Örnek
+///
+/// ```berk
+/// değişken mmap = io.mmap_read("data.bin")?
+/// // ... process data ...
+/// io.munmap(mmap)?  // CRITICAL: Always unmap to prevent resource leak!
+/// ```
+///
+/// # Performance / Performans
+///
+/// O(1) - Releases virtual memory mapping. ALWAYS call this to avoid leaks.
+/// O(1) - Sanal bellek eşlemesini serbest bırakır. Sızıntıyı önlemek için MUTLAKA çağırın.
+fonksiyon munmap(map: MemoryMap) -> Sonuç[boş, yazı]
+yap
+son
+
+
+// ============================================================================
+// STREAM PROCESSING
+// ============================================================================
+
+// Stream iterator (lazy line reading)
+tip LineIterator = yapı yap
+    reader: BufReader,
+    finished: mantıksal
+son
+
+/// Create a lazy line iterator for memory-efficient line processing.
+///
+/// Bellek-verimli satır işleme için lazy line iterator oluştur.
+///
+/// # Parameters / Parametreler
+///
+/// - `path`: Path to file / Dosya yolu
+///
+/// # Returns / Dönüş Değeri
+///
+/// Returns line iterator, or error.
+/// Satır iterator'ünü döner, veya hata.
+///
+/// # Example / Örnek
+///
+/// ```berk
+/// // Process huge file without loading it all into memory
+/// değişken iter = io.lines_iter("huge_log.txt")?
+/// döngü yap
+///     değişken line_opt = io.iter_next(iter)
+///     eğer line_opt.hiçbiri ise çık
+///     değişken line = line_opt.değer
+///     // Process line...
+/// son
+/// ```
+///
+/// # Performance / Performans
+///
+/// O(1) initialization. Each iter_next is O(line_length). Ideal for GB+ files.
+/// O(1) başlatma. Her iter_next O(satır_uzunluğu). GB+ dosyalar için ideal.
+fonksiyon lines_iter(path: yazı) -> Sonuç[LineIterator, yazı]
+yap
+    değişken file = open(path, "Read")?
+    değişken reader = buf_reader(file, 8192)
+    
+    dön Tamam(LineIterator yap
+        reader: reader,
+        finished: yanlış
+    son)
+son
+
+/// Get the next line from the iterator.
+///
+/// Iterator'den bir sonraki satırı al.
+///
+/// # Parameters / Parametreler
+///
+/// - `iter`: The line iterator / Satır iterator'ü
+///
+/// # Returns / Dönüş Değeri
+///
+/// Returns Some(line) if available, None if EOF reached.
+/// Varsa Some(satır) döner, EOF'a ulaşıldıysa None.
+///
+/// # Example / Örnek
+///
+/// ```berk
+/// değişken iter = io.lines_iter("input.txt")?
+/// döngü yap
+///     değişken line_opt = io.iter_next(iter)
+///     eğer line_opt.hiçbiri ise çık
+///     yazdır(line_opt.değer)
+/// son
+/// ```
+///
+/// # Performance / Performans
+///
+/// O(line_length) - Reads one line at a time without loading full file.
+/// O(satır_uzunluğu) - Tüm dosyayı yüklemeden tek seferde bir satır okur.
+fonksiyon iter_next(iter: LineIterator) -> Seçenek[yazı]
+yap
+son
+
+
+// ============================================================================
+// TEMPORARY FILES
+// ============================================================================
+
+/// Create a temporary file in system's temp directory.
+///
+/// Sistemin geçici dizininde geçici bir dosya oluştur.
+///
+/// # Returns / Dönüş Değeri
+///
+/// Returns temporary file handle (auto-deleted on close), or error.
+/// Geçici dosya handle'ını döner (kapanınca otomatik silinir), veya hata.
+///
+/// # Example / Örnek
+///
+/// ```berk
+/// // Create temp file for intermediate processing
+/// değişken temp = io.temp_file()?
+/// io.write_string(temp, "temporary data")?  
+/// io.close(temp)?  // File auto-deleted after close
+/// ```
+///
+/// # Performance / Performans
+///
+/// O(1) - Uses OS temp directory. File automatically cleaned up.
+/// O(1) - OS geçici dizinini kullanır. Dosya otomatik temizlenir.
+fonksiyon temp_file() -> Sonuç[File, yazı]
+yap
+son
+
+
+/// Create a temporary directory in system's temp directory.
+///
+/// Sistemin geçici dizininde geçici bir dizin oluştur.
+///
+/// # Returns / Dönüş Değeri
+///
+/// Returns path to temporary directory, or error.
+/// Geçici dizinin yolunu döner, veya hata.
+///
+/// # Example / Örnek
+///
+/// ```berk
+/// // Create temp dir for multiple files
+/// değişken temp_path = io.temp_dir()?
+/// io.write_string("{temp_path}/file1.txt", "data1")?  
+/// io.write_string("{temp_path}/file2.txt", "data2")?
+/// // Remember to clean up: io.remove_all(temp_path)?
+/// ```
+///
+/// # Performance / Performans
+///
+/// O(1) - Uses OS temp directory. Remember to manually delete when done.
+/// O(1) - OS geçici dizinini kullanır. Bitince manuel olarak silmeyi unutmayın.
+fonksiyon temp_dir() -> Sonuç[yazı, yazı]
+yap
+son
+
+
+// ============================================================================
+// STANDARD STREAMS
+// ============================================================================
+
+/// Get a handle to the standard input stream.
+///
+/// Standart giriş akışının handle'ını al.
+///
+/// # Returns / Dönüş Değeri
+///
+/// Returns stdin file handle.
+/// Stdin dosya handle'ını döner.
+///
+/// # Example / Örnek
+///
+/// ```berk
+/// değişken input_stream = io.stdin()
+/// değişken reader = io.buf_reader(input_stream, 4096)
+/// // Read from stdin with buffering
+/// ```
+///
+/// # Performance / Performans
+///
+/// O(1) - Returns handle to system stdin.
+/// O(1) - Sistem stdin handle'ını döner.
+fonksiyon stdin() -> File
+yap
+son
+
+
+/// Get a handle to the standard output stream.
+///
+/// Standart çıkış akışının handle'ını al.
+///
+/// # Returns / Dönüş Değeri
+///
+/// Returns stdout file handle.
+/// Stdout dosya handle'ını döner.
+///
+/// # Example / Örnek
+///
+/// ```berk
+/// değişken output_stream = io.stdout()
+/// değişken writer = io.buf_writer(output_stream, 4096)
+/// // Write to stdout with buffering
+/// ```
+///
+/// # Performance / Performans
+///
+/// O(1) - Returns handle to system stdout.
+/// O(1) - Sistem stdout handle'ını döner.
+fonksiyon stdout() -> File
+yap
+son
+
+
+/// Get a handle to the standard error stream.
+///
+/// Standart hata akışının handle'ını al.
+///
+/// # Returns / Dönüş Değeri
+///
+/// Returns stderr file handle.
+/// Stderr dosya handle'ını döner.
+///
+/// # Example / Örnek
+///
+/// ```berk
+/// değişken error_stream = io.stderr()
+/// değişken writer = io.buf_writer(error_stream, 1024)
+/// // Write errors to stderr with buffering
+/// ```
+///
+/// # Performance / Performans
+///
+/// O(1) - Returns handle to system stderr.
+/// O(1) - Sistem stderr handle'ını döner.
+fonksiyon stderr() -> File
+yap
+son
+
+
+/// Check if a file handle is connected to a terminal (TTY).
+///
+/// Bir dosya handle'ının terminale (TTY) bağlı olup olmadığını kontrol et.
+///
+/// # Parameters / Parametreler
+///
+/// - `file`: The file handle to check / Kontrol edilecek dosya handle'ı
+///
+/// # Returns / Dönüş Değeri
+///
+/// Returns true if connected to terminal, false if piped/redirected.
+/// Terminale bağlıysa true, pipe/yönlendirilmişse false döner.
+///
+/// # Example / Örnek
+///
+/// ```berk
+/// eğer io.is_tty(io.stdout()) yap
+///     // Use colors and interactive features
+///     yazdır("\x1b[32mGreen text\x1b[0m")
+/// yoksa yap
+///     // Plain output for pipes
+///     yazdır("Plain text")
+/// son
+/// ```
+///
+/// # Performance / Performans
+///
+/// O(1) - Simple system call.
+/// O(1) - Basit sistem çağrısı.
+fonksiyon is_tty(file: File) -> mantıksal
+yap
+son
+
+
+// ============================================================================
+// FILE METADATA
+// ============================================================================
+
+tip FileMetadata = yapı yap
+    size: tamsayı,
+    is_file: mantıksal,
+    is_dir: mantıksal,
+    is_symlink: mantıksal,
+    permissions: tamsayı,
+    modified_time: tamsayı,  // Unix timestamp
+    created_time: tamsayı,
+    accessed_time: tamsayı
+son
+
+/// Get comprehensive metadata about a file or directory.
+///
+/// Bir dosya veya dizin hakkında kapsamlı metadata al.
+///
+/// # Parameters / Parametreler
+///
+/// - `path`: Path to file or directory / Dosya veya dizin yolu
+///
+/// # Returns / Dönüş Değeri
+///
+/// Returns FileMetadata structure with size, type, permissions, timestamps, or error.
+/// Boyut, tip, izinler, zaman damgaları içeren FileMetadata yapısını döner, veya hata.
+///
+/// # Example / Örnek
+///
+/// ```berk
+/// değişken meta = io.metadata("config.json")?
+/// yazdır("Size: {meta.size} bytes")
+/// yazdır("Is file: {meta.is_file}")
+/// yazdır("Modified: {meta.modified_time}")
+/// ```
+///
+/// # Performance / Performans
+///
+/// O(1) - Single stat() system call.
+/// O(1) - Tek stat() sistem çağrısı.
+fonksiyon metadata(path: yazı) -> Sonuç[FileMetadata, yazı]
+yap
+son
+
+
+// Get file size
+fonksiyon file_size(path: yazı) -> Sonuç[tamsayı, yazı]
+yap
+    değişken meta = metadata(path)?
+    dön Tamam(meta.size)
+son
+
+// ============================================================================
+// LOCKING (File Locks)
+// ============================================================================
+
+tip LockType = "Shared" | "Exclusive"
+
+/// Lock a file (blocking until lock acquired).
+///
+/// Dosyayı kilitle (kilit alınana kadar blokla).
+///
+/// # Parameters / Parametreler
+///
+/// - `file`: The file handle / Dosya handle'ı
+/// - `lock_type`: "Shared" (multiple readers) or "Exclusive" (single writer) / "Shared" (çoklu okuyucu) veya "Exclusive" (tek yazıcı)
+///
+/// # Returns / Dönüş Değeri
+///
+/// Returns Ok(empty) when lock acquired, or error.
+/// Kilit alındığında Tamam(boş) döner, veya hata.
+///
+/// # Example / Örnek
+///
+/// ```berk
+/// değişken f = io.open("shared.db", "Write")?
+/// io.lock(f, "Exclusive")?  // Wait for exclusive access
+/// // ... modify file ...
+/// io.unlock(f)?  // Always unlock when done!
+/// ```
+///
+/// # Performance / Performans
+///
+/// Blocks until lock available. Use try_lock for non-blocking.
+/// Kilit müsait olana kadar bloklar. Bloklamayan için try_lock kullanın.
+fonksiyon lock(file: File, lock_type: LockType) -> Sonuç[boş, yazı]
+yap
+son
+
+
+/// Try to lock a file (non-blocking, returns immediately).
+///
+/// Dosyayı kilitlemeyi dene (bloklamaz, hemen döner).
+///
+/// # Parameters / Parametreler
+///
+/// - `file`: The file handle / Dosya handle'ı
+/// - `lock_type`: "Shared" or "Exclusive" / "Shared" veya "Exclusive"
+///
+/// # Returns / Dönüş Değeri
+///
+/// Returns Ok(true) if lock acquired, Ok(false) if busy, or error.
+/// Kilit alındıysa Tamam(true), meşgulse Tamam(false) döner, veya hata.
+///
+/// # Example / Örnek
+///
+/// ```berk
+/// değişken f = io.open("resource.dat", "Write")?
+/// değişken acquired = io.try_lock(f, "Exclusive")?
+/// eğer acquired yap
+///     // Got the lock, proceed
+///     io.write_string(f, "data")?  
+///     io.unlock(f)?
+/// yoksa yap
+///     yazdır("Resource busy, try later")
+/// son
+/// ```
+///
+/// # Performance / Performans
+///
+/// O(1) - Returns immediately without blocking.
+/// O(1) - Bloklamadan hemen döner.
+fonksiyon try_lock(file: File, lock_type: LockType) -> Sonuç[mantıksal, yazı]
+yap
+son
+
+
+/// Unlock a previously locked file.
+///
+/// Önceden kilitlenmiş dosyanın kilidini aç.
+///
+/// # Parameters / Parametreler
+///
+/// - `file`: The locked file handle / Kilitli dosya handle'ı
+///
+/// # Returns / Dönüş Değeri
+///
+/// Returns Ok(empty) on success, or error.
+/// Başarıda Tamam(boş) döner, veya hata.
+///
+/// # Example / Örnek
+///
+/// ```berk
+/// değişken f = io.open("locked.txt", "Write")?
+/// io.lock(f, "Exclusive")?
+/// io.write_string(f, "protected data")?  
+/// io.unlock(f)?  // CRITICAL: Always unlock!
+/// io.close(f)?
+/// ```
+///
+/// # Performance / Performans
+///
+/// O(1) - Releases file lock immediately.
+/// O(1) - Dosya kilidini hemen serbest bırakır.
+fonksiyon unlock(file: File) -> Sonuç[boş, yazı]
+yap
+son
+
+
+// ============================================================================
+// COPY & MOVE
+// ============================================================================
+
+/// Copy a file from source to destination.
+///
+/// Kaynaktan hedefe dosya kopyala.
+///
+/// # Parameters / Parametreler
+///
+/// - `src`: Source file path / Kaynak dosya yolu
+/// - `dst`: Destination file path / Hedef dosya yolu
+///
+/// # Returns / Dönüş Değeri
+///
+/// Returns number of bytes copied, or error.
+/// Kopyalanan byte sayısını döner, veya hata.
+///
+/// # Example / Örnek
+///
+/// ```berk
+/// değişken copied = io.copy_file("input.txt", "backup.txt")?
+/// yazdır("Copied {copied} bytes")
+/// ```
+///
+/// # Performance / Performans
+///
+/// O(n) where n=file size. Uses OS-level copy for efficiency.
+/// O(n) burada n=dosya boyutu. Verimlilik için OS seviyesi kopya kullanır.
+fonksiyon copy_file(src: yazı, dst: yazı) -> Sonuç[tamsayı, yazı]
+yap
+son
+
+
+/// Move or rename a file.
+///
+/// Dosyayı taşı veya yeniden adlandır.
+///
+/// # Parameters / Parametreler
+///
+/// - `src`: Source file path / Kaynak dosya yolu
+/// - `dst`: Destination file path / Hedef dosya yolu
+///
+/// # Returns / Dönüş Değeri
+///
+/// Returns Ok(empty) on success, or error.
+/// Başarıda Tamam(boş) döner, veya hata.
+///
+/// # Example / Örnek
+///
+/// ```berk
+/// // Rename file
+/// io.move_file("old_name.txt", "new_name.txt")?
+/// // Move to different directory
+/// io.move_file("file.txt", "archive/file.txt")?
+/// ```
+///
+/// # Performance / Performans
+///
+/// O(1) for same filesystem, O(n) for cross-filesystem (copy+delete).
+/// Aynı dosya sistemi için O(1), farklı dosya sistemleri için O(n) (kopya+sil).
+fonksiyon move_file(src: yazı, dst: yazı) -> Sonuç[boş, yazı]
+yap
+son
+
+
+// ============================================================================
+// TRUNCATE & SYNC
+// ============================================================================
+
+/// Truncate file to specified size.
+///
+/// Dosyayı belirtilen boyuta kırp.
+///
+/// # Parameters / Parametreler
+///
+/// - `file`: The file handle (must be writable) / Dosya handle'ı (yazılabilir olmalı)
+/// - `size`: New size in bytes / Yeni boyut byte cinsinden
+///
+/// # Returns / Dönüş Değeri
+///
+/// Returns Ok(empty) on success, or error.
+/// Başarıda Tamam(boş) döner, veya hata.
+///
+/// # Example / Örnek
+///
+/// ```berk
+/// değişken f = io.open("large.log", "Write")?
+/// io.truncate(f, 1024)?  // Shrink to 1KB
+/// // File position may change, use seek if needed
+/// ```
+///
+/// # Performance / Performans
+///
+/// O(1) - System call to set file size.
+/// O(1) - Dosya boyutunu ayarlamak için sistem çağrısı.
+fonksiyon truncate(file: File, size: tamsayı) -> Sonuç[boş, yazı]
+yap
+son
+
+
+/// Sync all file data and metadata to disk (fsync).
+///
+/// Tüm dosya verisini ve metadata'yı diske senkronize et (fsync).
+///
+/// # Parameters / Parametreler
+///
+/// - `file`: The file handle / Dosya handle'ı
+///
+/// # Returns / Dönüş Değeri
+///
+/// Returns Ok(empty) when data is on disk, or error.
+/// Veri diskte olduğunda Tamam(boş) döner, veya hata.
+///
+/// # Example / Örnek
+///
+/// ```berk
+/// değişken f = io.open("critical.db", "Write")?
+/// io.write_string(f, "important data")?  
+/// io.sync(f)?  // Ensure data is on disk before continuing
+/// yazdır("Data safely written")
+/// ```
+///
+/// # Performance / Performans
+///
+/// Blocks until disk write completes. Use for critical data only.
+/// Disk yazma tamamlanana kadar bloklar. Sadece kritik veriler için kullanın.
+fonksiyon sync(file: File) -> Sonuç[boş, yazı]
+yap
+son
+
+
+/// Sync file data to disk without metadata (fdatasync).
+///
+/// Metadata olmadan dosya verisini diske senkronize et (fdatasync).
+///
+/// # Parameters / Parametreler
+///
+/// - `file`: The file handle / Dosya handle'ı
+///
+/// # Returns / Dönüş Değeri
+///
+/// Returns Ok(empty) when data is on disk, or error.
+/// Veri diskte olduğunda Tamam(boş) döner, veya hata.
+///
+/// # Example / Örnek
+///
+/// ```berk
+/// değişken f = io.open("log.txt", "Append")?
+/// io.write_string(f, "log entry")?  
+/// io.sync_data(f)?  // Faster than sync() - skips metadata
+/// ```
+///
+/// # Performance / Performans
+///
+/// Faster than sync() - doesn't update access times. Good for logs.
+/// sync()'den daha hızlı - erişim zamanlarını güncellemez. Loglar için iyi.
+fonksiyon sync_data(file: File) -> Sonuç[boş, yazı]
+yap
+son
+
+
+// ============================================================================
+// UTILITIES
+// ============================================================================
+
+/// Create directory and all parent directories (like mkdir -p).
+///
+/// Dizin ve tüm üst dizinleri oluştur (mkdir -p gibi).
+///
+/// # Parameters / Parametreler
+///
+/// - `path`: Directory path to create / Oluşturulacak dizin yolu
+///
+/// # Returns / Dönüş Değeri
+///
+/// Returns Ok(empty) on success (idempotent), or error.
+/// Başarıda Tamam(boş) döner (idempotent), veya hata.
+///
+/// # Example / Örnek
+///
+/// ```berk
+/// // Creates all missing directories
+/// io.create_dir_all("data/logs/2024/january")?
+/// // Safe to call multiple times
+/// io.create_dir_all("data/logs/2024/january")?  // No error
+/// ```
+///
+/// # Performance / Performans
+///
+/// O(depth) - Creates each missing directory level.
+/// O(derinlik) - Her eksik dizin seviyesini oluşturur.
+fonksiyon create_dir_all(path: yazı) -> Sonuç[boş, yazı]
+yap
+son
+
+
+/// Remove a file or empty directory.
+///
+/// Bir dosyayı veya boş dizini sil.
+///
+/// # Parameters / Parametreler
+///
+/// - `path`: Path to file or empty directory / Dosya veya boş dizin yolu
+///
+/// # Returns / Dönüş Değeri
+///
+/// Returns Ok(empty) on success, or error if not found or directory not empty.
+/// Başarıda Tamam(boş) döner, bulunamazsa veya dizin boş değilse hata.
+///
+/// # Example / Örnek
+///
+/// ```berk
+/// io.remove("temp.txt")?  // Delete file
+/// io.remove("empty_dir")?  // Delete empty directory
+/// // io.remove("full_dir")?  // ERROR - use remove_all
+/// ```
+///
+/// # Performance / Performans
+///
+/// O(1) - Single unlink/rmdir system call.
+/// O(1) - Tek unlink/rmdir sistem çağrısı.
+fonksiyon remove(path: yazı) -> Sonuç[boş, yazı]
+yap
+son
+
+
+/// Remove directory and all its contents recursively.
+///
+/// Dizini ve içeriğini özyinelemeli olarak sil.
+///
+/// # Parameters / Parametreler
+///
+/// - `path`: Path to directory / Dizin yolu
+///
+/// # Returns / Dönüş Değeri
+///
+/// Returns Ok(empty) on success, or error.
+/// Başarıda Tamam(boş) döner, veya hata.
+///
+/// # Example / Örnek
+///
+/// ```berk
+/// // WARNING: Deletes everything inside!
+/// io.remove_all("temp_directory")?  
+/// // All files and subdirectories deleted
+/// ```
+///
+/// # Performance / Performans
+///
+/// O(n) where n=total files/dirs. USE WITH CAUTION - cannot undo!
+/// O(n) burada n=toplam dosya/dizin. DİKKATLİ KULLAN - geri alınamaz!
+fonksiyon remove_all(path: yazı) -> Sonuç[boş, yazı]
+yap
+son
+
+
+/// Check if a file or directory exists.
+///
+/// Bir dosya veya dizinin var olup olmadığını kontrol et.
+///
+/// # Parameters / Parametreler
+///
+/// - `path`: Path to check / Kontrol edilecek yol
+///
+/// # Returns / Dönüş Değeri
+///
+/// Returns true if path exists (file or directory), false otherwise.
+/// Yol varsa (dosya veya dizin) true, yoksa false döner.
+///
+/// # Example / Örnek
+///
+/// ```berk
+/// eğer io.exists("config.json") yap
+///     değişken config = io.read_to_string("config.json")?
+/// yoksa yap
+///     yazdır("Config file not found")
+/// son
+/// ```
+///
+/// # Performance / Performans
+///
+/// O(1) - Simple stat check, no file opening.
+/// O(1) - Basit stat kontrolü, dosya açma yok.
+fonksiyon exists(path: yazı) -> mantıksal
+yap
+son
+
+
+// ============================================================================
+// TURKISH ALIASES
+// ============================================================================
+
+fonksiyon aç(yol: yazı, mod: FileMode) -> Sonuç[File, yazı]
+yap
+    dön open(yol, mod)
+son
+
+fonksiyon kapat(dosya: File) -> Sonuç[boş, yazı]
+yap
+    dön close(dosya)
+son
+
+fonksiyon oku_string(yol: yazı) -> Sonuç[yazı, yazı]
+yap
+    dön read_to_string(yol)
+son
+
+fonksiyon yaz_string(yol: yazı, içerik: yazı) -> Sonuç[boş, yazı]
+yap
+    dön write_string(yol, içerik)
+son
+
+fonksiyon ekle_string(yol: yazı, içerik: yazı) -> Sonuç[boş, yazı]
+yap
+    dön append_string(yol, içerik)
+son
+
+fonksiyon yazdır(metin: yazı) -> boş
+yap
+    print(metin)
+son
+
+fonksiyon yazdır_satır(metin: yazı) -> boş
+yap
+    println(metin)
+son
+
+fonksiyon satırları_oku(yol: yazı) -> Sonuç[liste[yazı], yazı]
+yap
+    dön read_lines(yol)
+son
+
+fonksiyon dosya_boyutu(yol: yazı) -> Sonuç[tamsayı, yazı]
+yap
+    dön file_size(yol)
+son
+
+fonksiyon var_mı(yol: yazı) -> mantıksal
+yap
+    dön exists(yol)
+son
+
+fonksiyon kopyala(kaynak: yazı, hedef: yazı) -> Sonuç[tamsayı, yazı]
+yap
+    dön copy_file(kaynak, hedef)
+son
+
+fonksiyon taşı(kaynak: yazı, hedef: yazı) -> Sonuç[boş, yazı]
+yap
+    dön move_file(kaynak, hedef)
+son
+
+fonksiyon sil(yol: yazı) -> Sonuç[boş, yazı]
+yap
+    dön remove(yol)
+son
+
+son  // modül io

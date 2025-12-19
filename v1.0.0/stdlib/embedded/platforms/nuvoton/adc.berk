@@ -1,0 +1,26 @@
+// Nuvoton ADC Module
+
+extern "C" {
+    fn ADC_Open(adc: *void, mode: u32, channel_mask: u32) -> u32;
+    fn ADC_Read(adc: *void, channel: u32) -> u16;
+}
+
+pub struct ADC {
+    adc: *void,
+    channel: u32,
+}
+
+impl ADC {
+    pub fn new(adc: *void, channel: u32) -> ADC {
+        ADC { adc, channel }
+    }
+    
+    pub fn read_raw(&self) -> u16 {
+        unsafe { ADC_Read(self.adc, self.channel) }
+    }
+    
+    pub fn read_voltage(&self) -> f32 {
+        let raw = self.read_raw() as f32;
+        (raw / 4095.0) * 3.3
+    }
+}

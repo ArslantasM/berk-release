@@ -1,0 +1,155 @@
+/// ═══════════════════════════════════════════════════════════════════════════
+/// BERK Intermediate Demo - Modules (English Version)
+/// Standard library usage, import system
+/// ═══════════════════════════════════════════════════════════════════════════
+
+use std::io
+use std::math
+use std::time
+
+print("============================================================")
+print("         Intermediate Demo: Modules                         ")
+print("============================================================")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 1: Module System
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 1: Module System ---")
+
+print("\n   Import Syntax:")
+print("   use std::io       -> Input/Output")
+print("   use std::math     -> Math functions")
+print("   use std::time     -> Time operations")
+print("   use std::string   -> String functions")
+print("   use std::sqlite   -> Database operations")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 2: IO Module
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 2: IO Module ---")
+
+print("   print() function - Output to console")
+print("   read() function - Read from input")
+
+let message = "Hello from IO module!"
+print("   Message: ", message)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 3: Math Module
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 3: Math Module ---")
+
+fn power(base: int, exp: int) -> int do
+    if exp == 0 then
+        return 1
+    end
+    let result = 1
+    let i = 0
+    while i < exp do
+        result = result * base
+        i = i + 1
+    end
+    return result
+end
+
+fn abs_val(x: int) -> int do
+    if x < 0 then
+        return 0 - x
+    end
+    return x
+end
+
+print("   power(2, 8) = ", power(2, 8))
+print("   power(3, 4) = ", power(3, 4))
+print("   abs_val(-42) = ", abs_val(-42))
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 4: Time Module
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 4: Time Module ---")
+
+let ms_per_sec = 1000
+let ms_per_min = 60000
+let ms_per_hour = 3600000
+
+print("   Time Constants:")
+print("   - 1 second = ", ms_per_sec, " ms")
+print("   - 1 minute = ", ms_per_min, " ms")
+print("   - 1 hour = ", ms_per_hour, " ms")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 5: Custom Modules
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 5: Custom Modules ---")
+
+print("\n   Module Definition:")
+print("   // mymodule.berk")
+print("   pub fn my_function() do")
+print("       print(\"Hello from module!\")")
+print("   end")
+
+print("\n   Module Usage:")
+print("   use mymodule")
+print("   mymodule::my_function()")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 6: Standard Library Overview
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 6: Standard Library Overview ---")
+
+print("\n   ┌────────────────┬─────────────────────────────┐")
+print("   │ Module         │ Description                 │")
+print("   ├────────────────┼─────────────────────────────┤")
+print("   │ std::io        │ Input/Output operations     │")
+print("   │ std::math      │ Math functions              │")
+print("   │ std::string    │ String manipulation         │")
+print("   │ std::time      │ Time and date functions     │")
+print("   │ std::sqlite    │ SQLite database             │")
+print("   │ std::json      │ JSON parsing                │")
+print("   │ std::http      │ HTTP client                 │")
+print("   │ std::crypto    │ Cryptography                │")
+print("   └────────────────┴─────────────────────────────┘")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 7: Embedded Modules
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 7: Embedded Modules ---")
+
+print("\n   ┌────────────────┬─────────────────────────────┐")
+print("   │ Module         │ Platform                    │")
+print("   ├────────────────┼─────────────────────────────┤")
+print("   │ std::arduino   │ Arduino (AVR)               │")
+print("   │ std::esp32     │ ESP32 (Xtensa/RISC-V)       │")
+print("   │ std::stm32     │ STM32 (ARM Cortex-M)        │")
+print("   │ std::riscv     │ RISC-V                      │")
+print("   │ std::rp2040    │ Raspberry Pi Pico           │")
+print("   └────────────────┴─────────────────────────────┘")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 8: Performance
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 8: Performance ---")
+
+fn benchmark_sum(count: int) -> int do
+    let total = 0
+    let i = 0
+    while i < count do
+        total = total + i
+        i = i + 1
+    end
+    return total
+end
+
+let result = benchmark_sum(100)
+print("   Sum of 1 to 100: ", result)
+print("   Calculation completed successfully!")
+
+print("\n[OK] Modules demo completed!")

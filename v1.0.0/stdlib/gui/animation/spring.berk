@@ -1,0 +1,664 @@
+// ============================================================================
+// BERK GUI Framework - Spring Physics Animation System
+// ============================================================================
+// Gerçekçi fizik tabanlı animasyonlar
+// iOS, Android ve modern web animasyonlarından ilham
+// ============================================================================
+
+modül gui::animation::spring
+
+kullan gui::animation::time::Time
+
+// ============================================================================
+// SPRING CONFIGURATION - Yay Yapılandırması
+// ============================================================================
+
+/// Spring fizik parametreleri
+pub tip SpringConfig = yapı yap
+    /// Yay sertliği (stiffness) - Daha yüksek = daha hızlı
+    stiffness: ondalık,
+    /// Sönümleme (damping) - Daha yüksek = daha az salınım
+    damping: ondalık,
+    /// Kütle - Daha yüksek = daha yavaş
+    mass: ondalık,
+    /// Hız limiti
+    velocity_limit: ondalık,
+    /// Durma eşiği (animasyon bitiş toleransı)
+    rest_threshold: ondalık,
+    /// Hız eşiği
+    velocity_threshold: ondalık,
+son
+
+impl SpringConfig:
+    /// Varsayılan yapılandırma
+    pub fn default() döndür SpringConfig:
+        döndür SpringConfig {
+            stiffness: 100.0,
+            damping: 10.0,
+            mass: 1.0,
+            velocity_limit: 1000.0,
+            rest_threshold: 0.001,
+            velocity_threshold: 0.001,
+        }
+    son
+    
+    /// Builder pattern
+    pub fn new() döndür SpringConfig:
+        döndür SpringConfig::default()
+    son
+    
+    pub fn with_stiffness(mut self, stiffness: ondalık) döndür SpringConfig:
+        self.stiffness = stiffness
+        döndür self
+    son
+    
+    pub fn with_damping(mut self, damping: ondalık) döndür SpringConfig:
+        self.damping = damping
+        döndür self
+    son
+    
+    pub fn with_mass(mut self, mass: ondalık) döndür SpringConfig:
+        self.mass = mass
+        döndür self
+    son
+    
+    // ========================================================================
+    // PRESETS - Önceden Tanımlı Yapılandırmalar
+    // ========================================================================
+    
+    /// iOS tarzı varsayılan spring
+    pub fn ios_default() döndür SpringConfig:
+        döndür SpringConfig {
+            stiffness: 300.0,
+            damping: 20.0,
+            mass: 1.0,
+            velocity_limit: 1000.0,
+            rest_threshold: 0.001,
+            velocity_threshold: 0.001,
+        }
+    son
+    
+    /// iOS interaktif spring (daha responsive)
+    pub fn ios_interactive() döndür SpringConfig:
+        döndür SpringConfig {
+            stiffness: 400.0,
+            damping: 30.0,
+            mass: 1.0,
+            velocity_limit: 1000.0,
+            rest_threshold: 0.001,
+            velocity_threshold: 0.001,
+        }
+    son
+    
+    /// Android Material Design spring
+    pub fn material() döndür SpringConfig:
+        döndür SpringConfig {
+            stiffness: 200.0,
+            damping: 25.0,
+            mass: 1.0,
+            velocity_limit: 1000.0,
+            rest_threshold: 0.001,
+            velocity_threshold: 0.001,
+        }
+    son
+    
+    /// Yumuşak, yavaş spring
+    pub fn gentle() döndür SpringConfig:
+        döndür SpringConfig {
+            stiffness: 50.0,
+            damping: 15.0,
+            mass: 1.5,
+            velocity_limit: 500.0,
+            rest_threshold: 0.001,
+            velocity_threshold: 0.001,
+        }
+    son
+    
+    /// Sert, hızlı spring
+    pub fn stiff() döndür SpringConfig:
+        döndür SpringConfig {
+            stiffness: 500.0,
+            damping: 30.0,
+            mass: 0.8,
+            velocity_limit: 2000.0,
+            rest_threshold: 0.001,
+            velocity_threshold: 0.001,
+        }
+    son
+    
+    /// Bouncy (sekici) spring
+    pub fn bouncy() döndür SpringConfig:
+        döndür SpringConfig {
+            stiffness: 200.0,
+            damping: 8.0,  // Düşük damping = daha fazla bounce
+            mass: 1.0,
+            velocity_limit: 1000.0,
+            rest_threshold: 0.001,
+            velocity_threshold: 0.001,
+        }
+    son
+    
+    /// Çok bouncy spring
+    pub fn very_bouncy() döndür SpringConfig:
+        döndür SpringConfig {
+            stiffness: 180.0,
+            damping: 4.0,
+            mass: 1.0,
+            velocity_limit: 1500.0,
+            rest_threshold: 0.001,
+            velocity_threshold: 0.001,
+        }
+    son
+    
+    /// Yavaş & smooth
+    pub fn slow() döndür SpringConfig:
+        döndür SpringConfig {
+            stiffness: 30.0,
+            damping: 10.0,
+            mass: 2.0,
+            velocity_limit: 300.0,
+            rest_threshold: 0.001,
+            velocity_threshold: 0.001,
+        }
+    son
+    
+    /// Kritik sönümlemeli (overshoot yok)
+    pub fn critical() döndür SpringConfig:
+        // Kritik damping = 2 * sqrt(stiffness * mass)
+        değişken stiffness = 200.0
+        değişken mass = 1.0
+        değişken critical_damping = 2.0 * (stiffness * mass).sqrt()
+        
+        döndür SpringConfig {
+            stiffness: stiffness,
+            damping: critical_damping,
+            mass: mass,
+            velocity_limit: 1000.0,
+            rest_threshold: 0.001,
+            velocity_threshold: 0.001,
+        }
+    son
+    
+    /// Framer Motion varsayılanı
+    pub fn framer_default() döndür SpringConfig:
+        döndür SpringConfig {
+            stiffness: 100.0,
+            damping: 10.0,
+            mass: 1.0,
+            velocity_limit: 1000.0,
+            rest_threshold: 0.01,
+            velocity_threshold: 0.01,
+        }
+    son
+    
+    /// React Spring varsayılanı
+    pub fn react_spring() döndür SpringConfig:
+        döndür SpringConfig {
+            stiffness: 170.0,
+            damping: 26.0,
+            mass: 1.0,
+            velocity_limit: 1000.0,
+            rest_threshold: 0.001,
+            velocity_threshold: 0.001,
+        }
+    son
+    
+    // ========================================================================
+    // CALCULATIONS
+    // ========================================================================
+    
+    /// Kritik damping oranı (zeta)
+    pub fn damping_ratio(self) döndür ondalık:
+        // zeta = c / (2 * sqrt(k * m))
+        değişken critical = 2.0 * (self.stiffness * self.mass).sqrt()
+        döndür self.damping / critical
+    son
+    
+    /// Doğal frekans (omega)
+    pub fn natural_frequency(self) döndür ondalık:
+        // omega = sqrt(k / m)
+        döndür (self.stiffness / self.mass).sqrt()
+    son
+    
+    /// Sönümlü frekans
+    pub fn damped_frequency(self) döndür ondalık:
+        değişken omega = self.natural_frequency()
+        değişken zeta = self.damping_ratio()
+        
+        eğer zeta >= 1.0:
+            // Kritik veya üstü sönümlemede frekans 0
+            döndür 0.0
+        son
+        
+        // omega_d = omega * sqrt(1 - zeta^2)
+        döndür omega * (1.0 - zeta * zeta).sqrt()
+    son
+    
+    /// Tahmini yerleşme süresi
+    pub fn settling_time(self) döndür ondalık:
+        değişken zeta = self.damping_ratio()
+        değişken omega = self.natural_frequency()
+        
+        eğer zeta <= 0.0 veya omega <= 0.0:
+            döndür ondalık::sonsuz
+        son
+        
+        // Yaklaşık yerleşme süresi (5% tolerans)
+        // t_s ≈ 3 / (zeta * omega) for underdamped
+        eğer zeta < 1.0:
+            döndür 3.0 / (zeta * omega)
+        yoksa:
+            // Overdamped için farklı formül
+            döndür 4.0 / omega
+        son
+    son
+son
+
+// ============================================================================
+// SPRING STATE - Yay Durumu
+// ============================================================================
+
+/// Spring animasyonunun anlık durumu
+pub tip SpringState = yapı yap
+    /// Mevcut değer
+    value: ondalık,
+    /// Mevcut hız
+    velocity: ondalık,
+    /// Hedef değer
+    target: ondalık,
+    /// Başlangıç değeri
+    start_value: ondalık,
+    /// Animasyon tamamlandı mı?
+    at_rest: mantıksal,
+son
+
+impl SpringState:
+    pub fn new(initial: ondalık, target: ondalık) döndür SpringState:
+        döndür SpringState {
+            value: initial,
+            velocity: 0.0,
+            target: target,
+            start_value: initial,
+            at_rest: initial == target,
+        }
+    son
+    
+    pub fn with_velocity(mut self, velocity: ondalık) döndür SpringState:
+        self.velocity = velocity
+        self.at_rest = yanlış
+        döndür self
+    son
+son
+
+// ============================================================================
+// SPRING SIMULATION - Yay Simülasyonu
+// ============================================================================
+
+/// Fizik tabanlı spring animasyonu
+pub tip Spring = yapı yap
+    /// Yapılandırma
+    config: SpringConfig,
+    /// Mevcut durum
+    state: SpringState,
+    /// Toplam geçen süre
+    elapsed: ondalık,
+son
+
+impl Spring:
+    /// Yeni spring oluştur
+    pub fn new(config: SpringConfig) döndür Spring:
+        döndür Spring {
+            config: config,
+            state: SpringState::new(0.0, 0.0),
+            elapsed: 0.0,
+        }
+    son
+    
+    /// Varsayılan config ile
+    pub fn default() döndür Spring:
+        döndür Spring::new(SpringConfig::default())
+    son
+    
+    /// Başlangıç ve hedef değer ayarla
+    pub fn from_to(mut self, from: ondalık, to: ondalık) döndür Spring:
+        self.state = SpringState::new(from, to)
+        self.elapsed = 0.0
+        döndür self
+    son
+    
+    /// Hedef değer ayarla (mevcut değerden)
+    pub fn animate_to(mut self, target: ondalık) döndür void:
+        self.state.target = target
+        self.state.at_rest = yanlış
+    son
+    
+    /// Anlık hız ekle (gesture response için)
+    pub fn add_velocity(mut self, velocity: ondalık) döndür void:
+        self.state.velocity = self.state.velocity + velocity
+        self.state.at_rest = yanlış
+    son
+    
+    /// Simülasyonu güncelle
+    pub fn update(mut self, dt: ondalık) döndür void:
+        eğer self.state.at_rest:
+            döndür
+        son
+        
+        // Semi-implicit Euler integration
+        // Daha stabil ve doğru sonuçlar için RK4 da kullanılabilir
+        
+        değişken displacement = self.state.value - self.state.target
+        
+        // F = -kx - cv (Hooke's law + damping)
+        değişken spring_force = -self.config.stiffness * displacement
+        değişken damping_force = -self.config.damping * self.state.velocity
+        değişken total_force = spring_force + damping_force
+        
+        // a = F / m
+        değişken acceleration = total_force / self.config.mass
+        
+        // v = v + a * dt
+        self.state.velocity = self.state.velocity + acceleration * dt
+        
+        // Hız limiti
+        eğer self.state.velocity.abs() > self.config.velocity_limit:
+            değişken sign = eğer self.state.velocity > 0.0: 1.0 yoksa: -1.0 son
+            self.state.velocity = sign * self.config.velocity_limit
+        son
+        
+        // x = x + v * dt
+        self.state.value = self.state.value + self.state.velocity * dt
+        
+        self.elapsed = self.elapsed + dt
+        
+        // Durma kontrolü
+        değişken pos_at_rest = displacement.abs() < self.config.rest_threshold
+        değişken vel_at_rest = self.state.velocity.abs() < self.config.velocity_threshold
+        
+        eğer pos_at_rest && vel_at_rest:
+            self.state.value = self.state.target
+            self.state.velocity = 0.0
+            self.state.at_rest = doğru
+        son
+    son
+    
+    /// RK4 (Runge-Kutta 4) entegrasyon - daha hassas
+    pub fn update_rk4(mut self, dt: ondalık) döndür void:
+        eğer self.state.at_rest:
+            döndür
+        son
+        
+        değişken x = self.state.value
+        değişken v = self.state.velocity
+        
+        // k1
+        değişken k1_v = v
+        değişken k1_a = self.compute_acceleration(x, v)
+        
+        // k2
+        değişken k2_v = v + k1_a * dt * 0.5
+        değişken k2_a = self.compute_acceleration(x + k1_v * dt * 0.5, k2_v)
+        
+        // k3
+        değişken k3_v = v + k2_a * dt * 0.5
+        değişken k3_a = self.compute_acceleration(x + k2_v * dt * 0.5, k3_v)
+        
+        // k4
+        değişken k4_v = v + k3_a * dt
+        değişken k4_a = self.compute_acceleration(x + k3_v * dt, k4_v)
+        
+        // Birleştir
+        self.state.value = x + (k1_v + 2.0 * k2_v + 2.0 * k3_v + k4_v) * dt / 6.0
+        self.state.velocity = v + (k1_a + 2.0 * k2_a + 2.0 * k3_a + k4_a) * dt / 6.0
+        
+        self.elapsed = self.elapsed + dt
+        
+        // Durma kontrolü
+        değişken displacement = (self.state.value - self.state.target).abs()
+        eğer displacement < self.config.rest_threshold && 
+           self.state.velocity.abs() < self.config.velocity_threshold:
+            self.state.value = self.state.target
+            self.state.velocity = 0.0
+            self.state.at_rest = doğru
+        son
+    son
+    
+    /// İvme hesapla
+    fn compute_acceleration(self, position: ondalık, velocity: ondalık) döndür ondalık:
+        değişken displacement = position - self.state.target
+        değişken spring_force = -self.config.stiffness * displacement
+        değişken damping_force = -self.config.damping * velocity
+        döndür (spring_force + damping_force) / self.config.mass
+    son
+    
+    /// Mevcut değer
+    pub fn value(self) döndür ondalık:
+        döndür self.state.value
+    son
+    
+    /// Mevcut hız
+    pub fn velocity(self) döndür ondalık:
+        döndür self.state.velocity
+    son
+    
+    /// Tamamlandı mı?
+    pub fn is_at_rest(self) döndür mantıksal:
+        döndür self.state.at_rest
+    son
+    
+    /// İlerleme (tahmini, 0-1)
+    pub fn progress(self) döndür ondalık:
+        değişken total_dist = (self.state.start_value - self.state.target).abs()
+        eğer total_dist < 0.0001:
+            döndür 1.0
+        son
+        
+        değişken current_dist = (self.state.value - self.state.target).abs()
+        döndür 1.0 - (current_dist / total_dist).min(1.0).max(0.0)
+    son
+    
+    /// Sıfırla
+    pub fn reset(mut self) döndür void:
+        self.state.value = self.state.start_value
+        self.state.velocity = 0.0
+        self.state.at_rest = self.state.start_value == self.state.target
+        self.elapsed = 0.0
+    son
+son
+
+// ============================================================================
+// VEC2 SPRING - 2D Spring
+// ============================================================================
+
+/// 2D vektör için spring animasyonu
+pub tip Vec2Spring = yapı yap
+    x: Spring,
+    y: Spring,
+son
+
+impl Vec2Spring:
+    pub fn new(config: SpringConfig) döndür Vec2Spring:
+        döndür Vec2Spring {
+            x: Spring::new(config.clone()),
+            y: Spring::new(config),
+        }
+    son
+    
+    pub fn from_to(mut self, from_x: ondalık, from_y: ondalık, to_x: ondalık, to_y: ondalık) döndür Vec2Spring:
+        self.x = self.x.from_to(from_x, to_x)
+        self.y = self.y.from_to(from_y, to_y)
+        döndür self
+    son
+    
+    pub fn animate_to(mut self, x: ondalık, y: ondalık) döndür void:
+        self.x.animate_to(x)
+        self.y.animate_to(y)
+    son
+    
+    pub fn update(mut self, dt: ondalık) döndür void:
+        self.x.update(dt)
+        self.y.update(dt)
+    son
+    
+    pub fn value(self) döndür (ondalık, ondalık):
+        döndür (self.x.value(), self.y.value())
+    son
+    
+    pub fn is_at_rest(self) döndür mantıksal:
+        döndür self.x.is_at_rest() && self.y.is_at_rest()
+    son
+son
+
+// ============================================================================
+// COLOR SPRING - Renk Spring
+// ============================================================================
+
+pub tip ColorSpring = yapı yap
+    r: Spring,
+    g: Spring,
+    b: Spring,
+    a: Spring,
+son
+
+impl ColorSpring:
+    pub fn new(config: SpringConfig) döndür ColorSpring:
+        döndür ColorSpring {
+            r: Spring::new(config.clone()),
+            g: Spring::new(config.clone()),
+            b: Spring::new(config.clone()),
+            a: Spring::new(config),
+        }
+    son
+    
+    pub fn from_to_rgb(mut self, from: (ondalık, ondalık, ondalık), to: (ondalık, ondalık, ondalık)) döndür ColorSpring:
+        self.r = self.r.from_to(from.0, to.0)
+        self.g = self.g.from_to(from.1, to.1)
+        self.b = self.b.from_to(from.2, to.2)
+        self.a = self.a.from_to(1.0, 1.0)
+        döndür self
+    son
+    
+    pub fn update(mut self, dt: ondalık) döndür void:
+        self.r.update(dt)
+        self.g.update(dt)
+        self.b.update(dt)
+        self.a.update(dt)
+    son
+    
+    pub fn value(self) döndür (ondalık, ondalık, ondalık, ondalık):
+        döndür (self.r.value(), self.g.value(), self.b.value(), self.a.value())
+    son
+    
+    pub fn is_at_rest(self) döndür mantıksal:
+        döndür self.r.is_at_rest() && self.g.is_at_rest() && 
+               self.b.is_at_rest() && self.a.is_at_rest()
+    son
+son
+
+// ============================================================================
+// CHAIN SPRING - Zincirleme Spring (jiggle physics)
+// ============================================================================
+
+/// Birbirine bağlı noktalar zinciri
+pub tip ChainSpring = yapı yap
+    /// Noktalar
+    points: Liste[ondalık],
+    /// Hızlar
+    velocities: Liste[ondalık],
+    /// Her bağlantının sertliği
+    stiffness: ondalık,
+    /// Sönümleme
+    damping: ondalık,
+    /// İlk nokta sabit mi?
+    anchor_start: mantıksal,
+    /// Son nokta sabit mi?
+    anchor_end: mantıksal,
+son
+
+impl ChainSpring:
+    pub fn new(point_count: sayı, initial_value: ondalık) döndür ChainSpring:
+        değişken points: Liste[ondalık] = []
+        değişken velocities: Liste[ondalık] = []
+        
+        döngü _ in 0..point_count:
+            points.push(initial_value)
+            velocities.push(0.0)
+        son
+        
+        döndür ChainSpring {
+            points: points,
+            velocities: velocities,
+            stiffness: 150.0,
+            damping: 12.0,
+            anchor_start: doğru,
+            anchor_end: yanlış,
+        }
+    son
+    
+    /// Başlangıç noktasını ayarla
+    pub fn set_start(mut self, value: ondalık) döndür void:
+        eğer self.points.len() > 0:
+            self.points[0] = value
+        son
+    son
+    
+    /// Bitiş noktasını ayarla
+    pub fn set_end(mut self, value: ondalık) döndür void:
+        değişken len = self.points.len()
+        eğer len > 0:
+            self.points[len - 1] = value
+        son
+    son
+    
+    /// Simülasyonu güncelle
+    pub fn update(mut self, dt: ondalık) döndür void:
+        değişken len = self.points.len()
+        eğer len < 2:
+            döndür
+        son
+        
+        döngü i in 0..len:
+            // Sabit noktaları atla
+            eğer i == 0 && self.anchor_start:
+                devam
+            son
+            eğer i == len - 1 && self.anchor_end:
+                devam
+            son
+            
+            değişken force = 0.0
+            
+            // Önceki noktadan çekim
+            eğer i > 0:
+                değişken displacement = self.points[i - 1] - self.points[i]
+                force = force + self.stiffness * displacement
+            son
+            
+            // Sonraki noktadan çekim
+            eğer i < len - 1:
+                değişken displacement = self.points[i + 1] - self.points[i]
+                force = force + self.stiffness * displacement
+            son
+            
+            // Sönümleme
+            force = force - self.damping * self.velocities[i]
+            
+            // Güncelle
+            self.velocities[i] = self.velocities[i] + force * dt
+            self.points[i] = self.points[i] + self.velocities[i] * dt
+        son
+    son
+    
+    /// Tüm noktaları al
+    pub fn get_points(self) döndür Liste[ondalık]:
+        döndür self.points.clone()
+    son
+    
+    /// Belirli noktayı al
+    pub fn get_point(self, index: sayı) döndür ondalık:
+        eğer index >= 0 && index < self.points.len():
+            döndür self.points[index]
+        son
+        döndür 0.0
+    son
+son

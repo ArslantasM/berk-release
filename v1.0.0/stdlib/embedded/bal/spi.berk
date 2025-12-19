@@ -1,0 +1,208 @@
+// stdlib/embedded/bal/spi.berk
+// Backend Abstraction Layer - SPI Interface
+// Platform-independent SPI (Serial Peripheral Interface) API
+
+/// SPI mode (clock polarity and phase)
+pub enum Mode {
+    Mode0,  // CPOL=0, CPHA=0 (most common)
+    Mode1,  // CPOL=0, CPHA=1
+    Mode2,  // CPOL=1, CPHA=0
+    Mode3,  // CPOL=1, CPHA=1
+}
+
+/// SPI bit order
+pub enum BitOrder {
+    MSBFirst,   // Most Significant Bit first (standard)
+    LSBFirst,   // Least Significant Bit first (rare)
+}
+
+/// SPI data size
+pub enum DataSize {
+    Bits8,      // 8-bit transfers (standard)
+    Bits16,     // 16-bit transfers
+}
+
+/// SPI error types
+pub enum Error {
+    BusError,       // Bus error
+    Timeout,        // Operation timeout
+    Overrun,        // Data overrun
+    ModeFault,      // Mode fault (multi-master)
+    CRCError,       // CRC check failed
+}
+
+pub type Result<T> = stdlib.result.Result<T, Error>
+
+/// SPI configuration
+pub struct Config {
+    bus: u8,            // SPI bus number (0, 1, 2, etc.)
+    sck_pin: u8,        // Clock pin
+    mosi_pin: u8,       // Master Out Slave In
+    miso_pin: u8,       // Master In Slave Out
+    cs_pin: u8,         // Chip Select (optional, can be manual)
+    frequency: u32,     // Bus frequency in Hz
+    mode: Mode,         // SPI mode
+    bit_order: BitOrder,
+    data_size: DataSize,
+    cs_active_low: bool, // CS polarity
+}
+
+/// SPI HAL interface that platforms must implement
+pub interface SPI_HAL {
+    /// Initialize SPI bus
+    fn init(config: Config) -> Result<()>
+    
+    /// Deinitialize SPI bus
+    fn deinit(bus: u8)
+    
+    /// Transfer single byte (write and read simultaneously)
+    fn transfer_byte(bus: u8, data: u8) -> Result<u8>
+    
+    /// Transfer multiple bytes
+    fn transfer(bus: u8, write_data: &[u8], read_buffer: &mut [u8]) -> Result<()>
+    
+    /// Write data (ignore read data)
+    fn write(bus: u8, data: &[u8]) -> Result<()>
+    
+    /// Read data (send dummy bytes)
+    fn read(bus: u8, buffer: &mut [u8]) -> Result<()>
+    
+    /// Assert chip select (CS low)
+    fn select(bus: u8, cs_pin: u8)
+    
+    /// Deassert chip select (CS high)
+    fn deselect(bus: u8, cs_pin: u8)
+    
+    /// Set bus frequency
+    fn set_frequency(bus: u8, frequency: u32) -> Result<()>
+    
+    /// Set SPI mode
+    fn set_mode(bus: u8, mode: Mode) -> Result<()>
+}
+
+// High-level convenience functions
+
+/// Initialize SPI with default settings (8MHz, Mode0, MSB first)
+pub fn init_default(bus: u8, sck_pin: u8, mosi_pin: u8, miso_pin: u8, cs_pin: u8) -> Result<()> {
+    let config = Config {
+        bus: bus,
+        sck_pin: sck_pin,
+        mosi_pin: mosi_pin,
+        miso_pin: miso_pin,
+        cs_pin: cs_pin,
+        frequency: 8_000_000,  // 8 MHz
+        mode: Mode.Mode0,
+        bit_order: BitOrder.MSBFirst,
+        data_size: DataSize.Bits8,
+        cs_active_low: true,
+    }
+    SPI_HAL.init(config)
+}
+
+/// Transfer with automatic CS control
+pub fn transfer_with_cs(bus: u8, cs_pin: u8, write_data: &[u8], read_buffer: &mut [u8]) -> Result<()> {
+    SPI_HAL.select(bus, cs_pin)
+    let result = SPI_HAL.transfer(bus, write_data, read_buffer)
+    SPI_HAL.deselect(bus, cs_pin)
+    result
+}
+
+/// Write with automatic CS control
+pub fn write_with_cs(bus: u8, cs_pin: u8, data: &[u8]) -> Result<()> {
+    SPI_HAL.select(bus, cs_pin)
+    let result = SPI_HAL.write(bus, data)
+    SPI_HAL.deselect(bus, cs_pin)
+    result
+}
+
+/// Read with automatic CS control
+pub fn read_with_cs(bus: u8, cs_pin: u8, buffer: &mut [u8]) -> Result<()> {
+    SPI_HAL.select(bus, cs_pin)
+    let result = SPI_HAL.read(bus, buffer)
+    SPI_HAL.deselect(bus, cs_pin)
+    result
+}
+
+/// Write single byte
+pub fn write_byte(bus: u8, cs_pin: u8, data: u8) -> Result<()> {
+    let buffer: [u8; 1] = [data]
+    write_with_cs(bus, cs_pin, &buffer)
+}
+
+/// Read single byte
+pub fn read_byte(bus: u8, cs_pin: u8) -> Result<u8> {
+    let mut buffer: [u8; 1] = [0]
+    read_with_cs(bus, cs_pin, &mut buffer)?
+    Ok(buffer[0])
+}
+
+/// Write register (command byte + data byte)
+pub fn write_register(bus: u8, cs_pin: u8, register: u8, value: u8) -> Result<()> {
+    let data: [u8; 2] = [register, value]
+    write_with_cs(bus, cs_pin, &data)
+}
+
+/// Read register (command byte + read byte)
+pub fn read_register(bus: u8, cs_pin: u8, register: u8) -> Result<u8> {
+    let write_data: [u8; 2] = [register, 0x00]
+    let mut read_buffer: [u8; 2] = [0, 0]
+    transfer_with_cs(bus, cs_pin, &write_data, &mut read_buffer)?
+    Ok(read_buffer[1])
+}
+
+/// Read multiple registers
+pub fn read_registers(bus: u8, cs_pin: u8, start_register: u8, buffer: &mut [u8]) -> Result<()> {
+    SPI_HAL.select(bus, cs_pin)
+    
+    // Send register address
+    let _ = SPI_HAL.transfer_byte(bus, start_register)?
+    
+    // Read data
+    let result = SPI_HAL.read(bus, buffer)
+    
+    SPI_HAL.deselect(bus, cs_pin)
+    result
+}
+
+/// Write 16-bit value (big-endian)
+pub fn write_u16_be(bus: u8, cs_pin: u8, value: u16) -> Result<()> {
+    let data: [u8; 2] = [(value >> 8) as u8, value as u8]
+    write_with_cs(bus, cs_pin, &data)
+}
+
+/// Read 16-bit value (big-endian)
+pub fn read_u16_be(bus: u8, cs_pin: u8) -> Result<u16> {
+    let mut buffer: [u8; 2] = [0, 0]
+    read_with_cs(bus, cs_pin, &mut buffer)?
+    Ok((buffer[0] as u16) << 8 | buffer[1] as u16)
+}
+
+/// Write 32-bit value (big-endian)
+pub fn write_u32_be(bus: u8, cs_pin: u8, value: u32) -> Result<()> {
+    let data: [u8; 4] = [
+        (value >> 24) as u8,
+        (value >> 16) as u8,
+        (value >> 8) as u8,
+        value as u8
+    ]
+    write_with_cs(bus, cs_pin, &data)
+}
+
+/// Bulk transfer (DMA-friendly)
+pub fn bulk_transfer(bus: u8, cs_pin: u8, data: &[u8], chunk_size: u32) -> Result<()> {
+    SPI_HAL.select(bus, cs_pin)
+    
+    let mut offset: u32 = 0
+    while offset < data.len() as u32 {
+        let remaining = data.len() as u32 - offset
+        let size = if remaining < chunk_size { remaining } else { chunk_size }
+        
+        let chunk = &data[offset as usize..(offset + size) as usize]
+        SPI_HAL.write(bus, chunk)?
+        
+        offset += size
+    }
+    
+    SPI_HAL.deselect(bus, cs_pin)
+    Ok(())
+}

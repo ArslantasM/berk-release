@@ -1,0 +1,79 @@
+// Arduino Time Module for BERK
+// Timing functions for delays and timing
+//
+// Control your project timing! ⏱️
+
+extern "C" {
+    fn delay(ms: u32);
+    fn delayMicroseconds(us: u32);
+    fn millis() -> u32;
+    fn micros() -> u32;
+}
+
+// Delay in milliseconds
+pub fn delay_ms(ms: u32) {
+    unsafe { delay(ms); }
+}
+
+// Delay in microseconds
+pub fn delay_us(us: u32) {
+    unsafe { delayMicroseconds(us); }
+}
+
+// Get milliseconds since start
+pub fn millis() -> u32 {
+    unsafe { millis() }
+}
+
+// Get microseconds since start
+pub fn micros() -> u32 {
+    unsafe { micros() }
+}
+
+// 📱 VIRAL EXAMPLE: Blink without delay
+pub fn example_blink_no_delay() {
+    use super::gpio;
+    
+    let led = gpio::pin(13).output();
+    let mut last_toggle = millis();
+    let interval = 1000;  // 1 second
+    
+    loop {
+        let current = millis();
+        
+        if current - last_toggle >= interval {
+            led.toggle();
+            last_toggle = current;
+        }
+        
+        // Can do other work here!
+    }
+}
+
+// ⏲️ VIRAL EXAMPLE: Stopwatch
+pub fn example_stopwatch() {
+    use super::serial;
+    use super::gpio;
+    
+    serial::begin(9600);
+    let button = gpio::pin(2).input_pullup();
+    
+    let mut running = false;
+    let mut start_time = 0u32;
+    
+    loop {
+        if button.read() && !running {
+            start_time = millis();
+            running = true;
+            serial::println("Started!");
+        } else if button.read() && running {
+            let elapsed = millis() - start_time;
+            serial::print("Time: ");
+            serial::print_int(elapsed as i32);
+            serial::println(" ms");
+            running = false;
+        }
+        
+        delay_ms(100);
+    }
+}

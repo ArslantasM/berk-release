@@ -1,0 +1,48 @@
+// Nuvoton QEI Module (Quadrature Encoder Interface)
+// Unique feature for motor control applications
+
+extern "C" {
+    fn QEI_Open(qei: *void, mode: u32, max_count: u32);
+    fn QEI_Start(qei: *void);
+    fn QEI_GetCounter(qei: *void) -> u32;
+    fn QEI_SetCounter(qei: *void, value: u32);
+}
+
+const QEI_MODE_X2: u32 = 0;
+const QEI_MODE_X4: u32 = 1;
+
+pub struct QuadratureEncoder {
+    qei: *void,
+}
+
+impl QuadratureEncoder {
+    pub fn new(qei: *void, mode: u32) -> QuadratureEncoder {
+        unsafe {
+            QEI_Open(qei, mode, 0xFFFFFFFF);
+            QEI_Start(qei);
+        }
+        QuadratureEncoder { qei }
+    }
+    
+    pub fn get_position(&self) -> i32 {
+        unsafe { QEI_GetCounter(self.qei) as i32 }
+    }
+    
+    pub fn reset(&self) {
+        unsafe { QEI_SetCounter(self.qei, 0); }
+    }
+}
+
+// Example: Motor encoder reading
+pub fn example_motor_encoder() {
+    let encoder = QuadratureEncoder::new(core::ptr::null(), QEI_MODE_X4);
+    
+    loop {
+        let position = encoder.get_position();
+        println!("Motor position: {}", position);
+        sleep_ms(100);
+    }
+}
+
+fn sleep_ms(ms: u32) {}
+fn println!(msg: &str, pos: i32) {}

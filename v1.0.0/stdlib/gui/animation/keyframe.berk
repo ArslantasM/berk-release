@@ -1,0 +1,464 @@
+// ============================================================================
+// BERK GUI Framework - Keyframe Animation System
+// ============================================================================
+// Synfig tarzı keyframe animasyon sistemi
+// ============================================================================
+
+modül gui::animation::keyframe
+
+kullan gui::animation::time::{Time, TimeRange}
+kullan gui::animation::waypoint::{Waypoint, WaypointList}
+kullan gui::animation::interpolation::{Interpolation, Interpolator}
+kullan gui::animation::easing::{EasingType, ease}
+
+// ============================================================================
+// KEYFRAME - Animasyon Anahtarı
+// ============================================================================
+
+/// Keyframe, animasyonun belirli bir anındaki özellikleri temsil eder
+pub tip Keyframe = yapı yap
+    /// Benzersiz ID
+    id: sayı,
+    /// İsim
+    name: yazı,
+    /// Zaman noktası
+    time: Time,
+    /// Açıklama
+    description: yazı,
+    /// Etkin mi?
+    active: mantıksal,
+son
+
+/// Keyframe ID sayacı
+değişken keyframe_id_counter: sayı = 0
+
+impl Keyframe:
+    /// Yeni keyframe oluştur
+    pub fn new(time: Time, name: yazı) döndür Keyframe:
+        keyframe_id_counter = keyframe_id_counter + 1
+        döndür Keyframe {
+            id: keyframe_id_counter,
+            name: name,
+            time: time,
+            description: "",
+            active: doğru,
+        }
+    son
+    
+    /// Açıklama ekle
+    pub fn with_description(mut self, desc: yazı) döndür Keyframe:
+        self.description = desc
+        döndür self
+    son
+    
+    /// ID al
+    pub fn get_id(self) döndür sayı:
+        döndür self.id
+    son
+    
+    /// Zaman al
+    pub fn get_time(self) döndür Time:
+        döndür self.time
+    son
+    
+    /// İsim al
+    pub fn get_name(self) döndür yazı:
+        döndür self.name
+    son
+    
+    /// Etkinlik durumu
+    pub fn is_active(self) döndür mantıksal:
+        döndür self.active
+    son
+    
+    /// Etkinliği değiştir
+    pub fn set_active(mut self, active: mantıksal) döndür void:
+        self.active = active
+    son
+son
+
+// ============================================================================
+// KEYFRAME TRACK - Animasyon Parçası
+// ============================================================================
+
+/// Bir özellik için keyframe koleksiyonu
+pub tip KeyframeTrack[T] = yapı yap
+    /// Parça ismi
+    name: yazı,
+    /// Waypoint listesi
+    waypoints: WaypointList[T],
+    /// Varsayılan değer
+    default_value: T,
+    /// Varsayılan interpolasyon
+    default_interpolation: Interpolation,
+    /// Parça etkin mi?
+    enabled: mantıksal,
+    /// Kilitli mi? (düzenleme engeli)
+    locked: mantıksal,
+son
+
+impl KeyframeTrack[T]:
+    /// Yeni parça oluştur
+    pub fn new(name: yazı, default_value: T) döndür KeyframeTrack[T]:
+        döndür KeyframeTrack {
+            name: name,
+            waypoints: WaypointList::new(),
+            default_value: default_value,
+            default_interpolation: Interpolation::TCB(0.0, 0.0, 0.0),
+            enabled: doğru,
+            locked: yanlış,
+        }
+    son
+    
+    /// Varsayılan interpolasyonu ayarla
+    pub fn with_interpolation(mut self, interp: Interpolation) döndür KeyframeTrack[T]:
+        self.default_interpolation = interp
+        döndür self
+    son
+    
+    /// Keyframe ekle
+    pub fn add_keyframe(mut self, time: Time, value: T) döndür Waypoint[T]:
+        değişken wp = Waypoint::new(time, value)
+            .with_interpolation(self.default_interpolation)
+        self.waypoints.add(wp.clone())
+        döndür wp
+    son
+    
+    /// Keyframe ekle (interpolasyon ile)
+    pub fn add_keyframe_with_interp(mut self, time: Time, value: T, interp: Interpolation) döndür Waypoint[T]:
+        değişken wp = Waypoint::new(time, value)
+            .with_interpolation(interp)
+        self.waypoints.add(wp.clone())
+        döndür wp
+    son
+    
+    /// Keyframe sil
+    pub fn remove_keyframe(mut self, id: sayı) döndür mantıksal:
+        döndür self.waypoints.remove(id)
+    son
+    
+    /// Belirli zamandaki değeri al
+    pub fn get_value_at(self, time: Time) döndür T:
+        eğer !self.enabled:
+            döndür self.default_value
+        son
+        
+        // Çevreleyen waypoint'leri bul
+        değişken (before, after) = self.waypoints.find_surrounding(time)
+        
+        // Waypoint yoksa varsayılan
+        eğer before.is_none() && after.is_none():
+            döndür self.default_value
+        son
+        
+        // Sadece önceki varsa
+        eğer after.is_none():
+            döndür before.unwrap().get_value()
+        son
+        
+        // Sadece sonraki varsa
+        eğer before.is_none():
+            döndür after.unwrap().get_value()
+        son
+        
+        // Her ikisi de varsa interpolasyon yap
+        değişken wp_before = before.unwrap()
+        değişken wp_after = after.unwrap()
+        
+        // Zaman normalizasyonu
+        değişken t_range = wp_after.get_time().sub(wp_before.get_time()).seconds()
+        eğer t_range.abs() < 0.0001:
+            döndür wp_before.get_value()
+        son
+        
+        değişken t = time.sub(wp_before.get_time()).seconds() / t_range
+        
+        // İnterpolasyon uygula
+        değişken interpolator = Interpolator::new(wp_before.get_after())
+        döndür self.interpolate_values(wp_before.get_value(), wp_after.get_value(), t, interpolator)
+    son
+    
+    /// İki değer arasında interpolasyon (T tipine özel override gerekebilir)
+    fn interpolate_values(self, from: T, to: T, t: ondalık, interpolator: Interpolator) döndür T:
+        // Bu method T tipine göre özelleştirilmeli
+        döndür from  // Placeholder
+    son
+    
+    /// Tüm keyframe'leri al
+    pub fn get_all_keyframes(self) döndür Liste[Waypoint[T]]:
+        döndür self.waypoints.all()
+    son
+    
+    /// Keyframe sayısı
+    pub fn keyframe_count(self) döndür sayı:
+        döndür self.waypoints.len()
+    son
+    
+    /// Zaman aralığı
+    pub fn time_range(self) döndür Seçenek[(Time, Time)]:
+        döndür self.waypoints.time_range()
+    son
+    
+    /// Parça ismi
+    pub fn get_name(self) döndür yazı:
+        döndür self.name
+    son
+    
+    /// Etkinlik
+    pub fn is_enabled(self) döndür mantıksal:
+        döndür self.enabled
+    son
+    
+    pub fn set_enabled(mut self, enabled: mantıksal) döndür void:
+        self.enabled = enabled
+    son
+    
+    /// Kilit
+    pub fn is_locked(self) döndür mantıksal:
+        döndür self.locked
+    son
+    
+    pub fn set_locked(mut self, locked: mantıksal) döndür void:
+        self.locked = locked
+    son
+son
+
+// ============================================================================
+// NUMBER TRACK - Sayısal Parça
+// ============================================================================
+
+/// Ondalık sayılar için keyframe parçası
+pub tip NumberTrack = yapı yap
+    track: KeyframeTrack[ondalık],
+son
+
+impl NumberTrack:
+    pub fn new(name: yazı, default_value: ondalık) döndür NumberTrack:
+        döndür NumberTrack { track: KeyframeTrack::new(name, default_value) }
+    son
+    
+    pub fn add_keyframe(mut self, time: Time, value: ondalık) döndür void:
+        self.track.add_keyframe(time, value)
+    son
+    
+    pub fn get_value_at(self, time: Time) döndür ondalık:
+        // Çevreleyen waypoint'leri bul
+        değişken (before, after) = self.track.waypoints.find_surrounding(time)
+        
+        eğer before.is_none() && after.is_none():
+            döndür self.track.default_value
+        son
+        
+        eğer after.is_none():
+            döndür before.unwrap().get_value()
+        son
+        
+        eğer before.is_none():
+            döndür after.unwrap().get_value()
+        son
+        
+        değişken wp_before = before.unwrap()
+        değişken wp_after = after.unwrap()
+        
+        değişken t_range = wp_after.get_time().sub(wp_before.get_time()).seconds()
+        eğer t_range.abs() < 0.0001:
+            döndür wp_before.get_value()
+        son
+        
+        değişken t = time.sub(wp_before.get_time()).seconds() / t_range
+        
+        değişken interpolator = Interpolator::new(wp_before.get_after())
+        döndür interpolator.interpolate(wp_before.get_value(), wp_after.get_value(), t)
+    son
+son
+
+// ============================================================================
+// KEYFRAME ANIMATION - Çoklu Parça Animasyonu
+// ============================================================================
+
+/// Birden fazla parçayı yöneten animasyon
+pub tip KeyframeAnimation = yapı yap
+    /// Animasyon adı
+    name: yazı,
+    /// Animasyon açıklaması
+    description: yazı,
+    /// Sayısal parçalar
+    number_tracks: Liste[NumberTrack],
+    /// Keyframe işaretçileri
+    keyframes: Liste[Keyframe],
+    /// Toplam süre
+    duration: Time,
+    /// Mevcut zaman
+    current_time: Time,
+    /// Oynatma hızı (1.0 = normal)
+    speed: ondalık,
+    /// Döngü
+    loop_mode: LoopMode,
+    /// Çalışıyor mu?
+    playing: mantıksal,
+son
+
+/// Döngü modu
+pub tip LoopMode = özyinelemeli yap
+    | None           // Döngü yok
+    | Loop           // Baştan başla
+    | PingPong       // İleri-geri
+son
+
+impl KeyframeAnimation:
+    /// Yeni animasyon
+    pub fn new(name: yazı) döndür KeyframeAnimation:
+        döndür KeyframeAnimation {
+            name: name,
+            description: "",
+            number_tracks: [],
+            keyframes: [],
+            duration: Time::from_seconds(1.0),
+            current_time: Time::zero(),
+            speed: 1.0,
+            loop_mode: LoopMode::None,
+            playing: yanlış,
+        }
+    son
+    
+    /// Süre ayarla
+    pub fn with_duration(mut self, duration: Time) döndür KeyframeAnimation:
+        self.duration = duration
+        döndür self
+    son
+    
+    /// Döngü modu ayarla
+    pub fn with_loop(mut self, mode: LoopMode) döndür KeyframeAnimation:
+        self.loop_mode = mode
+        döndür self
+    son
+    
+    /// Hız ayarla
+    pub fn with_speed(mut self, speed: ondalık) döndür KeyframeAnimation:
+        self.speed = speed
+        döndür self
+    son
+    
+    /// Sayısal parça ekle
+    pub fn add_number_track(mut self, track: NumberTrack) döndür void:
+        self.number_tracks.push(track)
+    son
+    
+    /// Keyframe işaretçisi ekle
+    pub fn add_keyframe_marker(mut self, keyframe: Keyframe) döndür void:
+        self.keyframes.push(keyframe)
+    son
+    
+    /// Parça al (isimle)
+    pub fn get_number_track(self, name: yazı) döndür Seçenek[NumberTrack]:
+        döngü track in self.number_tracks:
+            eğer track.track.get_name() == name:
+                döndür Bazı(track)
+            son
+        son
+        döndür Hiçbiri
+    son
+    
+    /// Oynat
+    pub fn play(mut self) döndür void:
+        self.playing = doğru
+    son
+    
+    /// Duraklat
+    pub fn pause(mut self) döndür void:
+        self.playing = yanlış
+    son
+    
+    /// Durdur ve sıfırla
+    pub fn stop(mut self) döndür void:
+        self.playing = yanlış
+        self.current_time = Time::zero()
+    son
+    
+    /// Belirli zamana atla
+    pub fn seek(mut self, time: Time) döndür void:
+        self.current_time = time.clamp(Time::zero(), self.duration)
+    son
+    
+    /// Güncelle
+    pub fn update(mut self, delta: Time) döndür void:
+        eğer !self.playing:
+            döndür
+        son
+        
+        // Zamanı ilerlet
+        self.current_time = self.current_time.add(delta.mul(self.speed))
+        
+        // Süre aşıldı mı?
+        eğer self.current_time.greater_than(self.duration):
+            eşleştir self.loop_mode:
+                LoopMode::None:
+                    self.current_time = self.duration
+                    self.playing = yanlış
+                
+                LoopMode::Loop:
+                    // Fazlayı al ve baştan başla
+                    değişken excess = self.current_time.sub(self.duration)
+                    self.current_time = excess
+                
+                LoopMode::PingPong:
+                    // Tersine çevir
+                    self.speed = -self.speed
+                    self.current_time = self.duration
+            son
+        son
+        
+        // Negatif zaman (ping pong için)
+        eğer self.current_time.is_negative():
+            eşleştir self.loop_mode:
+                LoopMode::PingPong:
+                    self.speed = -self.speed
+                    self.current_time = Time::zero()
+                _:
+                    self.current_time = Time::zero()
+            son
+        son
+    son
+    
+    /// Tüm parçalardan mevcut değerleri al
+    pub fn get_values(self) döndür Harita[yazı, ondalık]:
+        değişken values: Harita[yazı, ondalık] = Harita::new()
+        
+        döngü track in self.number_tracks:
+            değişken value = track.get_value_at(self.current_time)
+            values.insert(track.track.get_name(), value)
+        son
+        
+        döndür values
+    son
+    
+    /// Belirli parçanın değerini al
+    pub fn get_value(self, track_name: yazı) döndür Seçenek[ondalık]:
+        döngü track in self.number_tracks:
+            eğer track.track.get_name() == track_name:
+                döndür Bazı(track.get_value_at(self.current_time))
+            son
+        son
+        döndür Hiçbiri
+    son
+    
+    /// Mevcut zaman
+    pub fn get_current_time(self) döndür Time:
+        döndür self.current_time
+    son
+    
+    /// İlerleme (0-1)
+    pub fn get_progress(self) döndür ondalık:
+        döndür self.current_time.seconds() / self.duration.seconds()
+    son
+    
+    /// Toplam süre
+    pub fn get_duration(self) döndür Time:
+        döndür self.duration
+    son
+    
+    /// Çalışıyor mu?
+    pub fn is_playing(self) döndür mantıksal:
+        döndür self.playing
+    son
+son

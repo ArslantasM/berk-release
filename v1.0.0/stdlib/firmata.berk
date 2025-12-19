@@ -1,0 +1,165 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// BERK Standard Library - Firmata Module
+// Hardware Bridge Phase HAL 6.0
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Arduino StandardFirmata protokolü ile gerçek donanım kontrolü.
+// Arduino'ya StandardFirmata yüklenmiş olmalı.
+//
+// Örnek:
+//   kullan std::firmata
+//   olsun arduino = firmata::connect("COM3")
+//   firmata::pin_mode(arduino, 13, "output")
+//   firmata::digital_write(arduino, 13, 1)
+//   firmata::disconnect(arduino)
+//
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Bağlantı Yönetimi
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Arduino'ya Firmata protokolü ile bağlan
+/// port: Port adı ("COM3", "/dev/ttyUSB0")
+/// Döner: Board handle
+@native("firmata_connect")
+dpiş connect(port: Metin) -> Tam
+
+/// Arduino'ya bağlan - Türkçe
+@native("firmata_connect")
+dpiş baglan(port: Metin) -> Tam
+
+/// Bağlantıyı kes
+@native("firmata_disconnect")
+dpiş disconnect(handle: Tam) -> Mantık
+
+/// Bağlantıyı kes - Türkçe
+@native("firmata_disconnect")
+dpiş baglanti_kes(handle: Tam) -> Mantık
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Pin Konfigürasyonu
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Pin modunu ayarla
+/// mode: "input", "output", "analog", "pwm", "servo", "i2c", "pullup"
+@native("firmata_pin_mode")
+dpiş pin_mode(handle: Tam, pin: Tam, mode: Metin) -> Mantık
+
+/// Pin modu - Türkçe
+@native("firmata_pin_mode")
+dpiş pin_modu(handle: Tam, pin: Tam, mod: Metin) -> Mantık
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Dijital I/O
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Dijital çıkış yaz (0 veya 1)
+@native("firmata_digital_write")
+dpiş digital_write(handle: Tam, pin: Tam, value: Tam) -> Mantık
+
+/// Dijital yaz - Türkçe
+@native("firmata_digital_write")
+dpiş dijital_yaz(handle: Tam, pin: Tam, deger: Tam) -> Mantık
+
+/// Dijital giriş oku
+/// Döner: 0 veya 1
+@native("firmata_digital_read")
+dpiş digital_read(handle: Tam, pin: Tam) -> Tam
+
+/// Dijital oku - Türkçe
+@native("firmata_digital_read")
+dpiş dijital_oku(handle: Tam, pin: Tam) -> Tam
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Analog / PWM
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// PWM çıkış yaz (0-255)
+@native("firmata_analog_write")
+dpiş analog_write(handle: Tam, pin: Tam, value: Tam) -> Mantık
+
+/// Analog/PWM yaz - Türkçe
+@native("firmata_analog_write")
+dpiş analog_yaz(handle: Tam, pin: Tam, deger: Tam) -> Mantık
+
+/// Analog giriş oku (0-1023)
+/// channel: Analog kanal (0-7, A0-A7 için)
+@native("firmata_analog_read")
+dpiş analog_read(handle: Tam, channel: Tam) -> Tam
+
+/// Analog oku - Türkçe
+@native("firmata_analog_read")
+dpiş analog_oku(handle: Tam, kanal: Tam) -> Tam
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Servo Motor
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Servo konfigürasyonu
+/// min_pulse: Minimum pulse genişliği (µs, varsayılan 544)
+/// max_pulse: Maximum pulse genişliği (µs, varsayılan 2400)
+@native("firmata_servo_config")
+dpiş servo_config(handle: Tam, pin: Tam, min_pulse: Tam, max_pulse: Tam) -> Mantık
+
+/// Servo ayarla - Türkçe
+@native("firmata_servo_config")
+dpiş servo_ayarla(handle: Tam, pin: Tam, min_puls: Tam, max_puls: Tam) -> Mantık
+
+/// Servo açısı yaz (0-180 derece)
+@native("firmata_servo_write")
+dpiş servo_write(handle: Tam, pin: Tam, angle: Tam) -> Mantık
+
+/// Servo yaz - Türkçe
+@native("firmata_servo_write")
+dpiş servo_yaz(handle: Tam, pin: Tam, aci: Tam) -> Mantık
+
+// ─────────────────────────────────────────────────────────────────────────────
+// I2C İletişim
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// I2C başlat
+/// delay: Okuma gecikmesi (µs)
+@native("firmata_i2c_config")
+dpiş i2c_config(handle: Tam, delay: Tam) -> Mantık
+
+/// I2C veri yaz
+/// address: Cihaz adresi (7-bit)
+/// data: Gönderilecek byte dizisi
+@native("firmata_i2c_write")
+dpiş i2c_write(handle: Tam, address: Tam, data: Dizi) -> Mantık
+
+/// I2C veri oku
+/// address: Cihaz adresi
+/// count: Okunacak byte sayısı
+/// Döner: Okunan byte dizisi
+@native("firmata_i2c_read")
+dpiş i2c_read(handle: Tam, address: Tam, count: Tam) -> Dizi
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sistem
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// String mesaj gönder
+@native("firmata_send_string")
+dpiş send_string(handle: Tam, text: Metin) -> Mantık
+
+/// Mesaj gönder - Türkçe
+@native("firmata_send_string")
+dpiş mesaj_gonder(handle: Tam, metin: Metin) -> Mantık
+
+/// Arduino'yu resetle
+@native("firmata_reset")
+dpiş reset(handle: Tam) -> Mantık
+
+/// Sıfırla - Türkçe
+@native("firmata_reset")
+dpiş sifirla(handle: Tam) -> Mantık
+
+/// Firmware sürümünü al
+/// Döner: {major, minor, name}
+@native("firmata_get_version")
+dpiş get_version(handle: Tam) -> Harita
+
+/// Sürüm al - Türkçe
+@native("firmata_get_version")
+dpiş surum_al(handle: Tam) -> Harita

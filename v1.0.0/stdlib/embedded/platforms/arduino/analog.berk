@@ -1,0 +1,135 @@
+// Arduino Analog Module for BERK
+// Modern wrapper for analogRead/Write
+//
+// Perfect for sensor projects! 📊
+
+extern "C" {
+    fn analogRead(pin: u8) -> u16;
+    fn analogWrite(pin: u8, value: u8);
+    fn analogReference(type_: u8);
+}
+
+const DEFAULT: u8 = 1;
+const INTERNAL: u8 = 3;
+const EXTERNAL: u8 = 0;
+
+// Read analog value (0-1023)
+pub fn read(pin: u8) -> u16 {
+    unsafe { analogRead(pin) }
+}
+
+// Write PWM value (0-255)
+pub fn write(pin: u8, value: u8) {
+    unsafe { analogWrite(pin, value); }
+}
+
+// Read as voltage (0-5V on Uno)
+pub fn read_voltage(pin: u8) -> f32 {
+    let raw = read(pin) as f32;
+    (raw / 1023.0) * 5.0
+}
+
+// Read as percentage (0-100%)
+pub fn read_percent(pin: u8) -> f32 {
+    let raw = read(pin) as f32;
+    (raw / 1023.0) * 100.0
+}
+
+// Set PWM duty cycle (0.0 to 1.0)
+pub fn write_duty(pin: u8, duty: f32) {
+    let value = (duty * 255.0) as u8;
+    write(pin, value);
+}
+
+// 📱 VIRAL EXAMPLE: Potentiometer LED dimmer
+pub fn example_pot_dimmer() {
+    use super::time;
+    
+    let pot_pin = 0;  // A0
+    let led_pin = 9;  // PWM pin
+    
+    loop {
+        let pot_value = read(pot_pin);
+        let brightness = (pot_value / 4) as u8;  // 0-1023 -> 0-255
+        write(led_pin, brightness);
+        time::delay_ms(10);
+    }
+}
+
+// 📱 VIRAL EXAMPLE: Temperature monitor
+pub fn example_temperature() {
+    use super::{serial, time};
+    
+    serial::begin(9600);
+    
+    loop {
+        let raw = read(0);  // TMP36 on A0
+        let voltage = read_voltage(0);
+        let temp_c = (voltage - 0.5) * 100.0;
+        
+        serial::print("Temperature: ");
+        serial::print(temp_c as i32);
+        serial::println("°C");
+        
+        time::delay_ms(1000);
+    }
+}
+
+// 🎨 VIRAL EXAMPLE: RGB LED color mixer
+pub fn example_rgb_mixer() {
+    let r_pot = 0;  // A0
+    let g_pot = 1;  // A1
+    let b_pot = 2;  // A2
+    
+    let r_led = 9;   // PWM
+    let g_led = 10;  // PWM
+    let b_led = 11;  // PWM
+    
+    loop {
+        let r = (read(r_pot) / 4) as u8;
+        let g = (read(g_pot) / 4) as u8;
+        let b = (read(b_pot) / 4) as u8;
+        
+        write(r_led, r);
+        write(g_led, g);
+        write(b_led, b);
+    }
+}
+
+// 🌡️ VIRAL EXAMPLE: Smart fan control
+pub fn example_smart_fan() {
+    use super::time;
+    
+    let temp_pin = 0;  // Temperature sensor
+    let fan_pin = 9;    // Fan (PWM)
+    
+    loop {
+        let voltage = read_voltage(temp_pin);
+        let temp = (voltage - 0.5) * 100.0;
+        
+        // Auto fan speed based on temp
+        let fan_speed = if temp < 25.0 {
+            0
+        } else if temp < 30.0 {
+            128  // 50%
+        } else {
+            255  // 100%
+        };
+        
+        write(fan_pin, fan_speed);
+        time::delay_ms(1000);
+    }
+}
+
+// 💡 VIRAL EXAMPLE: Light-reactive LED
+pub fn example_light_reactive() {
+    let ldr_pin = 0;  // Light sensor
+    let led_pin = 9;  // LED
+    
+    loop {
+        let light = read(ldr_pin);
+        // Invert: dark = bright LED
+        let brightness = (255 - (light / 4)) as u8;
+        write(led_pin, brightness);
+    }
+}

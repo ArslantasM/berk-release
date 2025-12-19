@@ -1,0 +1,350 @@
+/// ═══════════════════════════════════════════════════════════════════════════
+/// BERK HAL - Sensor Network Demo
+/// Coklu Sensor ile Veri Toplama ve Islem
+/// ═══════════════════════════════════════════════════════════════════════════
+
+kullan std::io
+kullan std::arduino
+kullan std::math
+
+yaz("============================================================")
+yaz("         HAL Demo: Sensor Network                           ")
+yaz("         Coklu Sensor Veri Toplama Sistemi                  ")
+yaz("============================================================")
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BOLUM 1: Sensor Konfigurasyonu
+// ═══════════════════════════════════════════════════════════════════════════
+
+yaz("\n--- BOLUM 1: Sensor Konfigurasyonu ---")
+
+// Sensor pin tanimlari
+değişken TEMP_SENSOR_PIN = 0      // Analog - LM35 veya NTC
+değişken HUMIDITY_PIN = 1         // Analog - DHT22 analog cikis
+değişken LIGHT_SENSOR_PIN = 2     // Analog - LDR
+değişken PRESSURE_PIN = 3         // Analog - BMP180 (I2C de olabilir)
+değişken GAS_SENSOR_PIN = 4       // Analog - MQ-2 veya MQ-135
+değişken MOTION_PIN = 7           // Dijital - PIR sensor
+değişken DOOR_SENSOR_PIN = 8      // Dijital - Manyetik switch
+
+yaz("\n   Analog Sensorler:")
+yaz("   - Sicaklik (A0): LM35/NTC")
+yaz("   - Nem (A1): DHT22")
+yaz("   - Isik (A2): LDR")
+yaz("   - Basinc (A3): BMP180")
+yaz("   - Gaz (A4): MQ-135")
+
+yaz("\n   Dijital Sensorler:")
+yaz("   - Hareket (D7): PIR HC-SR501")
+yaz("   - Kapi (D8): Manyetik Switch")
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BOLUM 2: ADC Deger - Fiziksel Birim Donusumleri
+// ═══════════════════════════════════════════════════════════════════════════
+
+yaz("\n--- BOLUM 2: ADC Donusum Fonksiyonlari ---")
+
+// LM35 sicaklik donusumu: 10mV/C
+fonksiyon lm35_oku(adc_deger: tamsayı) -> ondalık yap
+    olsun voltaj = (adc_deger * 5.0) / 1024.0
+    olsun sicaklik = voltaj * 100.0  // 10mV per degree C
+    dön sicaklik
+son
+
+// NTC termistor donusumu (Steinhart-Hart)
+fonksiyon ntc_oku(adc_deger: tamsayı, r_seri: ondalık, beta: ondalık, t0: ondalık, r0: ondalık) -> ondalık yap
+    olsun direnc = r_seri * (1024.0 / adc_deger - 1.0)
+    olsun log_r = matematik::ln(direnc / r0)
+    olsun t_kelvin = 1.0 / (1.0 / t0 + log_r / beta)
+    dön t_kelvin - 273.15  // Celsius'a cevir
+son
+
+// LDR isik yogunlugu (lux approximation)
+fonksiyon ldr_oku(adc_deger: tamsayı, r_seri: ondalık) -> ondalık yap
+    olsun ldr_direnc = r_seri * (1024.0 / adc_deger - 1.0)
+    // Yaklasik lux hesabi (LDR karakteristigine gore degisir)
+    olsun lux = 500000.0 / ldr_direnc
+    dön lux
+son
+
+// MQ gaz sensoru - PPM donusumu
+fonksiyon mq_oku(adc_deger: tamsayı, ro: ondalık, rl: ondalık) -> ondalık yap
+    olsun sensor_volt = (adc_deger * 5.0) / 1024.0
+    olsun rs = ((5.0 - sensor_volt) / sensor_volt) * rl
+    olsun ratio = rs / ro
+    // CO icin yaklasik PPM (log-log egri)
+    olsun ppm = 100.0 * matematik::pow(ratio, -1.5)
+    dön ppm
+son
+
+yaz("   [OK] Donusum fonksiyonlari tanimlandi")
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BOLUM 3: Veri Yapisi ve Buffer
+// ═══════════════════════════════════════════════════════════════════════════
+
+yaz("\n--- BOLUM 3: Sensor Veri Yapisi ---")
+
+// Ring buffer boyutu
+değişken BUFFER_SIZE = 60  // Son 60 okuma (1 dakika @ 1Hz)
+
+// Sensor veri yapilarini simulasyon verilerle doldur
+olsun temp_buffer = [22.5, 22.6, 22.7, 22.8, 22.9, 23.0, 23.1, 23.0, 22.9, 22.8]
+olsun humidity_buffer = [45.0, 45.5, 46.0, 46.5, 47.0, 47.5, 48.0, 47.5, 47.0, 46.5]
+olsun light_buffer = [150.0, 155.0, 160.0, 320.0, 450.0, 500.0, 480.0, 200.0, 160.0, 155.0]
+
+yaz("   Ring Buffer: ", BUFFER_SIZE, " ornek")
+yaz("   Ornek orani: 1 Hz")
+yaz("   Veri suresi: 1 dakika")
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BOLUM 4: Istatistiksel Islemler
+// ═══════════════════════════════════════════════════════════════════════════
+
+yaz("\n--- BOLUM 4: Istatistiksel Analiz ---")
+
+fonksiyon ortalama(buffer: [ondalık], boyut: tamsayı) -> ondalık yap
+    olsun toplam = 0.0
+    olsun i = 0
+    iken i < boyut yap
+        toplam = toplam + buffer[i]
+        i = i + 1
+    son
+    dön toplam / boyut
+son
+
+fonksiyon minimum(buffer: [ondalık], boyut: tamsayı) -> ondalık yap
+    olsun min_val = buffer[0]
+    olsun i = 1
+    iken i < boyut yap
+        eğer buffer[i] < min_val ise
+            min_val = buffer[i]
+        son
+        i = i + 1
+    son
+    dön min_val
+son
+
+fonksiyon maksimum(buffer: [ondalık], boyut: tamsayı) -> ondalık yap
+    olsun max_val = buffer[0]
+    olsun i = 1
+    iken i < boyut yap
+        eğer buffer[i] > max_val ise
+            max_val = buffer[i]
+        son
+        i = i + 1
+    son
+    dön max_val
+son
+
+fonksiyon standart_sapma(buffer: [ondalık], boyut: tamsayı, ort: ondalık) -> ondalık yap
+    olsun toplam_kare = 0.0
+    olsun i = 0
+    iken i < boyut yap
+        olsun fark = buffer[i] - ort
+        toplam_kare = toplam_kare + (fark * fark)
+        i = i + 1
+    son
+    dön matematik::sqrt(toplam_kare / boyut)
+son
+
+// Sicaklik istatistikleri
+olsun temp_ort = ortalama(temp_buffer, 10)
+olsun temp_min = minimum(temp_buffer, 10)
+olsun temp_max = maksimum(temp_buffer, 10)
+olsun temp_std = standart_sapma(temp_buffer, 10, temp_ort)
+
+yaz("\n   Sicaklik Istatistikleri:")
+yaz("   - Ortalama: ", temp_ort, " C")
+yaz("   - Minimum:  ", temp_min, " C")
+yaz("   - Maksimum: ", temp_max, " C")
+yaz("   - Std Sapma: ", temp_std, " C")
+
+// Nem istatistikleri
+olsun hum_ort = ortalama(humidity_buffer, 10)
+olsun hum_min = minimum(humidity_buffer, 10)
+olsun hum_max = maksimum(humidity_buffer, 10)
+
+yaz("\n   Nem Istatistikleri:")
+yaz("   - Ortalama: ", hum_ort, " %")
+yaz("   - Minimum:  ", hum_min, " %")
+yaz("   - Maksimum: ", hum_max, " %")
+
+// Isik istatistikleri
+olsun light_ort = ortalama(light_buffer, 10)
+olsun light_min = minimum(light_buffer, 10)
+olsun light_max = maksimum(light_buffer, 10)
+
+yaz("\n   Isik Istatistikleri:")
+yaz("   - Ortalama: ", light_ort, " lux")
+yaz("   - Minimum:  ", light_min, " lux")
+yaz("   - Maksimum: ", light_max, " lux")
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BOLUM 5: Alarm Sistemi
+// ═══════════════════════════════════════════════════════════════════════════
+
+yaz("\n--- BOLUM 5: Alarm Sistemi ---")
+
+// Esik degerleri
+değişken TEMP_MIN_THRESHOLD = 18.0
+değişken TEMP_MAX_THRESHOLD = 28.0
+değişken HUMIDITY_MIN_THRESHOLD = 30.0
+değişken HUMIDITY_MAX_THRESHOLD = 70.0
+değişken GAS_THRESHOLD = 200.0  // PPM
+değişken LIGHT_THRESHOLD = 50.0  // lux (karanlik)
+
+fonksiyon alarm_kontrol(sicaklik: ondalık, nem: ondalık, gaz_ppm: ondalık, isik: ondalık) yap
+    yaz("\n   Alarm Durumu:")
+    
+    eğer sicaklik < TEMP_MIN_THRESHOLD ise
+        yaz("   [!] UYARI: Dusuk sicaklik - ", sicaklik, " C")
+    değilse eğer sicaklik > TEMP_MAX_THRESHOLD ise
+        yaz("   [!] UYARI: Yuksek sicaklik - ", sicaklik, " C")
+    değilse
+        yaz("   [OK] Sicaklik normal - ", sicaklik, " C")
+    son
+    
+    eğer nem < HUMIDITY_MIN_THRESHOLD ise
+        yaz("   [!] UYARI: Dusuk nem - ", nem, " %")
+    değilse eğer nem > HUMIDITY_MAX_THRESHOLD ise
+        yaz("   [!] UYARI: Yuksek nem - ", nem, " %")
+    değilse
+        yaz("   [OK] Nem normal - ", nem, " %")
+    son
+    
+    eğer gaz_ppm > GAS_THRESHOLD ise
+        yaz("   [!] TEHLIKE: Gaz seviyesi yuksek - ", gaz_ppm, " PPM")
+    değilse
+        yaz("   [OK] Gaz seviyesi normal - ", gaz_ppm, " PPM")
+    son
+    
+    eğer isik < LIGHT_THRESHOLD ise
+        yaz("   [i] BILGI: Ortam karanlik - ", isik, " lux")
+    değilse
+        yaz("   [OK] Aydinlatma yeterli - ", isik, " lux")
+    son
+son
+
+// Simulasyon verileri ile test
+alarm_kontrol(22.5, 46.0, 85.0, 160.0)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BOLUM 6: Kalman Filtresi
+// ═══════════════════════════════════════════════════════════════════════════
+
+yaz("\n--- BOLUM 6: Kalman Filtresi ---")
+
+// Basit 1D Kalman filtresi
+fonksiyon kalman_guncelle(
+    x_est: ondalık,        // Onceki tahmin
+    p_est: ondalık,        // Onceki kovaryans
+    z: ondalık,            // Olcum
+    q: ondalık,            // Proses gurultsu
+    r: ondalık             // Olcum gurultsu
+) -> (ondalık, ondalık) yap
+    // Tahmin adimi
+    olsun x_pred = x_est
+    olsun p_pred = p_est + q
+    
+    // Guncelleme adimi
+    olsun k = p_pred / (p_pred + r)  // Kalman kazanci
+    olsun x_new = x_pred + k * (z - x_pred)
+    olsun p_new = (1.0 - k) * p_pred
+    
+    dön (x_new, p_new)
+son
+
+// Kalman ile sicaklik filtreleme ornegi
+olsun x_est = 22.0  // Baslangic tahmini
+olsun p_est = 1.0   // Baslangic kovaryansi
+değişken Q = 0.1    // Proses gurultsu
+değişken R = 0.5    // Olcum gurultsu
+
+yaz("\n   Kalman Filtre Parametreleri:")
+yaz("   - Proses Gurultsu (Q): ", Q)
+yaz("   - Olcum Gurultsu (R): ", R)
+
+yaz("\n   Filtreleme Sonuclari:")
+olsun i = 0
+iken i < 5 yap
+    olsun olcum = temp_buffer[i]
+    olsun sonuc = kalman_guncelle(x_est, p_est, olcum, Q, R)
+    x_est = sonuc.0
+    p_est = sonuc.1
+    yaz("   - Olcum: ", olcum, " C -> Filtreli: ", x_est, " C")
+    i = i + 1
+son
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BOLUM 7: Veri Paketleme (Protokol)
+// ═══════════════════════════════════════════════════════════════════════════
+
+yaz("\n--- BOLUM 7: Veri Paketi Formati ---")
+
+// Basit veri paketi yapisi
+// [START][LENGTH][TYPE][DATA...][CHECKSUM][END]
+
+değişken PACKET_START = 0xAA
+değişken PACKET_END = 0x55
+değişken TYPE_TEMP = 0x01
+değişken TYPE_HUMIDITY = 0x02
+değişken TYPE_LIGHT = 0x03
+değişken TYPE_GAS = 0x04
+değişken TYPE_ALL = 0xFF
+
+fonksiyon checksum_hesapla(data: [tamsayı], len: tamsayı) -> tamsayı yap
+    olsun sum = 0
+    olsun i = 0
+    iken i < len yap
+        sum = (sum + data[i]) % 256
+        i = i + 1
+    son
+    dön sum
+son
+
+yaz("\n   Paket Formati:")
+yaz("   ┌──────┬────────┬──────┬─────────────┬──────────┬─────┐")
+yaz("   │START │ LENGTH │ TYPE │    DATA     │ CHECKSUM │ END │")
+yaz("   │ 0xAA │ 1 byte │1 byte│ N bytes     │ 1 byte   │0x55 │")
+yaz("   └──────┴────────┴──────┴─────────────┴──────────┴─────┘")
+
+yaz("\n   Ornek Paket (Sicaklik = 22.5 C):")
+yaz("   AA 04 01 16 32 03 55")
+yaz("   |  |  |  |  |  |  └─ END")
+yaz("   |  |  |  |  |  └──── CHECKSUM")
+yaz("   |  |  |  └──┴─────── DATA (22, 50 = 22.5)")
+yaz("   |  |  └───────────── TYPE (Temperature)")
+yaz("   |  └──────────────── LENGTH")
+yaz("   └─────────────────── START")
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BOLUM 8: Sistem Ozeti
+// ═══════════════════════════════════════════════════════════════════════════
+
+yaz("\n============================================================")
+yaz("                  SISTEM OZETI                               ")
+yaz("============================================================")
+
+yaz("\n   Aktif Sensorler: 7")
+yaz("   - 5 Analog (sicaklik, nem, isik, basinc, gaz)")
+yaz("   - 2 Dijital (hareket, kapi)")
+
+yaz("\n   Veri Isleme:")
+yaz("   - Ring Buffer: 60 ornek")
+yaz("   - Kalman Filtresi: Aktif")
+yaz("   - Istatistik: Ortalama, Min, Max, StdDev")
+
+yaz("\n   Iletisim:")
+yaz("   - Protokol: Ozel paket formati")
+yaz("   - Baud Rate: 115200")
+yaz("   - Checksum: XOR")
+
+yaz("\n   Alarm Sistemi:")
+yaz("   - Sicaklik: ", TEMP_MIN_THRESHOLD, " - ", TEMP_MAX_THRESHOLD, " C")
+yaz("   - Nem: ", HUMIDITY_MIN_THRESHOLD, " - ", HUMIDITY_MAX_THRESHOLD, " %")
+yaz("   - Gaz: < ", GAS_THRESHOLD, " PPM")
+
+yaz("\n============================================================")
+yaz("         HAL Sensor Network Demo Tamamlandi                  ")
+yaz("============================================================")

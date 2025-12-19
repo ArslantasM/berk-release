@@ -1,0 +1,58 @@
+/// BERK Dual-Language Demo - Fibonacci Sequence
+/// BERK Çift Dilli Demo - Fibonacci Dizisi
+
+// ==========================================
+// 1. Recursive Fibonacci (English)
+// ==========================================
+function fibonacci_recursive(n: integer) integer do
+    if n <= 1 then do
+        return n
+    end
+    return fibonacci_recursive(n - 1) + fibonacci_recursive(n - 2)
+end
+
+// ==========================================
+// 2. Iterative Fibonacci (English)
+// ==========================================
+function fibonacci_fast(n: integer) integer do
+    if n <= 1 then do
+        return n
+    end
+    
+    variable previous = 0
+    variable current = 1
+    
+    for i in 2..=n do
+        variable next = previous + current
+        previous = current
+        current = next
+    end
+    
+    return current
+end
+
+// ==========================================
+// Main Function
+// ==========================================
+function main() do
+    print("=== Fibonacci Demo ===")
+    print("")
+    
+    // Test iterative version
+    print("First 20 Fibonacci numbers (iterative):")
+    for i in 0..20 do
+        print(fibonacci_fast(i))
+    end
+    
+    print("")
+    print("Fibonacci(30) = ")
+    print(fibonacci_fast(30))
+    
+    print("")
+    print("Fibonacci(40) = ")
+    print(fibonacci_fast(40))
+    
+    print("")
+    print("Fibonacci(50) = ")
+    print(fibonacci_fast(50))
+end

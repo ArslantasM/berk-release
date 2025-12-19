@@ -1,0 +1,414 @@
+// stdlib/embedded/platforms/stm32f4/adc.berk
+// STM32F4 ADC HAL Implementation
+// STM32 HAL ADC library bindings
+
+import "embedded/bal/adc" as ADC
+
+// STM32 HAL ADC constants
+const ADC_RESOLUTION_12B: u32 = 0x00000000
+const ADC_RESOLUTION_10B: u32 = 0x01000000
+const ADC_RESOLUTION_8B: u32 = 0x02000000
+const ADC_RESOLUTION_6B: u32 = 0x03000000
+
+const ADC_EXTERNALTRIGCONV_T1_CC1: u32 = 0x00000000
+const ADC_EXTERNALTRIGCONVEDGE_NONE: u32 = 0x00000000
+
+const ADC_DATAALIGN_RIGHT: u32 = 0x00000000
+const ADC_DATAALIGN_LEFT: u32 = 0x00000800
+
+const ADC_SAMPLETIME_3CYCLES: u32 = 0x00000000
+const ADC_SAMPLETIME_15CYCLES: u32 = 0x00000001
+const ADC_SAMPLETIME_28CYCLES: u32 = 0x00000002
+const ADC_SAMPLETIME_56CYCLES: u32 = 0x00000003
+const ADC_SAMPLETIME_84CYCLES: u32 = 0x00000004
+const ADC_SAMPLETIME_112CYCLES: u32 = 0x00000005
+const ADC_SAMPLETIME_144CYCLES: u32 = 0x00000006
+const ADC_SAMPLETIME_480CYCLES: u32 = 0x00000007
+
+// STM32 HAL ADC structures
+struct ADC_HandleTypeDef {
+    Instance: *mut void,
+    Init: ADC_InitTypeDef,
+    NbrOfConversionRank: u32,
+    Lock: u32,
+    State: u32,
+    ErrorCode: u32,
+}
+
+struct ADC_InitTypeDef {
+    ClockPrescaler: u32,
+    Resolution: u32,
+    DataAlign: u32,
+    ScanConvMode: u32,
+    EOCSelection: u32,
+    ContinuousConvMode: u32,
+    NbrOfConversion: u32,
+    DiscontinuousConvMode: u32,
+    NbrOfDiscConversion: u32,
+    ExternalTrigConv: u32,
+    ExternalTrigConvEdge: u32,
+    DMAContinuousRequests: u32,
+}
+
+struct ADC_ChannelConfTypeDef {
+    Channel: u32,
+    Rank: u32,
+    SamplingTime: u32,
+    Offset: u32,
+}
+
+// ADC peripheral base addresses
+const ADC1_BASE: u32 = 0x40012000
+const ADC2_BASE: u32 = 0x40012100
+const ADC3_BASE: u32 = 0x40012200
+
+// ADC channel mapping
+const ADC_CHANNEL_0: u32 = 0x00000000
+const ADC_CHANNEL_1: u32 = 0x00000001
+const ADC_CHANNEL_2: u32 = 0x00000002
+const ADC_CHANNEL_3: u32 = 0x00000003
+const ADC_CHANNEL_4: u32 = 0x00000004
+const ADC_CHANNEL_5: u32 = 0x00000005
+const ADC_CHANNEL_6: u32 = 0x00000006
+const ADC_CHANNEL_7: u32 = 0x00000007
+const ADC_CHANNEL_8: u32 = 0x00000008
+const ADC_CHANNEL_9: u32 = 0x00000009
+const ADC_CHANNEL_10: u32 = 0x0000000A
+const ADC_CHANNEL_11: u32 = 0x0000000B
+const ADC_CHANNEL_12: u32 = 0x0000000C
+const ADC_CHANNEL_13: u32 = 0x0000000D
+const ADC_CHANNEL_14: u32 = 0x0000000E
+const ADC_CHANNEL_15: u32 = 0x0000000F
+
+// GPIO to ADC channel mapping (PA0-PA7, PB0-PB1, PC0-PC5)
+const GPIO_TO_ADC: [i8; 48] = [
+    0,  1,  2,  3,  4,  5,  6,  7,   // PA0-PA7 (ADC1/2/3 CH0-7)
+    8,  9,  -1, -1, -1, -1, -1, -1,  // PB0-PB7 (ADC1/2 CH8-9)
+    10, 11, 12, 13, 14, 15, -1, -1,  // PC0-PC7 (ADC1/2/3 CH10-15)
+    -1, -1, -1, -1, -1, -1, -1, -1,  // Remaining
+    -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1,
+]
+
+// STM32 HAL ADC functions
+extern "C" {
+    fn HAL_ADC_Init(hadc: *mut ADC_HandleTypeDef) -> u32
+    fn HAL_ADC_DeInit(hadc: *mut ADC_HandleTypeDef) -> u32
+    fn HAL_ADC_ConfigChannel(hadc: *mut ADC_HandleTypeDef, sConfig: *ADC_ChannelConfTypeDef) -> u32
+    fn HAL_ADC_Start(hadc: *mut ADC_HandleTypeDef) -> u32
+    fn HAL_ADC_Stop(hadc: *mut ADC_HandleTypeDef) -> u32
+    fn HAL_ADC_PollForConversion(hadc: *mut ADC_HandleTypeDef, Timeout: u32) -> u32
+    fn HAL_ADC_GetValue(hadc: *mut ADC_HandleTypeDef) -> u32
+}
+
+const HAL_OK: u32 = 0x00
+const HAL_ADC_TIMEOUT: u32 = 100
+
+// ADC handle storage
+static mut adc_handles: [ADC_HandleTypeDef; 3] = [ADC_HandleTypeDef::default(); 3]
+static mut adc_initialized: [bool; 3] = [false; 3]
+static mut channel_configs: [ChannelConfig; 16] = [ChannelConfig::default(); 16]
+
+struct ChannelConfig {
+    initialized: bool,
+    adc_unit: u8,
+    channel: u8,
+    resolution: u8,
+}
+
+impl ADC_HandleTypeDef {
+    fn default() -> ADC_HandleTypeDef {
+        ADC_HandleTypeDef {
+            Instance: null,
+            Init: ADC_InitTypeDef::default(),
+            NbrOfConversionRank: 0,
+            Lock: 0,
+            State: 0,
+            ErrorCode: 0,
+        }
+    }
+}
+
+impl ADC_InitTypeDef {
+    fn default() -> ADC_InitTypeDef {
+        ADC_InitTypeDef {
+            ClockPrescaler: 0,
+            Resolution: ADC_RESOLUTION_12B,
+            DataAlign: ADC_DATAALIGN_RIGHT,
+            ScanConvMode: 0,
+            EOCSelection: 0,
+            ContinuousConvMode: 0,
+            NbrOfConversion: 1,
+            DiscontinuousConvMode: 0,
+            NbrOfDiscConversion: 0,
+            ExternalTrigConv: ADC_EXTERNALTRIGCONV_T1_CC1,
+            ExternalTrigConvEdge: ADC_EXTERNALTRIGCONVEDGE_NONE,
+            DMAContinuousRequests: 0,
+        }
+    }
+}
+
+impl ChannelConfig {
+    fn default() -> ChannelConfig {
+        ChannelConfig {
+            initialized: false,
+            adc_unit: 0,
+            channel: 0,
+            resolution: 12,
+        }
+    }
+}
+
+// STM32F4 ADC HAL implementation
+pub struct STM32F4_ADC {}
+
+impl ADC.ADC_HAL for STM32F4_ADC {
+    fn init(config: ADC.Config) -> ADC.Result<()> {
+        let adc_channel = GPIO_TO_ADC[config.pin as usize]
+        if adc_channel < 0 {
+            return Err(ADC.Error.InvalidChannel)
+        }
+        
+        // Use ADC1 by default
+        let adc_unit: u8 = 0
+        
+        unsafe {
+            if !adc_initialized[adc_unit as usize] {
+                // Initialize ADC peripheral
+                adc_handles[adc_unit as usize].Instance = ADC1_BASE as *mut void
+                
+                let resolution = match config.resolution {
+                    12 => ADC_RESOLUTION_12B,
+                    10 => ADC_RESOLUTION_10B,
+                    8 => ADC_RESOLUTION_8B,
+                    6 => ADC_RESOLUTION_6B,
+                    _ => return Err(ADC.Error.InvalidResolution),
+                }
+                
+                adc_handles[adc_unit as usize].Init = ADC_InitTypeDef {
+                    ClockPrescaler: 0,
+                    Resolution: resolution,
+                    DataAlign: ADC_DATAALIGN_RIGHT,
+                    ScanConvMode: 0,
+                    EOCSelection: 0,
+                    ContinuousConvMode: 0,
+                    NbrOfConversion: 1,
+                    DiscontinuousConvMode: 0,
+                    NbrOfDiscConversion: 0,
+                    ExternalTrigConv: ADC_EXTERNALTRIGCONV_T1_CC1,
+                    ExternalTrigConvEdge: ADC_EXTERNALTRIGCONVEDGE_NONE,
+                    DMAContinuousRequests: 0,
+                }
+                
+                let ret = HAL_ADC_Init(&mut adc_handles[adc_unit as usize])
+                if ret != HAL_OK {
+                    return Err(ADC.Error.HardwareError)
+                }
+                
+                adc_initialized[adc_unit as usize] = true
+            }
+            
+            // Configure channel
+            let channel_conf = ADC_ChannelConfTypeDef {
+                Channel: adc_channel as u32,
+                Rank: 1,
+                SamplingTime: ADC_SAMPLETIME_480CYCLES,  // Maximum sampling time for accuracy
+                Offset: 0,
+            }
+            
+            let ret = HAL_ADC_ConfigChannel(&mut adc_handles[adc_unit as usize], &channel_conf)
+            if ret != HAL_OK {
+                return Err(ADC.Error.HardwareError)
+            }
+            
+            // Save configuration
+            channel_configs[config.channel as usize] = ChannelConfig {
+                initialized: true,
+                adc_unit: adc_unit,
+                channel: adc_channel as u8,
+                resolution: config.resolution,
+            }
+            
+            Ok(())
+        }
+    }
+    
+    fn deinit(channel: u8) {
+        unsafe {
+            if channel < 16 {
+                channel_configs[channel as usize].initialized = false
+            }
+        }
+    }
+    
+    fn read_raw(pin: u8) -> ADC.Result<u16> {
+        let adc_channel = GPIO_TO_ADC[pin as usize]
+        if adc_channel < 0 {
+            return Err(ADC.Error.InvalidChannel)
+        }
+        
+        unsafe {
+            let adc_unit: u8 = 0  // ADC1
+            
+            if !adc_initialized[adc_unit as usize] {
+                return Err(ADC.Error.ReadError)
+            }
+            
+            // Configure channel for this conversion
+            let channel_conf = ADC_ChannelConfTypeDef {
+                Channel: adc_channel as u32,
+                Rank: 1,
+                SamplingTime: ADC_SAMPLETIME_480CYCLES,
+                Offset: 0,
+            }
+            
+            HAL_ADC_ConfigChannel(&mut adc_handles[adc_unit as usize], &channel_conf)
+            
+            // Start conversion
+            let ret = HAL_ADC_Start(&mut adc_handles[adc_unit as usize])
+            if ret != HAL_OK {
+                return Err(ADC.Error.ReadError)
+            }
+            
+            // Wait for conversion
+            let ret = HAL_ADC_PollForConversion(&mut adc_handles[adc_unit as usize], HAL_ADC_TIMEOUT)
+            if ret != HAL_OK {
+                HAL_ADC_Stop(&mut adc_handles[adc_unit as usize])
+                return Err(ADC.Error.ReadError)
+            }
+            
+            // Read value
+            let value = HAL_ADC_GetValue(&mut adc_handles[adc_unit as usize])
+            
+            HAL_ADC_Stop(&mut adc_handles[adc_unit as usize])
+            
+            Ok(value as u16)
+        }
+    }
+    
+    fn read_voltage(pin: u8) -> ADC.Result<u16> {
+        let raw = STM32F4_ADC.read_raw(pin)?
+        
+        // STM32F4 ADC: 3.3V reference, 12-bit (4096 levels)
+        let voltage_mv = ((raw as u32 * 3300) / 4096) as u16
+        Ok(voltage_mv)
+    }
+    
+    fn set_reference(channel: u8, reference_mv: u16) -> ADC.Result<()> {
+        // STM32F4 uses fixed 3.3V reference (VREF+)
+        Err(ADC.Error.HardwareError)
+    }
+    
+    fn set_resolution(channel: u8, bits: u8) -> ADC.Result<()> {
+        // Requires ADC reinitialization
+        Err(ADC.Error.InvalidResolution)
+    }
+    
+    fn set_averaging(channel: u8, samples: u16) {
+        // Software averaging in BAL layer
+    }
+}
+
+// STM32F4-specific ADC functions
+
+/// Read ADC with oversampling (hardware averaging)
+pub fn read_oversampled(pin: u8, samples: u16) -> ADC.Result<u16> {
+    let mut sum: u32 = 0
+    
+    for _ in 0..samples {
+        let value = STM32F4_ADC.read_raw(pin)?
+        sum += value as u32
+    }
+    
+    Ok((sum / samples as u32) as u16)
+}
+
+/// Read internal temperature sensor (°C)
+pub fn read_temperature() -> ADC.Result<f32> {
+    // Temperature sensor is on ADC1 channel 16
+    const TEMP_CHANNEL: u32 = 16
+    const V25: f32 = 760.0        // Voltage at 25°C (mV)
+    const AVG_SLOPE: f32 = 2.5    // Average slope (mV/°C)
+    
+    unsafe {
+        if !adc_initialized[0] {
+            return Err(ADC.Error.ReadError)
+        }
+        
+        // Configure temperature sensor channel
+        let channel_conf = ADC_ChannelConfTypeDef {
+            Channel: TEMP_CHANNEL,
+            Rank: 1,
+            SamplingTime: ADC_SAMPLETIME_480CYCLES,
+            Offset: 0,
+        }
+        
+        HAL_ADC_ConfigChannel(&mut adc_handles[0], &channel_conf)
+        
+        HAL_ADC_Start(&mut adc_handles[0])
+        HAL_ADC_PollForConversion(&mut adc_handles[0], HAL_ADC_TIMEOUT)
+        
+        let raw = HAL_ADC_GetValue(&mut adc_handles[0])
+        HAL_ADC_Stop(&mut adc_handles[0])
+        
+        // Convert to voltage
+        let voltage_mv = ((raw * 3300) / 4096) as f32
+        
+        // Calculate temperature
+        let temperature = ((voltage_mv - V25) / AVG_SLOPE) + 25.0
+        
+        Ok(temperature)
+    }
+}
+
+/// Read internal VRef (mV)
+pub fn read_vref() -> ADC.Result<u16> {
+    // VREFINT is on ADC1 channel 17
+    const VREFINT_CHANNEL: u32 = 17
+    const VREFINT_CAL: u32 = 1210  // Typical VREFINT at 3.3V
+    
+    unsafe {
+        if !adc_initialized[0] {
+            return Err(ADC.Error.ReadError)
+        }
+        
+        let channel_conf = ADC_ChannelConfTypeDef {
+            Channel: VREFINT_CHANNEL,
+            Rank: 1,
+            SamplingTime: ADC_SAMPLETIME_480CYCLES,
+            Offset: 0,
+        }
+        
+        HAL_ADC_ConfigChannel(&mut adc_handles[0], &channel_conf)
+        
+        HAL_ADC_Start(&mut adc_handles[0])
+        HAL_ADC_PollForConversion(&mut adc_handles[0], HAL_ADC_TIMEOUT)
+        
+        let raw = HAL_ADC_GetValue(&mut adc_handles[0])
+        HAL_ADC_Stop(&mut adc_handles[0])
+        
+        // Calculate actual VRef
+        let vref_mv = ((3300 * VREFINT_CAL) / raw) as u16
+        
+        Ok(vref_mv)
+    }
+}
+
+/// Initialize battery monitoring
+pub fn init_battery_monitor(pin: u8) -> ADC.Result<()> {
+    let config = ADC.Config {
+        channel: pin,
+        pin: pin,
+        resolution: 12,
+        reference_mv: 3300,
+        averaging: 16,
+    }
+    STM32F4_ADC.init(config)
+}
+
+/// Read battery voltage with voltage divider compensation
+pub fn read_battery_voltage(pin: u8, divider_ratio: f32) -> ADC.Result<u16> {
+    let voltage = STM32F4_ADC.read_voltage(pin)?
+    let battery_mv = (voltage as f32 * divider_ratio) as u16
+    Ok(battery_mv)
+}

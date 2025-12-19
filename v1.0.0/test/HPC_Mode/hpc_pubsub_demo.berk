@@ -1,0 +1,87 @@
+// ============================================================================
+// BERK-DDS HPC Mode - Publisher/Subscriber Demo
+// ============================================================================
+// Bu demo HPC modunda pub/sub pattern'ini gösterir.
+// 
+// Senaryo:
+//   - Sensör verileri yayınlanır
+//   - Subscriber verileri alır
+//   - Topic bazlı iletişim simüle edilir
+// ============================================================================
+
+yazdır("╔══════════════════════════════════════════════════════════════════╗")
+yazdır("║        BERK-DDS HPC MODE - PUB/SUB DEMO                         ║")
+yazdır("╚══════════════════════════════════════════════════════════════════╝\n")
+
+// ============================================================================
+// DDS Altyapı Kurulumu
+// ============================================================================
+yazdır("     DDS Altyapı Kurulumu...\n")
+
+katılımcı 0
+
+// İki farklı QoS profili ile topic'ler
+konu high_freq_data: SensorReading (güvenilir, geçmiş=1000)
+konu low_latency_cmd: MotorCommand (elinden_gelen)
+
+// Publisher'lar
+yayıncı sensor_publisher -> high_freq_data
+yayıncı command_publisher -> low_latency_cmd
+
+// Subscriber'lar
+abone sensor_subscriber -> high_freq_data
+abone command_subscriber -> low_latency_cmd
+
+yazdır("✅ DDS altyapısı hazır!\n")
+
+// ============================================================================
+// Simülasyon: Sensör Verileri Yayınlama
+// ============================================================================
+yazdır("📤 Sensör Verileri Yayınlanıyor...\n")
+
+olsun sample_count = 0
+iken sample_count < 5 yap {
+    // Simüle edilmiş sensör verisi
+    olsun temperature = 22.5 + sample_count * 0.3
+    olsun humidity = 45.0 + sample_count * 1.2
+    olsun pressure = 1013.25 + sample_count * 0.5
+    
+    yazdır("   [", sample_count, "] Sıcaklık: ", temperature, "°C, ")
+    yazdır("       Nem: ", humidity, "%, Basınç: ", pressure, " hPa")
+    
+    sample_count = sample_count + 1
+}
+
+yazdır("\n✅ ", sample_count, " örnek yayınlandı.\n")
+
+// ============================================================================
+// HPC Mode Performans Özeti
+// ============================================================================
+yazdır("   HPC Mode Performans Özeti\n")
+
+yazdır("   Yayın İstatistikleri:")
+yazdır("   ├─ Toplam Örnek: ", sample_count)
+yazdır("   ├─ Zero-Copy: Aktif")
+yazdır("   ├─ Buffer Mode: Lock-Free Ring")
+yazdır("   └─ Serialization: CDR4 (Ultra-Fast)")
+
+yazdır("\n   Beklenen Latency:")
+yazdır("   ├─ P50:    < 2 μs")
+yazdır("   ├─ P99:    < 5 μs")
+yazdır("   └─ P99.99: < 10 μs")
+
+// ============================================================================
+// QoS Karşılaştırması
+// ============================================================================
+yazdır("\n  QoS Profil Karşılaştırması\n")
+
+yazdır("   ┌────────────────────┬─────────────┬─────────────┐")
+yazdır("   │ Topic              │ Reliability │ Latency     │")
+yazdır("   ├────────────────────┼─────────────┼─────────────┤")
+yazdır("   │ high_freq_data     │ RELIABLE    │ ~5-10 μs    │")
+yazdır("   │ low_latency_cmd    │ BEST_EFFORT │ ~1-3 μs     │")
+yazdır("   └────────────────────┴─────────────┴─────────────┘")
+
+yazdır("\n╔══════════════════════════════════════════════════════════════════╗")
+yazdır("║                PUB/SUB DEMO TAMAMLANDI                           ║")
+yazdır("╚══════════════════════════════════════════════════════════════════╝")

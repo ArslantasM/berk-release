@@ -1,0 +1,567 @@
+//! # Color Module
+//!
+//! Color utilities (Pure BERK implementation).
+//!
+//! Renk araçları (Saf BERK implementasyonu).
+//!
+//! ## Features / Özellikler
+//!
+//! - **Color spaces**: RGB, HSL, HSV / Renk uzayları
+//! - **Conversions**: RGB ↔ HSL ↔ HSV / Dönüştürmeler
+//! - **Blending**: Multiply, screen, overlay / Karıştırma
+//! - **Palettes**: Complementary, triadic, analogous / Paletler
+//! - **Parsing**: Hex colors (#RRGGBB, #RGB) / Ayrıştırma
+//! - **Alpha compositing**: Porter-Duff operations / Alfa kompozit
+//!
+//! ## Example / Örnek
+//!
+//! ```berk
+//! kullan color
+//!
+//! değişken kırmızı = color.rgb(255, 0, 0)
+//! değişken hsl = color.rgb_to_hsl(kırmızı)
+//! değişken hex = color.rgb_to_hex(kırmızı)  // "#FF0000"
+//! ```
+//!
+//! Pure BERK - Zero dependencies
+
+modül color
+
+kullan math
+
+// ============================================================================
+// COLOR TYPES
+// ============================================================================
+
+tip Color = yapı yap
+    r: bayt,  // Red [0-255]
+    g: bayt,  // Green [0-255]
+    b: bayt,  // Blue [0-255]
+    a: bayt   // Alpha [0-255], 255 = opaque
+son
+
+tip ColorHSL = yapı yap
+    h: ondalık,  // Hue [0-360] degrees
+    s: ondalık,  // Saturation [0-100] percent
+    l: ondalık   // Lightness [0-100] percent
+son
+
+tip ColorHSV = yapı yap
+    h: ondalık,  // Hue [0-360] degrees
+    s: ondalık,  // Saturation [0-100] percent
+    v: ondalık   // Value [0-100] percent
+son
+
+// ============================================================================
+// RGB COLOR CONSTRUCTORS
+// ============================================================================
+
+fonksiyon rgb(r: bayt, g: bayt, b: bayt) -> Color
+yap
+    dön Color yap r: r, g: g, b: b, a: 255 son
+son
+
+fonksiyon rgba(r: bayt, g: bayt, b: bayt, a: bayt) -> Color
+yap
+    dön Color yap r: r, g: g, b: b, a: a son
+son
+
+fonksiyon gray(value: bayt) -> Color
+yap
+    dön rgb(value, value, value)
+son
+
+// ============================================================================
+// PREDEFINED COLORS
+// ============================================================================
+
+fonksiyon color_black() -> Color yap dön rgb(0, 0, 0) son
+fonksiyon color_white() -> Color yap dön rgb(255, 255, 255) son
+fonksiyon color_red() -> Color yap dön rgb(255, 0, 0) son
+fonksiyon color_green() -> Color yap dön rgb(0, 255, 0) son
+fonksiyon color_blue() -> Color yap dön rgb(0, 0, 255) son
+fonksiyon color_yellow() -> Color yap dön rgb(255, 255, 0) son
+fonksiyon color_cyan() -> Color yap dön rgb(0, 255, 255) son
+fonksiyon color_magenta() -> Color yap dön rgb(255, 0, 255) son
+fonksiyon color_orange() -> Color yap dön rgb(255, 165, 0) son
+fonksiyon color_purple() -> Color yap dön rgb(128, 0, 128) son
+fonksiyon color_pink() -> Color yap dön rgb(255, 192, 203) son
+fonksiyon color_brown() -> Color yap dön rgb(165, 42, 42) son
+fonksiyon color_transparent() -> Color yap dön rgba(0, 0, 0, 0) son
+
+// ============================================================================
+// RGB ↔ HSL CONVERSION
+// ============================================================================
+
+fonksiyon rgb_to_hsl(c: Color) -> ColorHSL
+yap
+    // Normalize RGB to [0, 1]
+    değişken r = ondalık_cast(c.r) / 255.0
+    değişken g = ondalık_cast(c.g) / 255.0
+    değişken b = ondalık_cast(c.b) / 255.0
+    
+    değişken max = math::max(math::max(r, g), b)
+    değişken min = math::min(math::min(r, g), b)
+    değişken delta = max - min
+    
+    // Lightness
+    değişken l = (max + min) / 2.0
+    
+    // Achromatic (gray)
+    eğer delta < 0.00001 ise yap
+        dön ColorHSL yap h: 0.0, s: 0.0, l: l * 100.0 son
+    son
+    
+    // Saturation
+    değişken s = eğer l > 0.5 ise
+        delta / (2.0 - max - min)
+    değilse
+        delta / (max + min)
+    
+    // Hue
+    değişken h = 0.0
+    eğer max == r ise yap
+        h = ((g - b) / delta) + (eğer g < b ise 6.0 değilse 0.0)
+    son değil eğer max == g ise yap
+        h = ((b - r) / delta) + 2.0
+    son değilse yap
+        h = ((r - g) / delta) + 4.0
+    son
+    
+    h = h * 60.0
+    
+    dön ColorHSL yap
+        h: h,
+        s: s * 100.0,
+        l: l * 100.0
+    son
+son
+
+fonksiyon hsl_to_rgb(hsl: ColorHSL) -> Color
+yap
+    // Normalize HSL
+    değişken h = hsl.h / 360.0
+    değişken s = hsl.s / 100.0
+    değişken l = hsl.l / 100.0
+    
+    // Achromatic
+    eğer s < 0.00001 ise yap
+        değişken gray = bayt_cast(l * 255.0)
+        dön rgb(gray, gray, gray)
+    son
+    
+    // Calculate RGB
+    değişken q = eğer l < 0.5 ise
+        l * (1.0 + s)
+    değilse
+        l + s - l * s
+    
+    değişken p = 2.0 * l - q
+    
+    değişken r = hsl_hue_to_rgb(p, q, h + 1.0/3.0)
+    değişken g = hsl_hue_to_rgb(p, q, h)
+    değişken b = hsl_hue_to_rgb(p, q, h - 1.0/3.0)
+    
+    dön rgb(
+        bayt_cast(r * 255.0),
+        bayt_cast(g * 255.0),
+        bayt_cast(b * 255.0)
+    )
+son
+
+// Helper for HSL to RGB conversion
+fonksiyon hsl_hue_to_rgb(p: ondalık, q: ondalık, t: ondalık) -> ondalık
+yap
+    değişken t_norm = t
+    eğer t_norm < 0.0 ise t_norm = t_norm + 1.0
+    eğer t_norm > 1.0 ise t_norm = t_norm - 1.0
+    
+    eğer t_norm < 1.0/6.0 ise dön p + (q - p) * 6.0 * t_norm
+    eğer t_norm < 1.0/2.0 ise dön q
+    eğer t_norm < 2.0/3.0 ise dön p + (q - p) * (2.0/3.0 - t_norm) * 6.0
+    dön p
+son
+
+// ============================================================================
+// RGB ↔ HSV CONVERSION
+// ============================================================================
+
+fonksiyon rgb_to_hsv(c: Color) -> ColorHSV
+yap
+    // Normalize RGB to [0, 1]
+    değişken r = ondalık_cast(c.r) / 255.0
+    değişken g = ondalık_cast(c.g) / 255.0
+    değişken b = ondalık_cast(c.b) / 255.0
+    
+    değişken max = math::max(math::max(r, g), b)
+    değişken min = math::min(math::min(r, g), b)
+    değişken delta = max - min
+    
+    // Value
+    değişken v = max
+    
+    // Achromatic (gray)
+    eğer delta < 0.00001 ise yap
+        dön ColorHSV yap h: 0.0, s: 0.0, v: v * 100.0 son
+    son
+    
+    // Saturation
+    değişken s = delta / max
+    
+    // Hue
+    değişken h = 0.0
+    eğer max == r ise yap
+        h = ((g - b) / delta) + (eğer g < b ise 6.0 değilse 0.0)
+    son değil eğer max == g ise yap
+        h = ((b - r) / delta) + 2.0
+    son değilse yap
+        h = ((r - g) / delta) + 4.0
+    son
+    
+    h = h * 60.0
+    
+    dön ColorHSV yap
+        h: h,
+        s: s * 100.0,
+        v: v * 100.0
+    son
+son
+
+fonksiyon hsv_to_rgb(hsv: ColorHSV) -> Color
+yap
+    // Normalize HSV
+    değişken h = hsv.h / 60.0
+    değişken s = hsv.s / 100.0
+    değişken v = hsv.v / 100.0
+    
+    // Achromatic
+    eğer s < 0.00001 ise yap
+        değişken gray = bayt_cast(v * 255.0)
+        dön rgb(gray, gray, gray)
+    son
+    
+    değişken i = tamsayı_cast(math::floor(h))
+    değişken f = h - ondalık_cast(i)
+    değişken p = v * (1.0 - s)
+    değişken q = v * (1.0 - s * f)
+    değişken t = v * (1.0 - s * (1.0 - f))
+    
+    değişken r = 0.0
+    değişken g = 0.0
+    değişken b = 0.0
+    
+    eğer i == 0 ise yap
+        r = v; g = t; b = p
+    son değil eğer i == 1 ise yap
+        r = q; g = v; b = p
+    son değil eğer i == 2 ise yap
+        r = p; g = v; b = t
+    son değil eğer i == 3 ise yap
+        r = p; g = q; b = v
+    son değil eğer i == 4 ise yap
+        r = t; g = p; b = v
+    son değilse yap
+        r = v; g = p; b = q
+    son
+    
+    dön rgb(
+        bayt_cast(r * 255.0),
+        bayt_cast(g * 255.0),
+        bayt_cast(b * 255.0)
+    )
+son
+
+// ============================================================================
+// COLOR BLENDING MODES
+// ============================================================================
+
+fonksiyon blend_normal(base: Color, blend: Color) -> Color
+yap
+    // Simple alpha compositing
+    değişken alpha = ondalık_cast(blend.a) / 255.0
+    değişken inv_alpha = 1.0 - alpha
+    
+    dön rgb(
+        bayt_cast(ondalık_cast(blend.r) * alpha + ondalık_cast(base.r) * inv_alpha),
+        bayt_cast(ondalık_cast(blend.g) * alpha + ondalık_cast(base.g) * inv_alpha),
+        bayt_cast(ondalık_cast(blend.b) * alpha + ondalık_cast(base.b) * inv_alpha)
+    )
+son
+
+fonksiyon blend_multiply(base: Color, blend: Color) -> Color
+yap
+    dön rgb(
+        bayt_cast((ondalık_cast(base.r) * ondalık_cast(blend.r)) / 255.0),
+        bayt_cast((ondalık_cast(base.g) * ondalık_cast(blend.g)) / 255.0),
+        bayt_cast((ondalık_cast(base.b) * ondalık_cast(blend.b)) / 255.0)
+    )
+son
+
+fonksiyon blend_screen(base: Color, blend: Color) -> Color
+yap
+    dön rgb(
+        bayt_cast(255.0 - ((255.0 - ondalık_cast(base.r)) * (255.0 - ondalık_cast(blend.r))) / 255.0),
+        bayt_cast(255.0 - ((255.0 - ondalık_cast(base.g)) * (255.0 - ondalık_cast(blend.g))) / 255.0),
+        bayt_cast(255.0 - ((255.0 - ondalık_cast(base.b)) * (255.0 - ondalık_cast(blend.b))) / 255.0)
+    )
+son
+
+fonksiyon blend_overlay(base: Color, blend: Color) -> Color
+yap
+    dön rgb(
+        blend_overlay_channel(base.r, blend.r),
+        blend_overlay_channel(base.g, blend.g),
+        blend_overlay_channel(base.b, blend.b)
+    )
+son
+
+fonksiyon blend_overlay_channel(base: bayt, blend: bayt) -> bayt
+yap
+    değişken b = ondalık_cast(base) / 255.0
+    değişken bl = ondalık_cast(blend) / 255.0
+    
+    değişken result = eğer b < 0.5 ise
+        2.0 * b * bl
+    değilse
+        1.0 - 2.0 * (1.0 - b) * (1.0 - bl)
+    
+    dön bayt_cast(result * 255.0)
+son
+
+fonksiyon blend_darken(base: Color, blend: Color) -> Color
+yap
+    dön rgb(
+        math::min(base.r, blend.r),
+        math::min(base.g, blend.g),
+        math::min(base.b, blend.b)
+    )
+son
+
+fonksiyon blend_lighten(base: Color, blend: Color) -> Color
+yap
+    dön rgb(
+        math::max(base.r, blend.r),
+        math::max(base.g, blend.g),
+        math::max(base.b, blend.b)
+    )
+son
+
+// ============================================================================
+// COLOR ADJUSTMENTS
+// ============================================================================
+
+fonksiyon adjust_brightness(c: Color, amount: ondalık) -> Color
+yap
+    // amount: -100 to +100
+    dön rgb(
+        bayt_cast(math::clamp(ondalık_cast(c.r) + amount * 2.55, 0.0, 255.0)),
+        bayt_cast(math::clamp(ondalık_cast(c.g) + amount * 2.55, 0.0, 255.0)),
+        bayt_cast(math::clamp(ondalık_cast(c.b) + amount * 2.55, 0.0, 255.0))
+    )
+son
+
+fonksiyon adjust_contrast(c: Color, amount: ondalık) -> Color
+yap
+    // amount: -100 to +100
+    değişken factor = (259.0 * (amount + 255.0)) / (255.0 * (259.0 - amount))
+    
+    dön rgb(
+        bayt_cast(math::clamp(factor * (ondalık_cast(c.r) - 128.0) + 128.0, 0.0, 255.0)),
+        bayt_cast(math::clamp(factor * (ondalık_cast(c.g) - 128.0) + 128.0, 0.0, 255.0)),
+        bayt_cast(math::clamp(factor * (ondalık_cast(c.b) - 128.0) + 128.0, 0.0, 255.0))
+    )
+son
+
+fonksiyon adjust_saturation(c: Color, amount: ondalık) -> Color
+yap
+    // amount: -100 to +100
+    değişken hsl = rgb_to_hsl(c)
+    hsl.s = math::clamp(hsl.s + amount, 0.0, 100.0)
+    dön hsl_to_rgb(hsl)
+son
+
+fonksiyon adjust_hue(c: Color, degrees: ondalık) -> Color
+yap
+    değişken hsl = rgb_to_hsl(c)
+    hsl.h = math::fmod(hsl.h + degrees + 360.0, 360.0)
+    dön hsl_to_rgb(hsl)
+son
+
+// ============================================================================
+// PALETTE GENERATION
+// ============================================================================
+
+fonksiyon palette_complementary(c: Color) -> liste[Color]
+yap
+    // Opposite color on the color wheel (180° hue rotation)
+    değişken complement = adjust_hue(c, 180.0)
+    dön [c, complement]
+son
+
+fonksiyon palette_triadic(c: Color) -> liste[Color]
+yap
+    // Three evenly spaced colors (120° apart)
+    değişken color2 = adjust_hue(c, 120.0)
+    değişken color3 = adjust_hue(c, 240.0)
+    dön [c, color2, color3]
+son
+
+fonksiyon palette_analogous(c: Color) -> liste[Color]
+yap
+    // Adjacent colors (±30° on color wheel)
+    değişken color1 = adjust_hue(c, -30.0)
+    değişken color3 = adjust_hue(c, 30.0)
+    dön [color1, c, color3]
+son
+
+fonksiyon palette_split_complementary(c: Color) -> liste[Color]
+yap
+    // Base + two colors adjacent to complement
+    değişken color2 = adjust_hue(c, 150.0)
+    değişken color3 = adjust_hue(c, 210.0)
+    dön [c, color2, color3]
+son
+
+fonksiyon palette_tetradic(c: Color) -> liste[Color]
+yap
+    // Four colors evenly spaced (90° apart)
+    değişken color2 = adjust_hue(c, 90.0)
+    değişken color3 = adjust_hue(c, 180.0)
+    değişken color4 = adjust_hue(c, 270.0)
+    dön [c, color2, color3, color4]
+son
+
+fonksiyon palette_monochromatic(c: Color, count: tamsayı) -> liste[Color]
+yap
+    // Same hue, varying lightness
+    değişken hsl = rgb_to_hsl(c)
+    değişken palette = []
+    
+    için i = 0 .. count yap
+        değişken t = ondalık_cast(i) / ondalık_cast(count - 1)
+        değişken new_hsl = ColorHSL yap
+            h: hsl.h,
+            s: hsl.s,
+            l: 20.0 + t * 60.0  // Lightness from 20% to 80%
+        son
+        liste_ekle(palette, hsl_to_rgb(new_hsl))
+    son
+    
+    dön palette
+son
+
+// ============================================================================
+// HEX COLOR PARSING
+// ============================================================================
+
+fonksiyon hex_to_rgb(hex: yazı) -> Sonuç[Color, yazı]
+yap
+    // Remove '#' prefix if present
+    değişken hex_clean = eğer string_başlangıç(hex, "#") ise
+        string_alt_dizi(hex, 1, string_uzunluk(hex))
+    değilse
+        hex
+    
+    değişken len = string_uzunluk(hex_clean)
+    
+    // Expand short form (#RGB -> #RRGGBB)
+    eğer len == 3 ise yap
+        değişken r_char = string_karakter_al(hex_clean, 0)
+        değişken g_char = string_karakter_al(hex_clean, 1)
+        değişken b_char = string_karakter_al(hex_clean, 2)
+        hex_clean = r_char + r_char + g_char + g_char + b_char + b_char
+        len = 6
+    son
+    
+    eğer len != 6 ise yap
+        dön Hata("Invalid hex color format")
+    son
+    
+    // Parse hex digits
+    değişken r = hex_byte_parse(string_alt_dizi(hex_clean, 0, 2))
+    değişken g = hex_byte_parse(string_alt_dizi(hex_clean, 2, 4))
+    değişken b = hex_byte_parse(string_alt_dizi(hex_clean, 4, 6))
+    
+    eğer r.hata_mı() veya g.hata_mı() veya b.hata_mı() ise yap
+        dön Hata("Invalid hex color digits")
+    son
+    
+    dön Tamam(rgb(r.unwrap(), g.unwrap(), b.unwrap()))
+son
+
+fonksiyon hex_byte_parse(hex: yazı) -> Sonuç[bayt, yazı]
+yap
+    eğer string_uzunluk(hex) != 2 ise dön Hata("Invalid hex byte")
+    
+    değişken high = hex_digit_to_value(string_karakter_al(hex, 0))
+    değişken low = hex_digit_to_value(string_karakter_al(hex, 1))
+    
+    eğer high == -1 veya low == -1 ise dön Hata("Invalid hex digit")
+    
+    dön Tamam(bayt_cast(high * 16 + low))
+son
+
+fonksiyon hex_digit_to_value(ch: yazı) -> tamsayı
+yap
+    değişken code = string_karakter_kodu(ch, 0)
+    
+    eğer code >= 48 ve code <= 57 ise dön code - 48  // '0'-'9'
+    eğer code >= 65 ve code <= 70 ise dön code - 55  // 'A'-'F'
+    eğer code >= 97 ve code <= 102 ise dön code - 87  // 'a'-'f'
+    
+    dön -1
+son
+
+fonksiyon rgb_to_hex(c: Color) -> yazı
+yap
+    dön "#" + byte_to_hex(c.r) + byte_to_hex(c.g) + byte_to_hex(c.b)
+son
+
+fonksiyon byte_to_hex(b: bayt) -> yazı
+yap
+    sabit HEX_CHARS = "0123456789ABCDEF"
+    değişken high = (b >> 4) & 0x0F
+    değişken low = b & 0x0F
+    dön string_karakter_al(HEX_CHARS, high) + string_karakter_al(HEX_CHARS, low)
+son
+
+// ============================================================================
+// UTILITY FUNCTIONS
+// ============================================================================
+
+fonksiyon color_lerp(a: Color, b: Color, t: ondalık) -> Color
+yap
+    dön rgb(
+        bayt_cast(ondalık_cast(a.r) + (ondalık_cast(b.r) - ondalık_cast(a.r)) * t),
+        bayt_cast(ondalık_cast(a.g) + (ondalık_cast(b.g) - ondalık_cast(a.g)) * t),
+        bayt_cast(ondalık_cast(a.b) + (ondalık_cast(b.b) - ondalık_cast(a.b)) * t)
+    )
+son
+
+fonksiyon color_distance(a: Color, b: Color) -> ondalık
+yap
+    // Euclidean distance in RGB space
+    değişken dr = ondalık_cast(tamsayı_cast(a.r) - tamsayı_cast(b.r))
+    değişken dg = ondalık_cast(tamsayı_cast(a.g) - tamsayı_cast(b.g))
+    değişken db = ondalık_cast(tamsayı_cast(a.b) - tamsayı_cast(b.b))
+    
+    dön math::sqrt(dr * dr + dg * dg + db * db)
+son
+
+fonksiyon color_invert(c: Color) -> Color
+yap
+    dön rgb(255 - c.r, 255 - c.g, 255 - c.b)
+son
+
+fonksiyon color_grayscale(c: Color) -> Color
+yap
+    // Weighted average (NTSC formula)
+    değişken gray = bayt_cast(
+        0.299 * ondalık_cast(c.r) +
+        0.587 * ondalık_cast(c.g) +
+        0.114 * ondalık_cast(c.b)
+    )
+    dön rgb(gray, gray, gray)
+son
+
+son  // modül color

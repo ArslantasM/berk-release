@@ -1,0 +1,937 @@
+// ============================================================================
+// BERK GUI Framework - Gauge Widget
+// ============================================================================
+// Profesyonel seviye gösterge (gauge) widget'ı
+// Dairesel, yarı dairesel, doğrusal ve özel gauge tipleri
+// ============================================================================
+
+modül gui::widgets::specialized::gauge
+
+kullan gui::widgets::core::widget::{Widget, WidgetBase, Rect, Shadow}
+kullan gui::rendering::canvas::{Canvas, Path, LinearGradient, RadialGradient, ColorStop}
+kullan gui::style::colors::Color
+kullan gui::style::theme::Theme
+kullan gui::materials::material::Material
+kullan gui::materials::metal::Metal
+kullan gui::effects::lighting::{Light, LightType}
+kullan gui::effects::reflection::Reflection
+kullan gui::animation::spring::Spring
+kullan gui::layout::constraints::{Size, Constraints}
+
+// ============================================================================
+// GAUGE TYPES
+// ============================================================================
+
+/// Gauge tipi
+pub tip GaugeType = enum yap
+    /// Tam daire (360°)
+    Circular,
+    
+    /// Yarı daire (180°)
+    SemiCircular,
+    
+    /// Çeyrek daire (90°)
+    QuarterCircular,
+    
+    /// Ark (özel açı aralığı)
+    Arc(start_angle: ondalık, end_angle: ondalık),
+    
+    /// Yatay çubuk
+    HorizontalBar,
+    
+    /// Dikey çubuk
+    VerticalBar,
+    
+    /// Özel (custom path)
+    Custom(path: Path)
+son
+
+/// Gauge stili
+pub tip GaugeStyle = enum yap
+    /// Modern düz tasarım
+    Flat,
+    
+    /// Materyal tasarım
+    Material,
+    
+    /// Skeuomorphic (gerçekçi)
+    Skeuomorphic,
+    
+    /// Retro/Vintage
+    Vintage,
+    
+    /// Uçak kokpiti
+    Aircraft,
+    
+    /// Otomotiv
+    Automotive,
+    
+    /// Endüstriyel
+    Industrial,
+    
+    /// Özel
+    Custom
+son
+
+// ============================================================================
+// GAUGE WIDGET
+// ============================================================================
+
+/// Profesyonel gauge widget
+pub tip Gauge = yapı yap
+    /// Temel widget özellikleri
+    base: WidgetBase,
+    
+    /// Gauge tipi
+    gauge_type: GaugeType,
+    
+    /// Gauge stili
+    style: GaugeStyle,
+    
+    /// Değer aralığı
+    min_value: ondalık,
+    max_value: ondalık,
+    
+    /// Mevcut değer
+    value: ondalık,
+    
+    /// Hedef değer (animasyonlu geçiş için)
+    target_value: ondalık,
+    
+    /// İğne fizik motoru
+    needle_physics: Seçenek[Spring],
+    
+    /// Değer formatı
+    value_format: yazı,  // "{:.1f}" gibi
+    
+    /// Birim
+    unit: yazı,
+    
+    /// Etiket
+    label: yazı,
+    
+    // === APPEARANCE ===
+    
+    /// Arka plan malzemesi
+    background_material: Seçenek[Material],
+    
+    /// Çerçeve (bezel) malzemesi
+    bezel_material: Seçenek[Material],
+    
+    /// Kadran rengi
+    dial_color: Color,
+    
+    /// Ölçek rengi
+    scale_color: Color,
+    
+    /// Değer gösterge rengi
+    indicator_color: Color,
+    
+    // === SCALE ===
+    
+    /// Ana bölme sayısı
+    major_ticks: tamsayı,
+    
+    /// Ara bölme sayısı (her ana bölme arasında)
+    minor_ticks: tamsayı,
+    
+    /// Bölme uzunlukları
+    major_tick_length: ondalık,
+    minor_tick_length: ondalık,
+    
+    /// Bölme kalınlıkları
+    major_tick_width: ondalık,
+    minor_tick_width: ondalık,
+    
+    /// Etiketleri göster
+    show_labels: mantıksal,
+    
+    /// Etiket fontsize
+    label_font_size: ondalık,
+    
+    // === NEEDLE ===
+    
+    /// İğne ayarları
+    needle: NeedleSettings,
+    
+    // === ZONES ===
+    
+    /// Renk bölgeleri (örn: yeşil-sarı-kırmızı)
+    zones: liste[GaugeZone],
+    
+    // === EFFECTS ===
+    
+    /// Işıklandırma
+    lights: liste[Light],
+    
+    /// Yansıma
+    reflection: Seçenek[Reflection],
+    
+    /// Cam efekti
+    glass_effect: mantıksal,
+    
+    // === ANIMATION ===
+    
+    /// Animasyon süresi (ms)
+    animation_duration: tamsayı,
+    
+    /// Değer animasyonu etkin mi?
+    animate_value: mantıksal
+son
+
+/// İğne ayarları
+pub tip NeedleSettings = yapı yap
+    /// İğne tipi
+    needle_type: NeedleType,
+    
+    /// İğne rengi
+    color: Color,
+    
+    /// İğne uzunluğu (0.0 - 1.0, yarıçap oranı)
+    length: ondalık,
+    
+    /// İğne genişliği (taban)
+    width: ondalık,
+    
+    /// İğne kalınlığı (uç)
+    tip_width: ondalık,
+    
+    /// Pivot (merkez) rengi
+    pivot_color: Color,
+    
+    /// Pivot boyutu
+    pivot_size: ondalık,
+    
+    /// Gölge
+    shadow: mantıksal,
+    
+    /// Parlaklık (glow)
+    glow: mantıksal,
+    
+    /// Glow rengi
+    glow_color: Color
+son
+
+/// İğne tipi
+pub tip NeedleType = enum yap
+    /// Klasik üçgen
+    Classic,
+    
+    /// İnce çizgi
+    Line,
+    
+    /// Ok şekli
+    Arrow,
+    
+    /// Elmas uçlu
+    Diamond,
+    
+    /// Bıçak şekli
+    Blade,
+    
+    /// Vintage (kalın, ornate)
+    Vintage,
+    
+    /// Modern (minimalist)
+    Modern,
+    
+    /// Özel SVG path
+    Custom(path: Path)
+son
+
+/// Gauge bölgesi (zone)
+pub tip GaugeZone = yapı yap
+    /// Başlangıç değeri
+    start: ondalık,
+    
+    /// Bitiş değeri
+    end_value: ondalık,
+    
+    /// Renk
+    color: Color,
+    
+    /// Etiket
+    label: Seçenek[yazı]
+son
+
+// ============================================================================
+// GAUGE IMPLEMENTATION
+// ============================================================================
+
+impl Gauge:
+    /// Dairesel gauge oluştur
+    pub fn circular() döndür Gauge:
+        döndür Gauge::new(GaugeType::Circular)
+    son
+    
+    /// Yarı dairesel gauge
+    pub fn semi_circular() döndür Gauge:
+        döndür Gauge::new(GaugeType::SemiCircular)
+    son
+    
+    /// Yatay bar gauge
+    pub fn horizontal_bar() döndür Gauge:
+        döndür Gauge::new(GaugeType::HorizontalBar)
+    son
+    
+    /// Dikey bar gauge
+    pub fn vertical_bar() döndür Gauge:
+        döndür Gauge::new(GaugeType::VerticalBar)
+    son
+    
+    /// Özel açı aralığıyla gauge
+    pub fn arc(start_angle: ondalık, end_angle: ondalık) döndür Gauge:
+        döndür Gauge::new(GaugeType::Arc(start_angle, end_angle))
+    son
+    
+    /// Temel gauge oluştur
+    pub fn new(gauge_type: GaugeType) döndür Gauge:
+        döndür Gauge yap
+            base: WidgetBase::new(WidgetBase::generate_id()),
+            gauge_type: gauge_type,
+            style: GaugeStyle::Flat,
+            min_value: 0.0,
+            max_value: 100.0,
+            value: 0.0,
+            target_value: 0.0,
+            needle_physics: boş,
+            value_format: "{:.0f}",
+            unit: "",
+            label: "",
+            background_material: boş,
+            bezel_material: boş,
+            dial_color: Color::hex("#1a1a2e"),
+            scale_color: Color::white(),
+            indicator_color: Color::hex("#00d4ff"),
+            major_ticks: 10,
+            minor_ticks: 5,
+            major_tick_length: 15.0,
+            minor_tick_length: 8.0,
+            major_tick_width: 2.0,
+            minor_tick_width: 1.0,
+            show_labels: doğru,
+            label_font_size: 12.0,
+            needle: NeedleSettings::default(),
+            zones: [],
+            lights: [],
+            reflection: boş,
+            glass_effect: yanlış,
+            animation_duration: 500,
+            animate_value: doğru
+        son
+    son
+    
+    // === BUILDER METHODS ===
+    
+    /// Değer aralığı ayarla
+    pub fn range(mut self, min: ondalık, max: ondalık) döndür Gauge:
+        self.min_value = min
+        self.max_value = max
+        döndür self
+    son
+    
+    /// Değer ayarla
+    pub fn value(mut self, value: ondalık) döndür Gauge:
+        değişken clamped = clamp(value, self.min_value, self.max_value)
+        eğer self.animate_value:
+            self.target_value = clamped
+        değilse:
+            self.value = clamped
+            self.target_value = clamped
+        son
+        döndür self
+    son
+    
+    /// Birim ayarla
+    pub fn unit(mut self, unit: yazı) döndür Gauge:
+        self.unit = unit
+        döndür self
+    son
+    
+    /// Etiket ayarla
+    pub fn label(mut self, label: yazı) döndür Gauge:
+        self.label = label
+        döndür self
+    son
+    
+    /// Stil ayarla
+    pub fn style(mut self, style: GaugeStyle) döndür Gauge:
+        self.style = style
+        self.apply_style_preset()
+        döndür self
+    son
+    
+    /// Skeuomorphic stil
+    pub fn skeuomorphic(mut self) döndür Gauge:
+        döndür self.style(GaugeStyle::Skeuomorphic)
+    son
+    
+    /// Uçak kokpiti stili
+    pub fn aircraft_style(mut self) döndür Gauge:
+        döndür self.style(GaugeStyle::Aircraft)
+    son
+    
+    /// Otomotiv stili
+    pub fn automotive_style(mut self) döndür Gauge:
+        döndür self.style(GaugeStyle::Automotive)
+    son
+    
+    /// Arka plan malzemesi
+    pub fn background(mut self, material: Material) döndür Gauge:
+        self.background_material = Bazı(material)
+        döndür self
+    son
+    
+    /// Çerçeve malzemesi
+    pub fn bezel(mut self, material: Material) döndür Gauge:
+        self.bezel_material = Bazı(material)
+        döndür self
+    son
+    
+    /// İğne ayarları
+    pub fn needle(mut self, needle: NeedleSettings) döndür Gauge:
+        self.needle = needle
+        döndür self
+    son
+    
+    /// İğne rengi
+    pub fn needle_color(mut self, color: Color) döndür Gauge:
+        self.needle.color = color
+        döndür self
+    son
+    
+    /// İğne gölgesi
+    pub fn needle_shadow(mut self, enabled: mantıksal) döndür Gauge:
+        self.needle.shadow = enabled
+        döndür self
+    son
+    
+    /// İğne parlaklığı
+    pub fn needle_glow(mut self, enabled: mantıksal) döndür Gauge:
+        self.needle.glow = enabled
+        döndür self
+    son
+    
+    /// İğne fizik motoru
+    pub fn needle_physics(mut self, spring: Spring) döndür Gauge:
+        self.needle_physics = Bazı(spring)
+        döndür self
+    son
+    
+    /// Bölge ekle
+    pub fn add_zone(mut self, start: ondalık, end_value: ondalık, color: Color) döndür Gauge:
+        self.zones.push(GaugeZone yap
+            start: start,
+            end_value: end_value,
+            color: color,
+            label: boş
+        son)
+        döndür self
+    son
+    
+    /// Standart tehlike bölgeleri (yeşil-sarı-kırmızı)
+    pub fn danger_zones(mut self) döndür Gauge:
+        değişken range = self.max_value - self.min_value
+        self.zones = [
+            GaugeZone yap
+                start: self.min_value,
+                end_value: self.min_value + range * 0.6,
+                color: Color::green(),
+                label: boş
+            son,
+            GaugeZone yap
+                start: self.min_value + range * 0.6,
+                end_value: self.min_value + range * 0.8,
+                color: Color::yellow(),
+                label: boş
+            son,
+            GaugeZone yap
+                start: self.min_value + range * 0.8,
+                end_value: self.max_value,
+                color: Color::red(),
+                label: boş
+            son
+        ]
+        döndür self
+    son
+    
+    /// Bölme ayarları
+    pub fn ticks(mut self, major: tamsayı, minor: tamsayı) döndür Gauge:
+        self.major_ticks = major
+        self.minor_ticks = minor
+        döndür self
+    son
+    
+    /// Işık ekle
+    pub fn add_light(mut self, light: Light) döndür Gauge:
+        self.lights.push(light)
+        döndür self
+    son
+    
+    /// Yansıma ekle
+    pub fn reflection(mut self, reflection: Reflection) döndür Gauge:
+        self.reflection = Bazı(reflection)
+        döndür self
+    son
+    
+    /// Cam efekti
+    pub fn glass(mut self, enabled: mantıksal) döndür Gauge:
+        self.glass_effect = enabled
+        döndür self
+    son
+    
+    /// Katman ekle (layer)
+    pub fn add_layer(mut self, layer: GaugeLayer) döndür Gauge:
+        // Layer'ı işle
+        eşle layer:
+            GaugeLayer::Light(l) => self.lights.push(l),
+            GaugeLayer::Reflection(r) => self.reflection = Bazı(r),
+            GaugeLayer::Material(m) => self.background_material = Bazı(m),
+            _ => ()
+        son
+        döndür self
+    son
+    
+    // === PRESET STYLES ===
+    
+    fn apply_style_preset(mut self) döndür void:
+        eşle self.style:
+            GaugeStyle::Skeuomorphic => yap
+                self.background_material = Bazı(Metal::brushed_aluminum())
+                self.bezel_material = Bazı(Metal::chrome())
+                self.needle.shadow = doğru
+                self.glass_effect = doğru
+                self.lights.push(Light::ambient(0.3))
+                self.lights.push(Light::directional(45.0, 0.7))
+            son,
+            
+            GaugeStyle::Aircraft => yap
+                self.dial_color = Color::hex("#0a0a14")
+                self.scale_color = Color::white()
+                self.background_material = Bazı(Metal::black_anodized())
+                self.bezel_material = Bazı(Metal::brushed_steel())
+                self.needle.color = Color::white()
+                self.needle.glow = doğru
+                self.needle.glow_color = Color::hex("#ff6600")
+            son,
+            
+            GaugeStyle::Automotive => yap
+                self.dial_color = Color::hex("#1a1a1a")
+                self.scale_color = Color::hex("#ff3300")
+                self.indicator_color = Color::hex("#ff0000")
+                self.needle.color = Color::hex("#ff3300")
+                self.needle.needle_type = NeedleType::Modern
+                self.glass_effect = doğru
+            son,
+            
+            GaugeStyle::Vintage => yap
+                self.dial_color = Color::hex("#f5e6c8")
+                self.scale_color = Color::hex("#3d2b1f")
+                self.needle.color = Color::hex("#8b0000")
+                self.needle.needle_type = NeedleType::Vintage
+                self.background_material = Bazı(Material::leather(Color::hex("#c4a35a")))
+            son,
+            
+            GaugeStyle::Industrial => yap
+                self.dial_color = Color::hex("#2d2d2d")
+                self.scale_color = Color::hex("#00ff00")
+                self.indicator_color = Color::hex("#00ff00")
+                self.bezel_material = Bazı(Metal::cast_iron())
+            son,
+            
+            _ => ()
+        son
+    son
+    
+    // === WIDGET IMPLEMENTATION ===
+    
+    /// Değer normalize et (0.0 - 1.0)
+    fn normalize_value(self, value: ondalık) döndür ondalık:
+        döndür (value - self.min_value) / (self.max_value - self.min_value)
+    son
+    
+    /// Değeri açıya çevir
+    fn value_to_angle(self, value: ondalık) döndür ondalık:
+        değişken normalized = self.normalize_value(value)
+        
+        eşle self.gauge_type:
+            GaugeType::Circular => yap
+                döndür normalized * 360.0 - 90.0  // Üstten başla
+            son,
+            
+            GaugeType::SemiCircular => yap
+                döndür normalized * 180.0 - 90.0  // Soldan sağa
+            son,
+            
+            GaugeType::QuarterCircular => yap
+                döndür normalized * 90.0
+            son,
+            
+            GaugeType::Arc(start, end) => yap
+                döndür start + normalized * (end - start)
+            son,
+            
+            _ => döndür normalized * 360.0
+        son
+    son
+son
+
+// ============================================================================
+// WIDGET TRAIT IMPLEMENTATION
+// ============================================================================
+
+impl Widget için Gauge:
+    fn id(self) döndür yazı:
+        döndür self.base.id
+    son
+    
+    fn measure(self, constraints: Constraints) döndür Size:
+        // Gauge varsayılan olarak kare
+        değişken size = min(constraints.max_width, constraints.max_height)
+        döndür Size yap width: size, height: size son
+    son
+    
+    fn layout(mut self, x: ondalık, y: ondalık, width: ondalık, height: ondalık) döndür void:
+        self.base.x = x
+        self.base.y = y
+        self.base.width = width
+        self.base.height = height
+    son
+    
+    fn bounds(self) döndür Rect:
+        döndür self.base.bounds()
+    son
+    
+    fn update(mut self) döndür void:
+        // Değer animasyonu
+        eğer self.value != self.target_value:
+            eğer değişken physics = self.needle_physics:
+                // Spring physics ile animate et
+                self.value = physics.update(self.value, self.target_value)
+            değilse:
+                // Basit lerp
+                self.value = lerp(self.value, self.target_value, 0.1)
+            son
+            
+            // Yaklaşık eşitlik kontrolü
+            eğer abs(self.value - self.target_value) < 0.001:
+                self.value = self.target_value
+            son
+        son
+        
+        // Animasyonları güncelle
+        self.base.update_animations()
+    son
+    
+    fn render(self, canvas: Canvas) döndür void:
+        değişken cx = self.base.x + self.base.width / 2.0
+        değişken cy = self.base.y + self.base.height / 2.0
+        değişken radius = min(self.base.width, self.base.height) / 2.0 - 10.0
+        
+        canvas.save()
+        
+        // 1. Arka plan
+        self.render_background(canvas, cx, cy, radius)
+        
+        // 2. Bölgeler (zones)
+        self.render_zones(canvas, cx, cy, radius)
+        
+        // 3. Ölçek ve işaretler
+        self.render_scale(canvas, cx, cy, radius)
+        
+        // 4. İğne
+        self.render_needle(canvas, cx, cy, radius)
+        
+        // 5. Pivot (merkez)
+        self.render_pivot(canvas, cx, cy)
+        
+        // 6. Değer gösterimi
+        self.render_value_display(canvas, cx, cy, radius)
+        
+        // 7. Etiket
+        self.render_label(canvas, cx, cy, radius)
+        
+        // 8. Çerçeve (bezel)
+        self.render_bezel(canvas, cx, cy, radius)
+        
+        // 9. Cam efekti ve yansımalar
+        eğer self.glass_effect:
+            self.render_glass_effect(canvas, cx, cy, radius)
+        son
+        
+        eğer değişken ref = self.reflection:
+            self.render_reflection(canvas, cx, cy, radius, ref)
+        son
+        
+        canvas.restore()
+    son
+son
+
+// ============================================================================
+// RENDER HELPERS
+// ============================================================================
+
+impl Gauge:
+    fn render_background(self, canvas: Canvas, cx: ondalık, cy: ondalık, radius: ondalık) döndür void:
+        eğer değişken material = self.background_material:
+            // Material ile çiz
+            material.apply_to_circle(canvas, cx, cy, radius, self.lights)
+        değilse:
+            // Düz renk
+            canvas.set_fill_color(self.dial_color)
+            canvas.fill_circle(cx, cy, radius)
+        son
+    son
+    
+    fn render_zones(self, canvas: Canvas, cx: ondalık, cy: ondalık, radius: ondalık) döndür void:
+        değişken zone_radius = radius * 0.85
+        değişken zone_width = radius * 0.1
+        
+        için zone içinde self.zones:
+            değişken start_angle = self.value_to_angle(zone.start)
+            değişken end_angle = self.value_to_angle(zone.end_value)
+            
+            canvas.set_fill_color(zone.color.with_alpha(128))
+            canvas.fill_path(
+                Path::new()
+                    .arc(cx, cy, zone_radius, deg_to_rad(start_angle), deg_to_rad(end_angle))
+            )
+        son
+    son
+    
+    fn render_scale(self, canvas: Canvas, cx: ondalık, cy: ondalık, radius: ondalık) döndür void:
+        değişken tick_radius = radius * 0.9
+        
+        // Ana bölmeler
+        için i içinde 0..=self.major_ticks:
+            değişken value = self.min_value + (self.max_value - self.min_value) * (i / self.major_ticks)
+            değişken angle = deg_to_rad(self.value_to_angle(value))
+            
+            değişken inner_r = tick_radius - self.major_tick_length
+            değişken x1 = cx + cos(angle) * inner_r
+            değişken y1 = cy + sin(angle) * inner_r
+            değişken x2 = cx + cos(angle) * tick_radius
+            değişken y2 = cy + sin(angle) * tick_radius
+            
+            canvas.set_stroke_color(self.scale_color)
+            canvas.set_line_width(self.major_tick_width)
+            canvas.stroke_path(
+                Path::new().move_to(x1, y1).line_to(x2, y2)
+            )
+            
+            // Etiket
+            eğer self.show_labels:
+                değişken label_r = inner_r - 15.0
+                değişken lx = cx + cos(angle) * label_r
+                değişken ly = cy + sin(angle) * label_r
+                
+                canvas.set_fill_color(self.scale_color)
+                canvas.fill_text(format(self.value_format, value), lx, ly)
+            son
+            
+            // Ara bölmeler
+            eğer i < self.major_ticks:
+                için j içinde 1..self.minor_ticks:
+                    değişken sub_value = value + (self.max_value - self.min_value) / self.major_ticks * (j / self.minor_ticks)
+                    değişken sub_angle = deg_to_rad(self.value_to_angle(sub_value))
+                    
+                    değişken sub_inner_r = tick_radius - self.minor_tick_length
+                    değişken sx1 = cx + cos(sub_angle) * sub_inner_r
+                    değişken sy1 = cy + sin(sub_angle) * sub_inner_r
+                    değişken sx2 = cx + cos(sub_angle) * tick_radius
+                    değişken sy2 = cy + sin(sub_angle) * tick_radius
+                    
+                    canvas.set_line_width(self.minor_tick_width)
+                    canvas.stroke_path(
+                        Path::new().move_to(sx1, sy1).line_to(sx2, sy2)
+                    )
+                son
+            son
+        son
+    son
+    
+    fn render_needle(self, canvas: Canvas, cx: ondalık, cy: ondalık, radius: ondalık) döndür void:
+        değişken angle = deg_to_rad(self.value_to_angle(self.value))
+        değişken needle_length = radius * self.needle.length
+        
+        // Gölge
+        eğer self.needle.shadow:
+            canvas.save()
+            canvas.set_shadow(Color::rgba(0, 0, 0, 64), 4.0, 2.0, 2.0)
+        son
+        
+        // İğne çiz
+        değişken path = self.create_needle_path(cx, cy, needle_length, angle)
+        
+        canvas.set_fill_color(self.needle.color)
+        canvas.fill_path(path)
+        
+        eğer self.needle.shadow:
+            canvas.restore()
+        son
+        
+        // Glow efekti
+        eğer self.needle.glow:
+            canvas.set_shadow(self.needle.glow_color, 10.0, 0.0, 0.0)
+            canvas.set_fill_color(self.needle.color.with_alpha(128))
+            canvas.fill_path(path)
+            canvas.clear_shadow()
+        son
+    son
+    
+    fn create_needle_path(self, cx: ondalık, cy: ondalık, length: ondalık, angle: ondalık) döndür Path:
+        değişken half_width = self.needle.width / 2.0
+        değişken tip_width = self.needle.tip_width / 2.0
+        
+        eşle self.needle.needle_type:
+            NeedleType::Classic => yap
+                // Klasik üçgen
+                döndür Path::new()
+                    .move_to(cx - half_width * cos(angle + 1.5708), cy - half_width * sin(angle + 1.5708))
+                    .line_to(cx + length * cos(angle), cy + length * sin(angle))
+                    .line_to(cx + half_width * cos(angle + 1.5708), cy + half_width * sin(angle + 1.5708))
+                    .close()
+            son,
+            
+            NeedleType::Line => yap
+                // İnce çizgi
+                döndür Path::new()
+                    .move_to(cx, cy)
+                    .line_to(cx + length * cos(angle), cy + length * sin(angle))
+            son,
+            
+            NeedleType::Arrow => yap
+                // Ok şekli
+                değişken tip_x = cx + length * cos(angle)
+                değişken tip_y = cy + length * sin(angle)
+                değişken back_x = cx + length * 0.9 * cos(angle)
+                değişken back_y = cy + length * 0.9 * sin(angle)
+                
+                döndür Path::new()
+                    .move_to(cx, cy)
+                    .line_to(back_x - half_width * cos(angle + 1.5708), back_y - half_width * sin(angle + 1.5708))
+                    .line_to(tip_x, tip_y)
+                    .line_to(back_x + half_width * cos(angle + 1.5708), back_y + half_width * sin(angle + 1.5708))
+                    .close()
+            son,
+            
+            _ => döndür Path::new()  // Diğer tipler için genişletilebilir
+        son
+    son
+    
+    fn render_pivot(self, canvas: Canvas, cx: ondalık, cy: ondalık) döndür void:
+        // Pivot gölge
+        canvas.set_fill_color(Color::rgba(0, 0, 0, 64))
+        canvas.fill_circle(cx + 1.0, cy + 1.0, self.needle.pivot_size)
+        
+        // Pivot
+        canvas.set_fill_color(self.needle.pivot_color)
+        canvas.fill_circle(cx, cy, self.needle.pivot_size)
+        
+        // Parlak nokta
+        canvas.set_fill_color(Color::rgba(255, 255, 255, 128))
+        canvas.fill_circle(cx - self.needle.pivot_size * 0.3, cy - self.needle.pivot_size * 0.3, self.needle.pivot_size * 0.3)
+    son
+    
+    fn render_value_display(self, canvas: Canvas, cx: ondalık, cy: ondalık, radius: ondalık) döndür void:
+        değişken value_text = format(self.value_format, self.value)
+        eğer self.unit != "":
+            value_text = value_text + " " + self.unit
+        son
+        
+        canvas.set_fill_color(self.scale_color)
+        canvas.set_font(Font::new("Arial", 18.0).bold())
+        canvas.fill_text(value_text, cx, cy + radius * 0.4)
+    son
+    
+    fn render_label(self, canvas: Canvas, cx: ondalık, cy: ondalık, radius: ondalık) döndür void:
+        eğer self.label != "":
+            canvas.set_fill_color(self.scale_color.with_alpha(200))
+            canvas.set_font(Font::new("Arial", 14.0))
+            canvas.fill_text(self.label, cx, cy + radius * 0.55)
+        son
+    son
+    
+    fn render_bezel(self, canvas: Canvas, cx: ondalık, cy: ondalık, radius: ondalık) döndür void:
+        eğer değişken material = self.bezel_material:
+            // Material ile çerçeve çiz
+            material.apply_to_ring(canvas, cx, cy, radius, radius + 8.0, self.lights)
+        değilse:
+            // Basit çerçeve
+            canvas.set_stroke_color(Color::hex("#333333"))
+            canvas.set_line_width(4.0)
+            canvas.stroke_circle(cx, cy, radius + 2.0)
+        son
+    son
+    
+    fn render_glass_effect(self, canvas: Canvas, cx: ondalık, cy: ondalık, radius: ondalık) döndür void:
+        // Cam yansıması (üst yarı)
+        değişken glass_gradient = RadialGradient yap
+            x0: cx, y0: cy - radius * 0.3, r0: 0.0,
+            x1: cx, y1: cy, r1: radius,
+            stops: [
+                ColorStop yap offset: 0.0, color: Color::rgba(255, 255, 255, 60) son,
+                ColorStop yap offset: 0.5, color: Color::rgba(255, 255, 255, 20) son,
+                ColorStop yap offset: 1.0, color: Color::transparent() son
+            ]
+        son
+        
+        canvas.set_fill_style(FillStyle::RadialGradient(glass_gradient))
+        canvas.fill_circle(cx, cy - radius * 0.1, radius * 0.8)
+    son
+    
+    fn render_reflection(self, canvas: Canvas, cx: ondalık, cy: ondalık, radius: ondalık, ref: Reflection) döndür void:
+        ref.apply(canvas, cx, cy, radius)
+    son
+son
+
+// ============================================================================
+// NEEDLE SETTINGS DEFAULT
+// ============================================================================
+
+impl NeedleSettings:
+    pub fn default() döndür NeedleSettings:
+        döndür NeedleSettings yap
+            needle_type: NeedleType::Classic,
+            color: Color::red(),
+            length: 0.75,
+            width: 10.0,
+            tip_width: 2.0,
+            pivot_color: Color::hex("#333333"),
+            pivot_size: 8.0,
+            shadow: yanlış,
+            glow: yanlış,
+            glow_color: Color::red()
+        son
+    son
+son
+
+// ============================================================================
+// GAUGE LAYER
+// ============================================================================
+
+/// Gauge layer tipi
+pub tip GaugeLayer = enum yap
+    Light(light: Light),
+    Reflection(ref: Reflection),
+    Material(mat: Material),
+    Custom(render: fn(canvas: Canvas, cx: ondalık, cy: ondalık, radius: ondalık) döndür void)
+son
+
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+fn deg_to_rad(degrees: ondalık) döndür ondalık:
+    döndür degrees * 3.14159265359 / 180.0
+son
+
+fn lerp(a: ondalık, b: ondalık, t: ondalık) döndür ondalık:
+    döndür a + (b - a) * t
+son
+
+fn clamp(value: ondalık, min: ondalık, max: ondalık) döndür ondalık:
+    eğer value < min: döndür min son
+    eğer value > max: döndür max son
+    döndür value
+son

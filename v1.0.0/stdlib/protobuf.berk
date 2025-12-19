@@ -1,0 +1,373 @@
+// ============================================================================
+// PROTOBUF.BERK - Protocol Buffers Serialization Library
+// ============================================================================
+// BERK Standard Library v1.5
+// 
+// Google Protocol Buffers + Rust prost + Go protobuf tasarımlarından esinlenildi
+//
+// Özellikler:
+// - Protocol Buffers 3 (proto3) desteği
+// - Binary serialization (wire format)
+// - Efficient encoding (varint, zigzag)
+// - Message packing/unpacking
+// - Nested messages
+// - Repeated fields (arrays)
+// - Optional fields
+// - Oneof fields (union types)
+// - Well-known types (Timestamp, Duration, Any, etc.)
+// - Reflection API (runtime inspection)
+// - JSON mapping (proto3 JSON format)
+//
+// Kullanım:
+//   kullan protobuf as pb
+//   
+//   // Message tanımlama
+//   tip Kisi = pb::message([
+//       pb::field("ad", pb::String, 1),
+//       pb::field("yas", pb::Int32, 2),
+//       pb::field("epostalar", pb::repeated(pb::String), 3)
+//   ])
+//   
+//   // Encoding
+//   değişken kisi = {"ad": "Ahmet", "yas": 25, "epostalar": ["a@x.com"]}
+//   değişken binary = pb::encode(kisi, Kisi)
+//   
+//   // Decoding
+//   değişken geri = pb::decode(binary, Kisi)
+// ============================================================================
+
+modül protobuf
+
+kullan result
+kullan io
+
+// ============================================================================
+// WIRE TYPES (Protocol Buffers Encoding)
+// ============================================================================
+
+tip WireType = 
+    Varint |           // 0: int32, int64, uint32, uint64, sint32, sint64, bool, enum
+    Fixed64 |          // 1: fixed64, sfixed64, double
+    LengthDelimited |  // 2: string, bytes, embedded messages, packed repeated
+    StartGroup |       // 3: deprecated
+    EndGroup |         // 4: deprecated
+    Fixed32            // 5: fixed32, sfixed32, float
+
+// ============================================================================
+// FIELD TYPES
+// ============================================================================
+
+tip FieldType = 
+    Double |      // 64-bit floating point
+    Float |       // 32-bit floating point
+    Int32 |       // Variable-length signed 32-bit
+    Int64 |       // Variable-length signed 64-bit
+    UInt32 |      // Variable-length unsigned 32-bit
+    UInt64 |      // Variable-length unsigned 64-bit
+    SInt32 |      // Variable-length signed 32-bit (zigzag)
+    SInt64 |      // Variable-length signed 64-bit (zigzag)
+    Fixed32 |     // Fixed 4 bytes
+    Fixed64 |     // Fixed 8 bytes
+    SFixed32 |    // Fixed 4 bytes (signed)
+    SFixed64 |    // Fixed 8 bytes (signed)
+    Bool |        // Boolean
+    String |      // UTF-8 string
+    Bytes |       // Arbitrary bytes
+    Message { schema: MessageSchema } |  // Nested message
+    Enum { values: eşleme[yazı, tamsayı] }  // Enumeration
+
+// ============================================================================
+// MESSAGE SCHEMA (Message Definition)
+// ============================================================================
+
+tip FieldRule = 
+    Optional |     // Field may be absent
+    Required |     // Field must be present (proto2 only)
+    Repeated       // Array of values
+
+tip FieldDescriptor = yapı yap
+    ad: yazı,
+    tür: FieldType,
+    numara: tamsayı,      // Field number (1-536870911)
+    kural: FieldRule,
+    varsayılan: boş?,     // Default value (proto2)
+    packed: mantıksal     // Packed encoding for repeated numerics
+son
+
+tip MessageSchema = yapı yap
+    ad: yazı,
+    alanlar: liste[FieldDescriptor],
+    nested: liste[MessageSchema],  // Nested message types
+    oneof_groups: liste[liste[tamsayı]]  // Oneof field numbers
+son
+
+// ============================================================================
+// PROTOBUF MESSAGE
+// ============================================================================
+
+tip ProtobufMessage = yapı yap
+    schema: MessageSchema,
+    değerler: eşleme[tamsayı, JsonDeger],  // field_number -> value
+    bilinmeyen: liste[(tamsayı, liste[bayt])]  // Unknown fields
+son
+
+// ============================================================================
+// ENCODING FUNCTIONS
+// ============================================================================
+
+// Encode message to binary (wire format)
+@native
+fonksiyon encode(message: ProtobufMessage) -> Sonuç[liste[bayt], yazı]
+
+// Encode varint (variable-length integer)
+@native
+fonksiyon encode_varint(value: tamsayı) -> liste[bayt]
+
+// Encode zigzag (signed varint)
+@native
+fonksiyon encode_zigzag(value: tamsayı) -> tamsayı
+
+// Encode fixed32
+@native
+fonksiyon encode_fixed32(value: tamsayı) -> liste[bayt]
+
+// Encode fixed64
+@native
+fonksiyon encode_fixed64(value: tamsayı) -> liste[bayt]
+
+// Encode length-delimited (string, bytes, message)
+@native
+fonksiyon encode_length_delimited(data: liste[bayt]) -> liste[bayt]
+
+// ============================================================================
+// DECODING FUNCTIONS
+// ============================================================================
+
+// Decode binary to message
+@native
+fonksiyon decode(data: liste[bayt], schema: MessageSchema) -> Sonuç[ProtobufMessage, yazı]
+
+// Decode varint
+@native
+fonksiyon decode_varint(data: liste[bayt], offset: tamsayı) -> Sonuç[(tamsayı, tamsayı), yazı]
+
+// Decode zigzag
+@native
+fonksiyon decode_zigzag(value: tamsayı) -> tamsayı
+
+// Decode fixed32
+@native
+fonksiyon decode_fixed32(data: liste[bayt], offset: tamsayı) -> Sonuç[(tamsayı, tamsayı), yazı]
+
+// Decode fixed64
+@native
+fonksiyon decode_fixed64(data: liste[bayt], offset: tamsayı) -> Sonuç[(tamsayı, tamsayı), yazı]
+
+// Decode length-delimited
+@native
+fonksiyon decode_length_delimited(data: liste[bayt], offset: tamsayı) -> Sonuç[(liste[bayt], tamsayı), yazı]
+
+// ============================================================================
+// SCHEMA BUILDER (Fluent API)
+// ============================================================================
+
+// Create message schema
+fonksiyon message(ad: yazı) -> MessageBuilder
+    değer MessageBuilder { ad: ad, alanlar: [], nested: [], oneofs: [] }
+son
+
+tip MessageBuilder = yapı yap
+    ad: yazı,
+    alanlar: liste[FieldDescriptor],
+    nested: liste[MessageSchema],
+    oneofs: liste[liste[tamsayı]]
+son
+
+fonksiyon (self: MessageBuilder) field(ad: yazı, tür: FieldType, numara: tamsayı) -> MessageBuilder
+    self.alanlar.ekle(FieldDescriptor {
+        ad: ad,
+        tür: tür,
+        numara: numara,
+        kural: Optional,
+        varsayılan: boş,
+        packed: yanlış
+    })
+    değer self
+son
+
+fonksiyon (self: MessageBuilder) repeated(ad: yazı, tür: FieldType, numara: tamsayı) -> MessageBuilder
+    self.alanlar.ekle(FieldDescriptor {
+        ad: ad,
+        tür: tür,
+        numara: numara,
+        kural: Repeated,
+        varsayılan: boş,
+        packed: doğru
+    })
+    değer self
+son
+
+fonksiyon (self: MessageBuilder) optional(ad: yazı, tür: FieldType, numara: tamsayı, varsayılan: boş?) -> MessageBuilder
+    self.alanlar.ekle(FieldDescriptor {
+        ad: ad,
+        tür: tür,
+        numara: numara,
+        kural: Optional,
+        varsayılan: varsayılan,
+        packed: yanlış
+    })
+    değer self
+son
+
+fonksiyon (self: MessageBuilder) nested(schema: MessageSchema) -> MessageBuilder
+    self.nested.ekle(schema)
+    değer self
+son
+
+fonksiyon (self: MessageBuilder) build() -> MessageSchema
+    değer MessageSchema {
+        ad: self.ad,
+        alanlar: self.alanlar,
+        nested: self.nested,
+        oneof_groups: self.oneofs
+    }
+son
+
+// ============================================================================
+// WELL-KNOWN TYPES (Google Protocol Buffers)
+// ============================================================================
+
+// google.protobuf.Timestamp
+tip Timestamp = yapı yap
+    seconds: tamsayı,   // Seconds since Unix epoch
+    nanos: tamsayı      // Nanoseconds (0-999999999)
+son
+
+// google.protobuf.Duration
+tip Duration = yapı yap
+    seconds: tamsayı,
+    nanos: tamsayı
+son
+
+// google.protobuf.Any
+tip Any = yapı yap
+    type_url: yazı,        // Type identifier
+    value: liste[bayt]     // Serialized message
+son
+
+// google.protobuf.Empty
+tip Empty = yapı yap son
+
+// ============================================================================
+// JSON MAPPING (Proto3 JSON Format)
+// ============================================================================
+
+// Convert protobuf message to JSON
+@native
+fonksiyon to_json(message: ProtobufMessage) -> Sonuç[yazı, yazı]
+
+// Parse JSON to protobuf message
+@native
+fonksiyon from_json(json: yazı, schema: MessageSchema) -> Sonuç[ProtobufMessage, yazı]
+
+// ============================================================================
+// REFLECTION API
+// ============================================================================
+
+// Get field by name
+@native
+fonksiyon get_field(message: ProtobufMessage, ad: yazı) -> Sonuç[JsonDeger, yazı]
+
+// Set field by name
+@native
+fonksiyon set_field(message: ProtobufMessage, ad: yazı, değer: JsonDeger) -> Sonuç[boş, yazı]
+
+// Check if field exists
+@native
+fonksiyon has_field(message: ProtobufMessage, ad: yazı) -> mantıksal
+
+// Clear field
+@native
+fonksiyon clear_field(message: ProtobufMessage, ad: yazı) -> boş
+
+// List all field names
+@native
+fonksiyon list_fields(message: ProtobufMessage) -> liste[yazı]
+
+// ============================================================================
+// FILE I/O
+// ============================================================================
+
+// Write message to file
+@native
+fonksiyon write_to_file(message: ProtobufMessage, path: yazı) -> Sonuç[boş, yazı]
+
+// Read message from file
+@native
+fonksiyon read_from_file(path: yazı, schema: MessageSchema) -> Sonuç[ProtobufMessage, yazı]
+
+// ============================================================================
+// VALIDATION
+// ============================================================================
+
+// Validate message against schema
+@native
+fonksiyon validate(message: ProtobufMessage) -> Sonuç[boş, yazı]
+
+// Check if all required fields are present
+@native
+fonksiyon check_required(message: ProtobufMessage) -> Sonuç[boş, yazı]
+
+// ============================================================================
+// UTILITY FUNCTIONS
+// ============================================================================
+
+// Get wire type for field type
+fonksiyon wire_type_for(field_type: FieldType) -> WireType
+    eşle field_type
+        Double | Fixed64 | SFixed64 -> Fixed64
+        Float | Fixed32 | SFixed32 -> Fixed32
+        String | Bytes | Message -> LengthDelimited
+        _ -> Varint  // All other numeric types
+    son
+son
+
+// Calculate message size (without encoding)
+@native
+fonksiyon compute_size(message: ProtobufMessage) -> tamsayı
+
+// Create empty message
+fonksiyon new_message(schema: MessageSchema) -> ProtobufMessage
+    değer ProtobufMessage {
+        schema: schema,
+        değerler: {},
+        bilinmeyen: []
+    }
+son
+
+// ============================================================================
+// ÖRNEK KULLANIM (Example Usage)
+// ============================================================================
+
+// Örnek: Kişi mesajı
+//
+// kullan protobuf as pb
+//
+// tip KişiSchema = pb::message("Kisi")
+//     .field("id", pb::Int32, 1)
+//     .field("ad", pb::String, 2)
+//     .field("eposta", pb::String, 3)
+//     .repeated("telefonlar", pb::String, 4)
+//     .build()
+//
+// değişken kisi = pb::new_message(KişiSchema)
+// pb::set_field(kisi, "id", 123)
+// pb::set_field(kisi, "ad", "Ahmet Yılmaz")
+// pb::set_field(kisi, "eposta", "ahmet@example.com")
+// pb::set_field(kisi, "telefonlar", ["555-1234", "555-5678"])
+//
+// değişken binary = pb::encode(kisi)?
+// yazı(binary.uzunluk, " byte encoded")
+//
+// değişken kisi2 = pb::decode(binary, KişiSchema)?
+// yazı(pb::get_field(kisi2, "ad")?)  // "Ahmet Yılmaz"

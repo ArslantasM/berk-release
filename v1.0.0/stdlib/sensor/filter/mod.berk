@@ -1,0 +1,463 @@
+// ============================================================================
+// BERK SENSOR API - Filtre Modülü (Ana)
+// ============================================================================
+// "Filter = Strategy" → Kalman tek seçenek değil, sadece bir araç
+// ============================================================================
+
+modül sensor::filter
+
+// ============================================================================
+// TEKNİK VİZYON (Kalman ötesi)
+// ============================================================================
+// 
+// ┌─────────────────────────────────────────────────────────────────────────┐
+// │                    GERÇEK DÜNYA FİLTRE HİYERARŞİSİ                      │
+// ├─────────────────────────────────────────────────────────────────────────┤
+// │                                                                          │
+// │   Kullanım Sıklığı (sahada):                                            │
+// │                                                                          │
+// │   ████████████████████████  EMA / Moving Average         (~35%)         │
+// │   ██████████████████        Median                       (~25%)         │
+// │   ████████████████          Complementary (IMU)          (~20%)         │
+// │   ████████████              Alpha-Beta                   (~15%)         │
+// │   ████                      Kalman                       (~5%)          │
+// │                                                                          │
+// │   Kalman = Aerospace, akademik, high-end robotics                       │
+// │   Diğerleri = Endüstri, embedded, gerçek dünya                          │
+// │                                                                          │
+// └─────────────────────────────────────────────────────────────────────────┘
+// 
+// ============================================================================
+
+// Re-export: Temel filtreler
+pub import sensor::filter::basic::{
+    MovingAverageFilter,
+    ExponentialMovingAverage,
+    MedianFilter,
+    LowPassFilter,
+    HighPassFilter,
+    BandPassFilter,
+    FilterChain,
+    // Convenience
+    moving_average,
+    ema,
+    median,
+    low_pass,
+    high_pass,
+    band_pass,
+}
+
+// Re-export: Gelişmiş filtreler (Kalman alternatifleri)
+pub import sensor::filter::advanced::{
+    // Alpha-Beta ailesi
+    AlphaBetaFilter,
+    AlphaBetaGammaFilter,
+    // Outlier rejection
+    HampelFilter,
+    RobustEMA,
+    // Signal conditioning
+    ThresholdGate,
+    RateLimiter,
+    DeadbandFilter,
+    // Adaptive/learning
+    LMSFilter,
+    OneStepPredictor,
+    // Convenience
+    alpha_beta,
+    hampel,
+    robust_ema,
+    threshold_gate,
+    rate_limiter,
+    deadband,
+    lms,
+}
+
+// Re-export: Adaptif/bağlamsal filtreler
+pub import sensor::filter::adaptive::{
+    // Context-aware
+    FilterContext,
+    FilterStrategy,
+    AdaptiveFilter,
+    // Variance-based
+    VarianceAdaptiveEMA,
+    // SNR-based
+    SNRAdaptiveFilter,
+    // Hybrid
+    HybridFilterChain,
+    // Factory
+    FilterFactory,
+    // Convenience
+    adaptive,
+    variance_adaptive_ema,
+    snr_adaptive,
+    hybrid_chain,
+    filter_for,
+}
+
+// Re-export: Fusion filtreler (IMU için)
+pub import sensor::filter::fusion::{
+    ComplementaryFilter,
+    MadgwickAHRS,
+    MahonyAHRS,
+    complementary,
+}
+
+// Re-export: Kalman (opsiyonel, gerektiğinde)
+pub import sensor::filter::kalman::{
+    KalmanFilter,
+    ExtendedKalmanFilter,
+    kalman,
+}
+
+// ============================================================================
+// FİLTRE SEÇİM KILAVUZU
+// ============================================================================
+
+/// Filtre seçim rehberi
+/// Her durum için en uygun filtreyi önerir
+pub tip FilterGuide = yapı yap
+son
+
+impl FilterGuide:
+    // =========================================================================
+    // SKALER SENSÖRLER (Sıcaklık, Nem, Basınç, vb.)
+    // =========================================================================
+    
+    /// Sıcaklık sensörü için önerilen filtre
+    /// - Yavaş değişim
+    /// - Düşük gürültü
+    /// - Outlier nadir
+    pub fn for_temperature() döndür metin:
+        döndür """
+        Önerilen: RobustEMA veya ThresholdGate + EMA
+        
+        Örnek:
+            değişken filtre = ema(0.1)  // Smooth
+            // veya
+            değişken filtre = hybrid_chain()
+                .set_stages(yanlış, doğru, yanlış)  // Sadece EMA
+        
+        Alternatif: Adaptive (varyans izleme ile)
+            değişken filtre = adaptive().for_temperature()
+        """
+    son
+    
+    /// Basınç sensörü için önerilen filtre
+    /// - Orta hızda değişim
+    /// - Atmosferik gürültü olabilir
+    pub fn for_pressure() döndür metin:
+        döndür """
+        Önerilen: MovingAverage veya RobustEMA
+        
+        Örnek:
+            değişken filtre = moving_average(10)
+            // veya
+            değişken filtre = robust_ema(0.15)
+        """
+    son
+    
+    /// Mesafe sensörü (ultrasonik/IR) için önerilen filtre
+    /// - Ani değişimler olabilir
+    /// - Multipath gürültüsü
+    /// - Outlier sık
+    pub fn for_distance() döndür metin:
+        döndür """
+        Önerilen: Hampel + Median
+        
+        Örnek:
+            değişken filtre = hybrid_chain()
+                .set_stages(doğru, yanlış, yanlış)  // Hampel
+            // ardından
+            değişken filtre2 = median(5)
+        
+        Veya:
+            değişken filtre = adaptive().for_industrial()
+        """
+    son
+    
+    // =========================================================================
+    // IMU SENSÖRLER
+    // =========================================================================
+    
+    /// Accelerometer için önerilen filtre
+    pub fn for_accelerometer() döndür metin:
+        döndür """
+        Önerilen: LowPassFilter + MedianFilter
+        
+        Örnek:
+            değişken lp = low_pass(0.2)
+            değişken med = median(5)
+        
+        Vibration ortamında:
+            değişken filtre = adaptive().for_imu()
+        """
+    son
+    
+    /// Gyroscope için önerilen filtre
+    pub fn for_gyroscope() döndür metin:
+        döndür """
+        Önerilen: Alpha-Beta (hız tahmini ile)
+        
+        Örnek:
+            değişken filtre = alpha_beta(0.2, 0.05)
+            // veya
+            değişken filtre = AlphaBetaFilter::for_imu()
+        """
+    son
+    
+    /// IMU fusion (acc + gyro) için önerilen filtre
+    pub fn for_imu_fusion() döndür metin:
+        döndür """
+        Önerilen: Complementary veya Madgwick
+        
+        NOT: Kalman DEĞİL! Complementary %90 durumda daha iyi.
+        
+        Örnek:
+            değişken filtre = complementary(0.98)  // %98 gyro güven
+            // veya
+            değişken filtre = MadgwickAHRS::new(0.1)
+        
+        Kalman sadece: 
+        - Aerospace seviye gereksinim
+        - Tam ölçüm modeli mevcut
+        - Hesaplama maliyeti önemli değil
+        """
+    son
+    
+    // =========================================================================
+    // ENDÜSTRİYEL SENSÖRLER
+    // =========================================================================
+    
+    /// Endüstriyel ortam (titreşim, gürültü)
+    pub fn for_industrial() döndür metin:
+        döndür """
+        Önerilen: Hampel + RobustEMA + RateLimiter
+        
+        Örnek:
+            değişken filtre = HybridFilterChain::for_industrial()
+        
+        Veya manuel:
+            değişken h = hampel(7, 2.5)
+            değişken r = robust_ema(0.1)
+            değişken rl = rate_limiter(10.0)
+        """
+    son
+    
+    /// Encoder için önerilen filtre
+    pub fn for_encoder() döndür metin:
+        döndür """
+        Önerilen: Alpha-Beta (pozisyon + hız tahmini)
+        
+        Örnek:
+            değişken filtre = AlphaBetaFilter::for_encoder()
+        
+        Hız tahmini al:
+            değişken pos = filtre.apply(raw_count)
+            değişken vel = filtre.get_velocity()
+        """
+    son
+    
+    // =========================================================================
+    // KARAR AĞACI
+    // =========================================================================
+    
+    /// Durum bazlı filtre seçimi
+    pub fn decision_tree() döndür metin:
+        döndür """
+        ┌─────────────────────────────────────────────────────────────────┐
+        │                    FİLTRE SEÇİM AĞACI                           │
+        └─────────────────────────────────────────────────────────────────┘
+        
+        Sensör tipi?
+        │
+        ├─> Skaler (sıcaklık, nem, basınç)
+        │   │
+        │   ├─> Outlier riski yüksek? → Hampel + EMA
+        │   └─> Outlier riski düşük? → EMA / MovingAverage
+        │
+        ├─> IMU (accelerometer, gyroscope)
+        │   │
+        │   ├─> Sadece bir eksen? → Alpha-Beta
+        │   ├─> Acc + Gyro fusion? → Complementary (KALMAN DEĞİL!)
+        │   └─> Full 9-DOF? → Madgwick AHRS
+        │
+        ├─> Mesafe (ultrasonik, ToF, LiDAR)
+        │   │
+        │   ├─> Multipath var mı? → Median + Hampel
+        │   └─> Temiz sinyal? → LowPass + MovingAverage
+        │
+        ├─> Encoder / Motor
+        │   │
+        │   └─> Position + Velocity? → Alpha-Beta-Gamma
+        │
+        └─> Endüstriyel / Gürültülü ortam
+            │
+            ├─> Sabit gürültü profili? → LMS Adaptive
+            ├─> Değişken gürültü? → Adaptive / SNR-Adaptive
+            └─> Bilinmeyen? → HybridFilterChain::for_industrial()
+        
+        ⚠️ KALMAN NE ZAMAN?
+        - Model kesin ve doğru
+        - Gürültü Gaussian
+        - Hesaplama maliyeti önemli değil
+        - Aerospace/akademik gereksinim
+        """
+    son
+son
+
+// ============================================================================
+// BENCHMARK VERİLERİ (Referans)
+// ============================================================================
+
+/// Performans karşılaştırması
+pub tip FilterBenchmarks = yapı yap
+son
+
+impl FilterBenchmarks:
+    /// MCU başına cycle/sample (tipik)
+    pub fn cycles_per_sample() döndür metin:
+        döndür """
+        Filtre               | ARM Cortex-M4 | ARM Cortex-M0 | AVR
+        ---------------------|---------------|---------------|--------
+        MovingAverage        |      50       |     100       |   200
+        EMA                  |      20       |      40       |    80
+        Median (7 sample)    |     150       |     300       |   600
+        LowPass (1st order)  |      30       |      60       |   120
+        Alpha-Beta           |      80       |     160       |   320
+        Hampel               |     200       |     400       |   800
+        Complementary        |     100       |     200       |   400
+        Kalman (2x2)         |    1000       |    2000       |  4000+
+        Madgwick AHRS        |     500       |    1000       |  2000
+        
+        Sonuç: Kalman = 10-50× daha yavaş
+        """
+    son
+    
+    /// RAM kullanımı (byte)
+    pub fn ram_usage() döndür metin:
+        döndür """
+        Filtre               | RAM (byte)
+        ---------------------|------------
+        EMA                  |     8
+        MovingAverage(10)    |    48
+        Median(7)            |    32
+        Alpha-Beta           |    24
+        Hampel(7)            |    40
+        Complementary        |    32
+        Kalman (2x2)         |   200+
+        Kalman (6x6)         |   800+
+        
+        Sonuç: Kalman RAM canavarı
+        """
+    son
+son
+
+// ============================================================================
+// QUICK-START CONVENIENCE
+// ============================================================================
+
+/// En hızlı başlangıç için presetler
+pub fn quick_start_filter(use_case: metin) döndür AdaptiveFilter:
+    eşle use_case:
+        "temperature" | "sıcaklık" | "humidity" | "nem":
+            döndür AdaptiveFilter::for_temperature()
+        son
+        "imu" | "motion" | "hareket":
+            döndür AdaptiveFilter::for_imu()
+        son
+        "industrial" | "endüstriyel" | "factory":
+            döndür AdaptiveFilter::for_industrial()
+        son
+        _:
+            döndür AdaptiveFilter::new()
+        son
+    son
+son
+
+// ============================================================================
+// MODÜL DOKÜMANTASYOnu
+// ============================================================================
+//
+// # sensor::filter - Akıllı Filtreleme
+//
+// ## Felsefe
+// "Kalman tek doğru değil, sadece bir araç."
+//
+// BERK'in filtreleme yaklaşımı:
+// 1. Duruma göre strateji seç
+// 2. MCU dostu ol
+// 3. Gerçek dünyayı kabul et (non-Gaussian, outlier, drift)
+//
+// ## Hiyerarşi
+//
+// ```
+// sensor::filter
+// ├── basic         → Temel: EMA, MA, Median, LowPass, HighPass
+// ├── advanced      → Gelişmiş: Alpha-Beta, Hampel, LMS, RobustEMA
+// ├── adaptive      → Adaptif: Context-aware, SNR, Variance-based
+// ├── fusion        → IMU: Complementary, Madgwick, Mahony
+// └── kalman        → Kalman: (Opsiyonel, gerektiğinde)
+// ```
+//
+// ## Örnek Kullanımlar
+//
+// ### Sıcaklık sensörü
+// ```berk
+// import sensor::filter::{ema}
+// 
+// değişken filtre = ema(0.1)
+// döngü:
+//     değişken raw = sıcaklık_oku()
+//     değişken filtered = filtre.apply(raw)
+// son
+// ```
+//
+// ### IMU fusion
+// ```berk
+// import sensor::filter::{complementary}
+// 
+// değişken fusion = complementary(0.98)
+// döngü:
+//     değişken acc = ivme_oku()
+//     değişken gyro = gyro_oku()
+//     değişken açı = fusion.update(acc, gyro, dt)
+// son
+// ```
+//
+// ### Endüstriyel ortam
+// ```berk
+// import sensor::filter::{hybrid_chain, HybridFilterChain}
+// 
+// değişken filtre = HybridFilterChain::for_industrial()
+// döngü:
+//     değişken raw = sensör_oku()
+//     değişken clean = filtre.apply(raw)
+// son
+// ```
+//
+// ### Adaptif (otomatik)
+// ```berk
+// import sensor::filter::{filter_for}
+// 
+// değişken filtre = filter_for("temperature")
+// // veya
+// değişken filtre = filter_for("imu")
+// ```
+//
+// ## Sonuç
+//
+// | Durum                | Öneri                      | Kalman? |
+// |----------------------|----------------------------|---------|
+// | Sıcaklık             | EMA / Threshold Gate       | ❌      |
+// | Basınç               | Moving Average             | ❌      |
+// | IMU single axis      | Alpha-Beta                 | ❌      |
+// | IMU fusion           | Complementary / Madgwick   | ❌      |
+// | Mesafe (outlier'lı)  | Hampel + Median            | ❌      |
+// | Endüstriyel          | Adaptive / Hybrid Chain    | ❌      |
+// | Encoder position     | Alpha-Beta-Gamma           | ❌      |
+// | Aerospace navigation | Kalman                     | ✅      |
+// | Academic requirement | Kalman                     | ✅      |
+//
+// Kalman: %5 case, %95 overkill.
+//
+// ============================================================================

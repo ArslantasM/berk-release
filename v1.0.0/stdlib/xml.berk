@@ -1,0 +1,516 @@
+//! # XML Module
+//!
+//! Advanced XML parsing and generation.
+//!
+//! Gelişmiş XML ayrıştırma ve üretme.
+//!
+//! ## Features / Özellikler
+//!
+//! - **DOM**: Full tree in memory / Bellekte tam ağaç
+//! - **SAX**: Event-based streaming / Olay tabanlı akış
+//! - **Generation**: Pretty-print, compact / Oluşturma
+//! - **XPath**: Element selection queries / XPath sorguları
+//! - **Namespaces**: Full support / Namespace desteği
+//! - **Validation**: DTD, XSD / Doğrulama
+//! - **HTML**: Lenient parsing mode / HTML ayrıştırma
+//!
+//! ## Example / Örnek
+//!
+//! ```berk
+//! kullan xml
+//!
+//! değişken doc = xml.parse("<root><child>Test</child></root>")?
+//! değişken child = xml.xpath(doc, "//child")?
+//! io.println(child.text())  // "Test"
+//! ```
+//!
+//! Backend: Rust quick-xml + roxmltree
+
+modül xml
+
+kullan result
+kullan io
+
+// ============================================================================
+// XML DOCUMENT (DOM)
+// ============================================================================
+
+tip XmlDocument = yapı yap
+    root: XmlElement,
+    version: yazı,        // "1.0"
+    encoding: yazı,       // "UTF-8"
+    standalone: mantıksal
+son
+
+tip XmlElement = yapı yap
+    name: yazı,
+    attributes: liste[(yazı, yazı)],
+    children: liste[XmlNode],
+    namespace: Seçenek[yazı]
+son
+
+tip XmlNode = 
+    Element { element: XmlElement } |
+    Text { content: yazı } |
+    CData { content: yazı } |
+    Comment { content: yazı } |
+    ProcessingInstruction { target: yazı, data: yazı }
+
+// ============================================================================
+// DOM PARSING
+// ============================================================================
+
+// Parse XML from string
+@native
+fonksiyon parse(xml_str: yazı) -> Sonuç[XmlDocument, yazı]
+
+// Parse XML from file
+@native
+fonksiyon parse_file(path: yazı) -> Sonuç[XmlDocument, yazı]
+
+// Parse HTML (lenient mode)
+@native
+fonksiyon parse_html(html_str: yazı) -> Sonuç[XmlDocument, yazı]
+
+// ============================================================================
+// XML GENERATION
+// ============================================================================
+
+// Create new document
+fonksiyon document_new(root_name: yazı) -> XmlDocument
+yap
+    dön XmlDocument yap
+        root: element_new(root_name),
+        version: "1.0",
+        encoding: "UTF-8",
+        standalone: yanlış
+    son
+son
+
+// Create new element
+fonksiyon element_new(name: yazı) -> XmlElement
+yap
+    dön XmlElement yap
+        name: name,
+        attributes: liste_oluştur[(yazı, yazı)](),
+        children: liste_oluştur[XmlNode](),
+        namespace: Hiç
+    son
+son
+
+// Add attribute
+fonksiyon element_set_attr(elem: XmlElement, name: yazı, value: yazı) -> XmlElement
+yap
+    liste_ekle(elem.attributes, (name, value))
+    dön elem
+son
+
+// Get attribute
+fonksiyon element_get_attr(elem: XmlElement, name: yazı) -> Seçenek[yazı]
+yap
+    için attr içinde elem.attributes yap
+        eğer attr.0 == name yap
+            dön Bazı(attr.1)
+        son
+    son
+    dön Hiç
+son
+
+// Add child element
+fonksiyon element_add_child(parent: XmlElement, child: XmlElement) -> XmlElement
+yap
+    liste_ekle(parent.children, Element { element: child })
+    dön parent
+son
+
+// Add text content
+fonksiyon element_add_text(elem: XmlElement, text: yazı) -> XmlElement
+yap
+    liste_ekle(elem.children, Text { content: text })
+    dön elem
+son
+
+// Add CDATA section
+fonksiyon element_add_cdata(elem: XmlElement, content: yazı) -> XmlElement
+yap
+    liste_ekle(elem.children, CData { content: content })
+    dön elem
+son
+
+// Add comment
+fonksiyon element_add_comment(elem: XmlElement, comment: yazı) -> XmlElement
+yap
+    liste_ekle(elem.children, Comment { content: comment })
+    dön elem
+son
+
+// ============================================================================
+// XML SERIALIZATION
+// ============================================================================
+
+// Convert document to string (pretty-print)
+@native
+fonksiyon to_string(doc: XmlDocument) -> yazı
+
+// Convert to string (compact, no whitespace)
+@native
+fonksiyon to_string_compact(doc: XmlDocument) -> yazı
+
+// Write to file
+@native
+fonksiyon write_file(doc: XmlDocument, path: yazı) -> Sonuç[boş, yazı]
+
+// Convert element to string
+@native
+fonksiyon element_to_string(elem: XmlElement) -> yazı
+
+// ============================================================================
+// XPATH QUERIES
+// ============================================================================
+
+// Find elements by XPath
+@native
+fonksiyon xpath(doc: XmlDocument, query: yazı) -> Sonuç[liste[XmlElement], yazı]
+
+// Find single element by XPath
+@native
+fonksiyon xpath_one(doc: XmlDocument, query: yazı) -> Sonuç[Seçenek[XmlElement], yazı]
+
+// Common XPath examples:
+// "/root/child"           - Direct child
+// "//child"               - Any descendant
+// "/root/child[@id='1']"  - With attribute
+// "//child[1]"            - First child
+// "//child[last()]"       - Last child
+// "//*[@class='foo']"     - Any element with attribute
+
+// ============================================================================
+// ELEMENT NAVIGATION
+// ============================================================================
+
+// Get element name
+fonksiyon element_name(elem: XmlElement) -> yazı
+yap
+    dön elem.name
+son
+
+// Get text content (concatenate all text nodes)
+@native
+fonksiyon element_text(elem: XmlElement) -> yazı
+
+// Get all child elements
+fonksiyon element_children(elem: XmlElement) -> liste[XmlElement]
+yap
+    değişken result = liste_oluştur[XmlElement]()
+    
+    için node içinde elem.children yap
+        eşleşme node yap
+            Element { element } => liste_ekle(result, element),
+            _ => devam
+        son
+    son
+    
+    dön result
+son
+
+// Find child by name
+fonksiyon element_find_child(elem: XmlElement, name: yazı) -> Seçenek[XmlElement]
+yap
+    için child içinde element_children(elem) yap
+        eğer child.name == name yap
+            dön Bazı(child)
+        son
+    son
+    dön Hiç
+son
+
+// Find all children by name
+fonksiyon element_find_children(elem: XmlElement, name: yazı) -> liste[XmlElement]
+yap
+    değişken result = liste_oluştur[XmlElement]()
+    
+    için child içinde element_children(elem) yap
+        eğer child.name == name yap
+            liste_ekle(result, child)
+        son
+    son
+    
+    dön result
+son
+
+// ============================================================================
+// SAX PARSING (Event-Based)
+// ============================================================================
+
+tip SaxEvent = 
+    StartDocument |
+    EndDocument |
+    StartElement { name: yazı, attributes: liste[(yazı, yazı)] } |
+    EndElement { name: yazı } |
+    Text { content: yazı } |
+    Comment { content: yazı } |
+    Error { message: yazı }
+
+tip SaxHandler = yapı yap
+    on_start_document: Seçenek[fonksiyon() -> boş],
+    on_end_document: Seçenek[fonksiyon() -> boş],
+    on_start_element: Seçenek[fonksiyon(yazı, liste[(yazı, yazı)]) -> boş],
+    on_end_element: Seçenek[fonksiyon(yazı) -> boş],
+    on_text: Seçenek[fonksiyon(yazı) -> boş],
+    on_comment: Seçenek[fonksiyon(yazı) -> boş]
+son
+
+// Parse XML with SAX (event-based, memory-efficient)
+@native
+fonksiyon parse_sax(xml_str: yazı, handler: SaxHandler) -> Sonuç[boş, yazı]
+
+// Parse file with SAX
+@native
+fonksiyon parse_file_sax(path: yazı, handler: SaxHandler) -> Sonuç[boş, yazı]
+
+// ============================================================================
+// XML STREAMING (Large Files)
+// ============================================================================
+
+tip XmlReader = yapı yap
+    handle: tamsayı,
+    current_event: Seçenek[SaxEvent]
+son
+
+// Create XML reader (streaming)
+@native
+fonksiyon reader_new(xml_str: yazı) -> XmlReader
+
+// Read next event
+@native
+fonksiyon reader_next(reader: XmlReader) -> Seçenek[SaxEvent]
+
+// ============================================================================
+// NAMESPACE SUPPORT
+// ============================================================================
+
+tip XmlNamespace = yapı yap
+    prefix: yazı,
+    uri: yazı
+son
+
+// Set namespace
+fonksiyon element_set_namespace(elem: XmlElement, prefix: yazı, uri: yazı) -> XmlElement
+yap
+    elem.namespace = Bazı(uri)
+    element_set_attr(elem, string::format("xmlns:{}", [prefix]), uri)
+    dön elem
+son
+
+// Get namespace URI
+fonksiyon element_namespace(elem: XmlElement) -> Seçenek[yazı]
+yap
+    dön elem.namespace
+son
+
+// ============================================================================
+// XML VALIDATION
+// ============================================================================
+
+// Validate against DTD
+@native
+fonksiyon validate_dtd(doc: XmlDocument, dtd: yazı) -> Sonuç[mantıksal, yazı]
+
+// Validate against XSD (XML Schema)
+@native
+fonksiyon validate_xsd(doc: XmlDocument, xsd_path: yazı) -> Sonuç[mantıksal, yazı]
+
+// Well-formed check (syntax only)
+@native
+fonksiyon is_well_formed(xml_str: yazı) -> mantıksal
+
+// ============================================================================
+// XML BUILDER (Fluent API)
+// ============================================================================
+
+tip XmlBuilder = yapı yap
+    current: XmlElement,
+    stack: liste[XmlElement]
+son
+
+// Create builder
+fonksiyon builder_new(root_name: yazı) -> XmlBuilder
+yap
+    dön XmlBuilder yap
+        current: element_new(root_name),
+        stack: liste_oluştur[XmlElement]()
+    son
+son
+
+// Add element and enter
+fonksiyon builder_element(builder: XmlBuilder, name: yazı) -> XmlBuilder
+yap
+    liste_ekle(builder.stack, builder.current)
+    builder.current = element_new(name)
+    dön builder
+son
+
+// Add attribute
+fonksiyon builder_attr(builder: XmlBuilder, name: yazı, value: yazı) -> XmlBuilder
+yap
+    element_set_attr(builder.current, name, value)
+    dön builder
+son
+
+// Add text
+fonksiyon builder_text(builder: XmlBuilder, text: yazı) -> XmlBuilder
+yap
+    element_add_text(builder.current, text)
+    dön builder
+son
+
+// Exit element
+fonksiyon builder_end(builder: XmlBuilder) -> XmlBuilder
+yap
+    eğer liste_uzunluk(builder.stack) > 0 yap
+        değişken parent = liste_pop(builder.stack)
+        element_add_child(parent, builder.current)
+        builder.current = parent
+    son
+    dön builder
+son
+
+// Build document
+fonksiyon builder_build(builder: XmlBuilder) -> XmlDocument
+yap
+    dön XmlDocument yap
+        root: builder.current,
+        version: "1.0",
+        encoding: "UTF-8",
+        standalone: yanlış
+    son
+son
+
+// ============================================================================
+// XML UTILITIES
+// ============================================================================
+
+// Escape XML special characters
+@native
+fonksiyon escape(text: yazı) -> yazı
+
+// Unescape XML entities
+@native
+fonksiyon unescape(text: yazı) -> yazı
+
+// Pretty-print with custom indent
+@native
+fonksiyon pretty_print(doc: XmlDocument, indent: tamsayı) -> yazı
+
+// Minify (remove all whitespace)
+@native
+fonksiyon minify(doc: XmlDocument) -> yazı
+
+// Convert XML to JSON
+@native
+fonksiyon to_json(doc: XmlDocument) -> yazı
+
+// Convert JSON to XML
+@native
+fonksiyon from_json(json_str: yazı, root_name: yazı) -> Sonuç[XmlDocument, yazı]
+
+// ============================================================================
+// COMMON XML PATTERNS
+// ============================================================================
+
+// RSS feed parsing
+tip RssItem = yapı yap
+    title: yazı,
+    link: yazı,
+    description: yazı,
+    pub_date: yazı
+son
+
+fonksiyon parse_rss(xml_str: yazı) -> Sonuç[liste[RssItem], yazı]
+yap
+    değişken doc = parse(xml_str)?
+    değişken items = xpath(doc, "//item")?
+    değişken result = liste_oluştur[RssItem]()
+    
+    için item içinde items yap
+        değişken title_elem = element_find_child(item, "title")
+        değişken link_elem = element_find_child(item, "link")
+        değişken desc_elem = element_find_child(item, "description")
+        değişken date_elem = element_find_child(item, "pubDate")
+        
+        eğer title_elem.bazı_mı() && link_elem.bazı_mı() yap
+            liste_ekle(result, RssItem yap
+                title: element_text(title_elem.unwrap()),
+                link: element_text(link_elem.unwrap()),
+                description: eğer desc_elem.bazı_mı() yap element_text(desc_elem.unwrap()) son değilse yap "" son,
+                pub_date: eğer date_elem.bazı_mı() yap element_text(date_elem.unwrap()) son değilse yap "" son
+            son)
+        son
+    son
+    
+    dön Tamam(result)
+son
+
+// SVG parsing helper
+fonksiyon parse_svg(svg_str: yazı) -> Sonuç[XmlDocument, yazı]
+yap
+    dön parse(svg_str)
+son
+
+// ============================================================================
+// XML DIFF & MERGE
+// ============================================================================
+
+// Compare two XML documents
+@native
+fonksiyon xml_diff(doc1: XmlDocument, doc2: XmlDocument) -> liste[yazı]  // List of differences
+
+// Merge XML documents
+@native
+fonksiyon xml_merge(doc1: XmlDocument, doc2: XmlDocument) -> XmlDocument
+
+// ============================================================================
+// TURKISH ALIASES
+// ============================================================================
+
+fonksiyon ayrıştır(xml: yazı) -> Sonuç[XmlDocument, yazı]
+yap
+    dön parse(xml)
+son
+
+fonksiyon dosyadan_ayrıştır(yol: yazı) -> Sonuç[XmlDocument, yazı]
+yap
+    dön parse_file(yol)
+son
+
+fonksiyon belge_oluştur(kök_adı: yazı) -> XmlDocument
+yap
+    dön document_new(kök_adı)
+son
+
+fonksiyon eleman_oluştur(ad: yazı) -> XmlElement
+yap
+    dön element_new(ad)
+son
+
+fonksiyon özellik_ekle(elem: XmlElement, ad: yazı, değer: yazı) -> XmlElement
+yap
+    dön element_set_attr(elem, ad, değer)
+son
+
+fonksiyon metin_ekle(elem: XmlElement, metin: yazı) -> XmlElement
+yap
+    dön element_add_text(elem, metin)
+son
+
+fonksiyon yazıya_çevir(belge: XmlDocument) -> yazı
+yap
+    dön to_string(belge)
+son
+
+fonksiyon dosyaya_yaz(belge: XmlDocument, yol: yazı) -> Sonuç[boş, yazı]
+yap
+    dön write_file(belge, yol)
+son
+
+son  // modül xml

@@ -1,0 +1,240 @@
+// stdlib/embedded/bal/adc.berk
+// Backend Abstraction Layer - ADC Interface
+// Platform-independent ADC (Analog-to-Digital Converter) API
+
+import "embedded/bal/time" as time
+
+/// ADC resolution (bits)
+pub enum Resolution {
+    Bits8,      // 8-bit (0-255)
+    Bits10,     // 10-bit (0-1023)
+    Bits12,     // 12-bit (0-4095) - most common
+    Bits14,     // 14-bit (0-16383)
+    Bits16,     // 16-bit (0-65535)
+}
+
+/// ADC reference voltage source
+pub enum Reference {
+    VCC,        // Use VCC as reference
+    Internal,   // Internal reference (e.g., 1.1V, 2.5V)
+    External,   // External reference pin
+}
+
+/// ADC sampling mode
+pub enum SamplingMode {
+    Single,     // Single conversion
+    Continuous, // Continuous conversion
+    Scan,       // Scan multiple channels
+}
+
+/// ADC error types
+pub enum Error {
+    Timeout,        // Conversion timeout
+    Overrun,        // Data overrun
+    InvalidChannel, // Invalid channel number
+    NotReady,       // ADC not ready
+}
+
+pub type Result<T> = stdlib.result.Result<T, Error>
+
+/// ADC configuration
+pub struct Config {
+    channel: u8,            // ADC channel number
+    pin: u8,                // Analog input pin
+    resolution: Resolution,
+    reference: Reference,
+    sampling_mode: SamplingMode,
+    sample_time_us: u32,    // Sample time in microseconds
+}
+
+/// ADC HAL interface that platforms must implement
+pub interface ADC_HAL {
+    /// Initialize ADC channel
+    fn init(config: Config) -> Result<()>
+    
+    /// Deinitialize ADC channel
+    fn deinit(channel: u8)
+    
+    /// Read raw ADC value (0 to max resolution)
+    fn read_raw(channel: u8) -> Result<u16>
+    
+    /// Read voltage (in volts)
+    fn read_voltage(channel: u8) -> Result<f32>
+    
+    /// Start continuous conversion
+    fn start_continuous(channel: u8)
+    
+    /// Stop continuous conversion
+    fn stop_continuous(channel: u8)
+    
+    /// Set resolution
+    fn set_resolution(channel: u8, resolution: Resolution) -> Result<()>
+    
+    /// Set reference voltage
+    fn set_reference(channel: u8, reference: Reference) -> Result<()>
+    
+    /// Calibrate ADC
+    fn calibrate(channel: u8) -> Result<()>
+    
+    /// Attach conversion complete callback
+    fn on_conversion_complete(channel: u8, handler: fn(value: u16))
+}
+
+// High-level convenience functions
+
+/// Initialize ADC with default settings (12-bit, VCC reference)
+pub fn init_default(channel: u8, pin: u8) -> Result<()> {
+    let config = Config {
+        channel: channel,
+        pin: pin,
+        resolution: Resolution.Bits12,
+        reference: Reference.VCC,
+        sampling_mode: SamplingMode.Single,
+        sample_time_us: 10,
+    }
+    ADC_HAL.init(config)
+}
+
+/// Read ADC value as percentage (0.0-100.0%)
+pub fn read_percentage(channel: u8) -> Result<f32> {
+    let raw = ADC_HAL.read_raw(channel)? as f32
+    let max = 4095.0  // 12-bit max
+    Ok((raw / max) * 100.0)
+}
+
+/// Read ADC value normalized to 0.0-1.0 range
+pub fn read_normalized(channel: u8) -> Result<f32> {
+    let raw = ADC_HAL.read_raw(channel)? as f32
+    let max = 4095.0  // 12-bit max
+    Ok(raw / max)
+}
+
+/// Read temperature from internal sensor (if available)
+pub fn read_temperature(channel: u8) -> Result<f32> {
+    // Platform-specific conversion
+    let voltage = ADC_HAL.read_voltage(channel)?
+    // Typical: 1.43V at 25°C, -4.3mV/°C
+    let temp = 25.0 + (voltage - 1.43) / -0.0043
+    Ok(temp)
+}
+
+/// Read with averaging (reduce noise)
+pub fn read_averaged(channel: u8, samples: u32) -> Result<u16> {
+    let mut sum: u32 = 0
+    
+    for _ in 0..samples {
+        sum += ADC_HAL.read_raw(channel)? as u32
+        time.delay_us(100)
+    }
+    
+    Ok((sum / samples) as u16)
+}
+
+/// Read with median filtering (reject outliers)
+pub fn read_median(channel: u8, samples: u32) -> Result<u16> {
+    let mut values: [u16; samples] = [0; samples]
+    
+    for i in 0..samples {
+        values[i] = ADC_HAL.read_raw(channel)?
+        time.delay_us(100)
+    }
+    
+    // Sort values
+    values.sort()
+    
+    // Return median
+    Ok(values[samples / 2])
+}
+
+/// Map ADC value to custom range
+pub fn map_range(channel: u8, out_min: f32, out_max: f32) -> Result<f32> {
+    let raw = ADC_HAL.read_raw(channel)? as f32
+    let max = 4095.0  // 12-bit max
+    let normalized = raw / max
+    Ok(out_min + normalized * (out_max - out_min))
+}
+
+/// Read potentiometer angle (0-360 degrees)
+pub fn read_potentiometer_angle(channel: u8) -> Result<f32> {
+    map_range(channel, 0.0, 360.0)
+}
+
+/// Read light sensor (lux approximation)
+pub fn read_light_sensor(channel: u8) -> Result<f32> {
+    // Typical LDR: higher voltage = more light
+    let voltage = ADC_HAL.read_voltage(channel)?
+    // Simple linear approximation (calibrate for actual sensor)
+    let lux = voltage * 1000.0
+    Ok(lux)
+}
+
+/// Read battery voltage (with voltage divider)
+pub fn read_battery_voltage(channel: u8, r1: f32, r2: f32) -> Result<f32> {
+    // Voltage divider: Vout = Vin * (R2 / (R1 + R2))
+    let vout = ADC_HAL.read_voltage(channel)?
+    let vin = vout * (r1 + r2) / r2
+    Ok(vin)
+}
+
+/// Read battery percentage (LiPo 3.0V-4.2V)
+pub fn read_battery_percentage(channel: u8, r1: f32, r2: f32) -> Result<f32> {
+    let voltage = read_battery_voltage(channel, r1, r2)?
+    
+    // LiPo voltage curve (simplified)
+    let percentage = if voltage >= 4.2 {
+        100.0
+    } else if voltage <= 3.0 {
+        0.0
+    } else {
+        (voltage - 3.0) / (4.2 - 3.0) * 100.0
+    }
+    
+    Ok(percentage)
+}
+
+/// Monitor voltage with callback on threshold
+pub fn monitor_voltage(channel: u8, threshold: f32, callback: fn(voltage: f32)) {
+    loop {
+        match ADC_HAL.read_voltage(channel) {
+            Ok(voltage) => {
+                if voltage < threshold {
+                    callback(voltage)
+                }
+            },
+            Err(_) => {}
+        }
+        time.sleep_ms(1000)
+    }
+}
+
+/// Continuous sampling with callback
+pub fn sample_continuous(channel: u8, interval_ms: u32, callback: fn(value: u16)) {
+    ADC_HAL.start_continuous(channel)
+    
+    loop {
+        match ADC_HAL.read_raw(channel) {
+            Ok(value) => callback(value),
+            Err(_) => {}
+        }
+        time.sleep_ms(interval_ms)
+    }
+}
+
+/// Detect threshold crossing (edge detection)
+pub fn wait_for_threshold(channel: u8, threshold: u16, rising: bool) -> Result<()> {
+    let mut prev_value = ADC_HAL.read_raw(channel)?
+    
+    loop {
+        let value = ADC_HAL.read_raw(channel)?
+        
+        if rising && prev_value < threshold && value >= threshold {
+            return Ok(())
+        }
+        if !rising && prev_value >= threshold && value < threshold {
+            return Ok(())
+        }
+        
+        prev_value = value
+        time.delay_us(100)
+    }
+}

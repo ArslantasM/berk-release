@@ -1,0 +1,448 @@
+// ============================================================================
+// BERK GUI Framework - Waypoint System
+// ============================================================================
+// Synfig Waypoint sisteminden ilham alınmıştır
+// Animasyon zaman çizelgesindeki kilit noktaları temsil eder
+// ============================================================================
+
+modül gui::animation::waypoint
+
+kullan gui::animation::time::Time
+kullan gui::animation::interpolation::Interpolation
+
+// ============================================================================
+// WAYPOINT - Animasyon Kilit Noktası
+// ============================================================================
+
+/// Waypoint, animasyonun belirli bir anındaki değeri ve 
+/// bu noktaya nasıl gelinip nasıl çıkılacağını tanımlar
+pub tip Waypoint[T] = yapı yap
+    /// Benzersiz ID
+    id: sayı,
+    
+    /// Zaman noktası
+    time: Time,
+    
+    /// Bu noktadaki değer
+    value: T,
+    
+    /// Bu noktaya giriş interpolasyonu
+    interpolation_before: Interpolation,
+    
+    /// Bu noktadan çıkış interpolasyonu  
+    interpolation_after: Interpolation,
+    
+    /// Öncelik (çakışan waypoint'ler için)
+    priority: sayı,
+    
+    /// TCB parametreleri (Tension, Continuity, Bias)
+    tension: ondalık,
+    continuity: ondalık,
+    bias: ondalık,
+    
+    /// Temporal tension (zaman ekseninde gerilim)
+    temporal_tension: ondalık,
+    
+    /// Etkin mi?
+    enabled: mantıksal,
+son
+
+/// Waypoint ID sayacı
+değişken waypoint_id_counter: sayı = 0
+
+impl Waypoint[T]:
+    // ========================================================================
+    // CONSTRUCTORS
+    // ========================================================================
+    
+    /// Yeni waypoint oluştur
+    pub fn new(time: Time, value: T) döndür Waypoint[T]:
+        waypoint_id_counter = waypoint_id_counter + 1
+        döndür Waypoint {
+            id: waypoint_id_counter,
+            time: time,
+            value: value,
+            interpolation_before: Interpolation::TCB(0.0, 0.0, 0.0),
+            interpolation_after: Interpolation::TCB(0.0, 0.0, 0.0),
+            priority: 0,
+            tension: 0.0,
+            continuity: 0.0,
+            bias: 0.0,
+            temporal_tension: 0.0,
+            enabled: doğru,
+        }
+    son
+    
+    /// Lineer interpolasyonlu waypoint
+    pub fn linear(time: Time, value: T) döndür Waypoint[T]:
+        değişken wp = Waypoint::new(time, value)
+        wp.interpolation_before = Interpolation::Linear
+        wp.interpolation_after = Interpolation::Linear
+        döndür wp
+    son
+    
+    /// Sabit değerli waypoint (step)
+    pub fn constant(time: Time, value: T) döndür Waypoint[T]:
+        değişken wp = Waypoint::new(time, value)
+        wp.interpolation_before = Interpolation::Constant
+        wp.interpolation_after = Interpolation::Constant
+        döndür wp
+    son
+    
+    /// Ease in/out waypoint
+    pub fn ease(time: Time, value: T) döndür Waypoint[T]:
+        değişken wp = Waypoint::new(time, value)
+        // Cubic bezier ease-in-out: (0.42, 0, 0.58, 1)
+        wp.interpolation_before = Interpolation::Bezier(0.42, 0.0, 0.58, 1.0)
+        wp.interpolation_after = Interpolation::Bezier(0.42, 0.0, 0.58, 1.0)
+        döndür wp
+    son
+    
+    // ========================================================================
+    // SETTERS (Builder Pattern)
+    // ========================================================================
+    
+    /// Giriş interpolasyonunu ayarla
+    pub fn with_before(mut self, interp: Interpolation) döndür Waypoint[T]:
+        self.interpolation_before = interp
+        döndür self
+    son
+    
+    /// Çıkış interpolasyonunu ayarla
+    pub fn with_after(mut self, interp: Interpolation) döndür Waypoint[T]:
+        self.interpolation_after = interp
+        döndür self
+    son
+    
+    /// Her iki interpolasyonu ayarla
+    pub fn with_interpolation(mut self, interp: Interpolation) döndür Waypoint[T]:
+        self.interpolation_before = interp
+        self.interpolation_after = interp
+        döndür self
+    son
+    
+    /// TCB değerlerini ayarla
+    pub fn with_tcb(mut self, tension: ondalık, continuity: ondalık, bias: ondalık) döndür Waypoint[T]:
+        self.tension = tension
+        self.continuity = continuity
+        self.bias = bias
+        self.interpolation_before = Interpolation::TCB(tension, continuity, bias)
+        self.interpolation_after = Interpolation::TCB(tension, continuity, bias)
+        döndür self
+    son
+    
+    /// Öncelik ayarla
+    pub fn with_priority(mut self, priority: sayı) döndür Waypoint[T]:
+        self.priority = priority
+        döndür self
+    son
+    
+    /// Temporal tension ayarla
+    pub fn with_temporal_tension(mut self, tt: ondalık) döndür Waypoint[T]:
+        self.temporal_tension = tt
+        döndür self
+    son
+    
+    // ========================================================================
+    // GETTERS
+    // ========================================================================
+    
+    /// ID'yi al
+    pub fn get_id(self) döndür sayı:
+        döndür self.id
+    son
+    
+    /// Zamanı al
+    pub fn get_time(self) döndür Time:
+        döndür self.time
+    son
+    
+    /// Değeri al
+    pub fn get_value(self) döndür T:
+        döndür self.value
+    son
+    
+    /// Giriş interpolasyonunu al
+    pub fn get_before(self) döndür Interpolation:
+        döndür self.interpolation_before
+    son
+    
+    /// Çıkış interpolasyonunu al
+    pub fn get_after(self) döndür Interpolation:
+        döndür self.interpolation_after
+    son
+    
+    // ========================================================================
+    // MODIFIERS
+    // ========================================================================
+    
+    /// Zamanı değiştir
+    pub fn set_time(mut self, time: Time) döndür void:
+        self.time = time
+    son
+    
+    /// Değeri değiştir
+    pub fn set_value(mut self, value: T) döndür void:
+        self.value = value
+    son
+    
+    /// Etkinliği değiştir
+    pub fn set_enabled(mut self, enabled: mantıksal) döndür void:
+        self.enabled = enabled
+    son
+    
+    // ========================================================================
+    // UTILITIES
+    // ========================================================================
+    
+    /// Waypoint etkin mi?
+    pub fn is_enabled(self) döndür mantıksal:
+        döndür self.enabled
+    son
+    
+    /// Animasyonlu mu (sabit değil)?
+    pub fn is_animated(self) döndür mantıksal:
+        döndür self.interpolation_before.is_animated() || 
+               self.interpolation_after.is_animated()
+    son
+    
+    /// Kopyala
+    pub fn clone(self) döndür Waypoint[T]:
+        döndür Waypoint {
+            id: self.id,
+            time: self.time,
+            value: self.value.clone(),
+            interpolation_before: self.interpolation_before,
+            interpolation_after: self.interpolation_after,
+            priority: self.priority,
+            tension: self.tension,
+            continuity: self.continuity,
+            bias: self.bias,
+            temporal_tension: self.temporal_tension,
+            enabled: self.enabled,
+        }
+    son
+son
+
+// ============================================================================
+// WAYPOINT MODEL - Waypoint düzenleme modeli
+// ============================================================================
+
+/// Waypoint'i düzenlemek için kullanılan model
+/// Synfig'in Waypoint::Model'inden ilham alınmıştır
+pub tip WaypointModel = yapı yap
+    // Değerler
+    priority: Seçenek[sayı],
+    before: Seçenek[Interpolation],
+    after: Seçenek[Interpolation],
+    tension: Seçenek[ondalık],
+    continuity: Seçenek[ondalık],
+    bias: Seçenek[ondalık],
+    temporal_tension: Seçenek[ondalık],
+son
+
+impl WaypointModel:
+    /// Boş model oluştur
+    pub fn new() döndür WaypointModel:
+        döndür WaypointModel {
+            priority: Hiçbiri,
+            before: Hiçbiri,
+            after: Hiçbiri,
+            tension: Hiçbiri,
+            continuity: Hiçbiri,
+            bias: Hiçbiri,
+            temporal_tension: Hiçbiri,
+        }
+    son
+    
+    /// Giriş interpolasyonunu ayarla
+    pub fn set_before(mut self, interp: Interpolation) döndür WaypointModel:
+        self.before = Bazı(interp)
+        döndür self
+    son
+    
+    /// Çıkış interpolasyonunu ayarla
+    pub fn set_after(mut self, interp: Interpolation) döndür WaypointModel:
+        self.after = Bazı(interp)
+        döndür self
+    son
+    
+    /// Tension ayarla
+    pub fn set_tension(mut self, t: ondalık) döndür WaypointModel:
+        self.tension = Bazı(t)
+        döndür self
+    son
+    
+    /// Continuity ayarla
+    pub fn set_continuity(mut self, c: ondalık) döndür WaypointModel:
+        self.continuity = Bazı(c)
+        döndür self
+    son
+    
+    /// Bias ayarla
+    pub fn set_bias(mut self, b: ondalık) döndür WaypointModel:
+        self.bias = Bazı(b)
+        döndür self
+    son
+    
+    /// Modeli waypoint'e uygula
+    pub fn apply[T](self, mut waypoint: Waypoint[T]) döndür Waypoint[T]:
+        eğer self.priority.is_some():
+            waypoint.priority = self.priority.unwrap()
+        son
+        eğer self.before.is_some():
+            waypoint.interpolation_before = self.before.unwrap()
+        son
+        eğer self.after.is_some():
+            waypoint.interpolation_after = self.after.unwrap()
+        son
+        eğer self.tension.is_some():
+            waypoint.tension = self.tension.unwrap()
+        son
+        eğer self.continuity.is_some():
+            waypoint.continuity = self.continuity.unwrap()
+        son
+        eğer self.bias.is_some():
+            waypoint.bias = self.bias.unwrap()
+        son
+        eğer self.temporal_tension.is_some():
+            waypoint.temporal_tension = self.temporal_tension.unwrap()
+        son
+        döndür waypoint
+    son
+    
+    /// Modeli sıfırla
+    pub fn reset(mut self) döndür void:
+        self.priority = Hiçbiri
+        self.before = Hiçbiri
+        self.after = Hiçbiri
+        self.tension = Hiçbiri
+        self.continuity = Hiçbiri
+        self.bias = Hiçbiri
+        self.temporal_tension = Hiçbiri
+    son
+son
+
+// ============================================================================
+// WAYPOINT LIST - Waypoint koleksiyonu
+// ============================================================================
+
+/// Sıralı waypoint listesi
+pub tip WaypointList[T] = yapı yap
+    waypoints: Liste[Waypoint[T]],
+son
+
+impl WaypointList[T]:
+    /// Yeni boş liste
+    pub fn new() döndür WaypointList[T]:
+        döndür WaypointList { waypoints: [] }
+    son
+    
+    /// Waypoint ekle (zamana göre sıralı)
+    pub fn add(mut self, waypoint: Waypoint[T]) döndür void:
+        // Doğru pozisyonu bul
+        değişken pos = 0
+        döngü i in 0..self.waypoints.len():
+            eğer self.waypoints[i].time.greater_than(waypoint.time):
+                kır
+            son
+            pos = i + 1
+        son
+        
+        self.waypoints.insert(pos, waypoint)
+    son
+    
+    /// Zamana göre waypoint bul
+    pub fn find_at(self, time: Time) döndür Seçenek[Waypoint[T]]:
+        döngü wp in self.waypoints:
+            eğer wp.time.equals(time):
+                döndür Bazı(wp)
+            son
+        son
+        döndür Hiçbiri
+    son
+    
+    /// ID'ye göre waypoint bul
+    pub fn find_by_id(self, id: sayı) döndür Seçenek[Waypoint[T]]:
+        döngü wp in self.waypoints:
+            eğer wp.id == id:
+                döndür Bazı(wp)
+            son
+        son
+        döndür Hiçbiri
+    son
+    
+    /// Zamandan önceki ve sonraki waypoint'leri bul
+    pub fn find_surrounding(self, time: Time) döndür (Seçenek[Waypoint[T]], Seçenek[Waypoint[T]]):
+        değişken before: Seçenek[Waypoint[T]] = Hiçbiri
+        değişken after: Seçenek[Waypoint[T]] = Hiçbiri
+        
+        döngü i in 0..self.waypoints.len():
+            değişken wp = self.waypoints[i]
+            
+            eğer wp.time.less_or_equal(time):
+                before = Bazı(wp)
+            değilse:
+                after = Bazı(wp)
+                kır
+            son
+        son
+        
+        döndür (before, after)
+    son
+    
+    /// Waypoint sil
+    pub fn remove(mut self, id: sayı) döndür mantıksal:
+        döngü i in 0..self.waypoints.len():
+            eğer self.waypoints[i].id == id:
+                self.waypoints.remove(i)
+                döndür doğru
+            son
+        son
+        döndür yanlış
+    son
+    
+    /// Tüm waypoint'leri al
+    pub fn all(self) döndür Liste[Waypoint[T]]:
+        döndür self.waypoints.clone()
+    son
+    
+    /// Waypoint sayısı
+    pub fn len(self) döndür sayı:
+        döndür self.waypoints.len()
+    son
+    
+    /// Boş mu?
+    pub fn is_empty(self) döndür mantıksal:
+        döndür self.waypoints.is_empty()
+    son
+    
+    /// İlk waypoint
+    pub fn first(self) döndür Seçenek[Waypoint[T]]:
+        eğer self.waypoints.is_empty():
+            döndür Hiçbiri
+        son
+        döndür Bazı(self.waypoints[0])
+    son
+    
+    /// Son waypoint
+    pub fn last(self) döndür Seçenek[Waypoint[T]]:
+        eğer self.waypoints.is_empty():
+            döndür Hiçbiri
+        son
+        döndür Bazı(self.waypoints[self.waypoints.len() - 1])
+    son
+    
+    /// Zaman aralığını al
+    pub fn time_range(self) döndür Seçenek[(Time, Time)]:
+        eğer self.waypoints.is_empty():
+            döndür Hiçbiri
+        son
+        döndür Bazı((self.waypoints[0].time, self.waypoints[self.waypoints.len() - 1].time))
+    son
+    
+    /// Tümünü temizle
+    pub fn clear(mut self) döndür void:
+        self.waypoints.clear()
+    son
+son

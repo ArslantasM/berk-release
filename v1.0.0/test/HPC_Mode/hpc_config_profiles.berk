@@ -1,0 +1,220 @@
+// ============================================================================
+// BERK-DDS HPC Mode - Konfigürasyon Profilleri Demo
+// ============================================================================
+// Bu demo farklı kullanım senaryoları için HPC konfigürasyon profillerini
+// gösterir.
+//
+// Profiller:
+//   1. Ultra-Low Latency (finansal sistemler)
+//   2. High Throughput (veri işleme)
+//   3. Real-Time Control (robotik)
+//   4. Mixed Workload (genel kullanım)
+//
+// NOT: DDS spesifikasyonuna göre modül başına tek participant tanımlanır.
+//      Bu demo profilleri kavramsal olarak gösterir.
+// ============================================================================
+
+yazdır("╔══════════════════════════════════════════════════════════════════╗")
+yazdır("║      BERK-DDS HPC MODE - KONFİGÜRASYON PROFİLLERİ              ║")
+yazdır("╚══════════════════════════════════════════════════════════════════╝\n")
+
+// ============================================================================
+// Aktif Profil: Mixed Workload (örnek amaçlı)
+// ============================================================================
+yazdır("      Aktif Konfigürasyon: MIXED WORKLOAD Profili\n")
+
+katılımcı 1
+
+konu events: EventData (güvenilir, geçmiş=100)
+konu metrics: MetricsData (elinden_gelen)
+konu commands: CommandData (güvenilir, kalıcı)
+
+yazdır("   ✓ DDS Participant aktif (domain: 1)")
+yazdır("   ✓ 3 Topic tanımlandı\n")
+
+// ============================================================================
+// Profil 1: Ultra-Low Latency
+// ============================================================================
+yazdır("═══════════════════════════════════════════════════════════════════")
+yazdır("    PROFİL 1: ULTRA-LOW LATENCY (Finansal Sistemler)")
+yazdır("═══════════════════════════════════════════════════════════════════\n")
+
+yazdır("   Kullanım Alanları:")
+yazdır("   ├─ High-frequency trading (HFT)")
+yazdır("   ├─ Market data distribution")
+yazdır("   └─ Order execution systems")
+
+yazdır("\n   Örnek Topic'ler:")
+yazdır("   ├─ market_tick: TickData (BEST_EFFORT)")
+yazdır("   ├─ order_request: OrderMsg (RELIABLE)")
+yazdır("   └─ execution_report: ExecutionMsg (RELIABLE)")
+
+yazdır("\n   Konfigürasyon:")
+yazdır("   ┌─────────────────────────┬────────────────────────────────────┐")
+yazdır("   │ Parametre               │ Değer                              │")
+yazdır("   ├─────────────────────────┼────────────────────────────────────┤")
+yazdır("   │ Ring Buffer Size        │ 64 KB (sıcak cache)                │")
+yazdır("   │ Batch Size              │ 1 (her mesaj anında)               │")
+yazdır("   │ Core Affinity           │ Dedicated core (isolated)          │")
+yazdır("   │ Memory                  │ Huge Pages (2MB)                   │")
+yazdır("   │ Scheduler               │ SCHED_FIFO, priority 99            │")
+yazdır("   │ Network                 │ Kernel bypass (DPDK/RDMA)          │")
+yazdır("   └─────────────────────────┴────────────────────────────────────┘")
+
+yazdır("\n   Beklenen Performans:")
+yazdır("   ├─ P50 Latency:    < 1 μs")
+yazdır("   ├─ P99 Latency:    < 5 μs")
+yazdır("   ├─ P99.99 Latency: < 10 μs")
+yazdır("   └─ Jitter:         < 0.5 μs")
+
+// ============================================================================
+// Profil 2: High Throughput
+// ============================================================================
+yazdır("\n═══════════════════════════════════════════════════════════════════")
+yazdır("    PROFİL 2: HIGH THROUGHPUT (Veri İşleme)")
+yazdır("═══════════════════════════════════════════════════════════════════\n")
+
+yazdır("   Kullanım Alanları:")
+yazdır("   ├─ Big data streaming")
+yazdır("   ├─ Log aggregation")
+yazdır("   └─ Bulk data transfer")
+
+yazdır("\n   Örnek Topic'ler:")
+yazdır("   ├─ data_stream: BulkData (BEST_EFFORT, History=1000)")
+yazdır("   └─ processed_batch: BatchResult (RELIABLE, TRANSIENT)")
+
+yazdır("\n   Konfigürasyon:")
+yazdır("   ┌─────────────────────────┬────────────────────────────────────┐")
+yazdır("   │ Parametre               │ Değer                              │")
+yazdır("   ├─────────────────────────┼────────────────────────────────────┤")
+yazdır("   │ Ring Buffer Size        │ 256 MB (maximum throughput)        │")
+yazdır("   │ Batch Size              │ 4096 (optimal batching)            │")
+yazdır("   │ Core Affinity           │ Multi-core (work-stealing)         │")
+yazdır("   │ Memory                  │ Huge Pages + NUMA-aware            │")
+yazdır("   │ Scheduler               │ SCHED_OTHER (throughput focused)   │")
+yazdır("   │ Network                 │ Jumbo frames (9000 bytes)          │")
+yazdır("   └─────────────────────────┴────────────────────────────────────┘")
+
+yazdır("\n   Beklenen Performans:")
+yazdır("   ├─ Throughput:     > 10 GB/s")
+yazdır("   ├─ Messages/sec:   > 50 M msg/s")
+yazdır("   ├─ Batch Efficiency: 99.5%")
+yazdır("   └─ Memory Bandwidth: Near-saturated")
+
+// ============================================================================
+// Profil 3: Real-Time Control
+// ============================================================================
+yazdır("\n═══════════════════════════════════════════════════════════════════")
+yazdır("    PROFİL 3: REAL-TIME CONTROL (Robotik/Otomasyon)")
+yazdır("═══════════════════════════════════════════════════════════════════\n")
+
+yazdır("   Kullanım Alanları:")
+yazdır("   ├─ Industrial robotics")
+yazdır("   ├─ CNC machine control")
+yazdır("   └─ Autonomous vehicles")
+
+yazdır("\n   Örnek Topic'ler:")
+yazdır("   ├─ sensor_data: SensorPacket (BEST_EFFORT, History=10)")
+yazdır("   ├─ control_cmd: ControlSignal (RELIABLE)")
+yazdır("   └─ actuator_feedback: ActuatorState (RELIABLE, TRANSIENT)")
+
+yazdır("\n   Konfigürasyon:")
+yazdır("   ┌─────────────────────────┬────────────────────────────────────┐")
+yazdır("   │ Parametre               │ Değer                              │")
+yazdır("   ├─────────────────────────┼────────────────────────────────────┤")
+yazdır("   │ Ring Buffer Size        │ 4 MB (balanced)                    │")
+yazdır("   │ Batch Size              │ 8-16 (low-latency batching)        │")
+yazdır("   │ Core Affinity           │ Pinned (sensor/control/actuator)   │")
+yazdır("   │ Memory                  │ Pre-allocated + locked             │")
+yazdır("   │ Scheduler               │ SCHED_DEADLINE (EDF)               │")
+yazdır("   │ Network                 │ QoS prioritized                    │")
+yazdır("   └─────────────────────────┴────────────────────────────────────┘")
+
+yazdır("\n   Beklenen Performans:")
+yazdır("   ├─ Control Loop:   1 kHz - 10 kHz")
+yazdır("   ├─ Determinism:    < 50 μs jitter")
+yazdır("   ├─ Deadline Miss:  < 0.001%")
+yazdır("   └─ Recovery Time:  < 100 μs")
+
+// ============================================================================
+// Profil 4: Mixed Workload
+// ============================================================================
+yazdır("\n═══════════════════════════════════════════════════════════════════")
+yazdır("    PROFİL 4: MIXED WORKLOAD (Genel Kullanım)")
+yazdır("═══════════════════════════════════════════════════════════════════\n")
+
+yazdır("   Kullanım Alanları:")
+yazdır("   ├─ Distributed simulation")
+yazdır("   ├─ IoT gateway systems")
+yazdır("   └─ Enterprise middleware")
+
+yazdır("\n   Örnek Topic'ler:")
+yazdır("   ├─ events: EventData (RELIABLE, History=100)")
+yazdır("   ├─ metrics: MetricsData (BEST_EFFORT)")
+yazdır("   └─ commands: CommandData (RELIABLE, TRANSIENT)")
+
+yazdır("\n   Konfigürasyon:")
+yazdır("   ┌─────────────────────────┬────────────────────────────────────┐")
+yazdır("   │ Parametre               │ Değer                              │")
+yazdır("   ├─────────────────────────┼────────────────────────────────────┤")
+yazdır("   │ Ring Buffer Size        │ 16 MB (adaptive)                   │")
+yazdır("   │ Batch Size              │ 64-256 (auto-tuned)                │")
+yazdır("   │ Core Affinity           │ Flexible (load-balanced)           │")
+yazdır("   │ Memory                  │ Standard + optional huge pages     │")
+yazdır("   │ Scheduler               │ SCHED_OTHER + nice priority        │")
+yazdır("   │ Network                 │ Standard TCP/UDP with tuning       │")
+yazdır("   └─────────────────────────┴────────────────────────────────────┘")
+
+yazdır("\n   Beklenen Performans:")
+yazdır("   ├─ Latency:        < 100 μs (typical)")
+yazdır("   ├─ Throughput:     > 1 M msg/s")
+yazdır("   ├─ Resource Usage: Balanced")
+yazdır("   └─ Flexibility:    High")
+
+// ============================================================================
+// Profil Karşılaştırması
+// ============================================================================
+yazdır("\n═══════════════════════════════════════════════════════════════════")
+yazdır("    PROFİL KARŞILAŞTIRMASI")
+yazdır("═══════════════════════════════════════════════════════════════════\n")
+
+yazdır("   ┌───────────────┬────────────┬────────────┬────────────┬───────────┐")
+yazdır("   │ Özellik       │ Ultra-Low  │ High       │ Real-Time  │ Mixed     │")
+yazdır("   │               │ Latency    │ Throughput │ Control    │ Workload  │")
+yazdır("   ├───────────────┼────────────┼────────────┼────────────┼───────────┤")
+yazdır("   │ P99 Latency   │ 5 μs       │ 500 μs     │ 50 μs      │ 100 μs    │")
+yazdır("   │ Throughput    │ 5 M/s      │ 50 M/s     │ 10 M/s     │ 1 M/s     │")
+yazdır("   │ Determinism   │ ★★★☆☆     │ ★☆☆☆☆     │ ★★★★★     │ ★★☆☆☆    │")
+yazdır("   │ Efficiency    │ ★★★☆☆     │ ★★★★★     │ ★★★★☆     │ ★★★☆☆    │")
+yazdır("   │ Flexibility   │ ★☆☆☆☆     │ ★★☆☆☆     │ ★★☆☆☆     │ ★★★★★    │")
+yazdır("   └───────────────┴────────────┴────────────┴────────────┴───────────┘")
+
+// ============================================================================
+// Konfigürasyon Kodu Örneği
+// ============================================================================
+yazdır("\n   Konfigürasyon Kullanım Örneği (Kavramsal):")
+yazdır("")
+yazdır("   // Profil seçimi")
+yazdır("   @hpc_profile(\"ultra_low_latency\")")
+yazdır("   katılımcı 100")
+yazdır("")
+yazdır("   // veya detaylı konfigürasyon")
+yazdır("   @hpc_config {")
+yazdır("       ring_size: 64KB,")
+yazdır("       batch_size: 1,")
+yazdır("       scheduler: FIFO(99),")
+yazdır("       huge_pages: true")
+yazdır("   }")
+yazdır("   katılımcı 100")
+
+// ============================================================================
+// Sonuç
+// ============================================================================
+yazdır("\n╔══════════════════════════════════════════════════════════════════╗")
+yazdır("║         KONFİGÜRASYON PROFİLLERİ DEMO TAMAMLANDI                ║")
+yazdır("╠══════════════════════════════════════════════════════════════════╣")
+yazdır("║  ✅ 4 optimizasyon profili tanımlandı                           ║")
+yazdır("║  ✅ Her profil için konfigürasyon parametreleri gösterildi      ║")
+yazdır("║  ✅ Performans hedefleri belirlendi                             ║")
+yazdır("║  ✅ Konfigürasyon rehberi sağlandı                              ║")
+yazdır("╚══════════════════════════════════════════════════════════════════╝")

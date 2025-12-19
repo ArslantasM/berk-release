@@ -1,0 +1,121 @@
+/// ═══════════════════════════════════════════════════════════════════════════
+/// BERK Programlama Dili - Diziler ve Metinler
+/// Seviye: Orta (Intermediate)
+/// ═══════════════════════════════════════════════════════════════════════════
+
+kullan std::io
+
+yaz("============================================================")
+yaz("         Diziler ve Metinler / Arrays and Strings           ")
+yaz("============================================================")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 1: Dizi Islemleri
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 1: Dizi Islemleri ---")
+
+değişken sayılar = [10, 20, 30, 40, 50]
+yaz("\n   Dizi: ", sayılar)
+yaz("   Uzunluk: ", sayılar.len())
+yaz("   Ilk eleman: ", sayılar.first())
+yaz("   Son eleman: ", sayılar.last())
+yaz("   Bos mu: ", sayılar.is_empty())
+
+yaz("\n   Ters cevir: ", sayılar.reverse())
+yaz("   Toplam: ", sayılar.sum())
+
+// Dizi icerir kontrolu
+değişken hedef = 30
+eğer sayılar.contains(hedef)
+    yaz("   Dizi ", hedef, " icerir: evet")
+son
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 2: Metin Islemleri
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 2: Metin Islemleri ---")
+
+değişken metin = "Merhaba Dunya"
+yaz("\n   Metin: ", metin)
+yaz("   Uzunluk: ", metin.len())
+yaz("   Buyuk harf: ", metin.to_uppercase())
+yaz("   Kucuk harf: ", metin.to_lowercase())
+
+değişken bosluklu = "   BERK dili   "
+yaz("\n   Bosluklu: '", bosluklu, "'")
+yaz("   Kirpilmis: '", bosluklu.trim(), "'")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 3: Metin Arama ve Bolme
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 3: Metin Arama ve Bolme ---")
+
+değişken cumle = "BERK,Rust,Python,Go"
+yaz("\n   Cumle: ", cumle)
+
+değişken parcalar = cumle.split(",")
+yaz("   Parcalar: ", parcalar)
+yaz("   Birlesik: ", parcalar.join(" - "))
+
+değişken test = "BERK programlama dili"
+yaz("\n   Test: ", test)
+yaz("   'BERK' icerir: ", test.contains("BERK"))
+yaz("   'BERK' ile baslar: ", test.starts_with("BERK"))
+yaz("   'dili' ile biter: ", test.ends_with("dili"))
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 4: Tip Donusumleri
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 4: Tip Donusumleri ---")
+
+değişken tam = 42
+değişken ondalık = tam as real64
+yaz("\n   Tamsayi: ", tam)
+yaz("   Real64'e donusum: ", ondalık)
+
+değişken pi = 3.14159
+değişken yuvarla = pi as tamsayı
+yaz("\n   Ondalik: ", pi)
+yaz("   Tamsayiya donusum: ", yuvarla)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 5: Range (Aralik) Islemleri
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 5: Range (Aralik) Islemleri ---")
+
+yaz("\n   0..5 araligi (exclusive):")
+için i içinde 0..5 yap
+    yaz("      ", i)
+son
+
+yaz("\n   0..=5 araligi (inclusive):")
+için i içinde 0..=5 yap
+    yaz("      ", i)
+son
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 6: Dizi Uzerinde Dongu
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 6: Dizi Uzerinde Dongu ---")
+
+değişken isimler = ["Ali", "Ayse", "Mehmet", "Fatma"]
+yaz("\n   Isimler listesi:")
+için isim in isimler yap
+    yaz("      - ", isim)
+son
+
+// Sayilarla islem
+değişken puanlar = [85, 92, 78, 96, 88]
+değişken toplam = puanlar.sum()
+değişken ortalama = toplam / puanlar.len()
+yaz("\n   Puanlar: ", puanlar)
+yaz("   Toplam: ", toplam)
+yaz("   Ortalama: ", ortalama)
+
+yaz("\n[OK] Diziler ve metinler demosu tamamlandi!")

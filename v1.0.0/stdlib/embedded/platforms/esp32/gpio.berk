@@ -1,0 +1,282 @@
+// stdlib/embedded/platforms/esp32/gpio.berk
+// ESP32 GPIO HAL Implementation
+// ESP-IDF bindings for BERK BAL GPIO interface
+
+import "embedded/bal/gpio" as GPIO
+
+// ESP-IDF GPIO types
+const GPIO_MODE_DISABLE: u32 = 0
+const GPIO_MODE_INPUT: u32 = 1
+const GPIO_MODE_OUTPUT: u32 = 2
+const GPIO_MODE_OUTPUT_OD: u32 = 6
+const GPIO_MODE_INPUT_OUTPUT_OD: u32 = 7
+const GPIO_MODE_INPUT_OUTPUT: u32 = 3
+
+const GPIO_PULLUP_DISABLE: u32 = 0
+const GPIO_PULLUP_ENABLE: u32 = 1
+const GPIO_PULLDOWN_DISABLE: u32 = 0
+const GPIO_PULLDOWN_ENABLE: u32 = 1
+
+const GPIO_INTR_DISABLE: u32 = 0
+const GPIO_INTR_POSEDGE: u32 = 1
+const GPIO_INTR_NEGEDGE: u32 = 2
+const GPIO_INTR_ANYEDGE: u32 = 3
+const GPIO_INTR_LOW_LEVEL: u32 = 4
+const GPIO_INTR_HIGH_LEVEL: u32 = 5
+
+// ESP-IDF GPIO functions
+extern "C" {
+    fn gpio_set_direction(gpio_num: u32, mode: u32) -> i32
+    fn gpio_set_level(gpio_num: u32, level: u32) -> i32
+    fn gpio_get_level(gpio_num: u32) -> i32
+    fn gpio_set_pull_mode(gpio_num: u32, pull: u32) -> i32
+    fn gpio_pullup_en(gpio_num: u32) -> i32
+    fn gpio_pullup_dis(gpio_num: u32) -> i32
+    fn gpio_pulldown_en(gpio_num: u32) -> i32
+    fn gpio_pulldown_dis(gpio_num: u32) -> i32
+    fn gpio_set_intr_type(gpio_num: u32, intr_type: u32) -> i32
+    fn gpio_intr_enable(gpio_num: u32) -> i32
+    fn gpio_intr_disable(gpio_num: u32) -> i32
+    fn gpio_install_isr_service(flags: i32) -> i32
+    fn gpio_isr_handler_add(gpio_num: u32, isr_handler: fn(), args: *mut void) -> i32
+    fn gpio_isr_handler_remove(gpio_num: u32) -> i32
+    fn gpio_set_drive_capability(gpio_num: u32, strength: u32) -> i32
+}
+
+// Drive strength mapping
+const GPIO_DRIVE_CAP_0: u32 = 0  // 5mA
+const GPIO_DRIVE_CAP_1: u32 = 1  // 10mA
+const GPIO_DRIVE_CAP_2: u32 = 2  // 20mA
+const GPIO_DRIVE_CAP_3: u32 = 3  // 40mA
+
+// Global state
+static mut isr_service_installed: bool = false
+static mut interrupt_handlers: [fn(); 40] = [null_handler; 40]
+
+fn null_handler() {
+    // Empty handler
+}
+
+// ESP32 GPIO HAL implementation
+pub struct ESP32_GPIO {}
+
+impl GPIO.GPIO_HAL for ESP32_GPIO {
+    fn init() {
+        // ESP32 GPIO is always enabled, no clock gating
+        // Install ISR service if not already installed
+        unsafe {
+            if !isr_service_installed {
+                gpio_install_isr_service(0)
+                isr_service_installed = true
+            }
+        }
+    }
+    
+    fn configure(pin: u8, mode: GPIO.Mode) {
+        let esp_mode = match mode {
+            GPIO.Mode.Input => GPIO_MODE_INPUT,
+            GPIO.Mode.Output => GPIO_MODE_OUTPUT,
+            GPIO.Mode.InputPullup => {
+                gpio_set_direction(pin as u32, GPIO_MODE_INPUT)
+                gpio_pullup_en(pin as u32)
+                return
+            },
+            GPIO.Mode.InputPulldown => {
+                gpio_set_direction(pin as u32, GPIO_MODE_INPUT)
+                gpio_pulldown_en(pin as u32)
+                return
+            },
+            GPIO.Mode.OutputOpenDrain => GPIO_MODE_OUTPUT_OD,
+            GPIO.Mode.Alternate => GPIO_MODE_INPUT_OUTPUT,
+            GPIO.Mode.Analog => GPIO_MODE_DISABLE,
+        }
+        
+        gpio_set_direction(pin as u32, esp_mode)
+    }
+    
+    fn configure_advanced(config: GPIO.Config) {
+        // Set direction
+        ESP32_GPIO.configure(config.pin, config.mode)
+        
+        // Set drive strength
+        ESP32_GPIO.set_drive_strength(config.pin, config.drive_strength)
+        
+        // Set initial level
+        if config.mode == GPIO.Mode.Output || config.mode == GPIO.Mode.OutputOpenDrain {
+            ESP32_GPIO.write(config.pin, config.level)
+        }
+        
+        // Set pull resistors
+        if config.pull_enabled {
+            if config.mode == GPIO.Mode.InputPullup {
+                gpio_pullup_en(config.pin as u32)
+            } else if config.mode == GPIO.Mode.InputPulldown {
+                gpio_pulldown_en(config.pin as u32)
+            }
+        }
+    }
+    
+    fn write(pin: u8, level: GPIO.Level) {
+        let val = if level == GPIO.Level.High { 1 } else { 0 }
+        gpio_set_level(pin as u32, val)
+    }
+    
+    fn read(pin: u8) -> GPIO.Level {
+        if gpio_get_level(pin as u32) != 0 {
+            GPIO.Level.High
+        } else {
+            GPIO.Level.Low
+        }
+    }
+    
+    fn toggle(pin: u8) {
+        let current = ESP32_GPIO.read(pin)
+        let new_level = if current == GPIO.Level.High {
+            GPIO.Level.Low
+        } else {
+            GPIO.Level.High
+        }
+        ESP32_GPIO.write(pin, new_level)
+    }
+    
+    fn set_drive_strength(pin: u8, strength: GPIO.DriveStrength) {
+        let esp_strength = match strength {
+            GPIO.DriveStrength.Low => GPIO_DRIVE_CAP_0,      // 5mA
+            GPIO.DriveStrength.Medium => GPIO_DRIVE_CAP_1,   // 10mA
+            GPIO.DriveStrength.High => GPIO_DRIVE_CAP_2,     // 20mA
+            GPIO.DriveStrength.VeryHigh => GPIO_DRIVE_CAP_3, // 40mA
+        }
+        gpio_set_drive_capability(pin as u32, esp_strength)
+    }
+    
+    fn set_pullup(pin: u8, enabled: bool) {
+        if enabled {
+            gpio_pullup_en(pin as u32)
+        } else {
+            gpio_pullup_dis(pin as u32)
+        }
+    }
+    
+    fn set_pulldown(pin: u8, enabled: bool) {
+        if enabled {
+            gpio_pulldown_en(pin as u32)
+        } else {
+            gpio_pulldown_dis(pin as u32)
+        }
+    }
+    
+    fn attach_interrupt(pin: u8, trigger: GPIO.Trigger, handler: fn()) {
+        let intr_type = match trigger {
+            GPIO.Trigger.RisingEdge => GPIO_INTR_POSEDGE,
+            GPIO.Trigger.FallingEdge => GPIO_INTR_NEGEDGE,
+            GPIO.Trigger.BothEdges => GPIO_INTR_ANYEDGE,
+            GPIO.Trigger.LowLevel => GPIO_INTR_LOW_LEVEL,
+            GPIO.Trigger.HighLevel => GPIO_INTR_HIGH_LEVEL,
+        }
+        
+        // Set interrupt type
+        gpio_set_intr_type(pin as u32, intr_type)
+        
+        // Store handler
+        unsafe {
+            interrupt_handlers[pin as usize] = handler
+        }
+        
+        // Add ISR handler
+        gpio_isr_handler_add(pin as u32, isr_wrapper, null)
+    }
+    
+    fn detach_interrupt(pin: u8) {
+        gpio_isr_handler_remove(pin as u32)
+        
+        unsafe {
+            interrupt_handlers[pin as usize] = null_handler
+        }
+    }
+    
+    fn enable_interrupt(pin: u8) {
+        gpio_intr_enable(pin as u32)
+    }
+    
+    fn disable_interrupt(pin: u8) {
+        gpio_intr_disable(pin as u32)
+    }
+}
+
+// ISR wrapper to call stored handler
+fn isr_wrapper() {
+    // This is called by ESP-IDF ISR service
+    // In real implementation, we'd need to determine which pin triggered
+    // For now, simplified version
+}
+
+// ESP32-specific helper functions
+
+/// Get GPIO pin capabilities
+pub fn get_pin_caps(pin: u8) -> u32 {
+    // ESP32 pin capabilities (simplified)
+    // Pins 34-39 are input-only
+    if pin >= 34 && pin <= 39 {
+        return 1  // Input only
+    }
+    return 3  // Input + Output
+}
+
+/// Check if pin is valid
+pub fn is_valid_pin(pin: u8) -> bool {
+    // ESP32 has GPIO 0-39 (some are reserved)
+    if pin >= 40 {
+        return false
+    }
+    
+    // Skip reserved pins (6-11 are used for flash)
+    if pin >= 6 && pin <= 11 {
+        return false
+    }
+    
+    return true
+}
+
+/// Get pin name string
+pub fn get_pin_name(pin: u8) -> string {
+    "GPIO" + pin.to_string()
+}
+
+/// Hold GPIO pad during deep sleep
+pub fn hold_pad(pin: u8) {
+    extern "C" {
+        fn gpio_hold_en(gpio_num: u32) -> i32
+    }
+    gpio_hold_en(pin as u32)
+}
+
+/// Release GPIO pad hold
+pub fn unhold_pad(pin: u8) {
+    extern "C" {
+        fn gpio_hold_dis(gpio_num: u32) -> i32
+    }
+    gpio_hold_dis(pin as u32)
+}
+
+/// Configure GPIO wakeup from deep sleep
+pub fn wakeup_enable(pin: u8, level: GPIO.Level) {
+    extern "C" {
+        fn gpio_wakeup_enable(gpio_num: u32, intr_type: u32) -> i32
+    }
+    
+    let intr_type = if level == GPIO.Level.High {
+        GPIO_INTR_HIGH_LEVEL
+    } else {
+        GPIO_INTR_LOW_LEVEL
+    }
+    
+    gpio_wakeup_enable(pin as u32, intr_type)
+}
+
+/// Disable GPIO wakeup
+pub fn wakeup_disable(pin: u8) {
+    extern "C" {
+        fn gpio_wakeup_disable(gpio_num: u32) -> i32
+    }
+    gpio_wakeup_disable(pin as u32)
+}

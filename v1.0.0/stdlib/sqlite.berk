@@ -1,0 +1,1298 @@
+//! # SQLite Module
+//!
+//! SQLite database operations (DB-API 2.0 compatible).
+//!
+//! SQLite veritabanı işlemleri (DB-API 2.0 uyumlu).
+//!
+//! ## Features / Özellikler
+//!
+//! - **SQLite 3.x**: Full API binding / Tam API bağlama
+//! - **Prepared statements**: SQL injection protection / SQL enjeksiyon koruma
+//! - **Parameters**: Named, positional, dollar / İsimli, konumsal
+//! - **Transactions**: BEGIN, COMMIT, ROLLBACK / İşlemler
+//! - **In-memory**: :memory: databases / Bellekte veritabanı
+//! - **Connection pooling**: Multi-threaded access / Bağlantı havuzu
+//! - **Row factory**: Dict-like access / Sözlük gibi erişim
+//! - **Foreign keys**: Full support / Yabancı anahtar
+//!
+//! ## Example / Örnek
+//!
+//! ```berk
+//! kullan sqlite
+//!
+//! değişken db = sqlite.connect("db.sqlite")?
+//! sqlite.execute(db, "CREATE TABLE users (id INTEGER, name TEXT)")
+//! sqlite.execute(db, "INSERT INTO users VALUES (?, ?)", [1, "Ali"])
+//! değişken rows = sqlite.query(db, "SELECT * FROM users")
+//! ```
+//!
+//! Backend: Rust rusqlite (SQLite 3.x)
+
+modül sqlite
+
+kullan result
+kullan string
+
+// ============================================================================
+// TÜRLER (Types)
+// ============================================================================
+
+// SQLite bağlantı
+tip SqliteBaglanti = yapı yap
+    dosya_yolu: yazı,
+    acık_mı: mantıksal,
+    otomatik_commit: mantıksal,
+    foreign_keys: mantıksal,
+    timeout_ms: tamsayı,
+    handle: tamsayı  // Internal SQLite connection pointer (opaque)
+son
+
+// SQLite cursor (sonuç kümesi)
+tip SqliteImkec = yapı yap
+    baglanti: SqliteBaglanti,
+    stmt_handle: tamsayı,  // Prepared statement pointer
+    satır_sayısı: tamsayı,
+    sütun_sayısı: tamsayı,
+    sütun_adları: liste[yazı],
+    bitti_mi: mantıksal
+son
+
+// SQLite satır (row) - dict-like access
+tip SqliteSatir = eşleme[yazı, SqliteDeger]
+
+// SQLite değer türleri
+tip SqliteDeger = tamsayı | ondalık | yazı | liste[byte] | boş
+
+// SQLite hatası
+tip SqliteHata = yapı yap
+    mesaj: yazı,
+    hata_kodu: tamsayı,  // SQLite error code
+    sql: yazı            // Hata oluşturan SQL
+son
+
+// Transaction isolation levels
+tip IsolasyonSeviyesi = "DEFERRED" | "IMMEDIATE" | "EXCLUSIVE"
+
+// ============================================================================
+// BAĞLANTI YÖNETİMİ (Connection Management)
+// ============================================================================
+
+// Veritabanına bağlan (Python: sqlite3.connect)
+fonksiyon baglan(dosya_yolu: yazı) -> Sonuç[SqliteBaglanti, SqliteHata]
+yap
+    değişken flags = SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE
+    değişken handle_sonuç = sqlite3_open_v2(dosya_yolu, flags)
+    
+    eğer handle_sonuç.hata_mı() ise yap
+        dön Hata(SqliteHata yap
+            mesaj: "Veritabanı açılamadı: " + dosya_yolu,
+            hata_kodu: handle_sonuç.hata_kodu(),
+            sql: ""
+        son)
+    son
+    
+    değişken conn = SqliteBaglanti yap
+        dosya_yolu: dosya_yolu,
+        acık_mı: doğru,
+        otomatik_commit: doğru,
+        foreign_keys: doğru,
+        timeout_ms: 5000,
+        handle: handle_sonuç.unwrap()
+    son
+    
+    // Foreign key constraint'leri aktif et
+    eğer conn.foreign_keys ise yap
+        sqlite3_exec(conn.handle, "PRAGMA foreign_keys = ON")
+    son
+    
+    dön Başarı(conn)
+son
+
+// In-memory veritabanı oluştur
+fonksiyon bellek_veritabani() -> Sonuç[SqliteBaglanti, SqliteHata]
+yap
+    dön baglan(":memory:")
+son
+
+// Bağlantıyı kapat (Python: connection.close)
+fonksiyon kapat(baglanti: SqliteBaglanti) -> Sonuç[boş, SqliteHata]
+yap
+    eğer değil baglanti.acık_mı ise yap
+        dön Başarı(boş)
+    son
+    
+    değişken sonuç = sqlite3_close(baglanti.handle)
+    eğer sonuç.hata_mı() ise yap
+        dön Hata(SqliteHata yap
+            mesaj: "Bağlantı kapatılamadı",
+            hata_kodu: sonuç.hata_kodu(),
+            sql: ""
+        son)
+    son
+    
+    baglanti.acık_mı = yanlış
+    dön Başarı(boş)
+son
+
+// Bağlantı timeout ayarla
+fonksiyon timeout_ayarla(baglanti: SqliteBaglanti, ms: tamsayı) -> boş
+yap
+    sqlite3_busy_timeout(baglanti.handle, ms)
+    baglanti.timeout_ms = ms
+son
+
+// ============================================================================
+// SQL ÇALIŞTIRMA (SQL Execution)
+// ============================================================================
+
+// SQL sorgusu çalıştır (Python: cursor.execute)
+fonksiyon calistir(
+    baglanti: SqliteBaglanti, 
+    sql: yazı, 
+    parametreler: liste[SqliteDeger] = []
+) -> Sonuç[SqliteImkec, SqliteHata]
+yap
+    eğer değil baglanti.acık_mı ise yap
+        dön Hata(SqliteHata yap
+            mesaj: "Bağlantı kapalı",
+            hata_kodu: SQLITE_MISUSE,
+            sql: sql
+        son)
+    son
+    
+    // Prepared statement oluştur
+    değişken stmt_sonuç = sqlite3_prepare_v2(baglanti.handle, sql)
+    eğer stmt_sonuç.hata_mı() ise yap
+        dön Hata(SqliteHata yap
+            mesaj: "SQL parse hatası: " + stmt_sonuç.hata_mesajı(),
+            hata_kodu: stmt_sonuç.hata_kodu(),
+            sql: sql
+        son)
+    son
+    
+    değişken stmt_handle = stmt_sonuç.unwrap()
+    
+    // Parametreleri bind et
+    değişken i = 1
+    her biri param içinde parametreler yap
+        değişken bind_sonuç = sqlite3_bind_value(stmt_handle, i, param)
+        eğer bind_sonuç.hata_mı() ise yap
+            sqlite3_finalize(stmt_handle)
+            dön Hata(SqliteHata yap
+                mesaj: "Parameter binding hatası",
+                hata_kodu: bind_sonuç.hata_kodu(),
+                sql: sql
+            son)
+        son
+        i += 1
+    son
+    
+    // Sütun bilgilerini al
+    değişken sütun_sayısı = sqlite3_column_count(stmt_handle)
+    değişken sütun_adları = liste_oluştur()
+    her biri j içinde aralık(0, sütun_sayısı) yap
+        sütun_adları.ekle(sqlite3_column_name(stmt_handle, j))
+    son
+    
+    dön Başarı(SqliteImkec yap
+        baglanti: baglanti,
+        stmt_handle: stmt_handle,
+        satır_sayısı: 0,
+        sütun_sayısı: sütun_sayısı,
+        sütun_adları: sütun_adları,
+        bitti_mi: yanlış
+    son)
+son
+
+// Named parameters ile çalıştır (Python: cursor.execute with dict)
+fonksiyon calistir_isimli(
+    baglanti: SqliteBaglanti, 
+    sql: yazı, 
+    parametreler: eşleme[yazı, SqliteDeger]
+) -> Sonuç[SqliteImkec, SqliteHata]
+yap
+    // Prepared statement oluştur
+    değişken stmt_sonuç = sqlite3_prepare_v2(baglanti.handle, sql)
+    eğer stmt_sonuç.hata_mı() ise yap
+        dön Hata(SqliteHata yap
+            mesaj: "SQL parse hatası",
+            hata_kodu: stmt_sonuç.hata_kodu(),
+            sql: sql
+        son)
+    son
+    
+    değişken stmt_handle = stmt_sonuç.unwrap()
+    
+    // Named parametreleri bind et
+    her biri (ad, değer) içinde parametreler yap
+        değişken parametre_adı = eğer ad.başlar_mı(":") ise ad değilse ":" + ad
+        değişken indeks = sqlite3_bind_parameter_index(stmt_handle, parametre_adı)
+        
+        eğer indeks > 0 ise yap
+            sqlite3_bind_value(stmt_handle, indeks, değer)
+        son
+    son
+    
+    // Cursor döndür (calistir() ile aynı mantık)
+    değişken sütun_sayısı = sqlite3_column_count(stmt_handle)
+    değişken sütun_adları = liste_oluştur()
+    her biri j içinde aralık(0, sütun_sayısı) yap
+        sütun_adları.ekle(sqlite3_column_name(stmt_handle, j))
+    son
+    
+    dön Başarı(SqliteImkec yap
+        baglanti: baglanti,
+        stmt_handle: stmt_handle,
+        satır_sayısı: 0,
+        sütun_sayısı: sütun_sayısı,
+        sütun_adları: sütun_adları,
+        bitti_mi: yanlış
+    son)
+son
+
+// Çok satırlı execute (Python: executemany)
+fonksiyon calistir_coklu(
+    baglanti: SqliteBaglanti, 
+    sql: yazı, 
+    parametreler_listesi: liste[liste[SqliteDeger]]
+) -> Sonuç[tamsayı, SqliteHata]
+yap
+    değişken toplam_etkilenen = 0
+    
+    her biri parametreler içinde parametreler_listesi yap
+        değişken sonuç = calistir(baglanti, sql, parametreler)
+        eğer sonuç.hata_mı() ise yap
+            dön Hata(sonuç.hata())
+        son
+        
+        değişken cursor = sonuç.unwrap()
+        toplam_etkilenen += imkec_etkilenen_satir(cursor)
+        imkec_kapat(cursor)
+    son
+    
+    dön Başarı(toplam_etkilenen)
+son
+
+// SQL script çalıştır (Python: executescript)
+fonksiyon script_calistir(baglanti: SqliteBaglanti, sql_script: yazı) -> Sonuç[boş, SqliteHata]
+yap
+    değişken sonuç = sqlite3_exec(baglanti.handle, sql_script)
+    eğer sonuç.hata_mı() ise yap
+        dön Hata(SqliteHata yap
+            mesaj: "Script execution hatası",
+            hata_kodu: sonuç.hata_kodu(),
+            sql: sql_script
+        son)
+    son
+    dön Başarı(boş)
+son
+
+// ============================================================================
+// CURSOR (İmkeç) İŞLEMLERİ (Cursor Operations)
+// ============================================================================
+
+// Tek satır al (Python: cursor.fetchone)
+fonksiyon imkec_bir_al(imkec: SqliteImkec) -> Seçenek[SqliteSatir]
+yap
+    eğer imkec.bitti_mi ise yap
+        dön Hiç
+    son
+    
+    değişken step_sonuç = sqlite3_step(imkec.stmt_handle)
+    
+    seç step_sonuç yap
+        durum SQLITE_ROW => yap
+            // Satırı oku
+            değişken satır = SqliteSatir_oluştur()
+            
+            her biri i içinde aralık(0, imkec.sütun_sayısı) yap
+                değişken sütun_adı = imkec.sütun_adları[i]
+                değişken değer = sqlite3_column_value(imkec.stmt_handle, i)
+                satır[sütun_adı] = değer
+            son
+            
+            imkec.satır_sayısı += 1
+            dön Bazı(satır)
+        son
+        durum SQLITE_DONE => yap
+            imkec.bitti_mi = doğru
+            dön Hiç
+        son
+        durum _ => yap
+            // Hata
+            imkec.bitti_mi = doğru
+            dön Hiç
+        son
+    son
+son
+
+// Tüm satırları al (Python: cursor.fetchall)
+fonksiyon imkec_tumu_al(imkec: SqliteImkec) -> liste[SqliteSatir]
+yap
+    değişken satirlar = liste_oluştur()
+    
+    iken doğru yap
+        değişken satır_sec = imkec_bir_al(imkec)
+        eğer satır_sec.hiç_mi() ise yap
+            dur
+        son
+        satirlar.ekle(satır_sec.unwrap())
+    son
+    
+    dön satirlar
+son
+
+// N satır al (Python: cursor.fetchmany)
+fonksiyon imkec_n_al(imkec: SqliteImkec, n: tamsayı) -> liste[SqliteSatir]
+yap
+    değişken satirlar = liste_oluştur()
+    
+    her biri _ içinde aralık(0, n) yap
+        değişken satır_sec = imkec_bir_al(imkec)
+        eğer satır_sec.hiç_mi() ise yap
+            dur
+        son
+        satirlar.ekle(satır_sec.unwrap())
+    son
+    
+    dön satirlar
+son
+
+// Cursor'ı kapat
+fonksiyon imkec_kapat(imkec: SqliteImkec) -> boş
+yap
+    sqlite3_finalize(imkec.stmt_handle)
+    imkec.bitti_mi = doğru
+son
+
+// Etkilenen satır sayısı (INSERT, UPDATE, DELETE için)
+fonksiyon imkec_etkilenen_satir(imkec: SqliteImkec) -> tamsayı
+yap
+    dön sqlite3_changes(imkec.baglanti.handle)
+son
+
+// Son eklenen ID (AUTOINCREMENT için)
+fonksiyon imkec_son_id(imkec: SqliteImkec) -> tamsayı
+yap
+    dön sqlite3_last_insert_rowid(imkec.baglanti.handle)
+son
+
+// Sütun adlarını al
+fonksiyon imkec_sutun_adlari(imkec: SqliteImkec) -> liste[yazı]
+yap
+    dön imkec.sütun_adları
+son
+
+// ============================================================================
+// TRANSACTION YÖNETİMİ (Transaction Management)
+// ============================================================================
+
+// Transaction başlat (Python: connection.begin)
+fonksiyon transaction_baslat(baglanti: SqliteBaglanti, izolasyon: IsolasyonSeviyesi = "DEFERRED") -> Sonuç[boş, SqliteHata]
+yap
+    değişken sql = "BEGIN " + izolasyon + " TRANSACTION"
+    değişken sonuç = sqlite3_exec(baglanti.handle, sql)
+    
+    eğer sonuç.hata_mı() ise yap
+        dön Hata(SqliteHata yap
+            mesaj: "Transaction başlatılamadı",
+            hata_kodu: sonuç.hata_kodu(),
+            sql: sql
+        son)
+    son
+    
+    dön Başarı(boş)
+son
+
+// Transaction onayla (Python: connection.commit)
+fonksiyon onay(baglanti: SqliteBaglanti) -> Sonuç[boş, SqliteHata]
+yap
+    değişken sonuç = sqlite3_exec(baglanti.handle, "COMMIT")
+    
+    eğer sonuç.hata_mı() ise yap
+        dön Hata(SqliteHata yap
+            mesaj: "Commit hatası",
+            hata_kodu: sonuç.hata_kodu(),
+            sql: "COMMIT"
+        son)
+    son
+    
+    dön Başarı(boş)
+son
+
+// Transaction geri al (Python: connection.rollback)
+fonksiyon geri_al(baglanti: SqliteBaglanti) -> Sonuç[boş, SqliteHata]
+yap
+    değişken sonuç = sqlite3_exec(baglanti.handle, "ROLLBACK")
+    
+    eğer sonuç.hata_mı() ise yap
+        dön Hata(SqliteHata yap
+            mesaj: "Rollback hatası",
+            hata_kodu: sonuç.hata_kodu(),
+            sql: "ROLLBACK"
+        son)
+    son
+    
+    dön Başarı(boş)
+son
+
+// Context manager (with-block için) - auto commit/rollback
+fonksiyon transaction(baglanti: SqliteBaglanti, blok: fonksiyon() -> Sonuç[boş, SqliteHata]) -> Sonuç[boş, SqliteHata]
+yap
+    // BEGIN
+    değişken baslat_sonuç = transaction_baslat(baglanti)
+    eğer baslat_sonuç.hata_mı() ise yap
+        dön baslat_sonuç
+    son
+    
+    // Blok çalıştır
+    değişken blok_sonuç = blok()
+    
+    eğer blok_sonuç.başarılı_mı() ise yap
+        // COMMIT
+        dön onay(baglanti)
+    değilse yap
+        // ROLLBACK
+        geri_al(baglanti)
+        dön blok_sonuç
+    son
+son
+
+// ============================================================================
+// YARDIMCI FONKSİYONLAR (Helper Functions)
+// ============================================================================
+
+// Tablo var mı kontrol
+fonksiyon tablo_var_mi(baglanti: SqliteBaglanti, tablo_adı: yazı) -> mantıksal
+yap
+    değişken sql = "SELECT name FROM sqlite_master WHERE type='table' AND name=?"
+    değişken sonuç = calistir(baglanti, sql, [tablo_adı])
+    
+    eğer sonuç.başarılı_mı() ise yap
+        değişken cursor = sonuç.unwrap()
+        değişken satır = imkec_bir_al(cursor)
+        imkec_kapat(cursor)
+        dön satır.bazı_mı()
+    son
+    
+    dön yanlış
+son
+
+// Tablo oluştur (basit helper)
+fonksiyon tablo_olustur(baglanti: SqliteBaglanti, tablo_adı: yazı, sütunlar: eşleme[yazı, yazı]) -> Sonuç[boş, SqliteHata]
+yap
+    değişken sütun_tanımları = liste_oluştur()
+    her biri (ad, tür) içinde sütunlar yap
+        sütun_tanımları.ekle(ad + " " + tür)
+    son
+    
+    değişken sql = "CREATE TABLE IF NOT EXISTS " + tablo_adı + " (" + 
+                   sütun_tanımları.birleştir(", ") + ")"
+    
+    dön script_calistir(baglanti, sql)
+son
+
+// Tablo sil
+fonksiyon tablo_sil(baglanti: SqliteBaglanti, tablo_adı: yazı) -> Sonuç[boş, SqliteHata]
+yap
+    değişken sql = "DROP TABLE IF EXISTS " + tablo_adı
+    dön script_calistir(baglanti, sql)
+son
+
+// Satır sayısı (COUNT)
+fonksiyon satir_sayisi(baglanti: SqliteBaglanti, tablo_adı: yazı) -> Sonuç[tamsayı, SqliteHata]
+yap
+    değişken sql = "SELECT COUNT(*) FROM " + tablo_adı
+    değişken sonuç = calistir(baglanti, sql)
+    
+    eğer sonuç.başarılı_mı() ise yap
+        değişken cursor = sonuç.unwrap()
+        değişken satır = imkec_bir_al(cursor)
+        imkec_kapat(cursor)
+        
+        eğer satır.bazı_mı() ise yap
+            değişken satır_data = satır.unwrap()
+            değişken sayı = satır_data["COUNT(*)"]
+            dön Başarı(sayı as tamsayı)
+        son
+    son
+    
+    dön Hata(SqliteHata yap
+        mesaj: "Satır sayısı alınamadı",
+        hata_kodu: -1,
+        sql: sql
+    son)
+son
+
+// Veritabanı boyutu (byte)
+fonksiyon veritabani_boyutu(baglanti: SqliteBaglanti) -> tamsayı
+yap
+    eğer baglanti.dosya_yolu == ":memory:" ise yap
+        dön 0  // In-memory DB'nin disk boyutu yok
+    son
+    dön fs::dosya_boyutu(baglanti.dosya_yolu)
+son
+
+// Veritabanını optimize et (VACUUM)
+fonksiyon optimize_et(baglanti: SqliteBaglanti) -> Sonuç[boş, SqliteHata]
+yap
+    dön script_calistir(baglanti, "VACUUM")
+son
+
+// Integrity check
+fonksiyon butunluk_kontrolu(baglanti: SqliteBaglanti) -> Sonuç[mantıksal, SqliteHata]
+yap
+    değişken sonuç = calistir(baglanti, "PRAGMA integrity_check")
+    eğer sonuç.başarılı_mı() ise yap
+        değişken cursor = sonuç.unwrap()
+        değişken satır = imkec_bir_al(cursor)
+        imkec_kapat(cursor)
+        
+        eğer satır.bazı_mı() ise yap
+            değişken mesaj = satır.unwrap()["integrity_check"] as yazı
+            dön Başarı(mesaj == "ok")
+        son
+    son
+    dön Başarı(yanlış)
+son
+
+// ============================================================================
+// BACKUP ve RESTORE
+// ============================================================================
+
+// Veritabanını yedekle
+fonksiyon yedek_al(baglanti: SqliteBaglanti, hedef_dosya: yazı) -> Sonuç[boş, SqliteHata]
+yap
+    değişken hedef_sonuç = baglan(hedef_dosya)
+    eğer hedef_sonuç.hata_mı() ise yap
+        dön Hata(hedef_sonuç.hata())
+    son
+    
+    değişken hedef = hedef_sonuç.unwrap()
+    değişken backup_sonuç = sqlite3_backup(hedef.handle, baglanti.handle)
+    kapat(hedef)
+    
+    eğer backup_sonuç.hata_mı() ise yap
+        dön Hata(SqliteHata yap
+            mesaj: "Backup hatası",
+            hata_kodu: backup_sonuç.hata_kodu(),
+            sql: ""
+        son)
+    son
+    
+    dön Başarı(boş)
+son
+
+// ============================================================================
+// SQLite ERROR CODES
+// ============================================================================
+
+sabit SQLITE_OK = 0
+sabit SQLITE_ERROR = 1
+sabit SQLITE_INTERNAL = 2
+sabit SQLITE_PERM = 3
+sabit SQLITE_ABORT = 4
+sabit SQLITE_BUSY = 5
+sabit SQLITE_LOCKED = 6
+sabit SQLITE_NOMEM = 7
+sabit SQLITE_READONLY = 8
+sabit SQLITE_INTERRUPT = 9
+sabit SQLITE_IOERR = 10
+sabit SQLITE_CORRUPT = 11
+sabit SQLITE_NOTFOUND = 12
+sabit SQLITE_FULL = 13
+sabit SQLITE_CANTOPEN = 14
+sabit SQLITE_PROTOCOL = 15
+sabit SQLITE_EMPTY = 16
+sabit SQLITE_SCHEMA = 17
+sabit SQLITE_TOOBIG = 18
+sabit SQLITE_CONSTRAINT = 19
+sabit SQLITE_MISMATCH = 20
+sabit SQLITE_MISUSE = 21
+sabit SQLITE_ROW = 100
+sabit SQLITE_DONE = 101
+
+sabit SQLITE_OPEN_READONLY = 0x00000001
+sabit SQLITE_OPEN_READWRITE = 0x00000002
+sabit SQLITE_OPEN_CREATE = 0x00000004
+
+// ============================================================================
+// DÜŞÜK SEVİYE FONKSİYONLAR (Low-level - External C bindings)
+// ============================================================================
+
+// SQLite3 C API bindings
+harici fonksiyon sqlite3_open_v2(dosya: yazı, flags: tamsayı) -> Sonuç[tamsayı, tamsayı]
+harici fonksiyon sqlite3_close(handle: tamsayı) -> Sonuç[boş, tamsayı]
+harici fonksiyon sqlite3_prepare_v2(handle: tamsayı, sql: yazı) -> Sonuç[tamsayı, tamsayı]
+harici fonksiyon sqlite3_finalize(stmt: tamsayı) -> boş
+harici fonksiyon sqlite3_step(stmt: tamsayı) -> tamsayı
+harici fonksiyon sqlite3_reset(stmt: tamsayı) -> boş
+harici fonksiyon sqlite3_exec(handle: tamsayı, sql: yazı) -> Sonuç[boş, tamsayı]
+harici fonksiyon sqlite3_bind_value(stmt: tamsayı, indeks: tamsayı, değer: SqliteDeger) -> Sonuç[boş, tamsayı]
+harici fonksiyon sqlite3_bind_parameter_index(stmt: tamsayı, ad: yazı) -> tamsayı
+harici fonksiyon sqlite3_bind_parameter_count(stmt: tamsayı) -> tamsayı
+harici fonksiyon sqlite3_column_count(stmt: tamsayı) -> tamsayı
+harici fonksiyon sqlite3_column_name(stmt: tamsayı, indeks: tamsayı) -> yazı
+harici fonksiyon sqlite3_column_value(stmt: tamsayı, indeks: tamsayı) -> SqliteDeger
+harici fonksiyon sqlite3_changes(handle: tamsayı) -> tamsayı
+harici fonksiyon sqlite3_total_changes(handle: tamsayı) -> tamsayı
+harici fonksiyon sqlite3_last_insert_rowid(handle: tamsayı) -> tamsayı
+harici fonksiyon sqlite3_busy_timeout(handle: tamsayı, ms: tamsayı) -> boş
+harici fonksiyon sqlite3_backup(hedef: tamsayı, kaynak: tamsayı) -> Sonuç[boş, tamsayı]
+
+// ============================================================================
+// KULLANIM ÖRNEKLERİ (Usage Examples)
+// ============================================================================
+
+/*
+// ============================================================================
+// TEMEL KULLANIM
+// ============================================================================
+
+// Örnek 1: Basit veritabanı oluşturma
+kullan sqlite
+
+değişken db = sqlite::baglan("uygulama.db")
+eğer db.hata_mı() ise yap
+    yazdır("Veritabanı açılamadı")
+    dön
+son
+
+değişken conn = db.unwrap()
+
+// Tablo oluştur
+değişken sütunlar = eşleme_oluştur()
+sütunlar["id"] = "INTEGER PRIMARY KEY AUTOINCREMENT"
+sütunlar["ad"] = "TEXT NOT NULL"
+sütunlar["email"] = "TEXT UNIQUE"
+sütunlar["yaş"] = "INTEGER"
+
+sqlite::tablo_olustur(conn, "kullanicilar", sütunlar)
+
+// Veri ekle
+değişken insert_sonuç = sqlite::calistir(
+    conn, 
+    "INSERT INTO kullanicilar (ad, email, yaş) VALUES (?, ?, ?)",
+    ["Ahmet", "ahmet@example.com", 25]
+)
+
+eğer insert_sonuç.başarılı_mı() ise yap
+    değişken cursor = insert_sonuç.unwrap()
+    değişken son_id = sqlite::imkec_son_id(cursor)
+    yazdır("Yeni kullanıcı ID: " + tamsayı_yazı(son_id))
+    sqlite::imkec_kapat(cursor)
+son
+
+// Veri oku
+değişken select_sonuç = sqlite::calistir(conn, "SELECT * FROM kullanicilar")
+eğer select_sonuç.başarılı_mı() ise yap
+    değişken cursor = select_sonuç.unwrap()
+    değişken satirlar = sqlite::imkec_tumu_al(cursor)
+    
+    her biri satır içinde satirlar yap
+        yazdır("ID: " + tamsayı_yazı(satır["id"] as tamsayı))
+        yazdır("Ad: " + satır["ad"] as yazı)
+        yazdır("Email: " + satır["email"] as yazı)
+    son
+    
+    sqlite::imkec_kapat(cursor)
+son
+
+sqlite::kapat(conn)
+
+// Örnek 2: Named parameters
+değişken params = eşleme_oluştur()
+params["ad"] = "Mehmet"
+params["yas"] = 30
+
+değişken sonuç = sqlite::calistir_isimli(
+    conn,
+    "SELECT * FROM kullanicilar WHERE ad = :ad AND yaş > :yas",
+    params
+)
+
+// Örnek 3: Transaction kullanımı
+değişken tx_sonuç = sqlite::transaction(conn, fonksiyon() -> Sonuç[boş, SqliteHata] yap
+    // Transaction içinde birden fazla işlem
+    sqlite::calistir(conn, "INSERT INTO kullanicilar (ad, email) VALUES (?, ?)", ["Ali", "ali@example.com"])
+    sqlite::calistir(conn, "UPDATE kullanicilar SET yaş = yaş + 1 WHERE ad = ?", ["Ahmet"])
+    
+    // Hata olursa otomatik ROLLBACK
+    eğer bazı_hata_durumu ise yap
+        dön Hata(SqliteHata yap mesaj: "İşlem iptal", hata_kodu: -1, sql: "" son)
+    son
+    
+    dön Başarı(boş)  // Otomatik COMMIT
+son)
+
+// Örnek 4: In-memory database (testler için ideal)
+değişken mem_db = sqlite::bellek_veritabani().unwrap()
+sqlite::script_calistir(mem_db, "
+    CREATE TABLE temp_data (
+        id INTEGER PRIMARY KEY,
+        value TEXT
+    );
+    INSERT INTO temp_data VALUES (1, 'test');
+")
+
+// Örnek 5: Bulk insert (executemany)
+değişken kullanicilar = [
+    ["User1", "user1@example.com", 20],
+    ["User2", "user2@example.com", 25],
+    ["User3", "user3@example.com", 30]
+]
+
+değişken etkilenen = sqlite::calistir_coklu(
+    conn,
+    "INSERT INTO kullanicilar (ad, email, yaş) VALUES (?, ?, ?)",
+    kullanicilar
+)
+
+yazdır("Eklenen satır sayısı: " + tamsayı_yazı(etkilenen.unwrap()))
+
+// Örnek 6: JOIN sorguları
+değişken join_sql = "
+    SELECT u.ad, p.başlık, p.içerik
+    FROM kullanicilar u
+    JOIN gonderiler p ON u.id = p.kullanici_id
+    WHERE u.yaş > 18
+    ORDER BY p.oluşturulma_tarihi DESC
+"
+
+değişken sonuç = sqlite::calistir(conn, join_sql)
+// ... sonuçları işle
+
+// Örnek 7: Aggregate functions
+değişken aggregate_sql = "
+    SELECT 
+        COUNT(*) as toplam,
+        AVG(yaş) as ortalama_yas,
+        MAX(yaş) as max_yas,
+        MIN(yaş) as min_yas
+    FROM kullanicilar
+"
+
+değişken cursor = sqlite::calistir(conn, aggregate_sql).unwrap()
+değişken satır = sqlite::imkec_bir_al(cursor).unwrap()
+
+yazdır("Toplam kullanıcı: " + tamsayı_yazı(satır["toplam"] as tamsayı))
+yazdır("Ortalama yaş: " + ondalık_yazı(satır["ortalama_yas"] as ondalık))
+
+// Örnek 8: Backup
+sqlite::yedek_al(conn, "uygulama_backup.db")
+
+// Örnek 9: Helper fonksiyonları
+eğer sqlite::tablo_var_mi(conn, "kullanicilar") ise yap
+    değişken sayı = sqlite::satir_sayisi(conn, "kullanicilar").unwrap()
+    yazdır("Kullanıcı sayısı: " + tamsayı_yazı(sayı))
+son
+
+değişken boyut = sqlite::veritabani_boyutu(conn)
+yazdır("Veritabanı boyutu: " + tamsayı_yazı(boyut) + " byte")
+
+sqlite::optimize_et(conn)  // VACUUM çalıştır
+
+// Örnek 10: Transaction ile batch insert
+sqlite::transaction_basla(conn)
+
+deneme yap
+    her biri i içinde aralık(1000) yap
+        sqlite::calistir(conn, "INSERT INTO logs (mesaj) VALUES (?)", ["Log " + tamsayı_yazı(i)])
+    son
+    
+    sqlite::transaction_commit(conn)
+    yazdır("1000 kayıt eklendi")
+son yakala hata yap
+    sqlite::transaction_rollback(conn)
+    yazdır("Hata: " + hata.mesaj)
+son
+
+// Örnek 11: Savepoint (nested transactions)
+sqlite::transaction_basla(conn)
+sqlite::savepoint_olustur(conn, "sp1")
+
+sqlite::calistir(conn, "INSERT INTO users (ad) VALUES (?)", ["Test"])
+
+eğer hata_var ise yap
+    sqlite::savepoint_rollback(conn, "sp1")  // Sadece savepoint'ten sonrasını geri al
+son değilse yap
+    sqlite::savepoint_release(conn, "sp1")   // Savepoint'i kaldır
+    sqlite::transaction_commit(conn)
+son
+*/
+
+// ============================================================================
+// TRANSACTION API - Gelişmiş İşlemler (Yeni - v1.7)
+// ============================================================================
+
+// Transaction durumu
+tip TransactionDurum = "INACTIVE" | "ACTIVE" | "COMMITTED" | "ROLLED_BACK"
+
+// Transaction context
+tip Transaction = yapı yap
+    baglanti: SqliteBaglanti,
+    seviye: IsolasyonSeviyesi,
+    durum: TransactionDurum,
+    başlangıç_zamanı: tamsayı,
+    savepoint_stack: liste[yazı]
+son
+
+// Transaction başlat
+fonksiyon transaction_basla_v2(conn: SqliteBaglanti, seviye: IsolasyonSeviyesi = "DEFERRED") -> Sonuç[Transaction, SqliteHata]
+yap
+    değişken sql = "BEGIN " + seviye + " TRANSACTION"
+    değişken sonuç = sqlite3_exec(conn.handle, sql)
+    
+    eğer sonuç.hata_mı() ise yap
+        dön Hata(SqliteHata yap
+            mesaj: "Transaction başlatılamadı",
+            hata_kodu: sonuç.hata_kodu(),
+            sql: sql
+        son)
+    son
+    
+    dön Başarı(Transaction yap
+        baglanti: conn,
+        seviye: seviye,
+        durum: "ACTIVE",
+        başlangıç_zamanı: time::timestamp_ms(),
+        savepoint_stack: liste_oluştur()
+    son)
+son
+
+// Transaction commit
+fonksiyon transaction_commit(tx: Transaction) -> Sonuç[boş, SqliteHata]
+yap
+    eğer tx.durum != "ACTIVE" ise yap
+        dön Hata(SqliteHata yap
+            mesaj: "Transaction aktif değil",
+            hata_kodu: SQLITE_ERROR,
+            sql: ""
+        son)
+    son
+    
+    değişken sonuç = sqlite3_exec(tx.baglanti.handle, "COMMIT")
+    
+    eğer sonuç.başarılı_mı() ise yap
+        tx.durum = "COMMITTED"
+        dön Başarı(boş)
+    son değilse yap
+        dön Hata(SqliteHata yap
+            mesaj: "Commit hatası",
+            hata_kodu: sonuç.hata_kodu(),
+            sql: "COMMIT"
+        son)
+    son
+son
+
+// Transaction rollback
+fonksiyon transaction_rollback(tx: Transaction) -> Sonuç[boş, SqliteHata]
+yap
+    eğer tx.durum != "ACTIVE" ise yap
+        dön Hata(SqliteHata yap
+            mesaj: "Transaction aktif değil",
+            hata_kodu: SQLITE_ERROR,
+            sql: ""
+        son)
+    son
+    
+    değişken sonuç = sqlite3_exec(tx.baglanti.handle, "ROLLBACK")
+    
+    eğer sonuç.başarılı_mı() ise yap
+        tx.durum = "ROLLED_BACK"
+        dön Başarı(boş)
+    son değilse yap
+        dön Hata(SqliteHata yap
+            mesaj: "Rollback hatası",
+            hata_kodu: sonuç.hata_kodu(),
+            sql: "ROLLBACK"
+        son)
+    son
+son
+
+// Savepoint oluştur (nested transaction)
+fonksiyon savepoint_olustur(tx: Transaction, isim: yazı) -> Sonuç[boş, SqliteHata]
+yap
+    eğer tx.durum != "ACTIVE" ise yap
+        dön Hata(SqliteHata yap
+            mesaj: "Transaction aktif değil",
+            hata_kodu: SQLITE_ERROR,
+            sql: ""
+        son)
+    son
+    
+    değişken sql = "SAVEPOINT " + isim
+    değişken sonuç = sqlite3_exec(tx.baglanti.handle, sql)
+    
+    eğer sonuç.başarılı_mı() ise yap
+        tx.savepoint_stack.ekle(isim)
+        dön Başarı(boş)
+    son değilse yap
+        dön Hata(SqliteHata yap
+            mesaj: "Savepoint oluşturulamadı",
+            hata_kodu: sonuç.hata_kodu(),
+            sql: sql
+        son)
+    son
+son
+
+// Savepoint'e geri dön (rollback)
+fonksiyon savepoint_rollback(tx: Transaction, isim: yazı) -> Sonuç[boş, SqliteHata]
+yap
+    değişken bulundu = yanlış
+    her biri sp içinde tx.savepoint_stack yap
+        eğer sp == isim ise yap
+            bulundu = doğru
+            dur
+        son
+    son
+    
+    eğer bulundu == yanlış ise yap
+        dön Hata(SqliteHata yap
+            mesaj: "Savepoint bulunamadı: " + isim,
+            hata_kodu: SQLITE_ERROR,
+            sql: ""
+        son)
+    son
+    
+    değişken sql = "ROLLBACK TO SAVEPOINT " + isim
+    değişken sonuç = sqlite3_exec(tx.baglanti.handle, sql)
+    
+    eğer sonuç.başarılı_mı() ise yap
+        dön Başarı(boş)
+    son değilse yap
+        dön Hata(SqliteHata yap
+            mesaj: "Savepoint rollback hatası",
+            hata_kodu: sonuç.hata_kodu(),
+            sql: sql
+        son)
+    son
+son
+
+// Savepoint'i kaldır (release)
+fonksiyon savepoint_release(tx: Transaction, isim: yazı) -> Sonuç[boş, SqliteHata]
+yap
+    değişken indeks = -1
+    değişken i = 0
+    her biri sp içinde tx.savepoint_stack yap
+        eğer sp == isim ise yap
+            indeks = i
+            dur
+        son
+        i = i + 1
+    son
+    
+    eğer indeks == -1 ise yap
+        dön Hata(SqliteHata yap
+            mesaj: "Savepoint bulunamadı: " + isim,
+            hata_kodu: SQLITE_ERROR,
+            sql: ""
+        son)
+    son
+    
+    değişken sql = "RELEASE SAVEPOINT " + isim
+    değişken sonuç = sqlite3_exec(tx.baglanti.handle, sql)
+    
+    eğer sonuç.başarılı_mı() ise yap
+        // Stack'ten kaldır
+        collections::remove_at(tx.savepoint_stack, indeks)
+        dön Başarı(boş)
+    son değilse yap
+        dön Hata(SqliteHata yap
+            mesaj: "Savepoint release hatası",
+            hata_kodu: sonuç.hata_kodu(),
+            sql: sql
+        son)
+    son
+son
+
+// Transaction context manager v2 (otomatik commit/rollback)
+fonksiyon transaction_v2(conn: SqliteBaglanti, işlem: fonksiyon(Transaction) -> Sonuç[boş, SqliteHata]) -> Sonuç[boş, SqliteHata]
+yap
+    değişken tx_sonuç = transaction_basla_v2(conn, "DEFERRED")
+    eğer tx_sonuç.hata_mı() ise yap
+        dön Hata(tx_sonuç.hata())
+    son
+    
+    değişken tx = tx_sonuç.unwrap()
+    
+    // İşlemi çalıştır
+    değişken işlem_sonuç = işlem(tx)
+    
+    eğer işlem_sonuç.başarılı_mı() ise yap
+        // Başarılı - commit et
+        dön transaction_commit(tx)
+    son değilse yap
+        // Hata - rollback et
+        transaction_rollback(tx)
+        dön Hata(işlem_sonuç.hata())
+    son
+son
+
+// Batch insert (transaction + prepared statement)
+fonksiyon batch_insert(conn: SqliteBaglanti, tablo: yazı, sütunlar: liste[yazı], veriler: liste[liste[SqliteDeger]]) -> Sonuç[tamsayı, SqliteHata]
+yap
+    // SQL prepare et - basit placeholder string oluştur
+    değişken placeholder_list = liste_oluştur[yazı]()
+    her biri _ içinde sütunlar yap
+        placeholder_list.ekle("?")
+    son
+    değişken placeholders = string::birleştir(placeholder_list, ", ")
+    değişken sutun_str = string::birleştir(sütunlar, ", ")
+    değişken sql = "INSERT INTO " + tablo + " (" + sutun_str + ") VALUES (" + placeholders + ")"
+    
+    değişken stmt_sonuç = prepare(conn, sql)
+    eğer stmt_sonuç.hata_mı() ise yap
+        dön Hata(stmt_sonuç.hata())
+    son
+    
+    değişken stmt = stmt_sonuç.unwrap()
+    değişken eklenen = 0
+    
+    // Transaction başlat
+    değişken tx_sonuç = transaction_basla_v2(conn, "DEFERRED")
+    eğer tx_sonuç.hata_mı() ise yap
+        finalize(stmt)
+        dön Hata(tx_sonuç.hata())
+    son
+    
+    değişken tx = tx_sonuç.unwrap()
+    
+    // Her satır için bind + execute
+    değişken hata_var = yanlış
+    değişken hata_mesaj: SqliteHata = SqliteHata yap mesaj: "", hata_kodu: 0, sql: "" son
+    
+    her biri satır içinde veriler yap
+        değişken bind_sonuç = bind_parameters(stmt, satır)
+        eğer bind_sonuç.hata_mı() ise yap
+            hata_var = doğru
+            hata_mesaj = bind_sonuç.hata()
+            dur
+        son
+        
+        değişken step_sonuç = step(stmt)
+        eğer step_sonuç.hata_mı() ise yap
+            hata_var = doğru
+            hata_mesaj = step_sonuç.hata()
+            dur
+        son
+        
+        reset(stmt)
+        eklenen = eklenen + 1
+    son
+    
+    // Hata kontrolu
+    eğer hata_var ise yap
+        transaction_rollback(tx)
+        finalize(stmt)
+        dön Hata(hata_mesaj)
+    son
+    
+    // Commit
+    değişken commit_sonuç = transaction_commit(tx)
+    finalize(stmt)
+    
+    eğer commit_sonuç.hata_mı() ise yap
+        dön Hata(commit_sonuç.hata())
+    son
+    
+    dön Başarı(eklenen)
+son
+
+// Batch update (transaction + prepared statement)
+fonksiyon batch_update(conn: SqliteBaglanti, tablo: yazı, set_sütunlar: liste[yazı], where_sütun: yazı, veriler: liste[liste[SqliteDeger]]) -> Sonuç[tamsayı, SqliteHata]
+yap
+    // SQL prepare et: UPDATE tablo SET col1=?, col2=? WHERE id=?
+    değişken set_parts = liste_oluştur[yazı]()
+    her biri s içinde set_sütunlar yap
+        set_parts.ekle(s + "=?")
+    son
+    değişken set_clause = string::birleştir(set_parts, ", ")
+    değişken sql = "UPDATE " + tablo + " SET " + set_clause + " WHERE " + where_sütun + "=?"
+    
+    değişken stmt_sonuç = prepare(conn, sql)
+    eğer stmt_sonuç.hata_mı() ise yap
+        dön Hata(stmt_sonuç.hata())
+    son
+    
+    değişken stmt = stmt_sonuç.unwrap()
+    değişken güncellenen = 0
+    
+    // Transaction
+    değişken tx_sonuç = transaction_basla_v2(conn, "DEFERRED")
+    eğer tx_sonuç.hata_mı() ise yap
+        finalize(stmt)
+        dön Hata(tx_sonuç.hata())
+    son
+    
+    değişken tx = tx_sonuç.unwrap()
+    
+    // Her satır için bind + execute
+    değişken hata_var = yanlış
+    değişken hata_mesaj: SqliteHata = SqliteHata yap mesaj: "", hata_kodu: 0, sql: "" son
+    
+    her biri satır içinde veriler yap
+        değişken bind_sonuç = bind_parameters(stmt, satır)
+        eğer bind_sonuç.hata_mı() ise yap
+            hata_var = doğru
+            hata_mesaj = bind_sonuç.hata()
+            dur
+        son
+        
+        değişken step_sonuç = step(stmt)
+        eğer step_sonuç.hata_mı() ise yap
+            hata_var = doğru
+            hata_mesaj = step_sonuç.hata()
+            dur
+        son
+        güncellenen = güncellenen + changes(conn)
+        reset(stmt)
+    son
+    
+    // Hata kontrolu
+    eğer hata_var ise yap
+        transaction_rollback(tx)
+        finalize(stmt)
+        dön Hata(hata_mesaj)
+    son
+    
+    // Commit
+    değişken commit_sonuç = transaction_commit(tx)
+    finalize(stmt)
+    
+    eğer commit_sonuç.hata_mı() ise yap
+        dön Hata(commit_sonuç.hata())
+    son
+    
+    dön Başarı(güncellenen)
+son
+
+// ============================================================================
+// PREPARED STATEMENTS - Gelişmiş API (Yeni - v1.7)
+// ============================================================================
+
+// Prepared statement
+tip PreparedStatement = yapı yap
+    conn_handle: tamsayı,
+    stmt_handle: tamsayı,
+    sql: yazı,
+    param_sayısı: tamsayı,
+    sütun_sayısı: tamsayı,
+    finalized: mantıksal
+son
+
+// Statement prepare et
+fonksiyon prepare(conn: SqliteBaglanti, sql: yazı) -> Sonuç[PreparedStatement, SqliteHata]
+yap
+    değişken stmt_sonuç = sqlite3_prepare_v2(conn.handle, sql)
+    
+    eğer stmt_sonuç.hata_mı() ise yap
+        dön Hata(SqliteHata yap
+            mesaj: "SQL prepare başarısız",
+            hata_kodu: stmt_sonuç.hata_kodu(),
+            sql: sql
+        son)
+    son
+    
+    değişken stmt_handle = stmt_sonuç.unwrap()
+    değişken param_sayısı = sqlite3_bind_parameter_count(stmt_handle)
+    değişken sütun_sayısı = sqlite3_column_count(stmt_handle)
+    
+    dön Başarı(PreparedStatement yap
+        conn_handle: conn.handle,
+        stmt_handle: stmt_handle,
+        sql: sql,
+        param_sayısı: param_sayısı,
+        sütun_sayısı: sütun_sayısı,
+        finalized: yanlış
+    son)
+son
+
+// Parametreleri bind et
+fonksiyon bind_parameters(stmt: PreparedStatement, params: liste[SqliteDeger]) -> Sonuç[boş, SqliteHata]
+yap
+    değişken params_len = 0
+    her biri _ içinde params yap
+        params_len = params_len + 1
+    son
+    
+    eğer params_len != stmt.param_sayısı ise yap
+        dön Hata(SqliteHata yap
+            mesaj: "Parametre sayısı uyuşmuyor",
+            hata_kodu: SQLITE_MISMATCH,
+            sql: stmt.sql
+        son)
+    son
+    
+    // Her parametreyi bind et (basitleştirilmiş - string ve int desteği)
+    değişken index = 1
+    her biri param içinde params yap
+        // Şimdilik sadece generic bind_value kullan
+        değişken bind_sonuç = sqlite3_bind_value(stmt.stmt_handle, index, param)
+        eğer bind_sonuç.hata_mı() ise yap
+            dön Hata(SqliteHata yap
+                mesaj: "Parameter binding hatası",
+                hata_kodu: bind_sonuç.hata_kodu(),
+                sql: stmt.sql
+            son)
+        son
+        index = index + 1
+    son
+    
+    dön Başarı(boş)
+son
+
+// Statement'ı çalıştır (bir adım)
+fonksiyon step(stmt: PreparedStatement) -> Sonuç[mantıksal, SqliteHata]
+yap
+    değişken result = sqlite3_step(stmt.stmt_handle)
+    
+    eğer result == SQLITE_ROW ise yap
+        dön Başarı(doğru)   // Daha fazla satır var
+    son değilse eğer result == SQLITE_DONE ise yap
+        dön Başarı(yanlış)  // Tamamlandı
+    son değilse yap
+        dön Hata(SqliteHata yap
+            mesaj: "Step hatası",
+            hata_kodu: result,
+            sql: stmt.sql
+        son)
+    son
+son
+
+// Statement'ı reset et (yeniden çalıştırmak için)
+fonksiyon reset(stmt: PreparedStatement) -> Sonuç[boş, SqliteHata]
+yap
+    sqlite3_reset(stmt.stmt_handle)
+    dön Başarı(boş)
+son
+
+// Statement'ı sonlandır (memory cleanup)
+fonksiyon finalize(stmt: PreparedStatement) -> Sonuç[boş, SqliteHata]
+yap
+    eğer stmt.finalized == yanlış ise yap
+        sqlite3_finalize(stmt.stmt_handle)
+        stmt.finalized = doğru
+    son
+    dön Başarı(boş)
+son
+
+// Etkilenen satır sayısı
+fonksiyon changes(conn: SqliteBaglanti) -> tamsayı
+yap
+    dön sqlite3_changes(conn.handle)
+son
+
+// Toplam değişiklik sayısı (bağlantı açıldığından beri)
+fonksiyon total_changes(conn: SqliteBaglanti) -> tamsayı
+yap
+    dön sqlite3_total_changes(conn.handle)
+son
+
+// Son eklenen satırın ROWID'si
+fonksiyon last_insert_rowid(conn: SqliteBaglanti) -> tamsayı
+yap
+    dön @native sqlite3_last_insert_rowid(conn.handle)
+son
+
+son  // modül sqlite

@@ -1,0 +1,474 @@
+// ============================================================================
+// BERK GUI Framework - Metal Materials
+// ============================================================================
+// Önceden tanımlı metal malzemeleri
+// Çelik, alüminyum, krom, altın, bakır, titanyum, vb.
+// ============================================================================
+
+modül gui::materials::metal
+
+kullan gui::materials::material::{Material, MaterialType, MaterialPattern}
+kullan gui::style::colors::Color
+kullan gui::rendering::canvas::{Canvas, Path, RadialGradient, LinearGradient, ColorStop, FillStyle}
+kullan gui::effects::lighting::Light
+
+// ============================================================================
+// METAL PRESET FACTORY
+// ============================================================================
+
+/// Metal malzeme fabrikası
+pub tip Metal = yapı son
+
+impl Metal:
+    // ========================================================================
+    // STEEL / ÇELİK
+    // ========================================================================
+    
+    /// Paslanmaz çelik
+    pub fn stainless_steel() döndür Material:
+        değişken mat = Material::new(MaterialType::Metal, Color::hex("#c0c0c0"))
+        mat.metallic = 0.9
+        mat.roughness = 0.2
+        mat.specular = 0.8
+        mat.clearcoat = 0.1
+        döndür mat
+    son
+    
+    /// Fırçalanmış çelik
+    pub fn brushed_steel() döndür Material:
+        değişken mat = Material::new(MaterialType::Metal, Color::hex("#b8b8b8"))
+        mat.metallic = 0.85
+        mat.roughness = 0.35
+        mat.specular = 0.6
+        mat.anisotropic = 0.7
+        mat.pattern = Bazı(MaterialPattern::Brushed(0.0))
+        döndür mat
+    son
+    
+    /// Dökme demir
+    pub fn cast_iron() döndür Material:
+        değişken mat = Material::new(MaterialType::Metal, Color::hex("#3d3d3d"))
+        mat.metallic = 0.75
+        mat.roughness = 0.7
+        mat.specular = 0.3
+        döndür mat
+    son
+    
+    /// Karbon çelik
+    pub fn carbon_steel() döndür Material:
+        değişken mat = Material::new(MaterialType::Metal, Color::hex("#4a4a4a"))
+        mat.metallic = 0.85
+        mat.roughness = 0.4
+        mat.specular = 0.5
+        döndür mat
+    son
+    
+    // ========================================================================
+    // ALUMINUM / ALÜMİNYUM
+    // ========================================================================
+    
+    /// Ham alüminyum
+    pub fn aluminum() döndür Material:
+        değişken mat = Material::new(MaterialType::Metal, Color::hex("#d6d6d6"))
+        mat.metallic = 0.8
+        mat.roughness = 0.25
+        mat.specular = 0.7
+        döndür mat
+    son
+    
+    /// Fırçalanmış alüminyum
+    pub fn brushed_aluminum() döndür Material:
+        değişken mat = Material::new(MaterialType::Metal, Color::hex("#cccccc"))
+        mat.metallic = 0.75
+        mat.roughness = 0.4
+        mat.specular = 0.5
+        mat.anisotropic = 0.6
+        mat.pattern = Bazı(MaterialPattern::Brushed(0.0))
+        döndür mat
+    son
+    
+    /// Dairesel fırçalanmış alüminyum
+    pub fn circular_brushed_aluminum() döndür Material:
+        değişken mat = Material::new(MaterialType::Metal, Color::hex("#c8c8c8"))
+        mat.metallic = 0.75
+        mat.roughness = 0.35
+        mat.specular = 0.55
+        mat.pattern = Bazı(MaterialPattern::CircularBrushed)
+        döndür mat
+    son
+    
+    /// Anodize alüminyum (renkli)
+    pub fn anodized_aluminum(color: Color) döndür Material:
+        değişken mat = Material::new(MaterialType::Metal, color)
+        mat.metallic = 0.7
+        mat.roughness = 0.15
+        mat.specular = 0.6
+        mat.clearcoat = 0.4
+        döndür mat
+    son
+    
+    /// Siyah anodize
+    pub fn black_anodized() döndür Material:
+        döndür Metal::anodized_aluminum(Color::hex("#1a1a1a"))
+    son
+    
+    /// Gümüş anodize
+    pub fn silver_anodized() döndür Material:
+        döndür Metal::anodized_aluminum(Color::hex("#b0b0b0"))
+    son
+    
+    // ========================================================================
+    // CHROME / KROM
+    // ========================================================================
+    
+    /// Parlak krom
+    pub fn chrome() döndür Material:
+        değişken mat = Material::new(MaterialType::Metal, Color::hex("#e8e8e8"))
+        mat.metallic = 1.0
+        mat.roughness = 0.05
+        mat.specular = 1.0
+        mat.clearcoat = 0.2
+        döndür mat
+    son
+    
+    /// Mat krom
+    pub fn matte_chrome() döndür Material:
+        değişken mat = Material::new(MaterialType::Metal, Color::hex("#d0d0d0"))
+        mat.metallic = 0.95
+        mat.roughness = 0.3
+        mat.specular = 0.7
+        döndür mat
+    son
+    
+    /// Saten krom
+    pub fn satin_chrome() döndür Material:
+        değişken mat = Material::new(MaterialType::Metal, Color::hex("#d8d8d8"))
+        mat.metallic = 0.9
+        mat.roughness = 0.2
+        mat.specular = 0.8
+        döndür mat
+    son
+    
+    /// Siyah krom
+    pub fn black_chrome() döndür Material:
+        değişken mat = Material::new(MaterialType::Metal, Color::hex("#2a2a2a"))
+        mat.metallic = 0.95
+        mat.roughness = 0.1
+        mat.specular = 0.9
+        döndür mat
+    son
+    
+    // ========================================================================
+    // PRECIOUS METALS / DEĞERLİ METALLER
+    // ========================================================================
+    
+    /// Altın
+    pub fn gold() döndür Material:
+        değişken mat = Material::new(MaterialType::Metal, Color::hex("#ffd700"))
+        mat.secondary_color = Bazı(Color::hex("#b8860b"))
+        mat.metallic = 1.0
+        mat.roughness = 0.1
+        mat.specular = 0.9
+        mat.specular_tint = 0.9
+        döndür mat
+    son
+    
+    /// Mat altın
+    pub fn matte_gold() döndür Material:
+        değişken mat = Material::new(MaterialType::Metal, Color::hex("#daa520"))
+        mat.metallic = 0.95
+        mat.roughness = 0.4
+        mat.specular = 0.5
+        mat.specular_tint = 0.8
+        döndür mat
+    son
+    
+    /// Rose gold
+    pub fn rose_gold() döndür Material:
+        değişken mat = Material::new(MaterialType::Metal, Color::hex("#e8b4b8"))
+        mat.metallic = 1.0
+        mat.roughness = 0.15
+        mat.specular = 0.8
+        mat.specular_tint = 0.7
+        döndür mat
+    son
+    
+    /// Gümüş
+    pub fn silver() döndür Material:
+        değişken mat = Material::new(MaterialType::Metal, Color::hex("#e8e8e8"))
+        mat.metallic = 1.0
+        mat.roughness = 0.1
+        mat.specular = 0.95
+        döndür mat
+    son
+    
+    /// Antik gümüş
+    pub fn antique_silver() döndür Material:
+        değişken mat = Material::new(MaterialType::Metal, Color::hex("#a0a0a0"))
+        mat.metallic = 0.85
+        mat.roughness = 0.5
+        mat.specular = 0.4
+        döndür mat
+    son
+    
+    /// Platin
+    pub fn platinum() döndür Material:
+        değişken mat = Material::new(MaterialType::Metal, Color::hex("#e5e4e2"))
+        mat.metallic = 1.0
+        mat.roughness = 0.12
+        mat.specular = 0.9
+        döndür mat
+    son
+    
+    // ========================================================================
+    // COPPER / BAKIR
+    // ========================================================================
+    
+    /// Parlak bakır
+    pub fn copper() döndür Material:
+        değişken mat = Material::new(MaterialType::Metal, Color::hex("#b87333"))
+        mat.metallic = 1.0
+        mat.roughness = 0.15
+        mat.specular = 0.85
+        mat.specular_tint = 0.8
+        döndür mat
+    son
+    
+    /// Oksitlenmiş bakır (patina)
+    pub fn oxidized_copper() döndür Material:
+        değişken mat = Material::new(MaterialType::Metal, Color::hex("#4a7c59"))
+        mat.metallic = 0.6
+        mat.roughness = 0.7
+        mat.specular = 0.2
+        döndür mat
+    son
+    
+    /// Bronz
+    pub fn bronze() döndür Material:
+        değişken mat = Material::new(MaterialType::Metal, Color::hex("#cd7f32"))
+        mat.metallic = 0.95
+        mat.roughness = 0.25
+        mat.specular = 0.7
+        mat.specular_tint = 0.7
+        döndür mat
+    son
+    
+    /// Antik bronz
+    pub fn antique_bronze() döndür Material:
+        değişken mat = Material::new(MaterialType::Metal, Color::hex("#665d1e"))
+        mat.metallic = 0.8
+        mat.roughness = 0.55
+        mat.specular = 0.35
+        döndür mat
+    son
+    
+    /// Pirinç
+    pub fn brass() döndür Material:
+        değişken mat = Material::new(MaterialType::Metal, Color::hex("#d4af37"))
+        mat.metallic = 0.95
+        mat.roughness = 0.2
+        mat.specular = 0.75
+        mat.specular_tint = 0.6
+        döndür mat
+    son
+    
+    /// Fırçalanmış pirinç
+    pub fn brushed_brass() döndür Material:
+        değişken mat = Material::new(MaterialType::Metal, Color::hex("#c9a227"))
+        mat.metallic = 0.9
+        mat.roughness = 0.4
+        mat.specular = 0.5
+        mat.anisotropic = 0.5
+        mat.pattern = Bazı(MaterialPattern::Brushed(0.0))
+        döndür mat
+    son
+    
+    // ========================================================================
+    // SPECIALTY METALS / ÖZEL METALLER
+    // ========================================================================
+    
+    /// Titanyum
+    pub fn titanium() döndür Material:
+        değişken mat = Material::new(MaterialType::Metal, Color::hex("#878681"))
+        mat.metallic = 0.9
+        mat.roughness = 0.3
+        mat.specular = 0.6
+        döndür mat
+    son
+    
+    /// Fırçalanmış titanyum
+    pub fn brushed_titanium() döndür Material:
+        değişken mat = Material::new(MaterialType::Metal, Color::hex("#7a7a78"))
+        mat.metallic = 0.85
+        mat.roughness = 0.45
+        mat.specular = 0.5
+        mat.anisotropic = 0.5
+        mat.pattern = Bazı(MaterialPattern::Brushed(0.0))
+        döndür mat
+    son
+    
+    /// Nikel
+    pub fn nickel() döndür Material:
+        değişken mat = Material::new(MaterialType::Metal, Color::hex("#c8c8c8"))
+        mat.metallic = 0.95
+        mat.roughness = 0.2
+        mat.specular = 0.8
+        döndür mat
+    son
+    
+    /// Tungsten
+    pub fn tungsten() döndür Material:
+        değişken mat = Material::new(MaterialType::Metal, Color::hex("#6b6b6b"))
+        mat.metallic = 0.9
+        mat.roughness = 0.35
+        mat.specular = 0.5
+        döndür mat
+    son
+    
+    /// Kobalt
+    pub fn cobalt() döndür Material:
+        değişken mat = Material::new(MaterialType::Metal, Color::hex("#0047ab"))
+        mat.metallic = 0.9
+        mat.roughness = 0.25
+        mat.specular = 0.7
+        mat.specular_tint = 0.5
+        döndür mat
+    son
+    
+    // ========================================================================
+    // INDUSTRIAL / ENDÜSTRİYEL
+    // ========================================================================
+    
+    /// Galvanize
+    pub fn galvanized() döndür Material:
+        değişken mat = Material::new(MaterialType::Metal, Color::hex("#9a9a9a"))
+        mat.metallic = 0.75
+        mat.roughness = 0.5
+        mat.specular = 0.4
+        döndür mat
+    son
+    
+    /// Karbon fiber metal
+    pub fn carbon_fiber() döndür Material:
+        değişken mat = Material::new(MaterialType::Metal, Color::hex("#2a2a2a"))
+        mat.metallic = 0.3
+        mat.roughness = 0.2
+        mat.specular = 0.6
+        mat.clearcoat = 0.8
+        mat.pattern = Bazı(MaterialPattern::CarbonFiber)
+        döndür mat
+    son
+    
+    /// Elmas plaka (anti-slip)
+    pub fn diamond_plate() döndür Material:
+        değişken mat = Material::new(MaterialType::Metal, Color::hex("#a8a8a8"))
+        mat.metallic = 0.8
+        mat.roughness = 0.45
+        mat.specular = 0.5
+        mat.pattern = Bazı(MaterialPattern::DiamondPlate)
+        döndür mat
+    son
+    
+    /// Paslı metal
+    pub fn rusted() döndür Material:
+        değişken mat = Material::new(MaterialType::Metal, Color::hex("#8b4513"))
+        mat.secondary_color = Bazı(Color::hex("#5c3317"))
+        mat.metallic = 0.3
+        mat.roughness = 0.9
+        mat.specular = 0.1
+        döndür mat
+    son
+    
+    // ========================================================================
+    // AUDIO EQUIPMENT / SES EKİPMANI
+    // ========================================================================
+    
+    /// VU meter çerçeve (klasik)
+    pub fn vu_meter_bezel() döndür Material:
+        döndür Metal::satin_chrome()
+    son
+    
+    /// Amplifikatör panel
+    pub fn amp_panel() döndür Material:
+        döndür Metal::brushed_aluminum()
+    son
+    
+    /// Rack mount
+    pub fn rack_mount() döndür Material:
+        döndür Metal::black_anodized()
+    son
+    
+    /// Potansiyometre şaft
+    pub fn pot_shaft() döndür Material:
+        değişken mat = Metal::stainless_steel()
+        mat.pattern = Bazı(MaterialPattern::Brushed(90.0))  // Dikey fırçalama
+        döndür mat
+    son
+    
+    /// Knob cap
+    pub fn knob_cap() döndür Material:
+        döndür Metal::circular_brushed_aluminum()
+    son
+son
+
+// ============================================================================
+// METAL EFFECTS
+// ============================================================================
+
+/// Metal efekt yardımcıları
+pub tip MetalEffects = yapı son
+
+impl MetalEffects:
+    /// Metal için ambient occlusion
+    pub fn apply_ambient_occlusion(canvas: Canvas, x: ondalık, y: ondalık, w: ondalık, h: ondalık, strength: ondalık) döndür void:
+        değişken ao_gradient = LinearGradient yap
+            x0: x, y0: y,
+            x1: x, y1: y + h,
+            stops: [
+                ColorStop yap offset: 0.0, color: Color::transparent() son,
+                ColorStop yap offset: 0.1, color: Color::rgba(0, 0, 0, (strength * 30.0).floor()) son,
+                ColorStop yap offset: 0.9, color: Color::rgba(0, 0, 0, (strength * 30.0).floor()) son,
+                ColorStop yap offset: 1.0, color: Color::rgba(0, 0, 0, (strength * 80.0).floor()) son
+            ]
+        son
+        
+        canvas.set_fill_style(FillStyle::LinearGradient(ao_gradient))
+        canvas.fill_rect(x, y, w, h)
+    son
+    
+    /// Metal kenar vurgusu
+    pub fn apply_edge_highlight(canvas: Canvas, x: ondalık, y: ondalık, w: ondalık, h: ondalık, intensity: ondalık) döndür void:
+        canvas.set_stroke_color(Color::rgba(255, 255, 255, (intensity * 80.0).floor()))
+        canvas.set_line_width(1.0)
+        canvas.stroke_path(
+            Path::new()
+                .move_to(x + 2.0, y + 1.0)
+                .line_to(x + w - 2.0, y + 1.0)
+        )
+    son
+    
+    /// Bevel efekti
+    pub fn apply_bevel(canvas: Canvas, x: ondalık, y: ondalık, w: ondalık, h: ondalık, depth: ondalık, raised: mantıksal) döndür void:
+        değişken light = eğer raised: Color::rgba(255, 255, 255, 60) değilse: Color::rgba(0, 0, 0, 60) son
+        değişken dark = eğer raised: Color::rgba(0, 0, 0, 60) değilse: Color::rgba(255, 255, 255, 30) son
+        
+        // Üst ve sol kenar
+        canvas.set_stroke_color(light)
+        canvas.set_line_width(depth)
+        canvas.stroke_path(
+            Path::new()
+                .move_to(x, y + h)
+                .line_to(x, y)
+                .line_to(x + w, y)
+        )
+        
+        // Alt ve sağ kenar
+        canvas.set_stroke_color(dark)
+        canvas.stroke_path(
+            Path::new()
+                .move_to(x, y + h)
+                .line_to(x + w, y + h)
+                .line_to(x + w, y)
+        )
+    son
+son

@@ -1,0 +1,377 @@
+// ============================================================================
+// BERK GUI Framework - Interpolation System
+// ============================================================================
+// Synfig Interpolation sisteminden ilham alınmıştır
+// ============================================================================
+
+modül gui::animation::interpolation
+
+kullan std::math
+kullan gui::animation::time::Time
+
+// ============================================================================
+// INTERPOLATION TYPES
+// ============================================================================
+
+/// İnterpolasyon tipi (Synfig uyumlu)
+pub tip Interpolation = özyinelemeli yap
+    /// TCB (Tension-Continuity-Bias) - Kochanek-Bartels spline
+    | TCB(ondalık, ondalık, ondalık)  // tension, continuity, bias
+    
+    /// Sabit değer - değişim yok
+    | Constant
+    
+    /// Lineer interpolasyon
+    | Linear
+    
+    /// Durma (ease-out gibi ama tam durma)
+    | Halt
+    
+    /// Manuel kontrol (tangent handle'lar)
+    | Manual(ondalık, ondalık)  // in_tangent, out_tangent
+    
+    /// Tanımsız
+    | Undefined
+    
+    /// Boş (interpolasyon yok)
+    | Nil
+    
+    /// Clamped (uçlarda düzeltilmiş)
+    | Clamped
+    
+    /// Bezier eğrisi
+    | Bezier(ondalık, ondalık, ondalık, ondalık)  // p1x, p1y, p2x, p2y
+    
+    /// Hermite eğrisi
+    | Hermite(ondalık, ondalık)  // in_tangent, out_tangent
+    
+    /// Catmull-Rom spline
+    | CatmullRom
+    
+    /// B-Spline
+    | BSpline
+son
+
+impl Interpolation:
+    /// Varsayılan TCB değerleri
+    pub fn default_tcb() döndür Interpolation:
+        döndür Interpolation::TCB(0.0, 0.0, 0.0)
+    son
+    
+    /// TCB değerlerini al
+    pub fn get_tcb(self) döndür Seçenek[(ondalık, ondalık, ondalık)]:
+        eşleştir self:
+            Interpolation::TCB(t, c, b): döndür Bazı((t, c, b))
+            _: döndür Hiçbiri
+        son
+    son
+    
+    /// Bu interpolasyon türü animasyon oluşturur mu?
+    pub fn is_animated(self) döndür mantıksal:
+        eşleştir self:
+            Interpolation::Constant: döndür yanlış
+            Interpolation::Nil: döndür yanlış
+            Interpolation::Undefined: döndür yanlış
+            _: döndür doğru
+        son
+    son
+    
+    /// İnterpolasyon adını al
+    pub fn name(self) döndür yazı:
+        eşleştir self:
+            Interpolation::TCB(_, _, _): döndür "TCB"
+            Interpolation::Constant: döndür "Constant"
+            Interpolation::Linear: döndür "Linear"
+            Interpolation::Halt: döndür "Halt"
+            Interpolation::Manual(_, _): döndür "Manual"
+            Interpolation::Undefined: döndür "Undefined"
+            Interpolation::Nil: döndür "Nil"
+            Interpolation::Clamped: döndür "Clamped"
+            Interpolation::Bezier(_, _, _, _): döndür "Bezier"
+            Interpolation::Hermite(_, _): döndür "Hermite"
+            Interpolation::CatmullRom: döndür "Catmull-Rom"
+            Interpolation::BSpline: döndür "B-Spline"
+        son
+    son
+son
+
+// ============================================================================
+// INTERPOLATOR - İnterpolasyon Hesaplayıcı
+// ============================================================================
+
+/// İki değer arasında interpolasyon yapan yapı
+pub tip Interpolator = yapı yap
+    interpolation: Interpolation,
+son
+
+impl Interpolator:
+    /// Yeni interpolator oluştur
+    pub fn new(interpolation: Interpolation) döndür Interpolator:
+        döndür Interpolator { interpolation: interpolation }
+    son
+    
+    /// Lineer interpolator
+    pub fn linear() döndür Interpolator:
+        döndür Interpolator::new(Interpolation::Linear)
+    son
+    
+    /// İki değer arasında interpolasyon yap
+    /// t: 0.0 ile 1.0 arası normalize edilmiş zaman
+    pub fn interpolate(self, from: ondalık, to: ondalık, t: ondalık) döndür ondalık:
+        değişken t_clamped = t.clamp(0.0, 1.0)
+        
+        eşleştir self.interpolation:
+            Interpolation::Constant:
+                // t < 1.0 ise from, değilse to
+                eğer t_clamped < 1.0:
+                    döndür from
+                değilse:
+                    döndür to
+                son
+            
+            Interpolation::Linear:
+                döndür from + (to - from) * t_clamped
+            
+            Interpolation::Halt:
+                // Ease-out benzeri durma
+                değişken ease_t = 1.0 - (1.0 - t_clamped).powi(3)
+                döndür from + (to - from) * ease_t
+            
+            Interpolation::TCB(tension, continuity, bias):
+                döndür self.tcb_interpolate(from, to, t_clamped, tension, continuity, bias)
+            
+            Interpolation::Bezier(p1x, p1y, p2x, p2y):
+                değişken bez_t = self.bezier_t(t_clamped, p1x, p2x)
+                değişken y = self.cubic_bezier(bez_t, 0.0, p1y, p2y, 1.0)
+                döndür from + (to - from) * y
+            
+            Interpolation::Hermite(in_tan, out_tan):
+                döndür self.hermite_interpolate(from, to, t_clamped, in_tan, out_tan)
+            
+            Interpolation::Manual(in_tan, out_tan):
+                döndür self.hermite_interpolate(from, to, t_clamped, in_tan, out_tan)
+            
+            Interpolation::CatmullRom:
+                // Basit durumda lineer, tam implementasyon 4 nokta gerektirir
+                döndür from + (to - from) * t_clamped
+            
+            Interpolation::BSpline:
+                // Basit durumda lineer
+                döndür from + (to - from) * t_clamped
+            
+            Interpolation::Clamped:
+                // Uçlarda düzeltilmiş smooth
+                değişken smooth_t = self.smoothstep(t_clamped)
+                döndür from + (to - from) * smooth_t
+            
+            _:
+                // Undefined, Nil için lineer fallback
+                döndür from + (to - from) * t_clamped
+        son
+    son
+    
+    // ========================================================================
+    // HELPER FUNCTIONS
+    // ========================================================================
+    
+    /// Smoothstep fonksiyonu
+    fn smoothstep(self, t: ondalık) döndür ondalık:
+        döndür t * t * (3.0 - 2.0 * t)
+    son
+    
+    /// Smoother step (Ken Perlin)
+    fn smootherstep(self, t: ondalık) döndür ondalık:
+        döndür t * t * t * (t * (t * 6.0 - 15.0) + 10.0)
+    son
+    
+    /// TCB (Kochanek-Bartels) interpolasyon
+    fn tcb_interpolate(self, from: ondalık, to: ondalık, t: ondalık, 
+                       tension: ondalık, continuity: ondalık, bias: ondalık) döndür ondalık:
+        // TCB parametreleri ile hermite eğrisi
+        // Tension: Eğrinin sıkılığı (-1 to 1)
+        // Continuity: Eğrinin sürekliliği (-1 to 1)  
+        // Bias: Eğrinin yönelimi (-1 to 1)
+        
+        değişken diff = to - from
+        
+        // Basitleştirilmiş TCB: tension etkisi
+        değişken t2 = t * t
+        değişken t3 = t2 * t
+        
+        // Hermite basis fonksiyonları
+        değişken h1 = 2.0 * t3 - 3.0 * t2 + 1.0
+        değişken h2 = -2.0 * t3 + 3.0 * t2
+        değişken h3 = t3 - 2.0 * t2 + t
+        değişken h4 = t3 - t2
+        
+        // Tension etkisi
+        değişken m0 = diff * (1.0 - tension)
+        değişken m1 = diff * (1.0 - tension)
+        
+        // Bias etkisi
+        m0 = m0 * (1.0 + bias)
+        m1 = m1 * (1.0 - bias)
+        
+        döndür from * h1 + to * h2 + m0 * h3 + m1 * h4
+    son
+    
+    /// Hermite interpolasyon
+    fn hermite_interpolate(self, from: ondalık, to: ondalık, t: ondalık,
+                          in_tangent: ondalık, out_tangent: ondalık) döndür ondalık:
+        değişken t2 = t * t
+        değişken t3 = t2 * t
+        
+        // Hermite basis fonksiyonları
+        değişken h1 = 2.0 * t3 - 3.0 * t2 + 1.0
+        değişken h2 = -2.0 * t3 + 3.0 * t2
+        değişken h3 = t3 - 2.0 * t2 + t
+        değişken h4 = t3 - t2
+        
+        döndür from * h1 + to * h2 + in_tangent * h3 + out_tangent * h4
+    son
+    
+    /// Cubic Bezier hesaplama
+    fn cubic_bezier(self, t: ondalık, p0: ondalık, p1: ondalık, p2: ondalık, p3: ondalık) döndür ondalık:
+        değişken one_minus_t = 1.0 - t
+        değişken one_minus_t2 = one_minus_t * one_minus_t
+        değişken one_minus_t3 = one_minus_t2 * one_minus_t
+        değişken t2 = t * t
+        değişken t3 = t2 * t
+        
+        döndür p0 * one_minus_t3 
+             + p1 * 3.0 * one_minus_t2 * t 
+             + p2 * 3.0 * one_minus_t * t2 
+             + p3 * t3
+    son
+    
+    /// Bezier t parametresini Newton-Raphson ile bul
+    fn bezier_t(self, x: ondalık, p1x: ondalık, p2x: ondalık) döndür ondalık:
+        // Başlangıç tahmini
+        değişken t = x
+        
+        // Newton-Raphson iterasyonu
+        döngü i in 0..8:
+            değişken current_x = self.cubic_bezier(t, 0.0, p1x, p2x, 1.0)
+            değişken diff = current_x - x
+            
+            eğer diff.abs() < 0.0001:
+                döndür t
+            son
+            
+            // Türev
+            değişken dx = self.bezier_derivative(t, 0.0, p1x, p2x, 1.0)
+            eğer dx.abs() < 0.0001:
+                kır
+            son
+            
+            t = t - diff / dx
+            t = t.clamp(0.0, 1.0)
+        son
+        
+        döndür t
+    son
+    
+    /// Bezier türevi
+    fn bezier_derivative(self, t: ondalık, p0: ondalık, p1: ondalık, p2: ondalık, p3: ondalık) döndür ondalık:
+        değişken one_minus_t = 1.0 - t
+        değişken one_minus_t2 = one_minus_t * one_minus_t
+        değişken t2 = t * t
+        
+        döndür 3.0 * one_minus_t2 * (p1 - p0) 
+             + 6.0 * one_minus_t * t * (p2 - p1) 
+             + 3.0 * t2 * (p3 - p2)
+    son
+son
+
+// ============================================================================
+// VECTOR INTERPOLATION
+// ============================================================================
+
+/// 2D vektör için interpolasyon
+pub tip Vec2Interpolator = yapı yap
+    interpolator: Interpolator,
+son
+
+impl Vec2Interpolator:
+    pub fn new(interpolation: Interpolation) döndür Vec2Interpolator:
+        döndür Vec2Interpolator { interpolator: Interpolator::new(interpolation) }
+    son
+    
+    pub fn interpolate(self, from: (ondalık, ondalık), to: (ondalık, ondalık), t: ondalık) döndür (ondalık, ondalık):
+        döndür (
+            self.interpolator.interpolate(from.0, to.0, t),
+            self.interpolator.interpolate(from.1, to.1, t)
+        )
+    son
+son
+
+/// 3D vektör için interpolasyon
+pub tip Vec3Interpolator = yapı yap
+    interpolator: Interpolator,
+son
+
+impl Vec3Interpolator:
+    pub fn new(interpolation: Interpolation) döndür Vec3Interpolator:
+        döndür Vec3Interpolator { interpolator: Interpolator::new(interpolation) }
+    son
+    
+    pub fn interpolate(self, from: (ondalık, ondalık, ondalık), 
+                       to: (ondalık, ondalık, ondalık), t: ondalık) döndür (ondalık, ondalık, ondalık):
+        döndür (
+            self.interpolator.interpolate(from.0, to.0, t),
+            self.interpolator.interpolate(from.1, to.1, t),
+            self.interpolator.interpolate(from.2, to.2, t)
+        )
+    son
+son
+
+/// Renk için interpolasyon
+pub tip ColorInterpolator = yapı yap
+    interpolator: Interpolator,
+son
+
+impl ColorInterpolator:
+    pub fn new(interpolation: Interpolation) döndür ColorInterpolator:
+        döndür ColorInterpolator { interpolator: Interpolator::new(interpolation) }
+    son
+    
+    /// RGBA interpolasyon
+    pub fn interpolate_rgba(self, from: (ondalık, ondalık, ondalık, ondalık), 
+                            to: (ondalık, ondalık, ondalık, ondalık), 
+                            t: ondalık) döndür (ondalık, ondalık, ondalık, ondalık):
+        döndür (
+            self.interpolator.interpolate(from.0, to.0, t),
+            self.interpolator.interpolate(from.1, to.1, t),
+            self.interpolator.interpolate(from.2, to.2, t),
+            self.interpolator.interpolate(from.3, to.3, t)
+        )
+    son
+    
+    /// HSL interpolasyon (renk geçişleri için daha iyi)
+    pub fn interpolate_hsl(self, from: (ondalık, ondalık, ondalık), 
+                           to: (ondalık, ondalık, ondalık), 
+                           t: ondalık) döndür (ondalık, ondalık, ondalık):
+        // Hue için kısa yolu seç
+        değişken h_diff = to.0 - from.0
+        eğer h_diff.abs() > 180.0:
+            eğer h_diff > 0.0:
+                h_diff = h_diff - 360.0
+            değilse:
+                h_diff = h_diff + 360.0
+            son
+        son
+        
+        değişken h = from.0 + h_diff * t
+        eğer h < 0.0:
+            h = h + 360.0
+        değilse eğer h >= 360.0:
+            h = h - 360.0
+        son
+        
+        döndür (
+            h,
+            self.interpolator.interpolate(from.1, to.1, t),
+            self.interpolator.interpolate(from.2, to.2, t)
+        )
+    son
+son

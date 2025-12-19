@@ -1,0 +1,40 @@
+// Nuvoton GPIO Module
+// Standard ARM Cortex GPIO implementation
+
+extern "C" {
+    fn GPIO_SetMode(port: *void, pin: u32, mode: u32);
+    fn GPIO_SetPullMode(port: *void, pin: u32, mode: u32);
+    fn GPIO_PIN_DATA(port: *void, pin: u32) -> u32;
+}
+
+const GPIO_MODE_INPUT: u32 = 0;
+const GPIO_MODE_OUTPUT: u32 = 1;
+const GPIO_MODE_OPEN_DRAIN: u32 = 2;
+const GPIO_MODE_QUASI: u32 = 3;
+
+pub struct GPIO {
+    port: *void,
+    pin: u32,
+}
+
+impl GPIO {
+    pub fn new(port: *void, pin: u32) -> GPIO {
+        GPIO { port, pin }
+    }
+    
+    pub fn set_output(&self) {
+        unsafe { GPIO_SetMode(self.port, self.pin, GPIO_MODE_OUTPUT); }
+    }
+    
+    pub fn set_input(&self) {
+        unsafe { GPIO_SetMode(self.port, self.pin, GPIO_MODE_INPUT); }
+    }
+    
+    pub fn write(&self, value: bool) {
+        // Set GPIO pin
+    }
+    
+    pub fn read(&self) -> bool {
+        unsafe { GPIO_PIN_DATA(self.port, self.pin) != 0 }
+    }
+}

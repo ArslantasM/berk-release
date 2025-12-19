@@ -1,0 +1,161 @@
+/// ═══════════════════════════════════════════════════════════════════════════
+/// BERK Programlama Dili - Veritabani Islemleri
+/// Seviye: Uzman (Expert)
+/// ═══════════════════════════════════════════════════════════════════════════
+
+kullan std::io
+kullan std::sqlite
+use std::time
+
+yaz("============================================================")
+yaz("         Veritabani Islemleri / Database Operations         ")
+yaz("============================================================")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 1: Veritabani Baglantisi
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 1: Veritabani Baglantisi ---")
+
+değişken db_path = ":memory:"
+yaz("\n   Veritabani: ", db_path, " (bellek ici)")
+
+değişken db = sqlite::open(db_path)
+yaz("   Baglanti basarili!")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 2: Tablo Olusturma
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 2: Tablo Olusturma ---")
+
+değişken create_sql = "CREATE TABLE kullanicilar (id INTEGER PRIMARY KEY, isim TEXT, yas INTEGER, email TEXT)"
+sqlite::execute(db, create_sql)
+yaz("   'kullanicilar' tablosu olusturuldu")
+
+değişken products_sql = "CREATE TABLE urunler (id INTEGER PRIMARY KEY, ad TEXT, fiyat INTEGER, stok INTEGER)"
+sqlite::execute(db, products_sql)
+yaz("   'urunler' tablosu olusturuldu")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 3: Veri Ekleme (INSERT)
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 3: Veri Ekleme (INSERT) ---")
+
+// Kullanici ekleme
+sqlite::execute(db, "INSERT INTO kullanicilar (isim, yas, email) VALUES ('Ahmet', 28, 'ahmet@email.com')")
+sqlite::execute(db, "INSERT INTO kullanicilar (isim, yas, email) VALUES ('Ayse', 32, 'ayse@email.com')")
+sqlite::execute(db, "INSERT INTO kullanicilar (isim, yas, email) VALUES ('Mehmet', 25, 'mehmet@email.com')")
+sqlite::execute(db, "INSERT INTO kullanicilar (isim, yas, email) VALUES ('Fatma', 30, 'fatma@email.com')")
+yaz("   4 kullanici eklendi")
+
+// Urun ekleme
+sqlite::execute(db, "INSERT INTO urunler (ad, fiyat, stok) VALUES ('Laptop', 15000, 10)")
+sqlite::execute(db, "INSERT INTO urunler (ad, fiyat, stok) VALUES ('Telefon', 8000, 25)")
+sqlite::execute(db, "INSERT INTO urunler (ad, fiyat, stok) VALUES ('Tablet', 5000, 15)")
+sqlite::execute(db, "INSERT INTO urunler (ad, fiyat, stok) VALUES ('Kulaklik', 500, 100)")
+yaz("   4 urun eklendi")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 4: Veri Sorgulama (SELECT)
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 4: Veri Sorgulama (SELECT) ---")
+
+yaz("\n   Tum kullanicilar:")
+değişken users = sqlite::query(db, "SELECT id, isim, yas FROM kullanicilar")
+yaz("   ", users)
+
+yaz("\n   30 yas ustu kullanicilar:")
+değişken senior = sqlite::query(db, "SELECT isim, yas FROM kullanicilar WHERE yas >= 30")
+yaz("   ", senior)
+
+yaz("\n   Tum urunler (fiyata gore sirali):")
+değişken products = sqlite::query(db, "SELECT ad, fiyat, stok FROM urunler ORDER BY fiyat DESC")
+yaz("   ", products)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 5: Veri Guncelleme (UPDATE)
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 5: Veri Guncelleme (UPDATE) ---")
+
+sqlite::execute(db, "UPDATE kullanicilar SET yas = 29 WHERE isim = 'Ahmet'")
+yaz("   Ahmet'in yasi guncellendi: 28 -> 29")
+
+sqlite::execute(db, "UPDATE urunler SET stok = stok - 5 WHERE ad = 'Laptop'")
+yaz("   Laptop stoku azaltildi: 10 -> 5")
+
+değişken updated = sqlite::query(db, "SELECT isim, yas FROM kullanicilar WHERE isim = 'Ahmet'")
+yaz("   Guncel veri: ", updated)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 6: Veri Silme (DELETE)
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 6: Veri Silme (DELETE) ---")
+
+değişken before_count = sqlite::query(db, "SELECT COUNT(*) as sayi FROM kullanicilar")
+yaz("   Silmeden once kullanici sayisi: ", before_count)
+
+sqlite::execute(db, "DELETE FROM kullanicilar WHERE yas < 27")
+yaz("   27 yas alti kullanicilar silindi")
+
+değişken after_count = sqlite::query(db, "SELECT COUNT(*) as sayi FROM kullanicilar")
+yaz("   Sildikten sonra kullanici sayisi: ", after_count)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 7: Aggregate Fonksiyonlar
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 7: Aggregate Fonksiyonlar ---")
+
+değişken toplam_stok = sqlite::query(db, "SELECT SUM(stok) as toplam FROM urunler")
+yaz("\n   Toplam stok: ", toplam_stok)
+
+değişken ort_fiyat = sqlite::query(db, "SELECT AVG(fiyat) as ortalama FROM urunler")
+yaz("   Ortalama fiyat: ", ort_fiyat)
+
+değişken max_fiyat = sqlite::query(db, "SELECT MAX(fiyat) as en_yuksek FROM urunler")
+yaz("   En yuksek fiyat: ", max_fiyat)
+
+değişken min_fiyat = sqlite::query(db, "SELECT MIN(fiyat) as en_dusuk FROM urunler")
+yaz("   En dusuk fiyat: ", min_fiyat)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 8: Performans Testi
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 8: Performans Testi ---")
+
+değişken start = time::now()
+
+// 100 kayit ekle
+için i içinde 1..101 yap
+    sqlite::execute(db, "INSERT INTO kullanicilar (isim, yas, email) VALUES ('Test', 20, 'test@test.com')")
+son
+
+değişken insert_sure = time::elapsed(start)
+yaz("\n   100 INSERT islemi: ", insert_sure, " ms")
+
+start = time::now()
+
+// 100 sorgu yap
+için i içinde 1..101 yap
+    sqlite::query(db, "SELECT * FROM kullanicilar WHERE id = 1")
+son
+
+değişken select_sure = time::elapsed(start)
+yaz("   100 SELECT islemi: ", select_sure, " ms")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 9: Veritabani Kapatma
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 9: Veritabani Kapatma ---")
+
+sqlite::close(db)
+yaz("   Veritabani baglantisi kapatildi")
+
+yaz("\n[OK] Veritabani islemleri demosu tamamlandi!")

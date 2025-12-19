@@ -1,0 +1,576 @@
+// RP2040 PIO Module (Programmable I/O)
+// Hardware Abstraction Layer for RP2040's unique PIO peripheral
+// 
+// PIO Features:
+// - 2 PIO blocks (PIO0, PIO1), each with 4 state machines
+// - 32 instruction memory per PIO block
+// - Programmable state machines for custom protocols
+// - Independent clock dividers per state machine
+// - 4 x 32-bit TX/RX FIFOs per state machine
+// - DMA support for high-speed data transfer
+// - GPIO mapping flexibility
+// - Perfect for: WS2812 LEDs, custom protocols, bit-banging, etc.
+//
+// PIO is RP2040's "killer feature" - software-defined hardware peripherals
+//
+// Pico SDK: hardware_pio
+
+extern "C" {
+    // PIO State Machine Functions
+    fn pio_sm_init(pio: *void, sm: u32, initial_pc: u32, config: *void);
+    fn pio_sm_set_enabled(pio: *void, sm: u32, enabled: bool);
+    fn pio_sm_set_enabled_mask(pio: *void, mask: u32, enabled: bool);
+    fn pio_sm_restart(pio: *void, sm: u32);
+    fn pio_sm_clkdiv_restart(pio: *void, sm: u32);
+    
+    fn pio_sm_is_tx_fifo_full(pio: *void, sm: u32) -> bool;
+    fn pio_sm_is_tx_fifo_empty(pio: *void, sm: u32) -> bool;
+    fn pio_sm_is_rx_fifo_full(pio: *void, sm: u32) -> bool;
+    fn pio_sm_is_rx_fifo_empty(pio: *void, sm: u32) -> bool;
+    
+    fn pio_sm_put_blocking(pio: *void, sm: u32, data: u32);
+    fn pio_sm_put(pio: *void, sm: u32, data: u32);
+    fn pio_sm_get_blocking(pio: *void, sm: u32) -> u32;
+    fn pio_sm_get(pio: *void, sm: u32) -> u32;
+    
+    fn pio_sm_drain_tx_fifo(pio: *void, sm: u32);
+    fn pio_sm_clear_fifos(pio: *void, sm: u32);
+    
+    // PIO Program Functions
+    fn pio_can_add_program(pio: *void, program: *void) -> bool;
+    fn pio_add_program(pio: *void, program: *void) -> u32;
+    fn pio_remove_program(pio: *void, program: *void, loaded_offset: u32);
+    fn pio_claim_unused_sm(pio: *void, required: bool) -> i32;
+    fn pio_sm_unclaim(pio: *void, sm: u32);
+    
+    // PIO GPIO Functions
+    fn pio_gpio_init(pio: *void, pin: u32);
+    fn pio_sm_set_pins(pio: *void, sm: u32, pins: u32);
+    fn pio_sm_set_pins_with_mask(pio: *void, sm: u32, pins: u32, mask: u32);
+    fn pio_sm_set_pindirs_with_mask(pio: *void, sm: u32, pindirs: u32, mask: u32);
+    
+    // PIO IRQ Functions
+    fn pio_set_irq0_source_enabled(pio: *void, source: u32, enabled: bool);
+    fn pio_set_irq1_source_enabled(pio: *void, source: u32, enabled: bool);
+    fn pio_interrupt_get(pio: *void, irq: u32) -> bool;
+    fn pio_interrupt_clear(pio: *void, irq: u32);
+    
+    // GPIO Functions
+    fn gpio_set_function(gpio: u32, fn_code: u32);
+    
+    // Hardware addresses
+    const PIO0_BASE: *void = 0x50200000 as *void;
+    const PIO1_BASE: *void = 0x50300000 as *void;
+}
+
+// GPIO Function codes for PIO
+const GPIO_FUNC_PIO0: u32 = 6;
+const GPIO_FUNC_PIO1: u32 = 7;
+
+// PIO state machine count
+const PIO_SM_COUNT: u32 = 4;
+
+// PIO instruction memory size
+const PIO_INSTRUCTION_MEMORY_SIZE: u32 = 32;
+
+pub struct PIO {
+    pio_block: *void,
+    block_num: u8,
+}
+
+pub struct PIOStateMachine {
+    pio: *void,
+    sm: u32,
+    offset: u32,
+}
+
+// PIO Program structure (simplified)
+pub struct PIOProgram {
+    instructions: Vec<u16>,
+    length: u32,
+    origin: i32,  // -1 for any location
+}
+
+impl PIOProgram {
+    // Create new PIO program from instructions
+    pub fn new(instructions: Vec<u16>) -> PIOProgram {
+        PIOProgram {
+            length: instructions.len() as u32,
+            instructions,
+            origin: -1,
+        }
+    }
+    
+    // Create program with specific origin
+    pub fn new_with_origin(instructions: Vec<u16>, origin: i32) -> PIOProgram {
+        PIOProgram {
+            length: instructions.len() as u32,
+            instructions,
+            origin,
+        }
+    }
+}
+
+impl PIO {
+    // Get PIO0 instance
+    pub fn pio0() -> PIO {
+        PIO {
+            pio_block: unsafe { PIO0_BASE },
+            block_num: 0,
+        }
+    }
+    
+    // Get PIO1 instance
+    pub fn pio1() -> PIO {
+        PIO {
+            pio_block: unsafe { PIO1_BASE },
+            block_num: 1,
+        }
+    }
+    
+    // Check if program can be loaded
+    pub fn can_add_program(&self, program: &PIOProgram) -> bool {
+        unsafe {
+            pio_can_add_program(self.pio_block, program as *const PIOProgram as *void)
+        }
+    }
+    
+    // Load program into PIO instruction memory
+    pub fn add_program(&self, program: &PIOProgram) -> u32 {
+        unsafe {
+            pio_add_program(self.pio_block, program as *const PIOProgram as *void)
+        }
+    }
+    
+    // Remove program from instruction memory
+    pub fn remove_program(&self, program: &PIOProgram, offset: u32) {
+        unsafe {
+            pio_remove_program(self.pio_block, program as *const PIOProgram as *void, offset);
+        }
+    }
+    
+    // Claim unused state machine
+    pub fn claim_unused_sm(&self) -> Result<u32, &str> {
+        unsafe {
+            let sm = pio_claim_unused_sm(self.pio_block, false);
+            if sm >= 0 {
+                Ok(sm as u32)
+            } else {
+                Err("No free state machine available")
+            }
+        }
+    }
+    
+    // Initialize GPIO for PIO use
+    pub fn gpio_init(&self, pin: u32) {
+        unsafe {
+            pio_gpio_init(self.pio_block, pin);
+            
+            let func = if self.block_num == 0 {
+                GPIO_FUNC_PIO0
+            } else {
+                GPIO_FUNC_PIO1
+            };
+            
+            gpio_set_function(pin, func);
+        }
+    }
+    
+    // Create state machine instance
+    pub fn get_sm(&self, sm: u32, program_offset: u32) -> PIOStateMachine {
+        PIOStateMachine {
+            pio: self.pio_block,
+            sm,
+            offset: program_offset,
+        }
+    }
+}
+
+impl PIOStateMachine {
+    // Initialize state machine with config
+    pub fn init(&self, config: *void) {
+        unsafe {
+            pio_sm_init(self.pio, self.sm, self.offset, config);
+        }
+    }
+    
+    // Enable/disable state machine
+    pub fn set_enabled(&self, enabled: bool) {
+        unsafe {
+            pio_sm_set_enabled(self.pio, self.sm, enabled);
+        }
+    }
+    
+    // Restart state machine
+    pub fn restart(&self) {
+        unsafe {
+            pio_sm_restart(self.pio, self.sm);
+        }
+    }
+    
+    // Check TX FIFO status
+    pub fn is_tx_fifo_full(&self) -> bool {
+        unsafe {
+            pio_sm_is_tx_fifo_full(self.pio, self.sm)
+        }
+    }
+    
+    pub fn is_tx_fifo_empty(&self) -> bool {
+        unsafe {
+            pio_sm_is_tx_fifo_empty(self.pio, self.sm)
+        }
+    }
+    
+    // Check RX FIFO status
+    pub fn is_rx_fifo_full(&self) -> bool {
+        unsafe {
+            pio_sm_is_rx_fifo_full(self.pio, self.sm)
+        }
+    }
+    
+    pub fn is_rx_fifo_empty(&self) -> bool {
+        unsafe {
+            pio_sm_is_rx_fifo_empty(self.pio, self.sm)
+        }
+    }
+    
+    // Write to TX FIFO (blocking)
+    pub fn put_blocking(&self, data: u32) {
+        unsafe {
+            pio_sm_put_blocking(self.pio, self.sm, data);
+        }
+    }
+    
+    // Write to TX FIFO (non-blocking)
+    pub fn put(&self, data: u32) -> bool {
+        if !self.is_tx_fifo_full() {
+            unsafe {
+                pio_sm_put(self.pio, self.sm, data);
+            }
+            true
+        } else {
+            false
+        }
+    }
+    
+    // Read from RX FIFO (blocking)
+    pub fn get_blocking(&self) -> u32 {
+        unsafe {
+            pio_sm_get_blocking(self.pio, self.sm)
+        }
+    }
+    
+    // Read from RX FIFO (non-blocking)
+    pub fn get(&self) -> Option<u32> {
+        if !self.is_rx_fifo_empty() {
+            unsafe {
+                Some(pio_sm_get(self.pio, self.sm))
+            }
+        } else {
+            None
+        }
+    }
+    
+    // Set GPIO pins
+    pub fn set_pins(&self, pins: u32) {
+        unsafe {
+            pio_sm_set_pins(self.pio, self.sm, pins);
+        }
+    }
+    
+    // Set GPIO pins with mask
+    pub fn set_pins_with_mask(&self, pins: u32, mask: u32) {
+        unsafe {
+            pio_sm_set_pins_with_mask(self.pio, self.sm, pins, mask);
+        }
+    }
+    
+    // Set pin directions
+    pub fn set_pindirs_with_mask(&self, pindirs: u32, mask: u32) {
+        unsafe {
+            pio_sm_set_pindirs_with_mask(self.pio, self.sm, pindirs, mask);
+        }
+    }
+    
+    // Drain TX FIFO
+    pub fn drain_tx_fifo(&self) {
+        unsafe {
+            pio_sm_drain_tx_fifo(self.pio, self.sm);
+        }
+    }
+    
+    // Clear both FIFOs
+    pub fn clear_fifos(&self) {
+        unsafe {
+            pio_sm_clear_fifos(self.pio, self.sm);
+        }
+    }
+    
+    // Unclaim state machine
+    pub fn unclaim(&self) {
+        unsafe {
+            pio_sm_unclaim(self.pio, self.sm);
+        }
+    }
+}
+
+// WS2812 (NeoPixel) LED Controller using PIO
+pub struct WS2812 {
+    sm: PIOStateMachine,
+    num_leds: u32,
+}
+
+impl WS2812 {
+    // Initialize WS2812 controller on GPIO pin
+    pub fn new(pin: u32, num_leds: u32) -> WS2812 {
+        let pio = PIO::pio0();
+        
+        // WS2812 PIO program (simplified - actual implementation would use real program)
+        let program = PIOProgram::new(vec![
+            0x6058, // out pins, 1
+            0xa042, // mov x, !x
+        ]);
+        
+        let offset = pio.add_program(&program);
+        let sm_num = pio.claim_unused_sm().unwrap();
+        let sm = pio.get_sm(sm_num, offset);
+        
+        pio.gpio_init(pin);
+        
+        // Initialize state machine (config would be set here)
+        // sm.init(config);
+        sm.set_enabled(true);
+        
+        WS2812 { sm, num_leds }
+    }
+    
+    // Set single LED color (RGB)
+    pub fn set_pixel(&self, index: u32, r: u8, g: u8, b: u8) {
+        if index < self.num_leds {
+            // WS2812 expects GRB format
+            let grb = ((g as u32) << 16) | ((r as u32) << 8) | (b as u32);
+            self.sm.put_blocking(grb);
+        }
+    }
+    
+    // Set all LEDs to same color
+    pub fn fill(&self, r: u8, g: u8, b: u8) {
+        for _ in 0..self.num_leds {
+            self.set_pixel(0, r, g, b);
+        }
+    }
+    
+    // Clear all LEDs (turn off)
+    pub fn clear(&self) {
+        self.fill(0, 0, 0);
+    }
+    
+    // Rainbow effect
+    pub fn rainbow(&self, offset: u8) {
+        for i in 0..self.num_leds {
+            let hue = ((i * 255 / self.num_leds) as u8).wrapping_add(offset);
+            let (r, g, b) = Self::hsv_to_rgb(hue, 255, 128);
+            self.set_pixel(i, r, g, b);
+        }
+    }
+    
+    // HSV to RGB conversion
+    fn hsv_to_rgb(h: u8, s: u8, v: u8) -> (u8, u8, u8) {
+        if s == 0 {
+            return (v, v, v);
+        }
+        
+        let region = h / 43;
+        let remainder = (h - (region * 43)) * 6;
+        
+        let p = (v as u16 * (255 - s as u16)) >> 8;
+        let q = (v as u16 * (255 - ((s as u16 * remainder as u16) >> 8))) >> 8;
+        let t = (v as u16 * (255 - ((s as u16 * (255 - remainder) as u16) >> 8))) >> 8;
+        
+        match region {
+            0 => (v, t as u8, p as u8),
+            1 => (q as u8, v, p as u8),
+            2 => (p as u8, v, t as u8),
+            3 => (p as u8, q as u8, v),
+            4 => (t as u8, p as u8, v),
+            _ => (v, p as u8, q as u8),
+        }
+    }
+}
+
+// Quadrature Encoder using PIO
+pub struct QuadratureEncoder {
+    sm: PIOStateMachine,
+}
+
+impl QuadratureEncoder {
+    // Initialize quadrature encoder on two GPIO pins
+    pub fn new(pin_a: u32, pin_b: u32) -> QuadratureEncoder {
+        let pio = PIO::pio0();
+        
+        // Quadrature encoder PIO program (simplified)
+        let program = PIOProgram::new(vec![
+            0x4001, // in pins, 1
+            0x00c0, // jmp pin, 0
+        ]);
+        
+        let offset = pio.add_program(&program);
+        let sm_num = pio.claim_unused_sm().unwrap();
+        let sm = pio.get_sm(sm_num, offset);
+        
+        pio.gpio_init(pin_a);
+        pio.gpio_init(pin_b);
+        
+        sm.set_enabled(true);
+        
+        QuadratureEncoder { sm }
+    }
+    
+    // Read encoder position
+    pub fn get_position(&self) -> i32 {
+        match self.sm.get() {
+            Some(value) => value as i32,
+            None => 0,
+        }
+    }
+    
+    // Reset encoder position
+    pub fn reset(&self) {
+        self.sm.clear_fifos();
+    }
+}
+
+// Example: WS2812 LED strip animation
+pub fn example_ws2812_strip() {
+    let mut leds = WS2812::new(16, 30);  // 30 LEDs on GPIO16
+    
+    // Rainbow animation
+    let mut offset: u8 = 0;
+    loop {
+        leds.rainbow(offset);
+        offset = offset.wrapping_add(1);
+        sleep_ms(50);
+    }
+}
+
+// Example: Custom protocol using PIO
+pub fn example_custom_protocol() {
+    let pio = PIO::pio0();
+    
+    // Simple custom protocol program
+    let program = PIOProgram::new(vec![
+        0x80a0, // pull block
+        0x6008, // out pins, 8
+        0x0000, // jmp 0
+    ]);
+    
+    let offset = pio.add_program(&program);
+    let sm_num = pio.claim_unused_sm().unwrap();
+    let sm = pio.get_sm(sm_num, offset);
+    
+    pio.gpio_init(10);  // Use GPIO10 for output
+    
+    sm.set_enabled(true);
+    
+    // Send data through custom protocol
+    for byte in 0..=255u32 {
+        sm.put_blocking(byte);
+        sleep_ms(10);
+    }
+}
+
+// Example: PWM using PIO (more flexible than hardware PWM)
+pub fn example_pio_pwm() {
+    let pio = PIO::pio0();
+    
+    // PIO PWM program (simplified)
+    let program = PIOProgram::new(vec![
+        0x9080, // pull block
+        0xa027, // mov x, osr
+        0x0043, // jmp x--, 3
+    ]);
+    
+    let offset = pio.add_program(&program);
+    let sm_num = pio.claim_unused_sm().unwrap();
+    let sm = pio.get_sm(sm_num, offset);
+    
+    pio.gpio_init(15);
+    sm.set_enabled(true);
+    
+    // Generate PWM with varying duty cycle
+    for duty in 0..=100 {
+        let level = (duty * 0xFFFFFFFF / 100) as u32;
+        sm.put_blocking(level);
+        sleep_ms(50);
+    }
+}
+
+// Example: Manchester encoding transmitter
+pub fn example_manchester_tx() {
+    let pio = PIO::pio0();
+    
+    // Manchester encoding program (simplified)
+    let program = PIOProgram::new(vec![
+        0x6001, // out pins, 1
+        0xe001, // set pins, 1
+        0xe000, // set pins, 0
+    ]);
+    
+    let offset = pio.add_program(&program);
+    let sm_num = pio.claim_unused_sm().unwrap();
+    let sm = pio.get_sm(sm_num, offset);
+    
+    pio.gpio_init(20);
+    sm.set_enabled(true);
+    
+    // Transmit data with Manchester encoding
+    let data: [u8; 4] = [0xAA, 0x55, 0xF0, 0x0F];
+    
+    for byte in data {
+        sm.put_blocking(byte as u32);
+    }
+}
+
+// Example: Stepper motor control using PIO
+pub fn example_stepper_motor() {
+    let pio = PIO::pio0();
+    
+    // Stepper motor step sequence program
+    let program = PIOProgram::new(vec![
+        0x80a0, // pull block
+        0x6004, // out pins, 4
+        0x00c0, // jmp 0
+    ]);
+    
+    let offset = pio.add_program(&program);
+    let sm_num = pio.claim_unused_sm().unwrap();
+    let sm = pio.get_sm(sm_num, offset);
+    
+    // Initialize 4 GPIO pins for stepper
+    for pin in 10..14 {
+        pio.gpio_init(pin);
+    }
+    
+    sm.set_enabled(true);
+    
+    // Full-step sequence
+    let sequence: [u32; 4] = [
+        0b0001,
+        0b0010,
+        0b0100,
+        0b1000,
+    ];
+    
+    // Rotate motor
+    for _ in 0..200 {  // 200 steps = 1 revolution for typical stepper
+        for &step in &sequence {
+            sm.put_blocking(step);
+            sleep_ms(5);  // Step delay
+        }
+    }
+}
+
+// Helper: Sleep function
+fn sleep_ms(ms: u32) {
+    // Placeholder - actual implementation would use Pico SDK
+}

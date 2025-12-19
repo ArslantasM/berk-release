@@ -1,0 +1,394 @@
+// ============================================================================
+// BERK SENSOR API - Temel Filtreler
+// ============================================================================
+
+modül sensor::filter::basic
+
+// ============================================================================
+// MOVİNG AVERAGE (Kayan Ortalama)
+// ============================================================================
+
+/// Kayan ortalama filtresi
+pub tip MovingAverageFilter = yapı yap
+    /// Pencere boyutu
+    window_size: sayı,
+    /// Buffer
+    buffer: Liste[ondalık],
+    /// Toplam (hızlı hesaplama için)
+    sum: ondalık,
+son
+
+impl MovingAverageFilter:
+    pub fn new(window_size: sayı) döndür MovingAverageFilter:
+        döndür MovingAverageFilter {
+            window_size: window_size.max(1),
+            buffer: [],
+            sum: 0.0,
+        }
+    son
+    
+    pub fn apply(mut self, value: ondalık) döndür ondalık:
+        // Eski değeri çıkar
+        eğer self.buffer.len() >= self.window_size:
+            değişken old = self.buffer.remove(0)
+            self.sum = self.sum - old
+        son
+        
+        // Yeni değeri ekle
+        self.buffer.push(value)
+        self.sum = self.sum + value
+        
+        döndür self.sum / self.buffer.len()
+    son
+    
+    pub fn reset(mut self) döndür void:
+        self.buffer.clear()
+        self.sum = 0.0
+    son
+son
+
+// ============================================================================
+// EXPONENTİAL MOVİNG AVERAGE
+// ============================================================================
+
+/// Üstel kayan ortalama
+pub tip ExponentialMovingAverage = yapı yap
+    /// Alpha (0-1)
+    alpha: ondalık,
+    /// Mevcut değer
+    value: ondalık,
+    /// Başlatıldı mı?
+    initialized: mantıksal,
+son
+
+impl ExponentialMovingAverage:
+    pub fn new(alpha: ondalık) döndür ExponentialMovingAverage:
+        döndür ExponentialMovingAverage {
+            alpha: alpha.clamp(0.01, 1.0),
+            value: 0.0,
+            initialized: yanlış,
+        }
+    son
+    
+    /// Time constant'tan alpha hesapla
+    /// alpha = 1 - exp(-dt/tau)
+    pub fn from_time_constant(tau: ondalık, dt: ondalık) döndür ExponentialMovingAverage:
+        değişken alpha = 1.0 - (-dt / tau).exp()
+        döndür ExponentialMovingAverage::new(alpha)
+    son
+    
+    pub fn apply(mut self, measurement: ondalık) döndür ondalık:
+        eğer !self.initialized:
+            self.value = measurement
+            self.initialized = doğru
+            döndür measurement
+        son
+        
+        self.value = self.alpha * measurement + (1.0 - self.alpha) * self.value
+        döndür self.value
+    son
+    
+    pub fn get_value(self) döndür ondalık:
+        döndür self.value
+    son
+    
+    pub fn reset(mut self) döndür void:
+        self.value = 0.0
+        self.initialized = yanlış
+    son
+son
+
+// ============================================================================
+// MEDİAN FİLTRE
+// ============================================================================
+
+/// Median filtre (outlier'a dayanıklı)
+pub tip MedianFilter = yapı yap
+    /// Pencere boyutu (tek sayı olmalı)
+    window_size: sayı,
+    /// Buffer
+    buffer: Liste[ondalık],
+son
+
+impl MedianFilter:
+    pub fn new(window_size: sayı) döndür MedianFilter:
+        // Tek sayı yap
+        değişken size = eğer window_size % 2 == 0:
+            window_size + 1
+        yoksa:
+            window_size
+        son
+        
+        döndür MedianFilter {
+            window_size: size.max(3),
+            buffer: [],
+        }
+    son
+    
+    pub fn apply(mut self, value: ondalık) döndür ondalık:
+        self.buffer.push(value)
+        eğer self.buffer.len() > self.window_size:
+            self.buffer.remove(0)
+        son
+        
+        // Sort ve median al
+        değişken sorted = self.buffer.clone()
+        sorted.sort()
+        döndür sorted[sorted.len() / 2]
+    son
+    
+    pub fn reset(mut self) döndür void:
+        self.buffer.clear()
+    son
+son
+
+// ============================================================================
+// LOW-PASS FİLTRE
+// ============================================================================
+
+/// Birinci dereceden low-pass (IIR)
+pub tip LowPassFilter = yapı yap
+    /// Cutoff oranı (0-1, normalized)
+    cutoff: ondalık,
+    /// Önceki çıkış
+    y_prev: ondalık,
+    initialized: mantıksal,
+son
+
+impl LowPassFilter:
+    pub fn new(cutoff: ondalık) döndür LowPassFilter:
+        döndür LowPassFilter {
+            cutoff: cutoff.clamp(0.01, 0.99),
+            y_prev: 0.0,
+            initialized: yanlış,
+        }
+    son
+    
+    /// RC time constant'tan oluştur
+    pub fn from_rc(rc: ondalık, dt: ondalık) döndür LowPassFilter:
+        değişken alpha = dt / (rc + dt)
+        döndür LowPassFilter::new(alpha)
+    son
+    
+    pub fn apply(mut self, x: ondalık) döndür ondalık:
+        eğer !self.initialized:
+            self.y_prev = x
+            self.initialized = doğru
+            döndür x
+        son
+        
+        // y[n] = α·x[n] + (1-α)·y[n-1]
+        değişken y = self.cutoff * x + (1.0 - self.cutoff) * self.y_prev
+        self.y_prev = y
+        döndür y
+    son
+    
+    pub fn reset(mut self) döndür void:
+        self.y_prev = 0.0
+        self.initialized = yanlış
+    son
+son
+
+// ============================================================================
+// HIGH-PASS FİLTRE
+// ============================================================================
+
+/// Birinci dereceden high-pass (IIR)
+pub tip HighPassFilter = yapı yap
+    alpha: ondalık,
+    x_prev: ondalık,
+    y_prev: ondalık,
+    initialized: mantıksal,
+son
+
+impl HighPassFilter:
+    pub fn new(alpha: ondalık) döndür HighPassFilter:
+        döndür HighPassFilter {
+            alpha: alpha.clamp(0.01, 0.99),
+            x_prev: 0.0,
+            y_prev: 0.0,
+            initialized: yanlış,
+        }
+    son
+    
+    pub fn apply(mut self, x: ondalık) döndür ondalık:
+        eğer !self.initialized:
+            self.x_prev = x
+            self.y_prev = 0.0
+            self.initialized = doğru
+            döndür 0.0
+        son
+        
+        // y[n] = α · (y[n-1] + x[n] - x[n-1])
+        değişken y = self.alpha * (self.y_prev + x - self.x_prev)
+        self.x_prev = x
+        self.y_prev = y
+        döndür y
+    son
+    
+    pub fn reset(mut self) döndür void:
+        self.x_prev = 0.0
+        self.y_prev = 0.0
+        self.initialized = yanlış
+    son
+son
+
+// ============================================================================
+// BAND-PASS FİLTRE
+// ============================================================================
+
+/// Band-pass (low + high kombinasyonu)
+pub tip BandPassFilter = yapı yap
+    low_pass: LowPassFilter,
+    high_pass: HighPassFilter,
+son
+
+impl BandPassFilter:
+    pub fn new(low_cutoff: ondalık, high_cutoff: ondalık) döndür BandPassFilter:
+        döndür BandPassFilter {
+            low_pass: LowPassFilter::new(low_cutoff),
+            high_pass: HighPassFilter::new(high_cutoff),
+        }
+    son
+    
+    pub fn apply(mut self, x: ondalık) döndür ondalık:
+        değişken lp_out = self.low_pass.apply(x)
+        döndür self.high_pass.apply(lp_out)
+    son
+    
+    pub fn reset(mut self) döndür void:
+        self.low_pass.reset()
+        self.high_pass.reset()
+    son
+son
+
+// ============================================================================
+// FİLTRE ZİNCİRİ
+// ============================================================================
+
+/// Filtre tipi (chain için)
+pub tip FilterType = enum yap
+    MovingAverage { window: sayı },
+    EMA { alpha: ondalık },
+    Median { window: sayı },
+    LowPass { cutoff: ondalık },
+    HighPass { cutoff: ondalık },
+son
+
+/// Filtre zinciri
+pub tip FilterChain = yapı yap
+    stages: Liste[FilterType],
+    // Aktif filtreler
+    ma_filters: Liste[MovingAverageFilter],
+    ema_filters: Liste[ExponentialMovingAverage],
+    median_filters: Liste[MedianFilter],
+    lp_filters: Liste[LowPassFilter],
+    hp_filters: Liste[HighPassFilter],
+son
+
+impl FilterChain:
+    pub fn new() döndür FilterChain:
+        döndür FilterChain {
+            stages: [],
+            ma_filters: [],
+            ema_filters: [],
+            median_filters: [],
+            lp_filters: [],
+            hp_filters: [],
+        }
+    son
+    
+    pub fn add_moving_average(mut self, window: sayı) döndür FilterChain:
+        self.stages.push(FilterType::MovingAverage { window: window })
+        self.ma_filters.push(MovingAverageFilter::new(window))
+        döndür self
+    son
+    
+    pub fn add_ema(mut self, alpha: ondalık) döndür FilterChain:
+        self.stages.push(FilterType::EMA { alpha: alpha })
+        self.ema_filters.push(ExponentialMovingAverage::new(alpha))
+        döndür self
+    son
+    
+    pub fn add_median(mut self, window: sayı) döndür FilterChain:
+        self.stages.push(FilterType::Median { window: window })
+        self.median_filters.push(MedianFilter::new(window))
+        döndür self
+    son
+    
+    pub fn add_low_pass(mut self, cutoff: ondalık) döndür FilterChain:
+        self.stages.push(FilterType::LowPass { cutoff: cutoff })
+        self.lp_filters.push(LowPassFilter::new(cutoff))
+        döndür self
+    son
+    
+    pub fn add_high_pass(mut self, cutoff: ondalık) döndür FilterChain:
+        self.stages.push(FilterType::HighPass { cutoff: cutoff })
+        self.hp_filters.push(HighPassFilter::new(cutoff))
+        döndür self
+    son
+    
+    pub fn apply(mut self, value: ondalık) döndür ondalık:
+        değişken result = value
+        değişken ma_idx = 0
+        değişken ema_idx = 0
+        değişken med_idx = 0
+        değişken lp_idx = 0
+        değişken hp_idx = 0
+        
+        döngü stage in self.stages.clone():
+            eşle stage:
+                FilterType::MovingAverage { window }:
+                    result = self.ma_filters[ma_idx].apply(result)
+                    ma_idx = ma_idx + 1
+                son
+                FilterType::EMA { alpha }:
+                    result = self.ema_filters[ema_idx].apply(result)
+                    ema_idx = ema_idx + 1
+                son
+                FilterType::Median { window }:
+                    result = self.median_filters[med_idx].apply(result)
+                    med_idx = med_idx + 1
+                son
+                FilterType::LowPass { cutoff }:
+                    result = self.lp_filters[lp_idx].apply(result)
+                    lp_idx = lp_idx + 1
+                son
+                FilterType::HighPass { cutoff }:
+                    result = self.hp_filters[hp_idx].apply(result)
+                    hp_idx = hp_idx + 1
+                son
+            son
+        son
+        
+        döndür result
+    son
+son
+
+// ============================================================================
+// CONVENİENCE FUNCTİONS
+// ============================================================================
+
+pub fn moving_average(window: sayı) döndür MovingAverageFilter:
+    döndür MovingAverageFilter::new(window)
+son
+
+pub fn ema(alpha: ondalık) döndür ExponentialMovingAverage:
+    döndür ExponentialMovingAverage::new(alpha)
+son
+
+pub fn median(window: sayı) döndür MedianFilter:
+    döndür MedianFilter::new(window)
+son
+
+pub fn low_pass(cutoff: ondalık) döndür LowPassFilter:
+    döndür LowPassFilter::new(cutoff)
+son
+
+pub fn high_pass(cutoff: ondalık) döndür HighPassFilter:
+    döndür HighPassFilter::new(cutoff)
+son
+
+pub fn band_pass(low: ondalık, high: ondalık) döndür BandPassFilter:
+    döndür BandPassFilter::new(low, high)
+son

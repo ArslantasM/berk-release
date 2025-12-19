@@ -1,0 +1,492 @@
+// RP2040 PWM Module
+// Hardware Abstraction Layer for RP2040's PWM peripheral
+// 
+// RP2040 Features:
+// - 8 PWM slices, each with 2 channels (A & B)
+// - 16 PWM outputs total (covers all 30 GPIO pins)
+// - Each slice has a 16-bit counter
+// - Programmable frequency and duty cycle
+// - Phase-correct and trailing-edge PWM modes
+// - Input mode for frequency/duty cycle measurement
+// - Free-running or gated by an input
+// - Interrupt on counter wrap
+//
+// Pico SDK: hardware_pwm
+
+extern "C" {
+    // Pico SDK PWM Functions
+    fn pwm_gpio_to_slice_num(gpio: u32) -> u32;
+    fn pwm_gpio_to_channel(gpio: u32) -> u32;
+    fn pwm_set_wrap(slice: u32, wrap: u16);
+    fn pwm_set_chan_level(slice: u32, chan: u32, level: u16);
+    fn pwm_set_gpio_level(gpio: u32, level: u16);
+    fn pwm_get_counter(slice: u32) -> u16;
+    fn pwm_set_counter(slice: u32, counter: u16);
+    
+    fn pwm_set_clkdiv(slice: u32, divider: f32);
+    fn pwm_set_clkdiv_int_frac(slice: u32, integer: u8, frac: u8);
+    fn pwm_set_clkdiv_mode(slice: u32, mode: u32);
+    
+    fn pwm_set_output_polarity(slice: u32, a: bool, b: bool);
+    fn pwm_set_phase_correct(slice: u32, phase_correct: bool);
+    fn pwm_set_enabled(slice: u32, enabled: bool);
+    fn pwm_set_mask_enabled(mask: u32);
+    
+    fn pwm_set_irq_enabled(slice: u32, enabled: bool);
+    fn pwm_clear_irq(slice: u32);
+    fn pwm_get_irq_status_mask() -> u32;
+    
+    // GPIO Functions
+    fn gpio_set_function(gpio: u32, fn_code: u32);
+}
+
+// GPIO Function code for PWM
+const GPIO_FUNC_PWM: u32 = 4;
+
+// PWM channels
+const PWM_CHAN_A: u32 = 0;
+const PWM_CHAN_B: u32 = 1;
+
+// PWM clock modes
+const PWM_DIV_FREE_RUNNING: u32 = 0;
+const PWM_DIV_B_HIGH: u32 = 1;
+const PWM_DIV_B_RISING: u32 = 2;
+const PWM_DIV_B_FALLING: u32 = 3;
+
+// System clock frequency (default 125 MHz)
+const SYSTEM_CLOCK_HZ: u32 = 125000000;
+
+// Common PWM frequencies
+const PWM_FREQ_1KHZ: u32 = 1000;
+const PWM_FREQ_10KHZ: u32 = 10000;
+const PWM_FREQ_25KHZ: u32 = 25000;
+const PWM_FREQ_50KHZ: u32 = 50000;
+
+// Servo parameters (50 Hz, 1-2ms pulse)
+const SERVO_FREQ: u32 = 50;
+const SERVO_MIN_PULSE_US: u32 = 1000;
+const SERVO_MAX_PULSE_US: u32 = 2000;
+const SERVO_CENTER_PULSE_US: u32 = 1500;
+
+pub struct PWM {
+    gpio: u32,
+    slice: u32,
+    channel: u32,
+    wrap: u16,
+    frequency: u32,
+}
+
+pub struct PWMConfig {
+    pub frequency: u32,
+    pub duty_cycle: f32,  // 0.0 to 1.0
+    pub phase_correct: bool,
+    pub polarity: bool,   // false = normal, true = inverted
+}
+
+impl PWMConfig {
+    // Default configuration: 1 kHz, 50% duty cycle
+    pub fn default() -> PWMConfig {
+        PWMConfig {
+            frequency: PWM_FREQ_1KHZ,
+            duty_cycle: 0.5,
+            phase_correct: false,
+            polarity: false,
+        }
+    }
+}
+
+impl PWM {
+    // Initialize PWM on GPIO pin with default settings
+    pub fn new(gpio: u32) -> PWM {
+        Self::new_with_config(gpio, &PWMConfig::default())
+    }
+    
+    // Initialize PWM with custom frequency
+    pub fn new_with_freq(gpio: u32, frequency: u32) -> PWM {
+        let mut config = PWMConfig::default();
+        config.frequency = frequency;
+        Self::new_with_config(gpio, &config)
+    }
+    
+    // Initialize PWM with full configuration
+    pub fn new_with_config(gpio: u32, config: &PWMConfig) -> PWM {
+        unsafe {
+            // Get slice and channel for this GPIO
+            let slice = pwm_gpio_to_slice_num(gpio);
+            let channel = pwm_gpio_to_channel(gpio);
+            
+            // Calculate divider and wrap for desired frequency
+            let (divider, wrap) = Self::calculate_pwm_params(config.frequency);
+            
+            // Configure PWM
+            pwm_set_clkdiv(slice, divider);
+            pwm_set_wrap(slice, wrap);
+            pwm_set_phase_correct(slice, config.phase_correct);
+            
+            // Set output polarity
+            if channel == PWM_CHAN_A {
+                pwm_set_output_polarity(slice, config.polarity, false);
+            } else {
+                pwm_set_output_polarity(slice, false, config.polarity);
+            }
+            
+            // Set initial duty cycle
+            let level = ((wrap as f32) * config.duty_cycle) as u16;
+            pwm_set_chan_level(slice, channel, level);
+            
+            // Configure GPIO for PWM
+            gpio_set_function(gpio, GPIO_FUNC_PWM);
+            
+            // Enable PWM
+            pwm_set_enabled(slice, true);
+            
+            PWM {
+                gpio,
+                slice,
+                channel,
+                wrap,
+                frequency: config.frequency,
+            }
+        }
+    }
+    
+    // Calculate divider and wrap for target frequency
+    fn calculate_pwm_params(frequency: u32) -> (f32, u16) {
+        // PWM frequency = System Clock / (divider * (wrap + 1))
+        // For best resolution, maximize wrap value (up to 65535)
+        
+        let cycles_per_period = SYSTEM_CLOCK_HZ / frequency;
+        
+        if cycles_per_period <= 65536 {
+            // Can achieve with divider = 1
+            (1.0, (cycles_per_period - 1) as u16)
+        } else {
+            // Need divider > 1
+            let divider = (cycles_per_period as f32 / 65536.0).ceil();
+            let wrap = ((cycles_per_period as f32 / divider) - 1.0) as u16;
+            (divider, wrap)
+        }
+    }
+    
+    // Set duty cycle (0.0 to 1.0)
+    pub fn set_duty_cycle(&mut self, duty: f32) {
+        let duty_clamped = if duty < 0.0 { 0.0 } else if duty > 1.0 { 1.0 } else { duty };
+        let level = ((self.wrap as f32) * duty_clamped) as u16;
+        
+        unsafe {
+            pwm_set_chan_level(self.slice, self.channel, level);
+        }
+    }
+    
+    // Set duty cycle as percentage (0-100)
+    pub fn set_duty_percent(&mut self, percent: u32) {
+        let duty = (percent as f32) / 100.0;
+        self.set_duty_cycle(duty);
+    }
+    
+    // Set raw level value (0 to wrap)
+    pub fn set_level(&self, level: u16) {
+        unsafe {
+            pwm_set_chan_level(self.slice, self.channel, level);
+        }
+    }
+    
+    // Change frequency (recalculates divider and wrap)
+    pub fn set_frequency(&mut self, frequency: u32) {
+        let (divider, wrap) = Self::calculate_pwm_params(frequency);
+        
+        unsafe {
+            pwm_set_clkdiv(self.slice, divider);
+            pwm_set_wrap(self.slice, wrap);
+        }
+        
+        self.wrap = wrap;
+        self.frequency = frequency;
+    }
+    
+    // Enable/disable phase-correct mode
+    pub fn set_phase_correct(&self, phase_correct: bool) {
+        unsafe {
+            pwm_set_phase_correct(self.slice, phase_correct);
+        }
+    }
+    
+    // Invert output polarity
+    pub fn set_polarity(&self, inverted: bool) {
+        unsafe {
+            if self.channel == PWM_CHAN_A {
+                pwm_set_output_polarity(self.slice, inverted, false);
+            } else {
+                pwm_set_output_polarity(self.slice, false, inverted);
+            }
+        }
+    }
+    
+    // Enable/disable PWM output
+    pub fn enable(&self) {
+        unsafe {
+            pwm_set_enabled(self.slice, true);
+        }
+    }
+    
+    pub fn disable(&self) {
+        unsafe {
+            pwm_set_enabled(self.slice, false);
+        }
+    }
+    
+    // Get current counter value
+    pub fn get_counter(&self) -> u16 {
+        unsafe {
+            pwm_get_counter(self.slice)
+        }
+    }
+    
+    // Set counter value
+    pub fn set_counter(&self, counter: u16) {
+        unsafe {
+            pwm_set_counter(self.slice, counter);
+        }
+    }
+    
+    // Enable interrupt on counter wrap
+    pub fn enable_interrupt(&self) {
+        unsafe {
+            pwm_set_irq_enabled(self.slice, true);
+        }
+    }
+    
+    pub fn disable_interrupt(&self) {
+        unsafe {
+            pwm_set_irq_enabled(self.slice, false);
+        }
+    }
+    
+    // Clear interrupt flag
+    pub fn clear_interrupt(&self) {
+        unsafe {
+            pwm_clear_irq(self.slice);
+        }
+    }
+}
+
+// PWM Servo controller
+pub struct Servo {
+    pwm: PWM,
+    min_pulse_us: u32,
+    max_pulse_us: u32,
+}
+
+impl Servo {
+    // Initialize servo on GPIO pin
+    pub fn new(gpio: u32) -> Servo {
+        Self::new_with_range(gpio, SERVO_MIN_PULSE_US, SERVO_MAX_PULSE_US)
+    }
+    
+    // Initialize servo with custom pulse range
+    pub fn new_with_range(gpio: u32, min_pulse_us: u32, max_pulse_us: u32) -> Servo {
+        let mut config = PWMConfig::default();
+        config.frequency = SERVO_FREQ;
+        config.duty_cycle = 0.075;  // 1.5ms / 20ms = 7.5% (center position)
+        
+        let pwm = PWM::new_with_config(gpio, &config);
+        
+        Servo {
+            pwm,
+            min_pulse_us,
+            max_pulse_us,
+        }
+    }
+    
+    // Set servo position by angle (-90 to +90 degrees)
+    pub fn set_angle(&mut self, angle: i32) {
+        let angle_clamped = if angle < -90 { -90 } else if angle > 90 { 90 } else { angle };
+        
+        // Map angle to pulse width
+        let range = (self.max_pulse_us - self.min_pulse_us) as i32;
+        let pulse_us = self.min_pulse_us as i32 + ((angle_clamped + 90) * range / 180);
+        
+        self.set_pulse_us(pulse_us as u32);
+    }
+    
+    // Set servo position by pulse width (microseconds)
+    pub fn set_pulse_us(&mut self, pulse_us: u32) {
+        let period_us = 1000000 / SERVO_FREQ;  // 20000 us at 50 Hz
+        let duty = (pulse_us as f32) / (period_us as f32);
+        
+        self.pwm.set_duty_cycle(duty);
+    }
+    
+    // Set servo to center position
+    pub fn center(&mut self) {
+        self.set_pulse_us(SERVO_CENTER_PULSE_US);
+    }
+    
+    // Set servo to minimum position
+    pub fn min(&mut self) {
+        self.set_pulse_us(self.min_pulse_us);
+    }
+    
+    // Set servo to maximum position
+    pub fn max(&mut self) {
+        self.set_pulse_us(self.max_pulse_us);
+    }
+}
+
+// Helper function: Create PWM for LED dimming
+pub fn init_led_pwm(gpio: u32) -> PWM {
+    PWM::new_with_freq(gpio, PWM_FREQ_1KHZ)
+}
+
+// Helper function: Create PWM for motor control
+pub fn init_motor_pwm(gpio: u32) -> PWM {
+    PWM::new_with_freq(gpio, PWM_FREQ_25KHZ)
+}
+
+// Example: LED breathing effect
+pub fn example_led_breathing() {
+    let mut led = init_led_pwm(25);  // Onboard LED on Pico
+    
+    loop {
+        // Fade in
+        for duty in 0..=100 {
+            led.set_duty_percent(duty);
+            sleep_ms(10);
+        }
+        
+        // Fade out
+        for duty in (0..=100).rev() {
+            led.set_duty_percent(duty);
+            sleep_ms(10);
+        }
+    }
+}
+
+// Example: RGB LED control
+pub fn example_rgb_led() {
+    let mut red = init_led_pwm(16);
+    let mut green = init_led_pwm(17);
+    let mut blue = init_led_pwm(18);
+    
+    // Purple color
+    red.set_duty_percent(50);
+    green.set_duty_percent(0);
+    blue.set_duty_percent(50);
+    
+    sleep_ms(1000);
+    
+    // Cyan color
+    red.set_duty_percent(0);
+    green.set_duty_percent(50);
+    blue.set_duty_percent(50);
+}
+
+// Example: Servo sweep
+pub fn example_servo_sweep() {
+    let mut servo = Servo::new(15);
+    
+    loop {
+        // Sweep from -90 to +90
+        for angle in -90..=90 {
+            servo.set_angle(angle);
+            sleep_ms(15);
+        }
+        
+        // Sweep from +90 to -90
+        for angle in (-90..=90).rev() {
+            servo.set_angle(angle);
+            sleep_ms(15);
+        }
+    }
+}
+
+// Example: DC motor speed control
+pub fn example_motor_control() {
+    let mut motor_pwm = init_motor_pwm(14);
+    
+    // Slowly accelerate
+    for speed in 0..=100 {
+        motor_pwm.set_duty_percent(speed);
+        sleep_ms(50);
+    }
+    
+    // Full speed
+    sleep_ms(2000);
+    
+    // Slowly decelerate
+    for speed in (0..=100).rev() {
+        motor_pwm.set_duty_percent(speed);
+        sleep_ms(50);
+    }
+}
+
+// Example: Multi-channel PWM (simultaneous LEDs)
+pub fn example_multi_channel() {
+    let mut leds: [PWM; 4] = [
+        init_led_pwm(10),
+        init_led_pwm(11),
+        init_led_pwm(12),
+        init_led_pwm(13),
+    ];
+    
+    // Knight Rider effect
+    loop {
+        for i in 0..4 {
+            leds[i].set_duty_percent(100);
+            sleep_ms(100);
+            leds[i].set_duty_percent(0);
+        }
+        
+        for i in (0..4).rev() {
+            leds[i].set_duty_percent(100);
+            sleep_ms(100);
+            leds[i].set_duty_percent(0);
+        }
+    }
+}
+
+// Example: Piezo buzzer tone generation
+pub fn example_buzzer_tones() {
+    let mut buzzer = PWM::new_with_freq(20, 440);  // A4 note (440 Hz)
+    buzzer.set_duty_percent(50);
+    
+    let notes: [u32; 8] = [
+        262,  // C4
+        294,  // D4
+        330,  // E4
+        349,  // F4
+        392,  // G4
+        440,  // A4
+        494,  // B4
+        523,  // C5
+    ];
+    
+    for freq in notes {
+        buzzer.set_frequency(freq);
+        sleep_ms(500);
+    }
+    
+    buzzer.disable();
+}
+
+// Example: Phase-correct PWM for audio
+pub fn example_audio_pwm() {
+    let mut audio = PWM::new_with_freq(21, 44100);  // 44.1 kHz sample rate
+    audio.set_phase_correct(true);
+    
+    // Generate simple sawtooth wave
+    for sample in 0..=255 {
+        let level = (sample as u16) << 8;  // Scale to 16-bit
+        audio.set_level(level);
+        sleep_us(23);  // ~44.1 kHz
+    }
+}
+
+// Helper: Sleep functions (would be implemented in time module)
+fn sleep_ms(ms: u32) {
+    // Placeholder - actual implementation would use Pico SDK sleep functions
+}
+
+fn sleep_us(us: u32) {
+    // Placeholder - actual implementation would use Pico SDK sleep functions
+}

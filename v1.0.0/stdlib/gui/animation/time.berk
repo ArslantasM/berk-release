@@ -1,0 +1,454 @@
+// ============================================================================
+// BERK GUI Framework - Animation Time System
+// ============================================================================
+// Synfig Time sisteminden ilham alınmıştır
+// ============================================================================
+
+modül gui::animation::time
+
+kullan std::math
+
+// ============================================================================
+// TIME - Zaman Yapısı
+// ============================================================================
+
+/// Animasyon zamanını temsil eden yapı
+/// Synfig'in Time sınıfından ilham alınmıştır
+pub tip Time = yapı yap
+    /// Saniye cinsinden değer
+    value: ondalık,
+son
+
+/// Time için statik sabitler
+pub const TIME_ZERO: Time = Time { value: 0.0 }
+pub const TIME_EPSILON: ondalık = 0.0000001
+pub const TIME_BEGIN: Time = Time { value: -16777216.0 }
+pub const TIME_END: Time = Time { value: 16777216.0 }
+
+/// Zaman formatı
+pub tip TimeFormat = özyinelemeli yap
+    | Normal           // Varsayılan format: "1s 500ms"
+    | NoSpaces         // Boşluksuz: "1s500ms"
+    | Full             // Tam format: "0h 0m 1s 500ms"
+    | Video            // Video formatı: "00:00:01.500"
+    | Frames           // Frame sayısı: "45"
+    | Milliseconds     // Milisaniye: "1500ms"
+    | Seconds          // Saniye: "1.5s"
+son
+
+impl Time:
+    // ========================================================================
+    // CONSTRUCTORS
+    // ========================================================================
+    
+    /// Sıfır zamanı oluştur
+    pub fn zero() döndür Time:
+        döndür TIME_ZERO
+    son
+    
+    /// Saniyeden oluştur
+    pub fn from_seconds(seconds: ondalık) döndür Time:
+        döndür Time { value: seconds }
+    son
+    
+    /// Milisaniyeden oluştur
+    pub fn from_milliseconds(ms: ondalık) döndür Time:
+        döndür Time { value: ms / 1000.0 }
+    son
+    
+    /// Frame'den oluştur (FPS ile)
+    pub fn from_frames(frames: sayı, fps: ondalık) döndür Time:
+        döndür Time { value: frames.to_float() / fps }
+    son
+    
+    /// Saat:Dakika:Saniye formatından oluştur
+    pub fn from_hms(hours: sayı, minutes: sayı, seconds: ondalık) döndür Time:
+        değişken total = hours.to_float() * 3600.0 
+                       + minutes.to_float() * 60.0 
+                       + seconds
+        döndür Time { value: total }
+    son
+    
+    /// String'den parse et
+    pub fn parse(s: yazı, fps: ondalık) döndür Sonuç[Time, yazı]:
+        // Video formatı: HH:MM:SS.FF veya HH:MM:SS:FF
+        eğer s.contains(":"):
+            değişken parts = s.split(":")
+            eğer parts.len() == 3:
+                değişken h = parts[0].parse_int().unwrap_or(0)
+                değişken m = parts[1].parse_int().unwrap_or(0)
+                
+                // Son kısım saniye veya saniye.frame olabilir
+                değişken sec_part = parts[2]
+                eğer sec_part.contains("."):
+                    değişken sec_parts = sec_part.split(".")
+                    değişken secs = sec_parts[0].parse_float().unwrap_or(0.0)
+                    değişken frames = sec_parts[1].parse_int().unwrap_or(0)
+                    değişken frame_time = frames.to_float() / fps
+                    döndür Tamam(Time::from_hms(h, m, secs + frame_time))
+                değilse:
+                    değişken secs = sec_part.parse_float().unwrap_or(0.0)
+                    döndür Tamam(Time::from_hms(h, m, secs))
+                son
+            son
+        son
+        
+        // Basit saniye formatı: "1.5s", "1500ms", "45f"
+        eğer s.ends_with("ms"):
+            değişken num = s.trim_end("ms").parse_float()
+            döndür num.map(|n| Time::from_milliseconds(n))
+        değilse eğer s.ends_with("s"):
+            değişken num = s.trim_end("s").parse_float()
+            döndür num.map(|n| Time::from_seconds(n))
+        değilse eğer s.ends_with("f"):
+            değişken num = s.trim_end("f").parse_int()
+            döndür num.map(|n| Time::from_frames(n, fps))
+        değilse:
+            // Sadece sayı - saniye olarak kabul et
+            değişken num = s.parse_float()
+            döndür num.map(|n| Time::from_seconds(n))
+        son
+        
+        döndür Hata("Geçersiz zaman formatı: " + s)
+    son
+    
+    // ========================================================================
+    // GETTERS
+    // ========================================================================
+    
+    /// Saniye değerini al
+    pub fn seconds(self) döndür ondalık:
+        döndür self.value
+    son
+    
+    /// Milisaniye değerini al
+    pub fn milliseconds(self) döndür ondalık:
+        döndür self.value * 1000.0
+    son
+    
+    /// Frame sayısını al
+    pub fn frames(self, fps: ondalık) döndür sayı:
+        döndür (self.value * fps).round().to_int()
+    son
+    
+    /// Saat kısmını al
+    pub fn hours(self) döndür sayı:
+        döndür (self.value / 3600.0).floor().to_int()
+    son
+    
+    /// Dakika kısmını al (0-59)
+    pub fn minutes(self) döndür sayı:
+        döndür ((self.value % 3600.0) / 60.0).floor().to_int()
+    son
+    
+    /// Saniye kısmını al (0-59.999...)
+    pub fn secs(self) döndür ondalık:
+        döndür self.value % 60.0
+    son
+    
+    // ========================================================================
+    // FORMATTING
+    // ========================================================================
+    
+    /// Zaman değerini string'e çevir
+    pub fn to_string(self, format: TimeFormat, fps: ondalık) döndür yazı:
+        eşleştir format:
+            TimeFormat::Normal:
+                değişken h = self.hours()
+                değişken m = self.minutes()
+                değişken s = self.secs()
+                
+                değişken result = ""
+                eğer h > 0:
+                    result = result + h.to_string() + "h "
+                son
+                eğer m > 0 || h > 0:
+                    result = result + m.to_string() + "m "
+                son
+                result = result + s.to_string() + "s"
+                döndür result.trim()
+            
+            TimeFormat::NoSpaces:
+                döndür self.to_string(TimeFormat::Normal, fps).replace(" ", "")
+            
+            TimeFormat::Full:
+                değişken h = self.hours()
+                değişken m = self.minutes()
+                değişken s = self.secs().floor().to_int()
+                değişken ms = ((self.secs() % 1.0) * 1000.0).round().to_int()
+                döndür format!("{}h {}m {}s {}ms", h, m, s, ms)
+            
+            TimeFormat::Video:
+                değişken h = self.hours()
+                değişken m = self.minutes()
+                değişken s = self.secs().floor().to_int()
+                değişken f = ((self.secs() % 1.0) * fps).round().to_int()
+                döndür format!("{:02}:{:02}:{:02}.{:02}", h, m, s, f)
+            
+            TimeFormat::Frames:
+                döndür self.frames(fps).to_string() + "f"
+            
+            TimeFormat::Milliseconds:
+                döndür self.milliseconds().round().to_int().to_string() + "ms"
+            
+            TimeFormat::Seconds:
+                döndür self.value.to_string() + "s"
+        son
+    son
+    
+    // ========================================================================
+    // VALIDATION
+    // ========================================================================
+    
+    /// Geçerli bir zaman mı?
+    pub fn is_valid(self) döndür mantıksal:
+        döndür !self.value.is_nan() && !self.value.is_infinite()
+    son
+    
+    /// Sıfır mı?
+    pub fn is_zero(self) döndür mantıksal:
+        döndür self.value.abs() < TIME_EPSILON
+    son
+    
+    /// Pozitif mi?
+    pub fn is_positive(self) döndür mantıksal:
+        döndür self.value > TIME_EPSILON
+    son
+    
+    /// Negatif mi?
+    pub fn is_negative(self) döndür mantıksal:
+        döndür self.value < -TIME_EPSILON
+    son
+    
+    // ========================================================================
+    // ROUNDING
+    // ========================================================================
+    
+    /// En yakın frame'e yuvarla
+    pub fn round_to_frame(self, fps: ondalık) döndür Time:
+        değişken frames = (self.value * fps).round()
+        döndür Time { value: frames / fps }
+    son
+    
+    /// Aşağı yuvarla (floor)
+    pub fn floor_to_frame(self, fps: ondalık) döndür Time:
+        değişken frames = (self.value * fps).floor()
+        döndür Time { value: frames / fps }
+    son
+    
+    /// Yukarı yuvarla (ceil)
+    pub fn ceil_to_frame(self, fps: ondalık) döndür Time:
+        değişken frames = (self.value * fps).ceil()
+        döndür Time { value: frames / fps }
+    son
+    
+    // ========================================================================
+    // OPERATORS
+    // ========================================================================
+    
+    /// Toplama
+    pub fn add(self, other: Time) döndür Time:
+        döndür Time { value: self.value + other.value }
+    son
+    
+    /// Çıkarma
+    pub fn sub(self, other: Time) döndür Time:
+        döndür Time { value: self.value - other.value }
+    son
+    
+    /// Çarpma (skaler ile)
+    pub fn mul(self, scalar: ondalık) döndür Time:
+        döndür Time { value: self.value * scalar }
+    son
+    
+    /// Bölme (skaler ile)
+    pub fn div(self, scalar: ondalık) döndür Time:
+        döndür Time { value: self.value / scalar }
+    son
+    
+    /// Negatif
+    pub fn neg(self) döndür Time:
+        döndür Time { value: -self.value }
+    son
+    
+    /// Mutlak değer
+    pub fn abs(self) döndür Time:
+        döndür Time { value: self.value.abs() }
+    son
+    
+    // ========================================================================
+    // COMPARISON
+    // ========================================================================
+    
+    /// Eşitlik (epsilon toleranslı)
+    pub fn equals(self, other: Time) döndür mantıksal:
+        döndür (self.value - other.value).abs() < TIME_EPSILON
+    son
+    
+    /// Küçüktür
+    pub fn less_than(self, other: Time) döndür mantıksal:
+        döndür self.value < other.value - TIME_EPSILON
+    son
+    
+    /// Büyüktür
+    pub fn greater_than(self, other: Time) döndür mantıksal:
+        döndür self.value > other.value + TIME_EPSILON
+    son
+    
+    /// Küçük veya eşit
+    pub fn less_or_equal(self, other: Time) döndür mantıksal:
+        döndür !self.greater_than(other)
+    son
+    
+    /// Büyük veya eşit
+    pub fn greater_or_equal(self, other: Time) döndür mantıksal:
+        döndür !self.less_than(other)
+    son
+    
+    // ========================================================================
+    // UTILITIES
+    // ========================================================================
+    
+    /// İki zaman arasındaki farkı al
+    pub fn distance(self, other: Time) döndür Time:
+        döndür self.sub(other).abs()
+    son
+    
+    /// Lineer interpolasyon
+    pub fn lerp(a: Time, b: Time, t: ondalık) döndür Time:
+        döndür Time { value: a.value + (b.value - a.value) * t }
+    son
+    
+    /// Clamp (sınırla)
+    pub fn clamp(self, min: Time, max: Time) döndür Time:
+        eğer self.less_than(min):
+            döndür min
+        değilse eğer self.greater_than(max):
+            döndür max
+        değilse:
+            döndür self
+        son
+    son
+    
+    /// Min
+    pub fn min(a: Time, b: Time) döndür Time:
+        eğer a.less_than(b):
+            döndür a
+        değilse:
+            döndür b
+        son
+    son
+    
+    /// Max
+    pub fn max(a: Time, b: Time) döndür Time:
+        eğer a.greater_than(b):
+            döndür a
+        değilse:
+            döndür b
+        son
+    son
+son
+
+// ============================================================================
+// TIME RANGE - Zaman Aralığı
+// ============================================================================
+
+/// Başlangıç ve bitiş zamanını temsil eder
+pub tip TimeRange = yapı yap
+    start: Time,
+    end: Time,
+son
+
+impl TimeRange:
+    /// Yeni bir zaman aralığı oluştur
+    pub fn new(start: Time, end: Time) döndür TimeRange:
+        döndür TimeRange { start: start, end: end }
+    son
+    
+    /// Süreyi hesapla
+    pub fn duration(self) döndür Time:
+        döndür self.end.sub(self.start)
+    son
+    
+    /// Zaman bu aralıkta mı?
+    pub fn contains(self, time: Time) döndür mantıksal:
+        döndür time.greater_or_equal(self.start) && time.less_or_equal(self.end)
+    son
+    
+    /// Normalize edilmiş pozisyon (0-1 arası)
+    pub fn normalized_position(self, time: Time) döndür ondalık:
+        değişken duration = self.duration().seconds()
+        eğer duration.abs() < TIME_EPSILON:
+            döndür 0.0
+        son
+        döndür (time.sub(self.start).seconds()) / duration
+    son
+    
+    /// Normalize edilmiş pozisyondan zaman al
+    pub fn time_at(self, normalized: ondalık) döndür Time:
+        değişken t = normalized.clamp(0.0, 1.0)
+        döndür Time::lerp(self.start, self.end, t)
+    son
+    
+    /// İki aralığın kesişimi
+    pub fn intersection(self, other: TimeRange) döndür Seçenek[TimeRange]:
+        değişken new_start = Time::max(self.start, other.start)
+        değişken new_end = Time::min(self.end, other.end)
+        
+        eğer new_start.less_or_equal(new_end):
+            döndür Bazı(TimeRange::new(new_start, new_end))
+        değilse:
+            döndür Hiçbiri
+        son
+    son
+    
+    /// İki aralığı birleştir
+    pub fn union(self, other: TimeRange) döndür TimeRange:
+        döndür TimeRange {
+            start: Time::min(self.start, other.start),
+            end: Time::max(self.end, other.end)
+        }
+    son
+son
+
+// ============================================================================
+// FPS PRESETS
+// ============================================================================
+
+pub const FPS_FILM: ondalık = 24.0
+pub const FPS_PAL: ondalık = 25.0
+pub const FPS_NTSC: ondalık = 29.97
+pub const FPS_30: ondalık = 30.0
+pub const FPS_60: ondalık = 60.0
+pub const FPS_120: ondalık = 120.0
+
+/// Ortak FPS değerleri
+pub tip FrameRate = özyinelemeli yap
+    | Film          // 24 fps
+    | PAL           // 25 fps  
+    | NTSC          // 29.97 fps
+    | HD30          // 30 fps
+    | HD60          // 60 fps
+    | HD120         // 120 fps
+    | Custom(ondalık)
+son
+
+impl FrameRate:
+    /// FPS değerini al
+    pub fn fps(self) döndür ondalık:
+        eşleştir self:
+            FrameRate::Film: döndür FPS_FILM
+            FrameRate::PAL: döndür FPS_PAL
+            FrameRate::NTSC: döndür FPS_NTSC
+            FrameRate::HD30: döndür FPS_30
+            FrameRate::HD60: döndür FPS_60
+            FrameRate::HD120: döndür FPS_120
+            FrameRate::Custom(fps): döndür fps
+        son
+    son
+    
+    /// Frame süresi
+    pub fn frame_duration(self) döndür Time:
+        döndür Time::from_seconds(1.0 / self.fps())
+    son
+son

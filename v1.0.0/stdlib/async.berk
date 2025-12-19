@@ -1,0 +1,488 @@
+//! # Async Module
+//!
+//! Async/await runtime (Tokio-style).
+//!
+//! Async/await çalışma zamanı.
+//!
+//! ## Features / Özellikler
+//!
+//! - **Async/await**: Modern asynchronous programming / Modern asenkron programlama
+//! - **Future/Promise**: Async value types / Async değer tipleri
+//! - **Task spawning**: Green threads / Yeşil iş parçacıkları
+//! - **Async I/O**: Non-blocking I/O primitives / Bloklamayan I/O
+//! - **Channels**: Async message passing / Asenkron mesaj geçişi
+//! - **Timeouts & delays**: Async timing / Asenkron zamanlama
+//! - **Select**: Wait on multiple futures / Çoklu future'larda bekleme
+//! - **Streams**: Async iterators / Asenkron iterator'ler
+//!
+//! ## Example / Örnek
+//!
+//! ```berk
+//! kullan async
+//!
+//! asenkron fonksiyon fetch_data() -> Sonuç[yazı, yazı] yap
+//!     değişken yanıt = bekle http.get("https://api.example.com")?
+//!     dön Tamam(yanıt.body)
+//! son
+//!
+//! async.run(fetch_data())
+//! ```
+//!
+//! Backend: Rust tokio + futures
+
+modül async
+
+kullan result
+kullan time
+
+// ============================================================================
+// FUTURE TYPE
+// ============================================================================
+
+tip Future<T> = yapı yap
+    handle: tamsayı,
+    state: FutureState
+son
+
+tip FutureState = "Pending" | "Ready" | "Cancelled"
+
+// Create completed future
+@native
+fonksiyon ready<T>(value: T) -> Future[T]
+
+// Create pending future
+@native
+fonksiyon pending<T>() -> Future[T]
+
+// ============================================================================
+// ASYNC RUNTIME
+// ============================================================================
+
+tip Runtime = yapı yap
+    handle: tamsayı,
+    num_threads: tamsayı
+son
+
+// Create runtime with default config (multi-threaded)
+@native
+fonksiyon runtime_new() -> Runtime
+
+// Create runtime with single thread
+@native
+fonksiyon runtime_single_threaded() -> Runtime
+
+// Create runtime with custom thread count
+@native
+fonksiyon runtime_with_threads(num_threads: tamsayı) -> Runtime
+
+// Block on future (run to completion)
+@native
+fonksiyon runtime_block_on<T>(runtime: Runtime, future: Future[T]) -> T
+
+// Shutdown runtime
+@native
+fonksiyon runtime_shutdown(runtime: Runtime) -> boş
+
+// ============================================================================
+// TASK SPAWNING
+// ============================================================================
+
+tip Task<T> = yapı yap
+    handle: tamsayı,
+    name: Seçenek[yazı]
+son
+
+// Spawn async task
+@native
+fonksiyon spawn<T>(future: Future[T]) -> Task[T]
+
+// Spawn with name
+@native
+fonksiyon spawn_named<T>(name: yazı, future: Future[T]) -> Task[T]
+
+// Spawn blocking task (for CPU-intensive work)
+@native
+fonksiyon spawn_blocking<T>(f: fonksiyon() -> T) -> Task[T]
+
+// Await task completion
+@native
+fonksiyon task_await<T>(task: Task[T]) -> Future[T]
+
+// Cancel task
+@native
+fonksiyon task_cancel<T>(task: Task[T]) -> boş
+
+// Check if task is finished
+@native
+fonksiyon task_is_finished<T>(task: Task[T]) -> mantıksal
+
+// ============================================================================
+// ASYNC CHANNELS
+// ============================================================================
+
+tip Sender<T> = yapı yap
+    handle: tamsayı
+son
+
+tip Receiver<T> = yapı yap
+    handle: tamsayı
+son
+
+// Create unbounded channel
+@native
+fonksiyon channel<T>() -> (Sender[T], Receiver[T])
+
+// Create bounded channel (with capacity)
+@native
+fonksiyon bounded_channel<T>(capacity: tamsayı) -> (Sender[T], Receiver[T])
+
+// Send value (async)
+@native
+fonksiyon send<T>(sender: Sender[T], value: T) -> Future[Sonuç[boş, yazı]]
+
+// Receive value (async)
+@native
+fonksiyon recv<T>(receiver: Receiver[T]) -> Future[Seçenek[T]]
+
+// Try send (non-blocking)
+@native
+fonksiyon try_send<T>(sender: Sender[T], value: T) -> Sonuç[boş, yazı]
+
+// Try receive (non-blocking)
+@native
+fonksiyon try_recv<T>(receiver: Receiver[T]) -> Seçenek[T]
+
+// Close channel
+@native
+fonksiyon close_sender<T>(sender: Sender[T]) -> boş
+
+// ============================================================================
+// ONESHOT CHANNEL (Single-Value)
+// ============================================================================
+
+tip OneshotSender<T> = yapı yap
+    handle: tamsayı
+son
+
+tip OneshotReceiver<T> = yapı yap
+    handle: tamsayı
+son
+
+// Create oneshot channel
+@native
+fonksiyon oneshot<T>() -> (OneshotSender[T], OneshotReceiver[T])
+
+// Send single value
+@native
+fonksiyon oneshot_send<T>(sender: OneshotSender[T], value: T) -> Sonuç[boş, yazı]
+
+// Receive single value
+@native
+fonksiyon oneshot_recv<T>(receiver: OneshotReceiver[T]) -> Future[Sonuç[T, yazı]]
+
+// ============================================================================
+// ASYNC SLEEP & TIMEOUT
+// ============================================================================
+
+// Sleep for duration (async)
+@native
+fonksiyon sleep(duration_ms: tamsayı) -> Future[boş]
+
+// Sleep until timestamp
+@native
+fonksiyon sleep_until(timestamp: tamsayı) -> Future[boş]
+
+// Timeout for future
+@native
+fonksiyon timeout<T>(duration_ms: tamsayı, future: Future[T]) -> Future[Sonuç[T, yazı]]
+
+// Delay execution
+fonksiyon delay(ms: tamsayı) -> Future[boş]
+yap
+    dön sleep(ms)
+son
+
+// ============================================================================
+// SELECT (Wait on Multiple Futures)
+// ============================================================================
+
+// Select first completed future (up to 2)
+@native
+fonksiyon select2<T1, T2>(future1: Future[T1], future2: Future[T2]) -> Future[Either[T1, T2]]
+
+// Select first completed (up to 4)
+@native
+fonksiyon select4<T1, T2, T3, T4>(
+    future1: Future[T1], 
+    future2: Future[T2], 
+    future3: Future[T3], 
+    future4: Future[T4]
+) -> Future[Either4[T1, T2, T3, T4]]
+
+tip Either<A, B> = Left { value: A } | Right { value: B }
+
+tip Either4<A, B, C, D> = First { value: A } | Second { value: B } | Third { value: C } | Fourth { value: D }
+
+// ============================================================================
+// JOIN (Wait for All Futures)
+// ============================================================================
+
+// Join 2 futures
+@native
+fonksiyon join2<T1, T2>(future1: Future[T1], future2: Future[T2]) -> Future[(T1, T2)]
+
+// Join 3 futures
+@native
+fonksiyon join3<T1, T2, T3>(
+    future1: Future[T1], 
+    future2: Future[T2], 
+    future3: Future[T3]
+) -> Future[(T1, T2, T3)]
+
+// Join all (list of same-type futures)
+@native
+fonksiyon join_all<T>(futures: liste[Future[T]]) -> Future[liste[T]]
+
+// ============================================================================
+// ASYNC MUTEX & SEMAPHORE
+// ============================================================================
+
+tip AsyncMutex<T> = yapı yap
+    handle: tamsayı
+son
+
+tip AsyncMutexGuard<T> = yapı yap
+    handle: tamsayı,
+    value: T
+son
+
+// Create async mutex
+@native
+fonksiyon mutex_new<T>(value: T) -> AsyncMutex[T]
+
+// Lock mutex (async)
+@native
+fonksiyon mutex_lock<T>(mutex: AsyncMutex[T]) -> Future[AsyncMutexGuard[T]]
+
+// Try lock (non-blocking)
+@native
+fonksiyon mutex_try_lock<T>(mutex: AsyncMutex[T]) -> Seçenek[AsyncMutexGuard[T]]
+
+// Unlock
+@native
+fonksiyon mutex_unlock<T>(guard: AsyncMutexGuard[T]) -> boş
+
+// Semaphore
+tip Semaphore = yapı yap
+    handle: tamsayı,
+    permits: tamsayı
+son
+
+// Create semaphore
+@native
+fonksiyon semaphore_new(permits: tamsayı) -> Semaphore
+
+// Acquire permit (async)
+@native
+fonksiyon semaphore_acquire(sem: Semaphore) -> Future[boş]
+
+// Release permit
+@native
+fonksiyon semaphore_release(sem: Semaphore) -> boş
+
+// ============================================================================
+// ASYNC STREAM
+// ============================================================================
+
+tip Stream<T> = yapı yap
+    handle: tamsayı
+son
+
+// Create stream from list
+@native
+fonksiyon stream_from_list<T>(items: liste[T]) -> Stream[T]
+
+// Stream next item
+@native
+fonksiyon stream_next<T>(stream: Stream[T]) -> Future[Seçenek[T]]
+
+// Map stream
+@native
+fonksiyon stream_map<T, U>(stream: Stream[T], f: fonksiyon(T) -> U) -> Stream[U]
+
+// Filter stream
+@native
+fonksiyon stream_filter<T>(stream: Stream[T], predicate: fonksiyon(T) -> mantıksal) -> Stream[T]
+
+// Collect stream to list
+@native
+fonksiyon stream_collect<T>(stream: Stream[T]) -> Future[liste[T]]
+
+// ============================================================================
+// ASYNC UTILITIES
+// ============================================================================
+
+// Yield to scheduler (give up current time slice)
+@native
+fonksiyon yield_now() -> Future[boş]
+
+// Retry future with backoff
+@native
+fonksiyon retry<T>(future_fn: fonksiyon() -> Future[T], max_retries: tamsayı, backoff_ms: tamsayı) -> Future[Sonuç[T, yazı]]
+
+// Race (first to complete wins, others cancelled)
+@native
+fonksiyon race<T>(futures: liste[Future[T]]) -> Future[T]
+
+// ============================================================================
+// ASYNC FILE I/O
+// ============================================================================
+
+// Read file asynchronously
+@native
+fonksiyon read_file_async(path: yazı) -> Future[Sonuç[liste[bayt], yazı]]
+
+// Write file asynchronously
+@native
+fonksiyon write_file_async(path: yazı, data: liste[bayt]) -> Future[Sonuç[boş, yazı]]
+
+// ============================================================================
+// ASYNC NETWORK (Basic)
+// ============================================================================
+
+// TCP connect (async)
+@native
+fonksiyon tcp_connect_async(addr: yazı) -> Future[Sonuç[TcpStream, yazı]]
+
+// TCP accept (async)
+@native
+fonksiyon tcp_accept_async(listener: TcpListener) -> Future[Sonuç[TcpStream, yazı]]
+
+// Read from stream (async)
+@native
+fonksiyon tcp_read_async(stream: TcpStream, buffer: liste[bayt]) -> Future[Sonuç[tamsayı, yazı]]
+
+// Write to stream (async)
+@native
+fonksiyon tcp_write_async(stream: TcpStream, data: liste[bayt]) -> Future[Sonuç[tamsayı, yazı]]
+
+tip TcpStream = yapı yap handle: tamsayı son
+tip TcpListener = yapı yap handle: tamsayı son
+
+// ============================================================================
+// ASYNC TIMER
+// ============================================================================
+
+tip Interval = yapı yap
+    handle: tamsayı,
+    period_ms: tamsayı
+son
+
+// Create interval timer
+@native
+fonksiyon interval(period_ms: tamsayı) -> Interval
+
+// Wait for next tick
+@native
+fonksiyon interval_tick(interval: Interval) -> Future[boş]
+
+// Stop interval
+@native
+fonksiyon interval_stop(interval: Interval) -> boş
+
+// ============================================================================
+// ASYNC ERROR HANDLING
+// ============================================================================
+
+// Fallback to default on error
+@native
+fonksiyon future_or_default<T>(future: Future[Sonuç[T, yazı]], default: T) -> Future[T]
+
+// Catch error
+@native
+fonksiyon future_catch<T>(future: Future[T], handler: fonksiyon(yazı) -> T) -> Future[T]
+
+// ============================================================================
+// TASK LOCAL STORAGE
+// ============================================================================
+
+tip TaskLocal<T> = yapı yap
+    handle: tamsayı
+son
+
+// Create task-local variable
+@native
+fonksiyon task_local_new<T>(default: T) -> TaskLocal[T]
+
+// Get task-local value
+@native
+fonksiyon task_local_get<T>(local: TaskLocal[T]) -> T
+
+// Set task-local value
+@native
+fonksiyon task_local_set<T>(local: TaskLocal[T], value: T) -> boş
+
+// ============================================================================
+// QUICK START HELPERS
+// ============================================================================
+
+// Run single async function
+fonksiyon run<T>(f: fonksiyon() -> Future[T]) -> T
+yap
+    değişken runtime = runtime_new()
+    değişken result = runtime_block_on(runtime, f())
+    runtime_shutdown(runtime)
+    dön result
+son
+
+// Spawn and forget
+fonksiyon fire_and_forget<T>(future: Future[T]) -> boş
+yap
+    spawn(future)
+son
+
+// ============================================================================
+// TURKISH ALIASES
+// ============================================================================
+
+fonksiyon çalışma_zamanı_oluştur() -> Runtime
+yap
+    dön runtime_new()
+son
+
+fonksiyon görev_başlat<T>(gelecek: Future[T]) -> Task[T]
+yap
+    dön spawn(gelecek)
+son
+
+fonksiyon uyku(süre_ms: tamsayı) -> Future[boş]
+yap
+    dön sleep(süre_ms)
+son
+
+fonksiyon kanal_oluştur<T>() -> (Sender[T], Receiver[T])
+yap
+    dön channel()
+son
+
+fonksiyon gönder<T>(gönderen: Sender[T], değer: T) -> Future[Sonuç[boş, yazı]]
+yap
+    dön send(gönderen, değer)
+son
+
+fonksiyon al<T>(alıcı: Receiver[T]) -> Future[Seçenek[T]]
+yap
+    dön recv(alıcı)
+son
+
+fonksiyon zaman_aşımı<T>(süre_ms: tamsayı, gelecek: Future[T]) -> Future[Sonuç[T, yazı]]
+yap
+    dön timeout(süre_ms, gelecek)
+son
+
+fonksiyon çalıştır<T>(f: fonksiyon() -> Future[T]) -> T
+yap
+    dön run(f)
+son
+
+son  // modül async

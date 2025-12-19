@@ -1,0 +1,127 @@
+// ============================================================================
+// BERK GUI Framework - Core Module Index
+// ============================================================================
+// Profesyonel Seviye GUI Kütüphanesi
+// 
+// Bu dosya tüm GUI modüllerini dışa aktarır (re-export)
+// ============================================================================
+
+modül gui
+
+// ============================================================================
+// CORE - Çekirdek Modüller
+// ============================================================================
+pub kullan gui::core::application::*
+pub kullan gui::core::window::*
+pub kullan gui::core::event::*
+pub kullan gui::core::context::*
+
+// ============================================================================
+// RENDERING - Render Engine
+// ============================================================================
+pub kullan gui::rendering::canvas::*
+pub kullan gui::rendering::painter::*
+pub kullan gui::rendering::compositor::*
+
+// ============================================================================
+// LAYOUT - Layout Engine
+// ============================================================================
+pub kullan gui::layout::box_model::*
+pub kullan gui::layout::flexbox::*
+pub kullan gui::layout::grid::*
+pub kullan gui::layout::constraints::*
+
+// ============================================================================
+// WIDGETS - Temel Widget'lar
+// ============================================================================
+pub kullan gui::widgets::core::widget::*
+pub kullan gui::widgets::core::container::*
+pub kullan gui::widgets::input::*
+pub kullan gui::widgets::display::*
+pub kullan gui::widgets::container::*
+pub kullan gui::widgets::navigation::*
+pub kullan gui::widgets::feedback::*
+pub kullan gui::widgets::data::*
+pub kullan gui::widgets::specialized::*
+
+// ============================================================================
+// STYLE - Stil Sistemi
+// ============================================================================
+pub kullan gui::style::theme::*
+pub kullan gui::style::colors::*
+pub kullan gui::style::typography::*
+pub kullan gui::style::shadows::*
+
+// ============================================================================
+// MATERIALS - Malzeme Sistemi
+// ============================================================================
+pub kullan gui::materials::*
+
+// ============================================================================
+// EFFECTS - Görsel Efektler
+// ============================================================================
+pub kullan gui::effects::*
+
+// ============================================================================
+// ANIMATION - Animasyon Sistemi
+// ============================================================================
+pub kullan gui::animation::*
+
+// ============================================================================
+// PRELUDE - Sık Kullanılan Türler
+// ============================================================================
+/// GUI için önceden tanımlanmış sık kullanılan türler ve fonksiyonlar
+pub modül prelude
+    pub kullan gui::core::application::Application
+    pub kullan gui::core::window::Window
+    pub kullan gui::core::event::{Event, EventHandler}
+    
+    pub kullan gui::widgets::core::widget::Widget
+    pub kullan gui::widgets::input::button::Button
+    pub kullan gui::widgets::input::textfield::TextField
+    pub kullan gui::widgets::display::label::Label
+    pub kullan gui::widgets::display::image::Image
+    pub kullan gui::widgets::container::panel::Panel
+    
+    pub kullan gui::layout::flexbox::FlexBox
+    pub kullan gui::layout::grid::Grid
+    
+    pub kullan gui::style::theme::Theme
+    pub kullan gui::style::colors::Color
+    
+    pub kullan gui::rendering::canvas::Canvas
+son
+
+// ============================================================================
+// VERSİYON BİLGİSİ
+// ============================================================================
+pub const GUI_VERSION: yazı = "1.0.0"
+pub const GUI_NAME: yazı = "BERK GUI Framework"
+pub const GUI_AUTHOR: yazı = "BERK Team"
+
+/// GUI Framework sürüm bilgisini döndürür
+pub fn version() döndür yazı:
+    döndür "{GUI_NAME} v{GUI_VERSION}"
+son
+
+/// GUI Framework hakkında bilgi
+pub fn info() döndür yazı:
+    döndür """
+╔══════════════════════════════════════════════════════════════╗
+║                    BERK GUI Framework                        ║
+║                       Version 1.0.0                          ║
+╠══════════════════════════════════════════════════════════════╣
+║  Profesyonel Seviye GUI Kütüphanesi                         ║
+║                                                              ║
+║  Özellikler:                                                 ║
+║  • Modern Widget Sistemi                                     ║
+║  • Flexbox & Grid Layout                                     ║
+║  • Theme Engine                                              ║
+║  • Material System (Skeuomorphic)                           ║
+║  • Animation Engine                                          ║
+║  • Specialized Widgets (Gauge, VU Meter, etc.)              ║
+║                                                              ║
+║  Backend: OpenGL/Vulkan/DirectX/Metal                       ║
+╚══════════════════════════════════════════════════════════════╝
+"""
+son

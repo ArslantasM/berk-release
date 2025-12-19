@@ -1,0 +1,610 @@
+// ============================================================================
+// BERK SENSOR API - Adaptif/Bağlamsal Filtreler
+// ============================================================================
+// "Sabit filtre yok, koşula bağlı filtre var"
+// ============================================================================
+
+modül sensor::filter::adaptive
+
+import sensor::measurement::{Measurement, Confidence}
+import sensor::filter::advanced::{
+    AlphaBetaFilter, HampelFilter, RobustEMA, RateLimiter
+}
+
+// ============================================================================
+// CONTEXT-AWARE FİLTRE (BERK İÇİN ALTIN)
+// ============================================================================
+
+/// Bağlam durumu
+pub tip FilterContext = enum yap
+    Stable,          // Düşük varyans, sabit
+    Transitioning,   // Değişim halinde
+    HighNoise,       // Yüksek gürültü
+    Outlier,         // Ani spike
+    Vibration,       // Titreşim modu
+    Unknown,         // Belirsiz
+son
+
+/// Adaptif filtre stratejisi
+pub tip FilterStrategy = enum yap
+    /// EMA kullan (stable durum için)
+    UseEMA { alpha: ondalık },
+    /// Median kullan (outlier/spike için)
+    UseMedian { window: sayı },
+    /// Raw geç (ani değişim yakala için)
+    PassThrough,
+    /// Alpha-Beta kullan (tracking için)
+    UseAlphaBeta { alpha: ondalık, beta: ondalık },
+    /// Hampel kullan (impulse noise için)
+    UseHampel { threshold: ondalık },
+son
+
+/// Context-Aware Adaptif Filtre
+/// Koşula göre filtre stratejisi değiştirir
+pub tip AdaptiveFilter = yapı yap
+    // --- Durum Algılama ---
+    /// Varyans penceresi
+    variance_window: Liste[ondalık],
+    /// Pencere boyutu
+    window_size: sayı,
+    /// Mevcut durum
+    current_context: FilterContext,
+    
+    // --- Eşikler ---
+    /// Düşük varyans eşiği (stable)
+    stable_variance_threshold: ondalık,
+    /// Yüksek varyans eşiği (noisy)
+    noisy_variance_threshold: ondalık,
+    /// Outlier z-score eşiği
+    outlier_z_threshold: ondalık,
+    
+    // --- İç Filtreler ---
+    ema_value: ondalık,
+    ema_alpha: ondalık,
+    median_buffer: Liste[ondalık],
+    
+    // --- İstatistikler ---
+    mean: ondalık,
+    variance: ondalık,
+    count: sayı,
+    
+    // --- Strateji sayaçları ---
+    ema_count: sayı,
+    median_count: sayı,
+    passthrough_count: sayı,
+    
+    initialized: mantıksal,
+son
+
+impl AdaptiveFilter:
+    /// Yeni adaptif filtre
+    pub fn new() döndür AdaptiveFilter:
+        döndür AdaptiveFilter {
+            variance_window: [],
+            window_size: 20,
+            current_context: FilterContext::Unknown,
+            stable_variance_threshold: 0.1,
+            noisy_variance_threshold: 5.0,
+            outlier_z_threshold: 3.0,
+            ema_value: 0.0,
+            ema_alpha: 0.15,
+            median_buffer: [],
+            mean: 0.0,
+            variance: 0.0,
+            count: 0,
+            ema_count: 0,
+            median_count: 0,
+            passthrough_count: 0,
+            initialized: yanlış,
+        }
+    son
+    
+    /// Eşikleri ayarla
+    pub fn with_thresholds(
+        mut self,
+        stable: ondalık,
+        noisy: ondalık,
+        outlier: ondalık
+    ) döndür AdaptiveFilter:
+        self.stable_variance_threshold = stable
+        self.noisy_variance_threshold = noisy
+        self.outlier_z_threshold = outlier
+        döndür self
+    son
+    
+    /// Preset: Sıcaklık sensörü
+    pub fn for_temperature() döndür AdaptiveFilter:
+        AdaptiveFilter::new()
+            .with_thresholds(0.05, 2.0, 4.0)
+    son
+    
+    /// Preset: IMU sensörü
+    pub fn for_imu() döndür AdaptiveFilter:
+        AdaptiveFilter::new()
+            .with_thresholds(0.01, 1.0, 3.0)
+    son
+    
+    /// Preset: Endüstriyel (gürültülü ortam)
+    pub fn for_industrial() döndür AdaptiveFilter:
+        AdaptiveFilter::new()
+            .with_thresholds(1.0, 10.0, 2.5)
+    son
+    
+    /// Bağlamı algıla
+    fn detect_context(mut self, value: ondalık) döndür FilterContext:
+        // Varyans penceresine ekle
+        self.variance_window.push(value)
+        eğer self.variance_window.len() > self.window_size:
+            self.variance_window.remove(0)
+        son
+        
+        // Online mean/variance güncelle (Welford)
+        self.count = self.count + 1
+        değişken delta = value - self.mean
+        self.mean = self.mean + delta / self.count
+        değişken delta2 = value - self.mean
+        eğer self.count > 1:
+            self.variance = self.variance + (delta * delta2 - self.variance) / self.count
+        son
+        
+        // Yeterli veri yoksa
+        eğer self.variance_window.len() < 5:
+            döndür FilterContext::Unknown
+        son
+        
+        // Outlier kontrolü (z-score)
+        değişken std_dev = self.variance.sqrt()
+        eğer std_dev > 0.001:
+            değişken z = (value - self.mean).abs() / std_dev
+            eğer z > self.outlier_z_threshold:
+                döndür FilterContext::Outlier
+            son
+        son
+        
+        // Varyans bazlı durum
+        eğer self.variance < self.stable_variance_threshold:
+            döndür FilterContext::Stable
+        yoksa eğer self.variance > self.noisy_variance_threshold:
+            // Titreşim mi noise mi?
+            // Basit yaklaşım: sign change sayısı
+            değişken sign_changes = 0
+            döngü i in 1..self.variance_window.len():
+                değişken diff1 = self.variance_window[i] - self.variance_window[i-1]
+                eğer i > 1:
+                    değişken diff2 = self.variance_window[i-1] - self.variance_window[i-2]
+                    eğer diff1 * diff2 < 0.0:
+                        sign_changes = sign_changes + 1
+                    son
+                son
+            son
+            
+            eğer sign_changes > self.variance_window.len() / 2:
+                döndür FilterContext::Vibration
+            yoksa:
+                döndür FilterContext::HighNoise
+            son
+        yoksa:
+            döndür FilterContext::Transitioning
+        son
+    son
+    
+    /// Strateji seç
+    fn select_strategy(self, context: FilterContext) döndür FilterStrategy:
+        eşle context:
+            FilterContext::Stable:
+                // Stabil → yumuşak EMA
+                döndür FilterStrategy::UseEMA { alpha: 0.1 }
+            son
+            FilterContext::Transitioning:
+                // Değişim → hızlı EMA
+                döndür FilterStrategy::UseEMA { alpha: 0.4 }
+            son
+            FilterContext::HighNoise:
+                // Yüksek gürültü → median
+                döndür FilterStrategy::UseMedian { window: 7 }
+            son
+            FilterContext::Outlier:
+                // Outlier → hampel veya son geçerli değeri koru
+                döndür FilterStrategy::UseHampel { threshold: 3.0 }
+            son
+            FilterContext::Vibration:
+                // Titreşim → median + alpha-beta
+                döndür FilterStrategy::UseMedian { window: 5 }
+            son
+            FilterContext::Unknown:
+                // Bilinmiyor → orta yol
+                döndür FilterStrategy::UseEMA { alpha: 0.2 }
+            son
+        son
+    son
+    
+    /// Ana filtre fonksiyonu
+    pub fn apply(mut self, value: ondalık) döndür ondalık:
+        eğer !self.initialized:
+            self.ema_value = value
+            self.initialized = doğru
+            döndür value
+        son
+        
+        // Bağlamı algıla
+        değişken context = self.detect_context(value)
+        self.current_context = context
+        
+        // Strateji seç
+        değişken strategy = self.select_strategy(context)
+        
+        // Stratejiyi uygula
+        eşle strategy:
+            FilterStrategy::UseEMA { alpha }:
+                self.ema_count = self.ema_count + 1
+                self.ema_value = alpha * value + (1.0 - alpha) * self.ema_value
+                döndür self.ema_value
+            son
+            
+            FilterStrategy::UseMedian { window }:
+                self.median_count = self.median_count + 1
+                self.median_buffer.push(value)
+                eğer self.median_buffer.len() > window:
+                    self.median_buffer.remove(0)
+                son
+                değişken sorted = self.median_buffer.clone()
+                sorted.sort()
+                döndür sorted[sorted.len() / 2]
+            son
+            
+            FilterStrategy::PassThrough:
+                self.passthrough_count = self.passthrough_count + 1
+                self.ema_value = value
+                döndür value
+            son
+            
+            FilterStrategy::UseAlphaBeta { alpha, beta }:
+                // Basitleştirilmiş alpha-beta
+                self.ema_value = alpha * value + (1.0 - alpha) * self.ema_value
+                döndür self.ema_value
+            son
+            
+            FilterStrategy::UseHampel { threshold }:
+                // Hampel: outlier ise son geçerli değeri döndür
+                self.median_count = self.median_count + 1
+                döndür self.ema_value  // Son geçerli değer
+            son
+        son
+    son
+    
+    /// Mevcut bağlamı al
+    pub fn get_context(self) döndür FilterContext:
+        döndür self.current_context
+    son
+    
+    /// Strateji istatistiklerini al
+    pub fn get_stats(self) döndür (sayı, sayı, sayı):
+        döndür (self.ema_count, self.median_count, self.passthrough_count)
+    son
+    
+    /// Reset
+    pub fn reset(mut self) döndür void:
+        self.variance_window.clear()
+        self.median_buffer.clear()
+        self.count = 0
+        self.mean = 0.0
+        self.variance = 0.0
+        self.ema_count = 0
+        self.median_count = 0
+        self.passthrough_count = 0
+        self.initialized = yanlış
+    son
+son
+
+// ============================================================================
+// VARİANS-BASED ADAPTIVE ALPHA
+// ============================================================================
+
+/// Varyansa göre alpha ayarlayan EMA
+/// Yüksek varyans → düşük alpha (smooth)
+/// Düşük varyans → yüksek alpha (responsive)
+pub tip VarianceAdaptiveEMA = yapı yap
+    /// Minimum alpha
+    alpha_min: ondalık,
+    /// Maksimum alpha
+    alpha_max: ondalık,
+    /// Varyans penceresi
+    buffer: Liste[ondalık],
+    window_size: sayı,
+    /// EMA değeri
+    value: ondalık,
+    /// Mevcut alpha
+    current_alpha: ondalık,
+    initialized: mantıksal,
+son
+
+impl VarianceAdaptiveEMA:
+    pub fn new(alpha_min: ondalık, alpha_max: ondalık) döndür VarianceAdaptiveEMA:
+        döndür VarianceAdaptiveEMA {
+            alpha_min: alpha_min,
+            alpha_max: alpha_max,
+            buffer: [],
+            window_size: 10,
+            value: 0.0,
+            current_alpha: (alpha_min + alpha_max) / 2.0,
+            initialized: yanlış,
+        }
+    son
+    
+    /// Preset: Standart
+    pub fn standard() döndür VarianceAdaptiveEMA:
+        döndür VarianceAdaptiveEMA::new(0.05, 0.5)
+    son
+    
+    pub fn apply(mut self, measurement: ondalık) döndür ondalık:
+        eğer !self.initialized:
+            self.value = measurement
+            self.buffer.push(measurement)
+            self.initialized = doğru
+            döndür measurement
+        son
+        
+        // Buffer güncelle
+        self.buffer.push(measurement)
+        eğer self.buffer.len() > self.window_size:
+            self.buffer.remove(0)
+        son
+        
+        // Varyans hesapla
+        değişken mean = 0.0
+        döngü v in self.buffer.clone():
+            mean = mean + v
+        son
+        mean = mean / self.buffer.len()
+        
+        değişken variance = 0.0
+        döngü v in self.buffer.clone():
+            variance = variance + (v - mean) * (v - mean)
+        son
+        variance = variance / self.buffer.len()
+        
+        // Alpha'yı ayarla (ters orantılı)
+        // Normalize edilmiş varyans: 0-1 arası
+        değişken normalized_var = (variance / (variance + 1.0)).clamp(0.0, 1.0)
+        
+        // Yüksek varyans → düşük alpha
+        self.current_alpha = self.alpha_max - normalized_var * (self.alpha_max - self.alpha_min)
+        
+        // EMA uygula
+        self.value = self.current_alpha * measurement + (1.0 - self.current_alpha) * self.value
+        
+        döndür self.value
+    son
+    
+    pub fn get_alpha(self) döndür ondalık:
+        döndür self.current_alpha
+    son
+son
+
+// ============================================================================
+// SINYAL-GÜRÜLTÜ ORANI TABANLI FİLTRE
+// ============================================================================
+
+/// SNR-Adaptive Filter
+/// Sinyal/Gürültü oranına göre filtre kuvveti ayarlar
+pub tip SNRAdaptiveFilter = yapı yap
+    /// Sinyal tahminleri
+    signal_estimate: ondalık,
+    /// Gürültü tahmini
+    noise_estimate: ondalık,
+    /// EMA alpha'ları
+    signal_alpha: ondalık,
+    noise_alpha: ondalık,
+    /// Çıkış
+    output: ondalık,
+    initialized: mantıksal,
+son
+
+impl SNRAdaptiveFilter:
+    pub fn new() döndür SNRAdaptiveFilter:
+        döndür SNRAdaptiveFilter {
+            signal_estimate: 0.0,
+            noise_estimate: 0.1,
+            signal_alpha: 0.1,
+            noise_alpha: 0.05,
+            output: 0.0,
+            initialized: yanlış,
+        }
+    son
+    
+    pub fn apply(mut self, measurement: ondalık) döndür ondalık:
+        eğer !self.initialized:
+            self.output = measurement
+            self.signal_estimate = measurement
+            self.initialized = doğru
+            döndür measurement
+        son
+        
+        // Sinyal tahmini (slow EMA)
+        self.signal_estimate = self.signal_alpha * measurement + 
+                               (1.0 - self.signal_alpha) * self.signal_estimate
+        
+        // Gürültü tahmini (deviation'dan)
+        değişken deviation = (measurement - self.signal_estimate).abs()
+        self.noise_estimate = self.noise_alpha * deviation + 
+                              (1.0 - self.noise_alpha) * self.noise_estimate
+        
+        // SNR hesapla
+        değişken snr = eğer self.noise_estimate > 0.001:
+            self.signal_estimate.abs() / self.noise_estimate
+        yoksa:
+            100.0
+        son
+        
+        // SNR'a göre filtre kuvveti
+        // Yüksek SNR → hızlı tepki (yüksek alpha)
+        // Düşük SNR → güçlü filtreleme (düşük alpha)
+        değişken alpha = (snr / (snr + 10.0)).clamp(0.05, 0.8)
+        
+        // Filtrele
+        self.output = alpha * measurement + (1.0 - alpha) * self.output
+        
+        döndür self.output
+    son
+    
+    pub fn get_snr(self) döndür ondalık:
+        eğer self.noise_estimate > 0.001:
+            döndür self.signal_estimate.abs() / self.noise_estimate
+        yoksa:
+            döndür 100.0
+        son
+    son
+son
+
+// ============================================================================
+// HYBRİD FİLTRE ZİNCİRİ
+// ============================================================================
+
+/// Aşamalı hibrit filtre
+/// Outlier → Smooth → Track
+pub tip HybridFilterChain = yapı yap
+    /// 1. Aşama: Hampel (outlier rejection)
+    hampel: HampelFilter,
+    /// 2. Aşama: Robust EMA
+    robust_ema: RobustEMA,
+    /// 3. Aşama: Alpha-Beta (tracking)
+    alpha_beta: AlphaBetaFilter,
+    /// Aşama etkinlikleri
+    enable_hampel: mantıksal,
+    enable_ema: mantıksal,
+    enable_tracking: mantıksal,
+son
+
+impl HybridFilterChain:
+    pub fn new() döndür HybridFilterChain:
+        döndür HybridFilterChain {
+            hampel: HampelFilter::standard(),
+            robust_ema: RobustEMA::standard(),
+            alpha_beta: AlphaBetaFilter::balanced(),
+            enable_hampel: doğru,
+            enable_ema: doğru,
+            enable_tracking: yanlış,
+        }
+    son
+    
+    /// Preset: Endüstriyel sensör
+    pub fn for_industrial() döndür HybridFilterChain:
+        döndür HybridFilterChain {
+            hampel: HampelFilter::aggressive(),
+            robust_ema: RobustEMA::smooth(),
+            alpha_beta: AlphaBetaFilter::smooth(),
+            enable_hampel: doğru,
+            enable_ema: doğru,
+            enable_tracking: yanlış,
+        }
+    son
+    
+    /// Preset: Tracking (motion)
+    pub fn for_tracking() döndür HybridFilterChain:
+        döndür HybridFilterChain {
+            hampel: HampelFilter::permissive(),
+            robust_ema: RobustEMA::fast(),
+            alpha_beta: AlphaBetaFilter::fast(),
+            enable_hampel: doğru,
+            enable_ema: yanlış,
+            enable_tracking: doğru,
+        }
+    son
+    
+    /// Aşamaları etkinleştir/devre dışı bırak
+    pub fn set_stages(
+        mut self,
+        hampel: mantıksal,
+        ema: mantıksal,
+        tracking: mantıksal
+    ) döndür HybridFilterChain:
+        self.enable_hampel = hampel
+        self.enable_ema = ema
+        self.enable_tracking = tracking
+        döndür self
+    son
+    
+    pub fn apply(mut self, value: ondalık) döndür ondalık:
+        değişken result = value
+        
+        // 1. Aşama: Outlier rejection
+        eğer self.enable_hampel:
+            result = self.hampel.apply(result)
+        son
+        
+        // 2. Aşama: Smoothing
+        eğer self.enable_ema:
+            result = self.robust_ema.apply(result)
+        son
+        
+        // 3. Aşama: Tracking
+        eğer self.enable_tracking:
+            result = self.alpha_beta.apply(result)
+        son
+        
+        döndür result
+    son
+son
+
+// ============================================================================
+// FİLTRE FABRİKASI
+// ============================================================================
+
+/// Sensör tipine göre otomatik filtre seçimi
+pub tip FilterFactory = yapı yap
+son
+
+impl FilterFactory:
+    /// Sensör tipine göre önerilen filtre
+    pub fn for_sensor_type(sensor_type: metin) döndür AdaptiveFilter:
+        eşle sensor_type:
+            "temperature" | "sıcaklık":
+                döndür AdaptiveFilter::for_temperature()
+            son
+            "humidity" | "nem":
+                döndür AdaptiveFilter::for_temperature()  // Benzer davranış
+            son
+            "pressure" | "basınç":
+                döndür AdaptiveFilter::for_industrial()
+            son
+            "imu" | "accelerometer" | "gyroscope":
+                döndür AdaptiveFilter::for_imu()
+            son
+            "industrial" | "endüstriyel":
+                döndür AdaptiveFilter::for_industrial()
+            son
+            _:
+                döndür AdaptiveFilter::new()
+            son
+        son
+    son
+son
+
+// ============================================================================
+// CONVENIENCE FUNCTIONS
+// ============================================================================
+
+/// Adaptif filtre oluştur
+pub fn adaptive() döndür AdaptiveFilter:
+    döndür AdaptiveFilter::new()
+son
+
+/// Varyans-adaptive EMA oluştur
+pub fn variance_adaptive_ema() döndür VarianceAdaptiveEMA:
+    döndür VarianceAdaptiveEMA::standard()
+son
+
+/// SNR-adaptive filtre oluştur
+pub fn snr_adaptive() döndür SNRAdaptiveFilter:
+    döndür SNRAdaptiveFilter::new()
+son
+
+/// Hybrid chain oluştur
+pub fn hybrid_chain() döndür HybridFilterChain:
+    döndür HybridFilterChain::new()
+son
+
+/// Sensör tipine göre filtre al
+pub fn filter_for(sensor_type: metin) döndür AdaptiveFilter:
+    döndür FilterFactory::for_sensor_type(sensor_type)
+son

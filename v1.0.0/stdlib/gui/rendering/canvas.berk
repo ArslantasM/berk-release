@@ -1,0 +1,810 @@
+// ============================================================================
+// BERK GUI Framework - Canvas Module
+// ============================================================================
+// 2D çizim API'si - vektör grafikleri, şekiller, metin, görüntüler
+// ============================================================================
+
+modül gui::rendering::canvas
+
+kullan gui::style::colors::Color
+kullan gui::core::window::Point
+
+// ============================================================================
+// CANVAS
+// ============================================================================
+
+/// 2D çizim tuvali (canvas)
+pub tip Canvas = yapı yap
+    /// Boyutlar
+    width: tamsayı,
+    height: tamsayı,
+    
+    /// Durum yığını (state stack)
+    state_stack: liste[CanvasState],
+    
+    /// Aktif durum
+    current_state: CanvasState,
+    
+    /// Native handle
+    native_handle: tamsayı
+son
+
+/// Canvas durumu (kaydedilebilir/geri yüklenebilir)
+pub tip CanvasState = yapı yap
+    /// Transform matrisi
+    transform: Transform2D,
+    
+    /// Dolgu rengi/stili
+    fill_style: FillStyle,
+    
+    /// Çizgi rengi/stili
+    stroke_style: StrokeStyle,
+    
+    /// Çizgi genişliği
+    line_width: ondalık,
+    
+    /// Çizgi ucu stili
+    line_cap: LineCap,
+    
+    /// Çizgi birleşim stili
+    line_join: LineJoin,
+    
+    /// Miter limit
+    miter_limit: ondalık,
+    
+    /// Global alpha (şeffaflık)
+    global_alpha: ondalık,
+    
+    /// Compositing mode
+    composite_operation: CompositeOperation,
+    
+    /// Clip region
+    clip_region: Seçenek[Path],
+    
+    /// Font
+    font: Font,
+    
+    /// Gölge ayarları
+    shadow: ShadowSettings
+son
+
+// ============================================================================
+// FILL & STROKE STYLES
+// ============================================================================
+
+/// Dolgu stili
+pub tip FillStyle = enum yap
+    /// Düz renk
+    Solid(color: Color),
+    
+    /// Doğrusal gradient
+    LinearGradient(gradient: LinearGradient),
+    
+    /// Radyal gradient
+    RadialGradient(gradient: RadialGradient),
+    
+    /// Konik gradient
+    ConicGradient(gradient: ConicGradient),
+    
+    /// Desen (pattern)
+    Pattern(pattern: Pattern)
+son
+
+/// Çizgi stili
+pub tip StrokeStyle = enum yap
+    Solid(color: Color),
+    LinearGradient(gradient: LinearGradient),
+    RadialGradient(gradient: RadialGradient)
+son
+
+/// Doğrusal gradient
+pub tip LinearGradient = yapı yap
+    x0: ondalık, y0: ondalık,  // Başlangıç noktası
+    x1: ondalık, y1: ondalık,  // Bitiş noktası
+    stops: liste[ColorStop]
+son
+
+/// Radyal gradient
+pub tip RadialGradient = yapı yap
+    x0: ondalık, y0: ondalık, r0: ondalık,  // İç daire
+    x1: ondalık, y1: ondalık, r1: ondalık,  // Dış daire
+    stops: liste[ColorStop]
+son
+
+/// Konik gradient
+pub tip ConicGradient = yapı yap
+    cx: ondalık, cy: ondalık,  // Merkez
+    start_angle: ondalık,       // Başlangıç açısı (radyan)
+    stops: liste[ColorStop]
+son
+
+/// Renk durağı
+pub tip ColorStop = yapı yap
+    offset: ondalık,  // 0.0 - 1.0
+    color: Color
+son
+
+/// Desen (pattern)
+pub tip Pattern = yapı yap
+    image: ImageData,
+    repetition: PatternRepetition
+son
+
+pub tip PatternRepetition = enum yap
+    Repeat,
+    RepeatX,
+    RepeatY,
+    NoRepeat
+son
+
+// ============================================================================
+// LINE STYLES
+// ============================================================================
+
+/// Çizgi ucu stili
+pub tip LineCap = enum yap
+    Butt,    // Düz kesim
+    Round,   // Yuvarlak
+    Square   // Kare
+son
+
+/// Çizgi birleşim stili
+pub tip LineJoin = enum yap
+    Miter,   // Sivri
+    Round,   // Yuvarlak
+    Bevel    // Pahlı
+son
+
+// ============================================================================
+// TRANSFORM
+// ============================================================================
+
+/// 2D transform matrisi (3x3 affine transform)
+pub tip Transform2D = yapı yap
+    // | a  c  e |
+    // | b  d  f |
+    // | 0  0  1 |
+    a: ondalık, b: ondalık,
+    c: ondalık, d: ondalık,
+    e: ondalık, f: ondalık
+son
+
+impl Transform2D:
+    /// Birim matris (identity)
+    pub fn identity() döndür Transform2D:
+        döndür Transform2D yap
+            a: 1.0, b: 0.0,
+            c: 0.0, d: 1.0,
+            e: 0.0, f: 0.0
+        son
+    son
+    
+    /// Öteleme (translate)
+    pub fn translate(x: ondalık, y: ondalık) döndür Transform2D:
+        döndür Transform2D yap
+            a: 1.0, b: 0.0,
+            c: 0.0, d: 1.0,
+            e: x, f: y
+        son
+    son
+    
+    /// Ölçekleme (scale)
+    pub fn scale(sx: ondalık, sy: ondalık) döndür Transform2D:
+        döndür Transform2D yap
+            a: sx, b: 0.0,
+            c: 0.0, d: sy,
+            e: 0.0, f: 0.0
+        son
+    son
+    
+    /// Döndürme (rotate)
+    pub fn rotate(angle: ondalık) döndür Transform2D:
+        değişken cos_a = cos(angle)
+        değişken sin_a = sin(angle)
+        döndür Transform2D yap
+            a: cos_a, b: sin_a,
+            c: -sin_a, d: cos_a,
+            e: 0.0, f: 0.0
+        son
+    son
+    
+    /// Eğme (skew)
+    pub fn skew(angle_x: ondalık, angle_y: ondalık) döndür Transform2D:
+        döndür Transform2D yap
+            a: 1.0, b: tan(angle_y),
+            c: tan(angle_x), d: 1.0,
+            e: 0.0, f: 0.0
+        son
+    son
+    
+    /// Matris çarpımı
+    pub fn multiply(self, other: Transform2D) döndür Transform2D:
+        döndür Transform2D yap
+            a: self.a * other.a + self.c * other.b,
+            b: self.b * other.a + self.d * other.b,
+            c: self.a * other.c + self.c * other.d,
+            d: self.b * other.c + self.d * other.d,
+            e: self.a * other.e + self.c * other.f + self.e,
+            f: self.b * other.e + self.d * other.f + self.f
+        son
+    son
+    
+    /// Nokta dönüşümü
+    pub fn transform_point(self, x: ondalık, y: ondalık) döndür (ondalık, ondalık):
+        döndür (
+            self.a * x + self.c * y + self.e,
+            self.b * x + self.d * y + self.f
+        )
+    son
+    
+    /// Ters matris
+    pub fn invert(self) döndür Seçenek[Transform2D]:
+        değişken det = self.a * self.d - self.b * self.c
+        eğer det == 0.0:
+            döndür boş
+        son
+        
+        değişken inv_det = 1.0 / det
+        döndür Bazı(Transform2D yap
+            a: self.d * inv_det,
+            b: -self.b * inv_det,
+            c: -self.c * inv_det,
+            d: self.a * inv_det,
+            e: (self.c * self.f - self.d * self.e) * inv_det,
+            f: (self.b * self.e - self.a * self.f) * inv_det
+        son)
+    son
+son
+
+// ============================================================================
+// PATH
+// ============================================================================
+
+/// Vektör yolu (path)
+pub tip Path = yapı yap
+    commands: liste[PathCommand]
+son
+
+/// Yol komutları
+pub tip PathCommand = enum yap
+    MoveTo(x: ondalık, y: ondalık),
+    LineTo(x: ondalık, y: ondalık),
+    QuadraticCurveTo(cpx: ondalık, cpy: ondalık, x: ondalık, y: ondalık),
+    BezierCurveTo(cp1x: ondalık, cp1y: ondalık, cp2x: ondalık, cp2y: ondalık, x: ondalık, y: ondalık),
+    ArcTo(x1: ondalık, y1: ondalık, x2: ondalık, y2: ondalık, radius: ondalık),
+    Arc(cx: ondalık, cy: ondalık, radius: ondalık, start_angle: ondalık, end_angle: ondalık, counter_clockwise: mantıksal),
+    Ellipse(cx: ondalık, cy: ondalık, rx: ondalık, ry: ondalık, rotation: ondalık, start_angle: ondalık, end_angle: ondalık, counter_clockwise: mantıksal),
+    Rect(x: ondalık, y: ondalık, width: ondalık, height: ondalık),
+    RoundRect(x: ondalık, y: ondalık, width: ondalık, height: ondalık, radii: liste[ondalık]),
+    ClosePath
+son
+
+impl Path:
+    /// Yeni boş yol
+    pub fn new() döndür Path:
+        döndür Path yap commands: [] son
+    son
+    
+    /// Kaleme taşı
+    pub fn move_to(mut self, x: ondalık, y: ondalık) döndür Path:
+        self.commands.push(PathCommand::MoveTo(x, y))
+        döndür self
+    son
+    
+    /// Çizgi çiz
+    pub fn line_to(mut self, x: ondalık, y: ondalık) döndür Path:
+        self.commands.push(PathCommand::LineTo(x, y))
+        döndür self
+    son
+    
+    /// Kuadratik Bezier eğrisi
+    pub fn quadratic_curve_to(mut self, cpx: ondalık, cpy: ondalık, x: ondalık, y: ondalık) döndür Path:
+        self.commands.push(PathCommand::QuadraticCurveTo(cpx, cpy, x, y))
+        döndür self
+    son
+    
+    /// Kübik Bezier eğrisi
+    pub fn bezier_curve_to(mut self, cp1x: ondalık, cp1y: ondalık, cp2x: ondalık, cp2y: ondalık, x: ondalık, y: ondalık) döndür Path:
+        self.commands.push(PathCommand::BezierCurveTo(cp1x, cp1y, cp2x, cp2y, x, y))
+        döndür self
+    son
+    
+    /// Yay (arc)
+    pub fn arc(mut self, cx: ondalık, cy: ondalık, radius: ondalık, start_angle: ondalık, end_angle: ondalık) döndür Path:
+        self.commands.push(PathCommand::Arc(cx, cy, radius, start_angle, end_angle, yanlış))
+        döndür self
+    son
+    
+    /// Elips
+    pub fn ellipse(mut self, cx: ondalık, cy: ondalık, rx: ondalık, ry: ondalık, rotation: ondalık, start_angle: ondalık, end_angle: ondalık) döndür Path:
+        self.commands.push(PathCommand::Ellipse(cx, cy, rx, ry, rotation, start_angle, end_angle, yanlış))
+        döndür self
+    son
+    
+    /// Dikdörtgen
+    pub fn rect(mut self, x: ondalık, y: ondalık, width: ondalık, height: ondalık) döndür Path:
+        self.commands.push(PathCommand::Rect(x, y, width, height))
+        döndür self
+    son
+    
+    /// Yuvarlak köşeli dikdörtgen
+    pub fn round_rect(mut self, x: ondalık, y: ondalık, width: ondalık, height: ondalık, radius: ondalık) döndür Path:
+        self.commands.push(PathCommand::RoundRect(x, y, width, height, [radius]))
+        döndür self
+    son
+    
+    /// Yolu kapat
+    pub fn close(mut self) döndür Path:
+        self.commands.push(PathCommand::ClosePath)
+        döndür self
+    son
+    
+    /// Daire oluştur
+    pub fn circle(x: ondalık, y: ondalık, radius: ondalık) döndür Path:
+        döndür Path::new()
+            .arc(x, y, radius, 0.0, 6.28318530718)  // 2π
+            .close()
+    son
+son
+
+// ============================================================================
+// FONT
+// ============================================================================
+
+/// Font ayarları
+pub tip Font = yapı yap
+    family: yazı,            // "Arial", "Roboto", etc.
+    size: ondalık,           // Piksel cinsinden
+    weight: FontWeight,
+    style: FontStyle,
+    variant: FontVariant
+son
+
+pub tip FontWeight = enum yap
+    Thin,       // 100
+    ExtraLight, // 200
+    Light,      // 300
+    Normal,     // 400
+    Medium,     // 500
+    SemiBold,   // 600
+    Bold,       // 700
+    ExtraBold,  // 800
+    Black       // 900
+son
+
+pub tip FontStyle = enum yap
+    Normal,
+    Italic,
+    Oblique
+son
+
+pub tip FontVariant = enum yap
+    Normal,
+    SmallCaps
+son
+
+impl Font:
+    pub fn default() döndür Font:
+        döndür Font yap
+            family: "sans-serif",
+            size: 14.0,
+            weight: FontWeight::Normal,
+            style: FontStyle::Normal,
+            variant: FontVariant::Normal
+        son
+    son
+    
+    pub fn new(family: yazı, size: ondalık) döndür Font:
+        değişken f = Font::default()
+        f.family = family
+        f.size = size
+        döndür f
+    son
+    
+    pub fn bold(mut self) döndür Font:
+        self.weight = FontWeight::Bold
+        döndür self
+    son
+    
+    pub fn italic(mut self) döndür Font:
+        self.style = FontStyle::Italic
+        döndür self
+    son
+son
+
+// ============================================================================
+// TEXT METRICS
+// ============================================================================
+
+/// Metin ölçümleri
+pub tip TextMetrics = yapı yap
+    width: ondalık,
+    actual_bounding_box_left: ondalık,
+    actual_bounding_box_right: ondalık,
+    actual_bounding_box_ascent: ondalık,
+    actual_bounding_box_descent: ondalık,
+    font_bounding_box_ascent: ondalık,
+    font_bounding_box_descent: ondalık,
+    em_height_ascent: ondalık,
+    em_height_descent: ondalık,
+    hanging_baseline: ondalık,
+    alphabetic_baseline: ondalık,
+    ideographic_baseline: ondalık
+son
+
+// ============================================================================
+// SHADOW
+// ============================================================================
+
+/// Gölge ayarları
+pub tip ShadowSettings = yapı yap
+    color: Color,
+    blur: ondalık,
+    offset_x: ondalık,
+    offset_y: ondalık,
+    enabled: mantıksal
+son
+
+impl ShadowSettings:
+    pub fn none() döndür ShadowSettings:
+        döndür ShadowSettings yap
+            color: Color::transparent(),
+            blur: 0.0,
+            offset_x: 0.0,
+            offset_y: 0.0,
+            enabled: yanlış
+        son
+    son
+    
+    pub fn new(color: Color, blur: ondalık, offset_x: ondalık, offset_y: ondalık) döndür ShadowSettings:
+        döndür ShadowSettings yap
+            color: color,
+            blur: blur,
+            offset_x: offset_x,
+            offset_y: offset_y,
+            enabled: doğru
+        son
+    son
+son
+
+// ============================================================================
+// COMPOSITE OPERATION
+// ============================================================================
+
+/// Compositing mode
+pub tip CompositeOperation = enum yap
+    SourceOver,      // Varsayılan
+    SourceIn,
+    SourceOut,
+    SourceAtop,
+    DestinationOver,
+    DestinationIn,
+    DestinationOut,
+    DestinationAtop,
+    Lighter,
+    Copy,
+    Xor,
+    Multiply,
+    Screen,
+    Overlay,
+    Darken,
+    Lighten,
+    ColorDodge,
+    ColorBurn,
+    HardLight,
+    SoftLight,
+    Difference,
+    Exclusion,
+    Hue,
+    Saturation,
+    Color,
+    Luminosity
+son
+
+// ============================================================================
+// IMAGE DATA
+// ============================================================================
+
+/// Görüntü verisi
+pub tip ImageData = yapı yap
+    width: tamsayı,
+    height: tamsayı,
+    data: liste[tamsayı]  // RGBA piksel verileri
+son
+
+impl ImageData:
+    pub fn new(width: tamsayı, height: tamsayı) döndür ImageData:
+        değişken size = width * height * 4
+        döndür ImageData yap
+            width: width,
+            height: height,
+            data: liste[tamsayı](size, 0)
+        son
+    son
+    
+    /// Piksel oku
+    pub fn get_pixel(self, x: tamsayı, y: tamsayı) döndür Color:
+        değişken idx = (y * self.width + x) * 4
+        döndür Color yap
+            r: self.data[idx],
+            g: self.data[idx + 1],
+            b: self.data[idx + 2],
+            a: self.data[idx + 3]
+        son
+    son
+    
+    /// Piksel yaz
+    pub fn set_pixel(mut self, x: tamsayı, y: tamsayı, color: Color) döndür void:
+        değişken idx = (y * self.width + x) * 4
+        self.data[idx] = color.r
+        self.data[idx + 1] = color.g
+        self.data[idx + 2] = color.b
+        self.data[idx + 3] = color.a
+    son
+son
+
+// ============================================================================
+// CANVAS IMPLEMENTATION
+// ============================================================================
+
+impl Canvas:
+    /// Yeni canvas oluştur
+    pub fn new(width: tamsayı, height: tamsayı) döndür Canvas:
+        döndür Canvas yap
+            width: width,
+            height: height,
+            state_stack: [],
+            current_state: CanvasState::default(),
+            native_handle: __native_create_canvas(width, height)
+        son
+    son
+    
+    /// Boyutlandır
+    pub fn resize(mut self, width: tamsayı, height: tamsayı) döndür void:
+        self.width = width
+        self.height = height
+        __native_resize_canvas(self.native_handle, width, height)
+    son
+    
+    // === STATE MANAGEMENT ===
+    
+    /// Durumu kaydet
+    pub fn save(mut self) döndür void:
+        self.state_stack.push(self.current_state.clone())
+        __native_canvas_save(self.native_handle)
+    son
+    
+    /// Durumu geri yükle
+    pub fn restore(mut self) döndür void:
+        eğer değişken state = self.state_stack.pop():
+            self.current_state = state
+            __native_canvas_restore(self.native_handle)
+        son
+    son
+    
+    /// Durumu sıfırla
+    pub fn reset(mut self) döndür void:
+        self.current_state = CanvasState::default()
+        self.state_stack.clear()
+        __native_canvas_reset(self.native_handle)
+    son
+    
+    // === TRANSFORM ===
+    
+    /// Öteleme
+    pub fn translate(mut self, x: ondalık, y: ondalık) döndür void:
+        self.current_state.transform = self.current_state.transform
+            .multiply(Transform2D::translate(x, y))
+        __native_canvas_translate(self.native_handle, x, y)
+    son
+    
+    /// Döndürme
+    pub fn rotate(mut self, angle: ondalık) döndür void:
+        self.current_state.transform = self.current_state.transform
+            .multiply(Transform2D::rotate(angle))
+        __native_canvas_rotate(self.native_handle, angle)
+    son
+    
+    /// Ölçekleme
+    pub fn scale(mut self, sx: ondalık, sy: ondalık) döndür void:
+        self.current_state.transform = self.current_state.transform
+            .multiply(Transform2D::scale(sx, sy))
+        __native_canvas_scale(self.native_handle, sx, sy)
+    son
+    
+    /// Transform matrisi ayarla
+    pub fn set_transform(mut self, transform: Transform2D) döndür void:
+        self.current_state.transform = transform
+        __native_canvas_set_transform(self.native_handle,
+            transform.a, transform.b, transform.c,
+            transform.d, transform.e, transform.f)
+    son
+    
+    /// Transform sıfırla
+    pub fn reset_transform(mut self) döndür void:
+        self.current_state.transform = Transform2D::identity()
+        __native_canvas_reset_transform(self.native_handle)
+    son
+    
+    // === FILL & STROKE STYLE ===
+    
+    /// Dolgu rengi ayarla
+    pub fn set_fill_color(mut self, color: Color) döndür void:
+        self.current_state.fill_style = FillStyle::Solid(color)
+        __native_canvas_set_fill_color(self.native_handle, color.r, color.g, color.b, color.a)
+    son
+    
+    /// Çizgi rengi ayarla
+    pub fn set_stroke_color(mut self, color: Color) döndür void:
+        self.current_state.stroke_style = StrokeStyle::Solid(color)
+        __native_canvas_set_stroke_color(self.native_handle, color.r, color.g, color.b, color.a)
+    son
+    
+    /// Çizgi genişliği ayarla
+    pub fn set_line_width(mut self, width: ondalık) döndür void:
+        self.current_state.line_width = width
+        __native_canvas_set_line_width(self.native_handle, width)
+    son
+    
+    /// Global alpha ayarla
+    pub fn set_global_alpha(mut self, alpha: ondalık) döndür void:
+        self.current_state.global_alpha = alpha
+        __native_canvas_set_global_alpha(self.native_handle, alpha)
+    son
+    
+    // === DRAWING SHAPES ===
+    
+    /// Dikdörtgen doldur
+    pub fn fill_rect(mut self, x: ondalık, y: ondalık, width: ondalık, height: ondalık) döndür void:
+        __native_canvas_fill_rect(self.native_handle, x, y, width, height)
+    son
+    
+    /// Dikdörtgen çizgi
+    pub fn stroke_rect(mut self, x: ondalık, y: ondalık, width: ondalık, height: ondalık) döndür void:
+        __native_canvas_stroke_rect(self.native_handle, x, y, width, height)
+    son
+    
+    /// Dikdörtgen temizle
+    pub fn clear_rect(mut self, x: ondalık, y: ondalık, width: ondalık, height: ondalık) döndür void:
+        __native_canvas_clear_rect(self.native_handle, x, y, width, height)
+    son
+    
+    /// Yolu doldur
+    pub fn fill_path(mut self, path: Path) döndür void:
+        __native_canvas_fill_path(self.native_handle, path.commands)
+    son
+    
+    /// Yolu çiz
+    pub fn stroke_path(mut self, path: Path) döndür void:
+        __native_canvas_stroke_path(self.native_handle, path.commands)
+    son
+    
+    /// Daire doldur
+    pub fn fill_circle(mut self, cx: ondalık, cy: ondalık, radius: ondalık) döndür void:
+        self.fill_path(Path::circle(cx, cy, radius))
+    son
+    
+    /// Daire çiz
+    pub fn stroke_circle(mut self, cx: ondalık, cy: ondalık, radius: ondalık) döndür void:
+        self.stroke_path(Path::circle(cx, cy, radius))
+    son
+    
+    /// Yuvarlak köşeli dikdörtgen doldur
+    pub fn fill_round_rect(mut self, x: ondalık, y: ondalık, width: ondalık, height: ondalık, radius: ondalık) döndür void:
+        değişken path = Path::new().round_rect(x, y, width, height, radius)
+        self.fill_path(path)
+    son
+    
+    // === TEXT ===
+    
+    /// Font ayarla
+    pub fn set_font(mut self, font: Font) döndür void:
+        self.current_state.font = font
+        __native_canvas_set_font(self.native_handle, font.family, font.size, font.weight, font.style)
+    son
+    
+    /// Metin doldur
+    pub fn fill_text(mut self, text: yazı, x: ondalık, y: ondalık) döndür void:
+        __native_canvas_fill_text(self.native_handle, text, x, y)
+    son
+    
+    /// Metin çiz (stroke)
+    pub fn stroke_text(mut self, text: yazı, x: ondalık, y: ondalık) döndür void:
+        __native_canvas_stroke_text(self.native_handle, text, x, y)
+    son
+    
+    /// Metin ölçümü
+    pub fn measure_text(self, text: yazı) döndür TextMetrics:
+        döndür __native_canvas_measure_text(self.native_handle, text)
+    son
+    
+    // === IMAGE ===
+    
+    /// Görüntü çiz
+    pub fn draw_image(mut self, image: ImageData, x: ondalık, y: ondalık) döndür void:
+        __native_canvas_draw_image(self.native_handle, image, x, y)
+    son
+    
+    /// Görüntü çiz (boyutlandırılmış)
+    pub fn draw_image_scaled(mut self, image: ImageData, x: ondalık, y: ondalık, width: ondalık, height: ondalık) döndür void:
+        __native_canvas_draw_image_scaled(self.native_handle, image, x, y, width, height)
+    son
+    
+    // === CLIPPING ===
+    
+    /// Clip region ayarla
+    pub fn clip(mut self, path: Path) döndür void:
+        self.current_state.clip_region = Bazı(path)
+        __native_canvas_clip(self.native_handle, path.commands)
+    son
+    
+    // === SHADOW ===
+    
+    /// Gölge ayarla
+    pub fn set_shadow(mut self, color: Color, blur: ondalık, offset_x: ondalık, offset_y: ondalık) döndür void:
+        self.current_state.shadow = ShadowSettings::new(color, blur, offset_x, offset_y)
+        __native_canvas_set_shadow(self.native_handle, color.r, color.g, color.b, color.a, blur, offset_x, offset_y)
+    son
+    
+    /// Gölgeyi kapat
+    pub fn clear_shadow(mut self) döndür void:
+        self.current_state.shadow = ShadowSettings::none()
+        __native_canvas_clear_shadow(self.native_handle)
+    son
+son
+
+// ============================================================================
+// DEFAULT STATE
+// ============================================================================
+
+impl CanvasState:
+    pub fn default() döndür CanvasState:
+        döndür CanvasState yap
+            transform: Transform2D::identity(),
+            fill_style: FillStyle::Solid(Color::black()),
+            stroke_style: StrokeStyle::Solid(Color::black()),
+            line_width: 1.0,
+            line_cap: LineCap::Butt,
+            line_join: LineJoin::Miter,
+            miter_limit: 10.0,
+            global_alpha: 1.0,
+            composite_operation: CompositeOperation::SourceOver,
+            clip_region: boş,
+            font: Font::default(),
+            shadow: ShadowSettings::none()
+        son
+    son
+son
+
+// ============================================================================
+// NATIVE BINDINGS
+// ============================================================================
+
+dış fn __native_create_canvas(width: tamsayı, height: tamsayı) döndür tamsayı
+dış fn __native_resize_canvas(handle: tamsayı, width: tamsayı, height: tamsayı) döndür void
+dış fn __native_canvas_save(handle: tamsayı) döndür void
+dış fn __native_canvas_restore(handle: tamsayı) döndür void
+dış fn __native_canvas_reset(handle: tamsayı) döndür void
+dış fn __native_canvas_translate(handle: tamsayı, x: ondalık, y: ondalık) döndür void
+dış fn __native_canvas_rotate(handle: tamsayı, angle: ondalık) döndür void
+dış fn __native_canvas_scale(handle: tamsayı, sx: ondalık, sy: ondalık) döndür void
+dış fn __native_canvas_set_transform(handle: tamsayı, a: ondalık, b: ondalık, c: ondalık, d: ondalık, e: ondalık, f: ondalık) döndür void
+dış fn __native_canvas_reset_transform(handle: tamsayı) döndür void
+dış fn __native_canvas_set_fill_color(handle: tamsayı, r: tamsayı, g: tamsayı, b: tamsayı, a: tamsayı) döndür void
+dış fn __native_canvas_set_stroke_color(handle: tamsayı, r: tamsayı, g: tamsayı, b: tamsayı, a: tamsayı) döndür void
+dış fn __native_canvas_set_line_width(handle: tamsayı, width: ondalık) döndür void
+dış fn __native_canvas_set_global_alpha(handle: tamsayı, alpha: ondalık) döndür void
+dış fn __native_canvas_fill_rect(handle: tamsayı, x: ondalık, y: ondalık, width: ondalık, height: ondalık) döndür void
+dış fn __native_canvas_stroke_rect(handle: tamsayı, x: ondalık, y: ondalık, width: ondalık, height: ondalık) döndür void
+dış fn __native_canvas_clear_rect(handle: tamsayı, x: ondalık, y: ondalık, width: ondalık, height: ondalık) döndür void
+dış fn __native_canvas_fill_path(handle: tamsayı, commands: liste[PathCommand]) döndür void
+dış fn __native_canvas_stroke_path(handle: tamsayı, commands: liste[PathCommand]) döndür void
+dış fn __native_canvas_set_font(handle: tamsayı, family: yazı, size: ondalık, weight: FontWeight, style: FontStyle) döndür void
+dış fn __native_canvas_fill_text(handle: tamsayı, text: yazı, x: ondalık, y: ondalık) döndür void
+dış fn __native_canvas_stroke_text(handle: tamsayı, text: yazı, x: ondalık, y: ondalık) döndür void
+dış fn __native_canvas_measure_text(handle: tamsayı, text: yazı) döndür TextMetrics
+dış fn __native_canvas_draw_image(handle: tamsayı, image: ImageData, x: ondalık, y: ondalık) döndür void
+dış fn __native_canvas_draw_image_scaled(handle: tamsayı, image: ImageData, x: ondalık, y: ondalık, width: ondalık, height: ondalık) döndür void
+dış fn __native_canvas_clip(handle: tamsayı, commands: liste[PathCommand]) döndür void
+dış fn __native_canvas_set_shadow(handle: tamsayı, r: tamsayı, g: tamsayı, b: tamsayı, a: tamsayı, blur: ondalık, ox: ondalık, oy: ondalık) döndür void
+dış fn __native_canvas_clear_shadow(handle: tamsayı) döndür void

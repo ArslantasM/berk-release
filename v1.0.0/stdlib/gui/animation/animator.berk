@@ -1,0 +1,773 @@
+// ============================================================================
+// BERK GUI Framework - Animator System
+// ============================================================================
+// Üst düzey animasyon yönetimi ve orkestrasyon
+// Unity, Unreal ve Synfig'den ilham
+// ============================================================================
+
+modül gui::animation::animator
+
+kullan gui::animation::time::Time
+kullan gui::animation::tween::{Tween, TweenState}
+kullan gui::animation::spring::{Spring, SpringConfig}
+kullan gui::animation::keyframe::KeyframeAnimation
+kullan gui::animation::easing::EasingType
+
+// ============================================================================
+// ANIMATION STATE - Animasyon Durumu
+// ============================================================================
+
+/// Bir animasyonun olası durumları
+pub tip AnimationState = özyinelemeli yap
+    | Idle        // Başlamadı
+    | Running     // Çalışıyor
+    | Paused      // Duraklatıldı
+    | Completed   // Tamamlandı
+    | Cancelled   // İptal edildi
+son
+
+/// Animasyon önceliği
+pub tip AnimationPriority = özyinelemeli yap
+    | Low
+    | Normal
+    | High
+    | Critical
+son
+
+impl AnimationPriority:
+    pub fn to_number(self) döndür sayı:
+        eşleştir self:
+            AnimationPriority::Low: 0
+            AnimationPriority::Normal: 1
+            AnimationPriority::High: 2
+            AnimationPriority::Critical: 3
+        son
+    son
+son
+
+// ============================================================================
+// ANIMATION WRAPPER - Animasyon Sarmalayıcı
+// ============================================================================
+
+/// Farklı animasyon türlerini saran yapı
+pub tip AnimationType = özyinelemeli yap
+    | TweenAnim(Tween[ondalık])
+    | SpringAnim(Spring)
+    | KeyframeAnim(KeyframeAnimation)
+    | GroupAnim(AnimationGroup)
+    | SequenceAnim(AnimationSequence)
+    | Custom(fn(ondalık) döndür void)  // Custom update function
+son
+
+/// Animasyon sarmalayıcı
+pub tip Animation = yapı yap
+    /// Benzersiz ID
+    id: sayı,
+    /// İsim
+    name: yazı,
+    /// Animasyon türü
+    animation_type: AnimationType,
+    /// Durum
+    state: AnimationState,
+    /// Öncelik
+    priority: AnimationPriority,
+    /// Etiketler
+    tags: Liste[yazı],
+    /// Gecikme (ms)
+    delay: ondalık,
+    /// Kalan gecikme
+    remaining_delay: ondalık,
+    /// Döngü sayısı (-1 = sonsuz)
+    loop_count: sayı,
+    /// Kalan döngü
+    remaining_loops: sayı,
+    /// Ters yönde mi?
+    reversed: mantıksal,
+    /// Yoyo (ileri-geri)
+    yoyo: mantıksal,
+    /// Başlangıç callback
+    on_start: Seçenek[fn() döndür void],
+    /// Güncelleme callback
+    on_update: Seçenek[fn(ondalık) döndür void],
+    /// Tamamlanma callback
+    on_complete: Seçenek[fn() döndür void],
+    /// İptal callback
+    on_cancel: Seçenek[fn() döndür void],
+son
+
+/// Animasyon ID sayacı
+değişken animation_id_counter: sayı = 0
+
+impl Animation:
+    /// Yeni tween animasyonu
+    pub fn tween(name: yazı, tween: Tween[ondalık]) döndür Animation:
+        animation_id_counter = animation_id_counter + 1
+        döndür Animation {
+            id: animation_id_counter,
+            name: name,
+            animation_type: AnimationType::TweenAnim(tween),
+            state: AnimationState::Idle,
+            priority: AnimationPriority::Normal,
+            tags: [],
+            delay: 0.0,
+            remaining_delay: 0.0,
+            loop_count: 0,
+            remaining_loops: 0,
+            reversed: yanlış,
+            yoyo: yanlış,
+            on_start: Hiçbiri,
+            on_update: Hiçbiri,
+            on_complete: Hiçbiri,
+            on_cancel: Hiçbiri,
+        }
+    son
+    
+    /// Yeni spring animasyonu
+    pub fn spring(name: yazı, spring: Spring) döndür Animation:
+        animation_id_counter = animation_id_counter + 1
+        döndür Animation {
+            id: animation_id_counter,
+            name: name,
+            animation_type: AnimationType::SpringAnim(spring),
+            state: AnimationState::Idle,
+            priority: AnimationPriority::Normal,
+            tags: [],
+            delay: 0.0,
+            remaining_delay: 0.0,
+            loop_count: 0,
+            remaining_loops: 0,
+            reversed: yanlış,
+            yoyo: yanlış,
+            on_start: Hiçbiri,
+            on_update: Hiçbiri,
+            on_complete: Hiçbiri,
+            on_cancel: Hiçbiri,
+        }
+    son
+    
+    /// Yeni keyframe animasyonu
+    pub fn keyframe(name: yazı, kf: KeyframeAnimation) döndür Animation:
+        animation_id_counter = animation_id_counter + 1
+        döndür Animation {
+            id: animation_id_counter,
+            name: name,
+            animation_type: AnimationType::KeyframeAnim(kf),
+            state: AnimationState::Idle,
+            priority: AnimationPriority::Normal,
+            tags: [],
+            delay: 0.0,
+            remaining_delay: 0.0,
+            loop_count: 0,
+            remaining_loops: 0,
+            reversed: yanlış,
+            yoyo: yanlış,
+            on_start: Hiçbiri,
+            on_update: Hiçbiri,
+            on_complete: Hiçbiri,
+            on_cancel: Hiçbiri,
+        }
+    son
+    
+    // ========================================================================
+    // BUILDER METHODS
+    // ========================================================================
+    
+    pub fn with_delay(mut self, delay_ms: ondalık) döndür Animation:
+        self.delay = delay_ms
+        self.remaining_delay = delay_ms
+        döndür self
+    son
+    
+    pub fn with_priority(mut self, priority: AnimationPriority) döndür Animation:
+        self.priority = priority
+        döndür self
+    son
+    
+    pub fn with_tag(mut self, tag: yazı) döndür Animation:
+        self.tags.push(tag)
+        döndür self
+    son
+    
+    pub fn with_loop(mut self, count: sayı) döndür Animation:
+        self.loop_count = count
+        self.remaining_loops = count
+        döndür self
+    son
+    
+    pub fn infinite(mut self) döndür Animation:
+        self.loop_count = -1
+        self.remaining_loops = -1
+        döndür self
+    son
+    
+    pub fn with_yoyo(mut self) döndür Animation:
+        self.yoyo = doğru
+        döndür self
+    son
+    
+    pub fn on_start(mut self, callback: fn() döndür void) döndür Animation:
+        self.on_start = Bazı(callback)
+        döndür self
+    son
+    
+    pub fn on_update(mut self, callback: fn(ondalık) döndür void) döndür Animation:
+        self.on_update = Bazı(callback)
+        döndür self
+    son
+    
+    pub fn on_complete(mut self, callback: fn() döndür void) döndür Animation:
+        self.on_complete = Bazı(callback)
+        döndür self
+    son
+    
+    pub fn on_cancel(mut self, callback: fn() döndür void) döndür Animation:
+        self.on_cancel = Bazı(callback)
+        döndür self
+    son
+    
+    // ========================================================================
+    // CONTROL METHODS
+    // ========================================================================
+    
+    /// Animasyonu başlat
+    pub fn start(mut self) döndür void:
+        eğer self.state == AnimationState::Idle veya self.state == AnimationState::Completed:
+            self.state = AnimationState::Running
+            
+            eğer self.on_start.is_some():
+                self.on_start.unwrap()()
+            son
+        son
+    son
+    
+    /// Animasyonu duraklat
+    pub fn pause(mut self) döndür void:
+        eğer self.state == AnimationState::Running:
+            self.state = AnimationState::Paused
+        son
+    son
+    
+    /// Animasyonu devam ettir
+    pub fn resume(mut self) döndür void:
+        eğer self.state == AnimationState::Paused:
+            self.state = AnimationState::Running
+        son
+    son
+    
+    /// Animasyonu iptal et
+    pub fn cancel(mut self) döndür void:
+        self.state = AnimationState::Cancelled
+        
+        eğer self.on_cancel.is_some():
+            self.on_cancel.unwrap()()
+        son
+    son
+    
+    /// Animasyonu sıfırla
+    pub fn reset(mut self) döndür void:
+        self.state = AnimationState::Idle
+        self.remaining_delay = self.delay
+        self.remaining_loops = self.loop_count
+        self.reversed = yanlış
+    son
+    
+    /// Animasyonu güncelle
+    pub fn update(mut self, delta_ms: ondalık) döndür void:
+        eğer self.state != AnimationState::Running:
+            döndür
+        son
+        
+        // Gecikme kontrolü
+        eğer self.remaining_delay > 0.0:
+            self.remaining_delay = self.remaining_delay - delta_ms
+            döndür
+        son
+        
+        // Animasyon tipine göre güncelle
+        değişken completed = yanlış
+        değişken progress = 0.0
+        
+        eşleştir self.animation_type:
+            AnimationType::TweenAnim(tween):
+                tween.update(delta_ms / 1000.0)  // seconds cinsinden
+                progress = tween.progress()
+                completed = tween.is_complete()
+            
+            AnimationType::SpringAnim(spring):
+                spring.update(delta_ms / 1000.0)
+                progress = spring.progress()
+                completed = spring.is_at_rest()
+            
+            AnimationType::KeyframeAnim(kf):
+                kf.update(Time::from_milliseconds(delta_ms))
+                progress = kf.get_progress()
+                completed = !kf.is_playing()
+            
+            AnimationType::GroupAnim(group):
+                group.update(delta_ms)
+                completed = group.is_complete()
+            
+            AnimationType::SequenceAnim(seq):
+                seq.update(delta_ms)
+                completed = seq.is_complete()
+            
+            AnimationType::Custom(update_fn):
+                // Custom animasyon için delta'yı gönder
+                update_fn(delta_ms)
+        son
+        
+        // Update callback
+        eğer self.on_update.is_some():
+            self.on_update.unwrap()(progress)
+        son
+        
+        // Tamamlandı mı?
+        eğer completed:
+            eğer self.yoyo:
+                self.reversed = !self.reversed
+            son
+            
+            eğer self.remaining_loops > 0 veya self.remaining_loops == -1:
+                eğer self.remaining_loops > 0:
+                    self.remaining_loops = self.remaining_loops - 1
+                son
+                // Döngü devam - sıfırla ama state'i değiştirme
+            yoksa:
+                self.state = AnimationState::Completed
+                
+                eğer self.on_complete.is_some():
+                    self.on_complete.unwrap()()
+                son
+            son
+        son
+    son
+    
+    /// Animasyon çalışıyor mu?
+    pub fn is_running(self) döndür mantıksal:
+        döndür self.state == AnimationState::Running
+    son
+    
+    /// Animasyon tamamlandı mı?
+    pub fn is_complete(self) döndür mantıksal:
+        döndür self.state == AnimationState::Completed
+    son
+    
+    /// Belirli etikete sahip mi?
+    pub fn has_tag(self, tag: yazı) döndür mantıksal:
+        döngü t in self.tags:
+            eğer t == tag:
+                döndür doğru
+            son
+        son
+        döndür yanlış
+    son
+son
+
+// ============================================================================
+// ANIMATION GROUP - Paralel Animasyonlar
+// ============================================================================
+
+/// Aynı anda çalışan animasyon grubu
+pub tip AnimationGroup = yapı yap
+    /// İsim
+    name: yazı,
+    /// Animasyonlar
+    animations: Liste[Animation],
+    /// Durum
+    state: AnimationState,
+son
+
+impl AnimationGroup:
+    pub fn new(name: yazı) döndür AnimationGroup:
+        döndür AnimationGroup {
+            name: name,
+            animations: [],
+            state: AnimationState::Idle,
+        }
+    son
+    
+    pub fn add(mut self, animation: Animation) döndür AnimationGroup:
+        self.animations.push(animation)
+        döndür self
+    son
+    
+    pub fn start(mut self) döndür void:
+        self.state = AnimationState::Running
+        döngü anim in self.animations:
+            anim.start()
+        son
+    son
+    
+    pub fn pause(mut self) döndür void:
+        self.state = AnimationState::Paused
+        döngü anim in self.animations:
+            anim.pause()
+        son
+    son
+    
+    pub fn resume(mut self) döndür void:
+        self.state = AnimationState::Running
+        döngü anim in self.animations:
+            anim.resume()
+        son
+    son
+    
+    pub fn cancel(mut self) döndür void:
+        self.state = AnimationState::Cancelled
+        döngü anim in self.animations:
+            anim.cancel()
+        son
+    son
+    
+    pub fn update(mut self, delta_ms: ondalık) döndür void:
+        eğer self.state != AnimationState::Running:
+            döndür
+        son
+        
+        değişken all_complete = doğru
+        
+        döngü anim in self.animations:
+            anim.update(delta_ms)
+            eğer !anim.is_complete():
+                all_complete = yanlış
+            son
+        son
+        
+        eğer all_complete:
+            self.state = AnimationState::Completed
+        son
+    son
+    
+    pub fn is_complete(self) döndür mantıksal:
+        döndür self.state == AnimationState::Completed
+    son
+son
+
+// ============================================================================
+// ANIMATION SEQUENCE - Sıralı Animasyonlar
+// ============================================================================
+
+/// Sırayla çalışan animasyonlar
+pub tip AnimationSequence = yapı yap
+    /// İsim
+    name: yazı,
+    /// Animasyonlar
+    animations: Liste[Animation],
+    /// Mevcut animasyon indeksi
+    current_index: sayı,
+    /// Durum
+    state: AnimationState,
+son
+
+impl AnimationSequence:
+    pub fn new(name: yazı) döndür AnimationSequence:
+        döndür AnimationSequence {
+            name: name,
+            animations: [],
+            current_index: 0,
+            state: AnimationState::Idle,
+        }
+    son
+    
+    pub fn then(mut self, animation: Animation) döndür AnimationSequence:
+        self.animations.push(animation)
+        döndür self
+    son
+    
+    pub fn start(mut self) döndür void:
+        self.state = AnimationState::Running
+        self.current_index = 0
+        
+        eğer self.animations.len() > 0:
+            self.animations[0].start()
+        son
+    son
+    
+    pub fn update(mut self, delta_ms: ondalık) döndür void:
+        eğer self.state != AnimationState::Running:
+            döndür
+        son
+        
+        eğer self.current_index >= self.animations.len():
+            self.state = AnimationState::Completed
+            döndür
+        son
+        
+        self.animations[self.current_index].update(delta_ms)
+        
+        // Mevcut animasyon tamamlandıysa sonrakine geç
+        eğer self.animations[self.current_index].is_complete():
+            self.current_index = self.current_index + 1
+            
+            eğer self.current_index < self.animations.len():
+                self.animations[self.current_index].start()
+            yoksa:
+                self.state = AnimationState::Completed
+            son
+        son
+    son
+    
+    pub fn is_complete(self) döndür mantıksal:
+        döndür self.state == AnimationState::Completed
+    son
+son
+
+// ============================================================================
+// ANIMATOR - Animasyon Yöneticisi
+// ============================================================================
+
+/// Merkezi animasyon yöneticisi
+pub tip Animator = yapı yap
+    /// Tüm animasyonlar
+    animations: Liste[Animation],
+    /// Gruplar
+    groups: Liste[AnimationGroup],
+    /// Sıralar
+    sequences: Liste[AnimationSequence],
+    /// Zaman ölçeği (global yavaşlatma/hızlandırma)
+    time_scale: ondalık,
+    /// Maksimum delta (frame skip koruması)
+    max_delta: ondalık,
+    /// Toplam çalışan animasyon sayısı
+    running_count: sayı,
+son
+
+impl Animator:
+    /// Yeni animator
+    pub fn new() döndür Animator:
+        döndür Animator {
+            animations: [],
+            groups: [],
+            sequences: [],
+            time_scale: 1.0,
+            max_delta: 100.0,  // max 100ms
+            running_count: 0,
+        }
+    son
+    
+    /// Zaman ölçeği ayarla
+    pub fn set_time_scale(mut self, scale: ondalık) döndür void:
+        self.time_scale = scale
+    son
+    
+    /// Animasyon ekle
+    pub fn add(mut self, animation: Animation) döndür sayı:
+        değişken id = animation.id
+        self.animations.push(animation)
+        döndür id
+    son
+    
+    /// Grup ekle
+    pub fn add_group(mut self, group: AnimationGroup) döndür void:
+        self.groups.push(group)
+    son
+    
+    /// Sıra ekle
+    pub fn add_sequence(mut self, sequence: AnimationSequence) döndür void:
+        self.sequences.push(sequence)
+    son
+    
+    /// ID ile animasyon al
+    pub fn get(self, id: sayı) döndür Seçenek[Animation]:
+        döngü anim in self.animations:
+            eğer anim.id == id:
+                döndür Bazı(anim)
+            son
+        son
+        döndür Hiçbiri
+    son
+    
+    /// İsimle animasyon al
+    pub fn get_by_name(self, name: yazı) döndür Seçenek[Animation]:
+        döngü anim in self.animations:
+            eğer anim.name == name:
+                döndür Bazı(anim)
+            son
+        son
+        döndür Hiçbiri
+    son
+    
+    /// Etiketle animasyonları al
+    pub fn get_by_tag(self, tag: yazı) döndür Liste[Animation]:
+        değişken result: Liste[Animation] = []
+        döngü anim in self.animations:
+            eğer anim.has_tag(tag):
+                result.push(anim)
+            son
+        son
+        döndür result
+    son
+    
+    /// ID ile animasyonu başlat
+    pub fn start(mut self, id: sayı) döndür void:
+        döngü anim in self.animations:
+            eğer anim.id == id:
+                anim.start()
+                döndür
+            son
+        son
+    son
+    
+    /// Tüm animasyonları başlat
+    pub fn start_all(mut self) döndür void:
+        döngü anim in self.animations:
+            anim.start()
+        son
+        
+        döngü group in self.groups:
+            group.start()
+        son
+        
+        döngü seq in self.sequences:
+            seq.start()
+        son
+    son
+    
+    /// ID ile animasyonu duraklat
+    pub fn pause(mut self, id: sayı) döndür void:
+        döngü anim in self.animations:
+            eğer anim.id == id:
+                anim.pause()
+                döndür
+            son
+        son
+    son
+    
+    /// Tüm animasyonları duraklat
+    pub fn pause_all(mut self) döndür void:
+        döngü anim in self.animations:
+            anim.pause()
+        son
+        
+        döngü group in self.groups:
+            group.pause()
+        son
+    son
+    
+    /// ID ile animasyonu iptal et
+    pub fn cancel(mut self, id: sayı) döndür void:
+        döngü anim in self.animations:
+            eğer anim.id == id:
+                anim.cancel()
+                döndür
+            son
+        son
+    son
+    
+    /// Etiketle animasyonları iptal et
+    pub fn cancel_by_tag(mut self, tag: yazı) döndür void:
+        döngü anim in self.animations:
+            eğer anim.has_tag(tag):
+                anim.cancel()
+            son
+        son
+    son
+    
+    /// Tüm animasyonları iptal et
+    pub fn cancel_all(mut self) döndür void:
+        döngü anim in self.animations:
+            anim.cancel()
+        son
+        
+        döngü group in self.groups:
+            group.cancel()
+        son
+    son
+    
+    /// Tüm animasyonları güncelle
+    pub fn update(mut self, delta_ms: ondalık) döndür void:
+        // Delta sınırla
+        değişken capped_delta = delta_ms.min(self.max_delta)
+        değişken scaled_delta = capped_delta * self.time_scale
+        
+        self.running_count = 0
+        
+        // Animasyonları güncelle
+        döngü anim in self.animations:
+            anim.update(scaled_delta)
+            eğer anim.is_running():
+                self.running_count = self.running_count + 1
+            son
+        son
+        
+        // Grupları güncelle
+        döngü group in self.groups:
+            group.update(scaled_delta)
+        son
+        
+        // Sıraları güncelle
+        döngü seq in self.sequences:
+            seq.update(scaled_delta)
+        son
+    son
+    
+    /// Tamamlanan animasyonları temizle
+    pub fn cleanup(mut self) döndür void:
+        değişken active_anims: Liste[Animation] = []
+        döngü anim in self.animations:
+            eğer anim.state != AnimationState::Completed && 
+               anim.state != AnimationState::Cancelled:
+                active_anims.push(anim)
+            son
+        son
+        self.animations = active_anims
+        
+        değişken active_groups: Liste[AnimationGroup] = []
+        döngü group in self.groups:
+            eğer !group.is_complete():
+                active_groups.push(group)
+            son
+        son
+        self.groups = active_groups
+        
+        değişken active_seqs: Liste[AnimationSequence] = []
+        döngü seq in self.sequences:
+            eğer !seq.is_complete():
+                active_seqs.push(seq)
+            son
+        son
+        self.sequences = active_seqs
+    son
+    
+    /// Çalışan animasyon sayısı
+    pub fn get_running_count(self) döndür sayı:
+        döndür self.running_count
+    son
+    
+    /// Toplam animasyon sayısı
+    pub fn get_total_count(self) döndür sayı:
+        döndür self.animations.len() + self.groups.len() + self.sequences.len()
+    son
+    
+    /// Animasyon var mı?
+    pub fn is_animating(self) döndür mantıksal:
+        döndür self.running_count > 0
+    son
+son
+
+// ============================================================================
+// GLOBAL ANIMATOR - Singleton Erişim
+// ============================================================================
+
+değişken global_animator: Seçenek[Animator] = Hiçbiri
+
+/// Global animator'ı al
+pub fn get_animator() döndür Animator:
+    eğer global_animator.is_none():
+        global_animator = Bazı(Animator::new())
+    son
+    döndür global_animator.unwrap()
+son
+
+/// Global animator'ı güncelle
+pub fn update_animations(delta_ms: ondalık) döndür void:
+    get_animator().update(delta_ms)
+son
+
+/// Animasyon ekle ve başlat
+pub fn animate(animation: Animation) döndür sayı:
+    değişken animator = get_animator()
+    değişken id = animator.add(animation)
+    animator.start(id)
+    döndür id
+son

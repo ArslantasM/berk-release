@@ -1,0 +1,601 @@
+//! # YAML Module
+//!
+//! YAML 1.2 parsing and generation.
+//!
+//! YAML 1.2 ayrıştırma ve üretme.
+//!
+//! ## Features / Özellikler
+//!
+//! - **YAML 1.2**: Full standard support / Tam standart desteği
+//! - **Parsing**: Single/multi-document / Ayrıştırma
+//! - **Generation**: Dump, pretty-print / Oluşturma
+//! - **Anchors**: &anchor, *alias / Bağlantılar
+//! - **Merge keys**: << operator / Birleştirme anahtarları
+//! - **Complex types**: Maps, sequences, scalars / Karmaşık tipler
+//! - **Streaming**: Large file support / Akış
+//!
+//! ## Example / Örnek
+//!
+//! ```berk
+//! kullan yaml
+//!
+//! değişken data = yaml.parse("name: BERK\nversion: 1.8")
+//! io.println(data["name"])  // "BERK"
+//! ```
+//!
+//! Backend: Rust serde_yaml
+
+modül yaml
+
+kullan result
+
+// ============================================================================
+// YAML VALUE (Recursive Type)
+// ============================================================================
+
+tip YamlValue = 
+    Null |
+    Bool { value: mantıksal } |
+    Integer { value: tamsayı } |
+    Float { value: ondalık } |
+    String { value: yazı } |
+    Sequence { items: liste[YamlValue] } |
+    Mapping { pairs: liste[(YamlValue, YamlValue)] }
+
+// ============================================================================
+// YAML PARSING
+// ============================================================================
+
+// Parse YAML from string
+@native
+fonksiyon parse(yaml_str: yazı) -> Sonuç[YamlValue, yazı]
+
+// Parse YAML from file
+@native
+fonksiyon parse_file(path: yazı) -> Sonuç[YamlValue, yazı]
+
+// Parse multiple YAML documents (separated by ---)
+@native
+fonksiyon parse_all(yaml_str: yazı) -> Sonuç[liste[YamlValue], yazı]
+
+// ============================================================================
+// YAML GENERATION
+// ============================================================================
+
+// Convert value to YAML string
+@native
+fonksiyon to_string(value: YamlValue) -> yazı
+
+// Write to file
+@native
+fonksiyon write_file(value: YamlValue, path: yazı) -> Sonuç[boş, yazı]
+
+// Pretty-print with custom indent
+@native
+fonksiyon pretty_print(value: YamlValue, indent: tamsayı) -> yazı
+
+// ============================================================================
+// VALUE CONSTRUCTORS
+// ============================================================================
+
+// Create null
+fonksiyon null() -> YamlValue
+yap
+    dön Null
+son
+
+// Create bool
+fonksiyon bool(value: mantıksal) -> YamlValue
+yap
+    dön Bool { value: value }
+son
+
+// Create integer
+fonksiyon int(value: tamsayı) -> YamlValue
+yap
+    dön Integer { value: value }
+son
+
+// Create float
+fonksiyon float(value: ondalık) -> YamlValue
+yap
+    dön Float { value: value }
+son
+
+// Create string
+fonksiyon string(value: yazı) -> YamlValue
+yap
+    dön String { value: value }
+son
+
+// Create sequence (array)
+fonksiyon sequence(items: liste[YamlValue]) -> YamlValue
+yap
+    dön Sequence { items: items }
+son
+
+// Create mapping (object)
+fonksiyon mapping(pairs: liste[(YamlValue, YamlValue)]) -> YamlValue
+yap
+    dön Mapping { pairs: pairs }
+son
+
+// ============================================================================
+// VALUE ACCESSORS
+// ============================================================================
+
+// Get as bool
+fonksiyon as_bool(value: YamlValue) -> Seçenek[mantıksal]
+yap
+    eşleşme value yap
+        Bool { value } => dön Bazı(value),
+        _ => dön Hiç
+    son
+son
+
+// Get as integer
+fonksiyon as_int(value: YamlValue) -> Seçenek[tamsayı]
+yap
+    eşleşme value yap
+        Integer { value } => dön Bazı(value),
+        _ => dön Hiç
+    son
+son
+
+// Get as float
+fonksiyon as_float(value: YamlValue) -> Seçenek[ondalık]
+yap
+    eşleşme value yap
+        Float { value } => dön Bazı(value),
+        Integer { value } => dön Bazı(ondalık(value)),
+        _ => dön Hiç
+    son
+son
+
+// Get as string
+fonksiyon as_string(value: YamlValue) -> Seçenek[yazı]
+yap
+    eşleşme value yap
+        String { value } => dön Bazı(value),
+        _ => dön Hiç
+    son
+son
+
+// Get as sequence
+fonksiyon as_sequence(value: YamlValue) -> Seçenek[liste[YamlValue]]
+yap
+    eşleşme value yap
+        Sequence { items } => dön Bazı(items),
+        _ => dön Hiç
+    son
+son
+
+// Get as mapping
+fonksiyon as_mapping(value: YamlValue) -> Seçenek[liste[(YamlValue, YamlValue)]]
+yap
+    eşleşme value yap
+        Mapping { pairs } => dön Bazı(pairs),
+        _ => dön Hiç
+    son
+son
+
+// ============================================================================
+// MAPPING OPERATIONS
+// ============================================================================
+
+// Get value from mapping by string key
+fonksiyon mapping_get(map: YamlValue, key: yazı) -> Seçenek[YamlValue]
+yap
+    eşleşme map yap
+        Mapping { pairs } => yap
+            için pair içinde pairs yap
+                eşleşme pair.0 yap
+                    String { value } => yap
+                        eğer value == key yap
+                            dön Bazı(pair.1)
+                        son
+                    son,
+                    _ => devam
+                son
+            son
+            dön Hiç
+        son,
+        _ => dön Hiç
+    son
+son
+
+// Set value in mapping
+fonksiyon mapping_set(map: YamlValue, key: yazı, value: YamlValue) -> YamlValue
+yap
+    eşleşme map yap
+        Mapping { pairs } => yap
+            değişken new_pairs = pairs
+            liste_ekle(new_pairs, (string(key), value))
+            dön Mapping { pairs: new_pairs }
+        son,
+        _ => dön map
+    son
+son
+
+// Get all keys from mapping
+fonksiyon mapping_keys(map: YamlValue) -> liste[yazı]
+yap
+    değişken result = liste_oluştur[yazı]()
+    
+    eşleşme map yap
+        Mapping { pairs } => yap
+            için pair içinde pairs yap
+                eşleşme pair.0 yap
+                    String { value } => liste_ekle(result, value),
+                    _ => devam
+                son
+            son
+        son,
+        _ => {}
+    son
+    
+    dön result
+son
+
+// ============================================================================
+// SEQUENCE OPERATIONS
+// ============================================================================
+
+// Get element at index
+fonksiyon sequence_get(seq: YamlValue, index: tamsayı) -> Seçenek[YamlValue]
+yap
+    eşleşme seq yap
+        Sequence { items } => yap
+            eğer index >= 0 && index < liste_uzunluk(items) yap
+                dön Bazı(liste_al(items, index))
+            son
+            dön Hiç
+        son,
+        _ => dön Hiç
+    son
+son
+
+// Append to sequence
+fonksiyon sequence_push(seq: YamlValue, value: YamlValue) -> YamlValue
+yap
+    eşleşme seq yap
+        Sequence { items } => yap
+            değişken new_items = items
+            liste_ekle(new_items, value)
+            dön Sequence { items: new_items }
+        son,
+        _ => dön seq
+    son
+son
+
+// Get sequence length
+fonksiyon sequence_len(seq: YamlValue) -> tamsayı
+yap
+    eşleşme seq yap
+        Sequence { items } => dön liste_uzunluk(items),
+        _ => dön 0
+    son
+son
+
+// ============================================================================
+// TYPE CHECKING
+// ============================================================================
+
+fonksiyon is_null(value: YamlValue) -> mantıksal
+yap
+    eşleşme value yap
+        Null => dön doğru,
+        _ => dön yanlış
+    son
+son
+
+fonksiyon is_bool(value: YamlValue) -> mantıksal
+yap
+    eşleşme value yap
+        Bool { _ } => dön doğru,
+        _ => dön yanlış
+    son
+son
+
+fonksiyon is_number(value: YamlValue) -> mantıksal
+yap
+    eşleşme value yap
+        Integer { _ } => dön doğru,
+        Float { _ } => dön doğru,
+        _ => dön yanlış
+    son
+son
+
+fonksiyon is_string(value: YamlValue) -> mantıksal
+yap
+    eşleşme value yap
+        String { _ } => dön doğru,
+        _ => dön yanlış
+    son
+son
+
+fonksiyon is_sequence(value: YamlValue) -> mantıksal
+yap
+    eşleşme value yap
+        Sequence { _ } => dön doğru,
+        _ => dön yanlış
+    son
+son
+
+fonksiyon is_mapping(value: YamlValue) -> mantıksal
+yap
+    eşleşme value yap
+        Mapping { _ } => dön doğru,
+        _ => dön yanlış
+    son
+son
+
+// ============================================================================
+// YAML BUILDER (Fluent API)
+// ============================================================================
+
+tip YamlBuilder = yapı yap
+    value: YamlValue
+son
+
+// Create builder for mapping
+fonksiyon builder_mapping() -> YamlBuilder
+yap
+    dön YamlBuilder yap
+        value: Mapping { pairs: liste_oluştur[(YamlValue, YamlValue)]() }
+    son
+son
+
+// Create builder for sequence
+fonksiyon builder_sequence() -> YamlBuilder
+yap
+    dön YamlBuilder yap
+        value: Sequence { items: liste_oluştur[YamlValue]() }
+    son
+son
+
+// Add key-value pair (for mapping)
+fonksiyon builder_add_pair(builder: YamlBuilder, key: yazı, value: YamlValue) -> YamlBuilder
+yap
+    builder.value = mapping_set(builder.value, key, value)
+    dön builder
+son
+
+// Add item (for sequence)
+fonksiyon builder_add_item(builder: YamlBuilder, value: YamlValue) -> YamlBuilder
+yap
+    builder.value = sequence_push(builder.value, value)
+    dön builder
+son
+
+// Build final value
+fonksiyon builder_build(builder: YamlBuilder) -> YamlValue
+yap
+    dön builder.value
+son
+
+// ============================================================================
+// ANCHORS & ALIASES
+// ============================================================================
+
+// Note: Anchors (&) and aliases (*) are handled automatically during parsing
+// Example YAML:
+// defaults: &defaults
+//   name: "default"
+//   value: 42
+// 
+// config:
+//   <<: *defaults
+//   name: "custom"
+
+// ============================================================================
+// CUSTOM TAGS
+// ============================================================================
+
+tip YamlTag = yapı yap
+    tag: yazı,
+    value: YamlValue
+son
+
+// Parse with custom tag support
+@native
+fonksiyon parse_with_tags(yaml_str: yazı) -> Sonuç[YamlValue, yazı]
+
+// ============================================================================
+// YAML <-> JSON CONVERSION
+// ============================================================================
+
+// Convert YAML to JSON
+@native
+fonksiyon to_json(value: YamlValue) -> yazı
+
+// Convert JSON to YAML
+@native
+fonksiyon from_json(json_str: yazı) -> Sonuç[YamlValue, yazı]
+
+// ============================================================================
+// VALIDATION
+// ============================================================================
+
+// Check if YAML is valid
+@native
+fonksiyon is_valid(yaml_str: yazı) -> mantıksal
+
+// Validate against schema (JSON Schema)
+@native
+fonksiyon validate_schema(value: YamlValue, schema_path: yazı) -> Sonuç[mantıksal, yazı]
+
+// ============================================================================
+// COMMON PATTERNS
+// ============================================================================
+
+// Load configuration file
+tip Config = yapı yap
+    data: YamlValue
+son
+
+fonksiyon load_config(path: yazı) -> Sonuç[Config, yazı]
+yap
+    değişken value = parse_file(path)?
+    dön Tamam(Config yap data: value son)
+son
+
+// Get config value with default
+fonksiyon config_get_string(config: Config, key: yazı, default: yazı) -> yazı
+yap
+    değişken value_opt = mapping_get(config.data, key)
+    
+    eşleşme value_opt yap
+        Bazı[value] => yap
+            eşleşme as_string(value) yap
+                Bazı[str] => dön str,
+                Hiç => dön default
+            son
+        son,
+        Hiç => dön default
+    son
+son
+
+fonksiyon config_get_int(config: Config, key: yazı, default: tamsayı) -> tamsayı
+yap
+    değişken value_opt = mapping_get(config.data, key)
+    
+    eşleşme value_opt yap
+        Bazı[value] => yap
+            eşleşme as_int(value) yap
+                Bazı[num] => dön num,
+                Hiç => dön default
+            son
+        son,
+        Hiç => dön default
+    son
+son
+
+fonksiyon config_get_bool(config: Config, key: yazı, default: mantıksal) -> mantıksal
+yap
+    değişken value_opt = mapping_get(config.data, key)
+    
+    eşleşme value_opt yap
+        Bazı[value] => yap
+            eşleşme as_bool(value) yap
+                Bazı[b] => dön b,
+                Hiç => dön default
+            son
+        son,
+        Hiç => dön default
+    son
+son
+
+// ============================================================================
+// YAML MERGE & DIFF
+// ============================================================================
+
+// Deep merge two YAML values
+@native
+fonksiyon merge(base: YamlValue, override: YamlValue) -> YamlValue
+
+// Compare two YAML values
+@native
+fonksiyon diff(a: YamlValue, b: YamlValue) -> liste[yazı]  // List of differences
+
+// ============================================================================
+// EXAMPLES
+// ============================================================================
+
+// Example: Create YAML programmatically
+fonksiyon example_create_yaml() -> yazı
+yap
+    değişken builder = builder_mapping()
+    
+    builder = builder_add_pair(builder, "name", string("MyApp"))
+    builder = builder_add_pair(builder, "version", string("1.0.0"))
+    builder = builder_add_pair(builder, "port", int(8080))
+    builder = builder_add_pair(builder, "debug", bool(doğru))
+    
+    değişken seq = sequence([
+        string("feature1"),
+        string("feature2"),
+        string("feature3")
+    ])
+    builder = builder_add_pair(builder, "features", seq)
+    
+    değişken doc = builder_build(builder)
+    dön to_string(doc)
+son
+
+// Example output:
+// name: MyApp
+// version: 1.0.0
+// port: 8080
+// debug: true
+// features:
+//   - feature1
+//   - feature2
+//   - feature3
+
+// ============================================================================
+// STREAM PARSING (Large Files)
+// ============================================================================
+
+tip YamlStream = yapı yap
+    handle: tamsayı
+son
+
+// Create stream parser
+@native
+fonksiyon stream_new(path: yazı) -> Sonuç[YamlStream, yazı]
+
+// Read next document from stream
+@native
+fonksiyon stream_next(stream: YamlStream) -> Sonuç[Seçenek[YamlValue], yazı]
+
+// ============================================================================
+// TURKISH ALIASES
+// ============================================================================
+
+fonksiyon ayrıştır(yaml_str: yazı) -> Sonuç[YamlValue, yazı]
+yap
+    dön parse(yaml_str)
+son
+
+fonksiyon dosyadan_ayrıştır(yol: yazı) -> Sonuç[YamlValue, yazı]
+yap
+    dön parse_file(yol)
+son
+
+fonksiyon yazıya_çevir(değer: YamlValue) -> yazı
+yap
+    dön to_string(değer)
+son
+
+fonksiyon dosyaya_yaz(değer: YamlValue, yol: yazı) -> Sonuç[boş, yazı]
+yap
+    dön write_file(değer, yol)
+son
+
+fonksiyon metin(değer: yazı) -> YamlValue
+yap
+    dön string(değer)
+son
+
+fonksiyon sayı(değer: tamsayı) -> YamlValue
+yap
+    dön int(değer)
+son
+
+fonksiyon mantıksal_değer(değer: mantıksal) -> YamlValue
+yap
+    dön bool(değer)
+son
+
+fonksiyon dizi(öğeler: liste[YamlValue]) -> YamlValue
+yap
+    dön sequence(öğeler)
+son
+
+fonksiyon eşleme(çiftler: liste[(YamlValue, YamlValue)]) -> YamlValue
+yap
+    dön mapping(çiftler)
+son
+
+son  // modül yaml

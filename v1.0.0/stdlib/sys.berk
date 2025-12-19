@@ -1,0 +1,613 @@
+//! # Sys Module
+//!
+//! System information and control library.
+//!
+//! Sistem bilgisi ve kontrol kütüphanesi.
+//!
+//! ## Features / Özellikler
+//!
+//! - **CPU**: Cores, usage, temperature / Çekirdek, kullanım, sıcaklık
+//! - **Memory**: RAM, swap statistics / Belleğin istatistikleri
+//! - **OS info**: Name, version, kernel / İşletim sistemi bilgisi
+//! - **Process**: Spawn, kill, list, monitor / Süreç yönetimi
+//! - **Environment**: Variables / Çevre değişkenleri
+//! - **Filesystem**: Disk usage, mounts / Disk kullanımı
+//! - **Network**: Interfaces, bandwidth / Ağ arayüzleri
+//!
+//! ## Example / Örnek
+//!
+//! ```berk
+//! kullan sys
+//!
+//! değişken cpu = sys.cpu_usage()
+//! değişken mem = sys.memory_info()
+//! io.println("CPU: {cpu}%, RAM: {mem.used} MB")
+//! ```
+//!
+//! Backend: Rust sysinfo + platform APIs
+
+modül sys
+
+kullan result
+
+// ============================================================================
+// CPU INFORMATION
+// ============================================================================
+
+tip CpuInfo = yapı yap
+    cores_physical: tamsayı,
+    cores_logical: tamsayı,
+    model: yazı,
+    vendor: yazı,
+    frequency_mhz: tamsayı,
+    architecture: yazı,  // "x86_64", "aarch64", etc.
+    features: liste[yazı]  // "sse2", "avx", "fma", etc.
+son
+
+// Get CPU information
+@native
+fonksiyon cpu_info() -> CpuInfo
+
+// Physical CPU cores
+@native
+fonksiyon cpu_cores() -> tamsayı
+
+// Logical CPU threads (with hyper-threading)
+@native
+fonksiyon cpu_threads() -> tamsayı
+
+// Effective threads (respecting container limits)
+@native
+fonksiyon cpu_effective_threads() -> tamsayı
+
+// CPU usage percentage (0.0-100.0)
+@native
+fonksiyon cpu_usage() -> ondalık
+
+// CPU usage per core
+@native
+fonksiyon cpu_usage_per_core() -> liste[ondalık]
+
+// CPU temperature (°C, may not work on all platforms)
+@native
+fonksiyon cpu_temperature() -> Seçenek[ondalık]
+
+// CPU frequency per core (current, MHz)
+@native
+fonksiyon cpu_frequencies() -> liste[tamsayı]
+
+// ============================================================================
+// MEMORY INFORMATION
+// ============================================================================
+
+tip MemoryInfo = yapı yap
+    total: tamsayı,      // Total RAM (bytes)
+    free: tamsayı,       // Free RAM
+    available: tamsayı,  // Available (free + reclaimable)
+    used: tamsayı,       // Used RAM
+    buffers: tamsayı,    // Buffers (Linux)
+    cached: tamsayı,     // Cached (Linux)
+    swap_total: tamsayı,
+    swap_free: tamsayı,
+    swap_used: tamsayı
+son
+
+// Get memory statistics
+@native
+fonksiyon memory_info() -> MemoryInfo
+
+// Total RAM (bytes)
+@native
+fonksiyon memory_total() -> tamsayı
+
+// Available RAM (bytes)
+@native
+fonksiyon memory_available() -> tamsayı
+
+// RAM usage percentage
+fonksiyon memory_usage_percent() -> ondalık
+yap
+    değişken info = memory_info()
+    eğer info.total == 0 yap
+        dön 0.0
+    son
+    dön (ondalık(info.used) / ondalık(info.total)) * 100.0
+son
+
+// Swap usage percentage
+fonksiyon swap_usage_percent() -> ondalık
+yap
+    değişken info = memory_info()
+    eğer info.swap_total == 0 yap
+        dön 0.0
+    son
+    dön (ondalık(info.swap_used) / ondalık(info.swap_total)) * 100.0
+son
+
+// Page size (bytes)
+@native
+fonksiyon memory_pagesize() -> tamsayı
+
+// ============================================================================
+// OPERATING SYSTEM INFORMATION
+// ============================================================================
+
+tip OsInfo = yapı yap
+    name: yazı,          // "Linux", "Windows", "Darwin"
+    version: yazı,       // Kernel version
+    release: yazı,       // Distribution/release
+    hostname: yazı,
+    username: yazı,
+    architecture: yazı,  // "x86_64", "arm64"
+    word_size: tamsayı,  // 32 or 64 bits
+    endianness: yazı,    // "little" or "big"
+    uptime_seconds: tamsayı,
+    boot_time: tamsayı   // Unix timestamp
+son
+
+// Get OS information
+@native
+fonksiyon os_info() -> OsInfo
+
+// OS name
+@native
+fonksiyon os_name() -> yazı
+
+// OS version/kernel
+@native
+fonksiyon os_version() -> yazı
+
+// OS release/distribution
+@native
+fonksiyon os_release() -> yazı
+
+// Hostname
+@native
+fonksiyon hostname() -> yazı
+
+// Current username
+@native
+fonksiyon username() -> yazı
+
+// Home directory
+@native
+fonksiyon home_dir() -> yazı
+
+// System uptime (seconds)
+@native
+fonksiyon uptime() -> tamsayı
+
+// System boot time (Unix timestamp)
+@native
+fonksiyon boot_time() -> tamsayı
+
+// Machine word size (32 or 64)
+fonksiyon word_size() -> tamsayı
+yap
+    dön 64  // @native will implement
+son
+
+// Is little endian
+@native
+fonksiyon is_little_endian() -> mantıksal
+
+// ============================================================================
+// PROCESS MANAGEMENT
+// ============================================================================
+
+tip ProcessInfo = yapı yap
+    pid: tamsayı,
+    ppid: tamsayı,       // Parent PID
+    name: yazı,
+    exe: yazı,           // Executable path
+    cwd: yazı,           // Current working directory
+    cmdline: liste[yazı], // Command line arguments
+    status: ProcessStatus,
+    cpu_usage: ondalık,  // CPU percentage
+    memory_rss: tamsayı, // Resident Set Size (bytes)
+    memory_vms: tamsayı, // Virtual Memory Size
+    threads: tamsayı,    // Thread count
+    start_time: tamsayı, // Unix timestamp
+    user: yazı           // Owner username
+son
+
+tip ProcessStatus = "Running" | "Sleeping" | "Waiting" | "Zombie" | "Stopped"
+
+// Get current process ID
+@native
+fonksiyon process_id() -> tamsayı
+
+// Get parent process ID
+@native
+fonksiyon parent_process_id() -> tamsayı
+
+// Get process information by PID
+@native
+fonksiyon process_info(pid: tamsayı) -> Sonuç[ProcessInfo, yazı]
+
+// Get current process info
+fonksiyon current_process() -> Sonuç[ProcessInfo, yazı]
+yap
+    dön process_info(process_id())
+son
+
+// List all processes
+@native
+fonksiyon process_list() -> liste[ProcessInfo]
+
+// Spawn process
+@native
+fonksiyon process_spawn(command: yazı, args: liste[yazı]) -> Sonuç[tamsayı, yazı]  // Returns PID
+
+// Kill process
+@native
+fonksiyon process_kill(pid: tamsayı) -> Sonuç[boş, yazı]
+
+// Terminate process gracefully (SIGTERM)
+@native
+fonksiyon process_terminate(pid: tamsayı) -> Sonuç[boş, yazı]
+
+// Check if process exists
+@native
+fonksiyon process_exists(pid: tamsayı) -> mantıksal
+
+// Wait for process to exit
+@native
+fonksiyon process_wait(pid: tamsayı) -> Sonuç[tamsayı, yazı]  // Returns exit code
+
+// Get process CPU time (user + system, seconds)
+@native
+fonksiyon process_cpu_time() -> ondalık
+
+// Get process memory usage (RSS, bytes)
+@native
+fonksiyon process_memory() -> tamsayı
+
+// Get process thread count
+@native
+fonksiyon process_thread_count() -> tamsayı
+
+// ============================================================================
+// ENVIRONMENT VARIABLES
+// ============================================================================
+
+// Get environment variable
+@native
+fonksiyon getenv(name: yazı) -> Seçenek[yazı]
+
+// Set environment variable
+@native
+fonksiyon setenv(name: yazı, value: yazı) -> Sonuç[boş, yazı]
+
+// Unset environment variable
+@native
+fonksiyon unsetenv(name: yazı) -> Sonuç[boş, yazı]
+
+// Check if environment variable exists
+fonksiyon hasenv(name: yazı) -> mantıksal
+yap
+    eşleşme getenv(name) yap
+        Bazı[_] => dön doğru,
+        Hiç => dön yanlış
+    son
+son
+
+// Get all environment variables
+@native
+fonksiyon environ() -> liste[(yazı, yazı)]
+
+// Get PATH variable
+fonksiyon path() -> Seçenek[yazı]
+yap
+    dön getenv("PATH")
+son
+
+// ============================================================================
+// FILE SYSTEM STATISTICS
+// ============================================================================
+
+tip DiskUsage = yapı yap
+    path: yazı,
+    total: tamsayı,      // Total bytes
+    free: tamsayı,       // Free bytes
+    available: tamsayı,  // Available for non-root
+    used: tamsayı,
+    percent: ondalık,    // Usage percentage
+    filesystem: yazı,    // "ext4", "NTFS", etc.
+    mount_point: yazı
+son
+
+// Get disk usage for path
+@native
+fonksiyon disk_usage(path: yazı) -> Sonuç[DiskUsage, yazı]
+
+// List all mount points
+@native
+fonksiyon disk_mounts() -> liste[DiskUsage]
+
+// Disk I/O statistics
+tip DiskIoStats = yapı yap
+    read_bytes: tamsayı,
+    write_bytes: tamsayı,
+    read_count: tamsayı,
+    write_count: tamsayı
+son
+
+// Get disk I/O stats
+@native
+fonksiyon disk_io_stats() -> Sonuç[DiskIoStats, yazı]
+
+// ============================================================================
+// NETWORK INTERFACES
+// ============================================================================
+
+tip NetworkInterface = yapı yap
+    name: yazı,          // "eth0", "wlan0", etc.
+    ip_address: yazı,    // IPv4 address
+    ip6_address: Seçenek[yazı], // IPv6 address
+    mac_address: yazı,   // MAC address
+    netmask: yazı,
+    broadcast: Seçenek[yazı],
+    is_up: mantıksal,
+    is_loopback: mantıksal,
+    bytes_sent: tamsayı,
+    bytes_recv: tamsayı,
+    packets_sent: tamsayı,
+    packets_recv: tamsayı
+son
+
+// List all network interfaces
+@native
+fonksiyon network_interfaces() -> liste[NetworkInterface]
+
+// Get primary IP address
+@native
+fonksiyon ip_address() -> Seçenek[yazı]
+
+// Get primary MAC address
+@native
+fonksiyon mac_address() -> Seçenek[yazı]
+
+// Network statistics
+tip NetworkStats = yapı yap
+    bytes_sent: tamsayı,
+    bytes_recv: tamsayı,
+    packets_sent: tamsayı,
+    packets_recv: tamsayı,
+    errors_in: tamsayı,
+    errors_out: tamsayı,
+    drops_in: tamsayı,
+    drops_out: tamsayı
+son
+
+// Get network statistics
+@native
+fonksiyon network_stats() -> NetworkStats
+
+// ============================================================================
+// BATTERY STATUS (Laptops)
+// ============================================================================
+
+tip BatteryInfo = yapı yap
+    percent: ondalık,    // 0.0-100.0
+    is_charging: mantıksal,
+    is_plugged: mantıksal,
+    time_remaining: Seçenek[tamsayı], // Seconds until empty/full
+    status: BatteryStatus
+son
+
+tip BatteryStatus = "Charging" | "Discharging" | "Full" | "Unknown"
+
+// Get battery information (None if no battery)
+@native
+fonksiyon battery_info() -> Seçenek[BatteryInfo]
+
+// ============================================================================
+// SYSTEM LOAD & MONITORING
+// ============================================================================
+
+// Load average (1, 5, 15 minutes) - Unix only
+@native
+fonksiyon load_average() -> Seçenek[(ondalık, ondalık, ondalık)]
+
+// Number of open file descriptors (current process)
+@native
+fonksiyon open_files_count() -> tamsayı
+
+// Max file descriptor limit
+@native
+fonksiyon max_files_limit() -> tamsayı
+
+// Set file descriptor limit
+@native
+fonksiyon set_files_limit(limit: tamsayı) -> Sonuç[boş, yazı]
+
+// ============================================================================
+// PLATFORM DETECTION
+// ============================================================================
+
+// Platform checks (compile-time or runtime)
+@native
+fonksiyon is_linux() -> mantıksal
+
+@native
+fonksiyon is_windows() -> mantıksal
+
+@native
+fonksiyon is_macos() -> mantıksal
+
+@native
+fonksiyon is_bsd() -> mantıksal
+
+fonksiyon is_unix() -> mantıksal
+yap
+    dön is_linux() || is_macos() || is_bsd()
+son
+
+// ============================================================================
+// CONTAINER & VIRTUALIZATION DETECTION
+// ============================================================================
+
+// Is running in Docker container
+@native
+fonksiyon is_docker() -> mantıksal
+
+// Is running in Kubernetes
+fonksiyon is_kubernetes() -> mantıksal
+yap
+    dön hasenv("KUBERNETES_SERVICE_HOST")
+son
+
+// Is running in WSL (Windows Subsystem for Linux)
+@native
+fonksiyon is_wsl() -> mantıksal
+
+// Is running in virtual machine
+@native
+fonksiyon is_vm() -> mantıksal
+
+// Get container type ("docker", "podman", "lxc", "none")
+@native
+fonksiyon container_type() -> yazı
+
+// ============================================================================
+// SYSTEM DIRECTORIES
+// ============================================================================
+
+// Get config directory (~/.config or AppData)
+@native
+fonksiyon config_dir() -> Seçenek[yazı]
+
+// Get data directory (~/.local/share or AppData)
+@native
+fonksiyon data_dir() -> Seçenek[yazı]
+
+// Get cache directory (~/.cache or Temp)
+@native
+fonksiyon cache_dir() -> Seçenek[yazı]
+
+// Get temp directory
+@native
+fonksiyon temp_dir() -> yazı
+
+// Get current working directory
+@native
+fonksiyon current_dir() -> Sonuç[yazı, yazı]
+
+// Set current working directory
+@native
+fonksiyon set_current_dir(path: yazı) -> Sonuç[boş, yazı]
+
+// ============================================================================
+// SYSTEM SENSORS (Advanced, Platform-Dependent)
+// ============================================================================
+
+tip SensorInfo = yapı yap
+    name: yazı,
+    sensor_type: SensorType,
+    value: ondalık,
+    unit: yazı
+son
+
+tip SensorType = "Temperature" | "Fan" | "Voltage" | "Power"
+
+// Get all available sensors
+@native
+fonksiyon sensors() -> liste[SensorInfo]
+
+// ============================================================================
+// RESOURCE LIMITS (rlimit)
+// ============================================================================
+
+tip ResourceLimit = yapı yap
+    soft: tamsayı,  // Soft limit
+    hard: tamsayı   // Hard limit (requires privileges to change)
+son
+
+tip ResourceType = "MaxOpenFiles" | "StackSize" | "CoreDumpSize" | "MaxMemory"
+
+// Get resource limit
+@native
+fonksiyon get_resource_limit(resource: ResourceType) -> Sonuç[ResourceLimit, yazı]
+
+// Set resource limit
+@native
+fonksiyon set_resource_limit(resource: ResourceType, limit: ResourceLimit) -> Sonuç[boş, yazı]
+
+// ============================================================================
+// UTILITIES
+// ============================================================================
+
+// Format bytes to human-readable (KB, MB, GB)
+fonksiyon format_bytes(bytes: tamsayı) -> yazı
+yap
+    eğer bytes < 1024 yap
+        dön string::format("{} B", [bytes])
+    son
+    
+    değişken kb = ondalık(bytes) / 1024.0
+    eğer kb < 1024.0 yap
+        dön string::format("{:.2f} KB", [kb])
+    son
+    
+    değişken mb = kb / 1024.0
+    eğer mb < 1024.0 yap
+        dön string::format("{:.2f} MB", [mb])
+    son
+    
+    değişken gb = mb / 1024.0
+    dön string::format("{:.2f} GB", [gb])
+son
+
+// Format uptime to human-readable
+fonksiyon format_uptime(seconds: tamsayı) -> yazı
+yap
+    değişken days = seconds / 86400
+    değişken hours = (seconds % 86400) / 3600
+    değişken mins = (seconds % 3600) / 60
+    
+    dön string::format("{} days, {} hours, {} minutes", [days, hours, mins])
+son
+
+// Print system summary
+fonksiyon print_system_info() -> boş
+yap
+    değişken os = os_info()
+    değişken cpu = cpu_info()
+    değişken mem = memory_info()
+    
+    io::println("=== System Information ===")
+    io::println(string::format("OS: {} {}", [os.name, os.version]))
+    io::println(string::format("Hostname: {}", [os.hostname]))
+    io::println(string::format("CPU: {} ({} cores, {} threads)", [cpu.model, cpu.cores_physical, cpu.cores_logical]))
+    io::println(string::format("Memory: {} / {}", [format_bytes(mem.used), format_bytes(mem.total)]))
+    io::println(string::format("Uptime: {}", [format_uptime(os.uptime_seconds)]))
+son
+
+// ============================================================================
+// SIGNAL HANDLING (Unix)
+// ============================================================================
+
+tip Signal = "SIGINT" | "SIGTERM" | "SIGKILL" | "SIGSTOP" | "SIGHUP" | "SIGUSR1" | "SIGUSR2"
+
+// Send signal to process
+@native
+fonksiyon send_signal(pid: tamsayı, signal: Signal) -> Sonuç[boş, yazı]
+
+// Register signal handler
+@native
+fonksiyon register_signal_handler(signal: Signal, handler: fonksiyon() -> boş) -> Sonuç[boş, yazı]
+
+// ============================================================================
+// PERFORMANCE COUNTERS
+// ============================================================================
+
+// Get CPU cycle counter (TSC/RDTSC)
+@native
+fonksiyon cpu_cycles() -> tamsayı
+
+// Get monotonic time (nanoseconds since arbitrary epoch)
+@native
+fonksiyon monotonic_time() -> tamsayı
+
+son  // modül sys

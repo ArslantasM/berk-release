@@ -1,0 +1,134 @@
+/// ═══════════════════════════════════════════════════════════════════════════
+/// BERK HAL - STM32 Platformu Demo
+/// Hardware Abstraction Layer - ARM Cortex-M
+/// ═══════════════════════════════════════════════════════════════════════════
+
+kullan std::io
+kullan std::stm32
+
+yaz("============================================================")
+yaz("         HAL Demo: STM32 Platformu                          ")
+yaz("============================================================")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 1: STM32 Ozellikleri
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 1: STM32F4 Ozellikleri ---")
+
+yaz("\n   Teknik Ozellikler (STM32F407):")
+yaz("   - CPU: ARM Cortex-M4 @ 168 MHz")
+yaz("   - FPU: Single precision")
+yaz("   - RAM: 192 KB SRAM")
+yaz("   - Flash: 1 MB")
+yaz("   - GPIO: 140+ pin")
+yaz("   - ADC: 3x 12-bit (24 kanal)")
+yaz("   - DAC: 2x 12-bit")
+yaz("   - Timer: 14 adet")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 2: GPIO Konfigurasyonu
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 2: GPIO Konfigurasyonu ---")
+
+yaz("\n   GPIO Port ve Pin:")
+yaz("   - GPIOA, GPIOB, GPIOC, ... GPIOI")
+yaz("   - Her port 16 pin (0-15)")
+
+yaz("\n   GPIO Modlari:")
+yaz("   - GPIO_MODE_INPUT       -> Giris")
+yaz("   - GPIO_MODE_OUTPUT_PP   -> Push-Pull Cikis")
+yaz("   - GPIO_MODE_OUTPUT_OD   -> Open-Drain Cikis")
+yaz("   - GPIO_MODE_AF_PP       -> Alternatif Fonksiyon")
+yaz("   - GPIO_MODE_ANALOG      -> Analog")
+
+yaz("\n   Pull-up/Pull-down:")
+yaz("   - GPIO_NOPULL")
+yaz("   - GPIO_PULLUP")
+yaz("   - GPIO_PULLDOWN")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 3: Clock Konfigurasyonu
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 3: Clock Konfigurasyonu ---")
+
+yaz("\n   Clock Kaynaklari:")
+yaz("   - HSI: 16 MHz dahili RC")
+yaz("   - HSE: 8 MHz harici kristal")
+yaz("   - PLL: Carpan ile yuksek frekans")
+
+yaz("\n   Clock Agaci:")
+yaz("   ┌──────────────────────────────────────┐")
+yaz("   │ HSE 8MHz -> PLL -> SYSCLK 168MHz     │")
+yaz("   │                    │                 │")
+yaz("   │           ┌────────┴────────┐        │")
+yaz("   │           │                 │        │")
+yaz("   │      AHB 168MHz       APB1 42MHz     │")
+yaz("   │           │           APB2 84MHz     │")
+yaz("   └──────────────────────────────────────┘")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 4: Timer ve PWM
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 4: Timer ve PWM ---")
+
+yaz("\n   Timer Turleri:")
+yaz("   - TIM1, TIM8: Advanced (motor kontrol)")
+yaz("   - TIM2-TIM5: General purpose (32-bit)")
+yaz("   - TIM9-TIM14: General purpose (16-bit)")
+yaz("   - TIM6, TIM7: Basic (DAC trigger)")
+
+yaz("\n   PWM Hesaplama:")
+yaz("   - Frekans = Timer_Clock / (Prescaler * Period)")
+yaz("   - Duty = Pulse / Period * 100%")
+
+fonksiyon pwm_hesapla(clock: tamsayı, prescaler: tamsayı, period: tamsayı) -> tamsayı yap
+    dön clock / (prescaler * period)
+son
+
+değişken timer_clock = 84000000
+değişken prescaler = 84
+değişken period = 1000
+değişken pwm_freq = pwm_hesapla(timer_clock, prescaler, period)
+
+yaz("\n   Ornek PWM:")
+yaz("   - Timer Clock: ", timer_clock, " Hz")
+yaz("   - Prescaler: ", prescaler)
+yaz("   - Period: ", period)
+yaz("   - PWM Frekans: ", pwm_freq, " Hz")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 5: UART Iletisim
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 5: UART Iletisim ---")
+
+yaz("\n   UART Modulleri:")
+yaz("   - USART1, USART2, USART3, USART6")
+yaz("   - UART4, UART5")
+
+yaz("\n   Konfigürasyon:")
+yaz("   - Baud Rate: 115200")
+yaz("   - Word Length: 8 bit")
+yaz("   - Stop Bits: 1")
+yaz("   - Parity: None")
+yaz("   - Mode: TX/RX")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 6: Interrupt Yonetimi
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 6: Interrupt Yonetimi ---")
+
+yaz("\n   NVIC (Nested Vector Interrupt Controller):")
+yaz("   - 82 adet interrupt hatti")
+yaz("   - 16 seviye oncelik")
+
+yaz("\n   Ornek EXTI (External Interrupt):")
+yaz("   - HAL_NVIC_SetPriority(EXTI0_IRQn, 0, 0)")
+yaz("   - HAL_NVIC_EnableIRQ(EXTI0_IRQn)")
+
+yaz("\n[OK] STM32 HAL demosu tamamlandi!")

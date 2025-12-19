@@ -1,0 +1,147 @@
+// stdlib/embedded/platforms/riscv_gd32vf103/time.berk
+// GD32VF103 Time/Delay Implementation
+// Using RISC-V machine timer (mtime)
+
+kullan "embedded/bal/time" olarak TIME_BAL
+
+// RISC-V machine timer registers (memory-mapped)
+sabit MTIME_BASE: u64 = 0x0200BFF8     // Timer value register
+sabit MTIMECMP_BASE: u64 = 0x02004000  // Timer compare register
+sabit TIMER_FREQ_HZ: u64 = 27000000    // 27 MHz (default system clock / 4)
+
+// System clock frequency (can be 108 MHz max)
+sabit SYSTEM_CLOCK_HZ: u32 = 108000000
+
+harici "C" yap
+    // Direct RISC-V CSR access
+    fonksiyon get_mtime() -> u64
+    fonksiyon set_mtimecmp(value: u64)
+    fonksiyon get_cycle() -> u64  // RISC-V cycle counter
+son
+
+// Global tick counter (milliseconds)
+değişken mut TICK_COUNT: u64 = 0
+
+// Initialize timer
+açık fonksiyon time_init() yap
+    TICK_COUNT = 0
+    // Timer is always running on RISC-V
+son
+
+// Get milliseconds since boot
+açık fonksiyon millis() -> u64 yap
+    // mtime increments at TIMER_FREQ_HZ
+    // Convert to milliseconds: mtime * 1000 / TIMER_FREQ_HZ
+    değişken mtime = get_mtime()
+    dön (mtime * 1000) / TIMER_FREQ_HZ
+son
+
+// Get microseconds since boot
+açık fonksiyon micros() -> u64 yap
+    // Convert to microseconds: mtime * 1000000 / TIMER_FREQ_HZ
+    değişken mtime = get_mtime()
+    dön (mtime * 1000000) / TIMER_FREQ_HZ
+son
+
+// Delay milliseconds (busy-wait)
+açık fonksiyon delay_ms(ms: u32) yap
+    değişken start = millis()
+    döngü yap
+        eğer (millis() - start) >= ms olarak u64 yap
+            kır
+        son
+    son
+son
+
+// Delay microseconds (busy-wait)
+açık fonksiyon delay_us(us: u32) yap
+    değişken start = micros()
+    döngü yap
+        eğer (micros() - start) >= us olarak u64 yap
+            kır
+        son
+    son
+son
+
+// High-precision delay using cycle counter
+açık fonksiyon delay_cycles(cycles: u64) yap
+    değişken start = get_cycle()
+    döngü yap
+        eğer (get_cycle() - start) >= cycles yap
+            kır
+        son
+    son
+son
+
+// Convert milliseconds to cycles
+açık fonksiyon ms_to_cycles(ms: u32) -> u64 yap
+    dön (SYSTEM_CLOCK_HZ olarak u64 * ms olarak u64) / 1000
+son
+
+// Convert microseconds to cycles
+açık fonksiyon us_to_cycles(us: u32) -> u64 yap
+    dön (SYSTEM_CLOCK_HZ olarak u64 * us olarak u64) / 1000000
+son
+
+// Timeout helper
+yapı Timeout yap
+    start_time: u64,
+    duration_ms: u32,
+son
+
+uygula Timeout yap
+    açık fonksiyon yeni(duration_ms: u32) -> Timeout yap
+        dön Timeout yap
+            start_time: millis(),
+            duration_ms: duration_ms,
+        son
+    son
+    
+    açık fonksiyon expired(&kendim) -> bool yap
+        dön (millis() - kendim.start_time) >= kendim.duration_ms olarak u64
+    son
+    
+    açık fonksiyon reset(&değiştir kendim) yap
+        kendim.start_time = millis()
+    son
+    
+    açık fonksiyon remaining(&kendim) -> u32 yap
+        değişken elapsed = millis() - kendim.start_time
+        eğer elapsed >= kendim.duration_ms olarak u64 yap
+            dön 0
+        son
+        dön kendim.duration_ms - elapsed olarak u32
+    son
+son
+
+// BAL implementation
+yapı GD32VF103_TIME_HAL yap
+    initialized: bool,
+son
+
+uygula GD32VF103_TIME_HAL yap
+    açık fonksiyon yeni() -> GD32VF103_TIME_HAL yap
+        time_init()
+        dön GD32VF103_TIME_HAL yap initialized: doğru son
+    son
+son
+
+uygula TIME_BAL::TimeHAL için GD32VF103_TIME_HAL yap
+    fonksiyon millis(&kendim) -> u64 yap
+        dön millis()
+    son
+    
+    fonksiyon micros(&kendim) -> u64 yap
+        dön micros()
+    son
+    
+    fonksiyon delay_ms(&kendim, ms: u32) yap
+        delay_ms(ms)
+    son
+    
+    fonksiyon delay_us(&kendim, us: u32) yap
+        delay_us(us)
+    son
+son
+
+açık tip TIME_HAL = GD32VF103_TIME_HAL

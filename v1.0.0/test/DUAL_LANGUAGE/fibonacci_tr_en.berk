@@ -1,0 +1,292 @@
+/// BERK Dual-Language Demo - Fibonacci Sequence
+/// BERK Çift Dilli Demo - Fibonacci Dizisi
+///
+/// This file demonstrates BERK's unique dual-language capability.
+/// Both Turkish and English keywords can be used interchangeably.
+/// Bu dosya BERK'in benzersiz çift dilli kabiliyetini gösterir.
+/// Türkçe ve İngilizce anahtar kelimeler birbirinin yerine kullanılabilir.
+
+kullan std::io
+use std::time
+
+// Turkish version - Türkçe versiyon
+fonksiyon fibonacci_turkce(n: tamsayı) -> tamsayı yap
+    eğer n <= 1
+        dön n
+    son
+    
+    dön fibonacci_turkce(n - 1) + fibonacci_turkce(n - 2)
+son
+
+// English version - İngilizce versiyon
+function fibonacci_english(n: integer) -> integer do
+    if n <= 1
+        return n
+    end
+    
+    return fibonacci_english(n - 1) + fibonacci_english(n - 2)
+end
+
+// Mixed version - Karışık versiyon
+function fibonacci_mixed(n: tamsayı) -> integer yap
+    if n <= 1
+        dön n
+    end
+    
+    return fibonacci_mixed(n - 1) + fibonacci_mixed(n - 2)
+son
+
+// Optimized iterative - Turkish
+fonksiyon fibonacci_hızlı_tr(n: tamsayı) -> tamsayı yap
+    eğer n <= 1
+        dön n
+    son
+    
+    değişken önceki = 0
+    değişken şimdiki = 1
+    
+    için i içinde 2..=n
+        değişken sonraki = önceki + şimdiki
+        önceki = şimdiki
+        şimdiki = sonraki
+    son
+    
+    dön şimdiki
+son
+
+// Optimized iterative - English
+function fibonacci_fast_en(n: integer) -> integer do
+    if n <= 1
+        return n
+    end
+    
+    variable previous = 0
+    variable current = 1
+    
+    for i in 2..=n
+        variable next = previous + current
+        previous = current
+        current = next
+    end
+    
+    return current
+end
+
+// Benchmark function - Kıyaslama fonksiyonu
+fonksiyon benchmark_fibonacci() yap
+    yaz("\n╔═══════════════════════════════════════════════════╗")
+    yaz("║  Fibonacci Performance Comparison                 ║")
+    yaz("║  Performans Karşılaştırması                       ║")
+    yaz("╚═══════════════════════════════════════════════════╝\n")
+    
+    değişken test_n = 25  // 35 çok yavaş (interpreter modu)
+    
+    // Turkish recursive - Türkçe özyinelemeli
+    yaz("🇹🇷 Türkçe (Recursive / Özyinelemeli):")
+    değişken start = time::now()
+    değişken result_tr = fibonacci_turkce(test_n)
+    değişken duration_tr = time::elapsed(start)
+    yaz("   Sonuç: F(", test_n, ") = ", result_tr)
+    yaz("   Süre:  ", duration_tr, " ms")
+    
+    // English recursive - İngilizce özyinelemeli
+    yaz("\n🇬🇧 English (Recursive / Özyinelemeli):")
+    start = time::now()
+    değişken result_en = fibonacci_english(test_n)
+    değişken duration_en = time::elapsed(start)
+    yaz("   Result: F(", test_n, ") = ", result_en)
+    yaz("   Time:   ", duration_en, " ms")
+    
+    // Mixed - Karışık
+    yaz("\n🌍 Mixed / Karışık:")
+    start = time::now()
+    değişken result_mix = fibonacci_mixed(test_n)
+    değişken duration_mix = time::elapsed(start)
+    yaz("   Sonuç: F(", test_n, ") = ", result_mix)
+    yaz("   Time:  ", duration_mix, " ms")
+    
+    // Performance comparison
+    yaz("\n⏱️  Performance Analysis:")
+    yaz("   Turkish:  ", duration_tr, " ms")
+    yaz("   English:  ", duration_en, " ms")
+    yaz("   Mixed:    ", duration_mix, " ms")
+    yaz("   ✅ ALL VERSIONS COMPILE TO IDENTICAL MACHINE CODE!")
+    yaz("   ✅ TÜM VERSİYONLAR AYNI MAKİNE KODUNA DERLENİR!")
+    
+    // Fast versions - Hızlı versiyonlar
+    test_n = 1000
+    
+    yaz("\n🚀 Optimized Iterative / Optimize Edilmiş Döngüsel (n=", test_n, "):")
+    
+    start = time::now()
+    değişken fast_tr = fibonacci_hızlı_tr(test_n)
+    değişken fast_duration_tr = time::elapsed(start)
+    yaz("   🇹🇷 Türkçe: ", fast_duration_tr, " µs")
+    
+    start = time::now()
+    değişken fast_en = fibonacci_fast_en(test_n)
+    değişken fast_duration_en = time::elapsed(start)
+    yaz("   🇬🇧 English: ", fast_duration_en, " µs")
+    
+    yaz("   ✅ Speedup: ~", duration_tr / fast_duration_tr, "x faster!")
+son
+
+// Generate sequence - Dizi üret
+fonksiyon fibonacci_sequence(count: tamsayı) yap
+    yaz("\n╔═══════════════════════════════════════════════════╗")
+    yaz("║  Fibonacci Sequence / Fibonacci Dizisi            ║")
+    yaz("╚═══════════════════════════════════════════════════╝\n")
+    
+    yaz("İlk ", count, " Fibonacci sayısı:")
+    yaz("First ", count, " Fibonacci numbers:\n")
+    
+    for i in 0..count do
+        variable value = fibonacci_hızlı_tr(i)
+        yaz("   F(", i, ") = ", value)
+    end
+son
+
+// Golden ratio approximation - Altın oran yaklaşımı
+function golden_ratio_demo() do
+    yaz("\n╔═══════════════════════════════════════════════════╗")
+    yaz("║  Golden Ratio / Altın Oran                        ║")
+    yaz("╚═══════════════════════════════════════════════════╝\n")
+    
+    yaz("Fibonacci sayıları altın orana yaklaşır:")
+    yaz("Fibonacci numbers approach the golden ratio:\n")
+    
+    yaz("φ (phi / altın oran) = (1 + √5) / 2 ≈ 1.618033988749...\n")
+    
+    variable golden_ratio = 1.618033988749
+    
+    for n in 5..15 do
+        variable fib_n = fibonacci_hızlı_tr(n) as real64
+        variable fib_prev = fibonacci_hızlı_tr(n - 1) as real64
+        variable ratio = fib_n / fib_prev
+        variable error = abs(ratio - golden_ratio)
+        
+        yaz("   F(", n, ")/F(", n-1, ") = ", ratio, "  (error: ", error, ")")
+    end
+    
+    yaz("\n✅ As n increases, ratio approaches φ")
+    yaz("✅ n arttıkça, oran φ'ye yaklaşır")
+end
+
+// Main function - Ana fonksiyon
+fonksiyon ana() -> tamsayı yap
+    yaz("╔═══════════════════════════════════════════════════╗")
+    yaz("║  BERK Dual-Language Demo                          ║")
+    yaz("║  BERK Çift Dilli Demo                             ║")
+    yaz("╚═══════════════════════════════════════════════════╝\n")
+    
+    yaz("🌍 BERK's Unique Feature: Dual-Language Support")
+    yaz("🌍 BERK'in Benzersiz Özelliği: Çift Dilli Destek\n")
+    
+    yaz("Write code in Turkish, English, or BOTH!")
+    yaz("Kodu Türkçe, İngilizce veya İKİSİNDE BİRDEN yazın!\n")
+    
+    yaz("📋 Keyword Equivalents / Anahtar Kelime Eşdeğerleri:")
+    yaz("   fonksiyon  =  function")
+    yaz("   değişken   =  variable")
+    yaz("   eğer       =  if")
+    yaz("   yoksa      =  else")
+    yaz("   için       =  for")
+    yaz("   döngü      =  loop")
+    yaz("   dön        =  return")
+    yaz("   yap        =  do")
+    yaz("   son        =  end")
+    yaz("   içinde     =  in")
+    yaz("   tamsayı    =  integer")
+    yaz("   reel       =  real")
+    yaz("   metin      =  string")
+    yaz("   doğru      =  true")
+    yaz("   yanlış     =  false")
+    
+    // Run demos
+    fibonacci_sequence(10)
+    golden_ratio_demo()
+    benchmark_fibonacci()
+    
+    yaz("\n╔═══════════════════════════════════════════════════╗")
+    yaz("║  Key Advantages / Ana Avantajlar                  ║")
+    yaz("╚═══════════════════════════════════════════════════╝\n")
+    
+    yaz("✅ No performance penalty / Performans kaybı yok")
+    yaz("   • All versions compile to same machine code")
+    yaz("   • Tüm versiyonlar aynı makine koduna derlenir")
+    
+    yaz("\n✅ Choose your language / Dilinizi seçin")
+    yaz("   • Turkish for Turkish developers")
+    yaz("   • English for international collaboration")
+    yaz("   • Mix both for bilingual teams")
+    
+    yaz("\n✅ Accessibility / Erişilebilirlik")
+    yaz("   • Lower barrier to entry for Turkish speakers")
+    yaz("   • Türkçe konuşanlar için daha düşük giriş engeli")
+    yaz("   • Educational: Learn programming in native language")
+    yaz("   • Eğitimsel: Programlamayı anadilde öğren")
+    
+    yaz("\n✅ Unique in systems programming")
+    yaz("   • No other systems language offers this")
+    yaz("   • Başka hiçbir sistem dili bunu sunmaz")
+    yaz("   • Rust: English only")
+    yaz("   • C++: English only")
+    yaz("   • Go: English only")
+    yaz("   • Zig: English only")
+    yaz("   • BERK: Turkish AND English! 🇹🇷🇬🇧")
+    
+    yaz("\n💡 Use Cases / Kullanım Senaryoları:")
+    yaz("   1. Education: Teach programming in Turkish")
+    yaz("      Eğitim: Programlamayı Türkçe öğret")
+    
+    yaz("   2. Collaboration: Turkish team, international contributors")
+    yaz("      İşbirliği: Türk ekip, uluslararası katkıcılar")
+    
+    yaz("   3. Migration: Gradually translate codebases")
+    yaz("      Geçiş: Kod tabanlarını kademeli çevir")
+    
+    yaz("   4. Documentation: Code comments match keywords")
+    yaz("      Dokümantasyon: Kod yorumları anahtar kelimelerle eşleşir")
+    
+    yaz("\n✅ Demo completed / Demo tamamlandı!")
+    dön 0
+son
+
+/*
+═══════════════════════════════════════════════════════════════
+              DUAL-LANGUAGE IMPLEMENTATION
+              ÇİFT DİLLİ UYGULAMA
+═══════════════════════════════════════════════════════════════
+
+How it works / Nasıl çalışır:
+
+1. Lexer Phase / Sözcük Çözümleme:
+   • Recognizes both Turkish and English keywords
+   • Her iki dilin anahtar kelimelerini tanır
+   • Maps to same token type internally
+   • Dahili olarak aynı token tipine eşler
+
+2. Parser Phase / Sözdizimi Çözümleme:
+   • Same AST for both languages
+   • Her iki dil için aynı AST
+   • No semantic difference
+   • Semantik fark yok
+
+3. Code Generation / Kod Üretimi:
+   • Identical LLVM IR
+   • Özdeş LLVM IR
+   • Same machine code
+   • Aynı makine kodu
+   • Zero overhead
+   • Sıfır ek maliyet
+
+Performance / Performans:
+  Turkish:  100%
+  English:  100%
+  Mixed:    100%
+
+All versions are EXACTLY the same after compilation!
+Derleme sonrası tüm versiyonlar TAMAMEN aynı!
+
+═══════════════════════════════════════════════════════════════
+*/

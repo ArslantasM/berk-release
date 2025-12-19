@@ -1,0 +1,389 @@
+// ============================================================================
+// MSGPACK.BERK - MessagePack Binary Serialization Library
+// ============================================================================
+// BERK Standard Library v1.5
+// 
+// MessagePack spec + Rust rmp + Python msgpack-python tasarımlarından esinlenildi
+//
+// Özellikler:
+// - Compact binary format (daha küçük JSON)
+// - Efficient encoding (type-tagged)
+// - Multiple data types (nil, bool, int, float, string, binary, array, map)
+// - Extension types (custom types)
+// - Timestamp support (ext type -1)
+// - Streaming API (large data)
+// - Zero-copy deserialization (mümkün olduğunda)
+// - Backward compatible with JSON structure
+//
+// MessagePack Avantajları:
+// - JSON'dan ~30-50% daha küçük
+// - Daha hızlı parsing (binary format)
+// - Binary data desteği
+// - Integer türleri (int8, int16, int32, int64)
+// - Timestamp built-in
+//
+// Kullanım:
+//   kullan msgpack as mp
+//   
+//   değişken veri = {"ad": "Ahmet", "yas": 25, "aktif": doğru}
+//   değişken packed = mp::pack(veri)
+//   değişken geri = mp::unpack(packed)
+//
+// IoT ve Embedded sistemler için idealdir!
+// ============================================================================
+
+modül msgpack
+
+kullan result
+kullan io
+
+// ============================================================================
+// MSGPACK VALUE (Dynamic Type)
+// ============================================================================
+
+tip MsgpackValue = 
+    Nil |
+    Bool { value: mantıksal } |
+    Int { value: tamsayı } |              // Signed integer
+    UInt { value: tamsayı } |             // Unsigned integer
+    Float32 { value: ondalık } |          // 32-bit float
+    Float64 { value: ondalık } |          // 64-bit float
+    String { value: yazı } |              // UTF-8 string
+    Binary { value: liste[bayt] } |       // Raw bytes
+    Array { items: liste[MsgpackValue] } |
+    Map { pairs: liste[(MsgpackValue, MsgpackValue)] } |
+    Extension { type_id: tamsayı, data: liste[bayt] } |  // Custom extensions
+    Timestamp { seconds: tamsayı, nanos: tamsayı }        // Built-in timestamp
+
+// ============================================================================
+// FORMAT CODES (MessagePack Type Identifiers)
+// ============================================================================
+
+// Positive fixint: 0x00 - 0x7f
+// Fixmap: 0x80 - 0x8f
+// Fixarray: 0x90 - 0x9f
+// Fixstr: 0xa0 - 0xbf
+// Nil: 0xc0
+// Never used: 0xc1
+// False: 0xc2
+// True: 0xc3
+// Bin 8/16/32: 0xc4, 0xc5, 0xc6
+// Ext 8/16/32: 0xc7, 0xc8, 0xc9
+// Float 32/64: 0xca, 0xcb
+// Uint 8/16/32/64: 0xcc, 0xcd, 0xce, 0xcf
+// Int 8/16/32/64: 0xd0, 0xd1, 0xd2, 0xd3
+// Fixext 1/2/4/8/16: 0xd4, 0xd5, 0xd6, 0xd7, 0xd8
+// Str 8/16/32: 0xd9, 0xda, 0xdb
+// Array 16/32: 0xdc, 0xdd
+// Map 16/32: 0xde, 0xdf
+// Negative fixint: 0xe0 - 0xff
+
+tip FormatCode = 
+    PositiveFixInt { value: tamsayı } |  // 0x00 - 0x7f
+    NegativeFixInt { value: tamsayı } |  // 0xe0 - 0xff
+    FixMap { size: tamsayı } |           // 0x80 - 0x8f
+    FixArray { size: tamsayı } |         // 0x90 - 0x9f
+    FixStr { size: tamsayı } |           // 0xa0 - 0xbf
+    Nil |                                 // 0xc0
+    False |                               // 0xc2
+    True |                                // 0xc3
+    Bin8 | Bin16 | Bin32 |               // 0xc4, 0xc5, 0xc6
+    Ext8 | Ext16 | Ext32 |               // 0xc7, 0xc8, 0xc9
+    Float32 | Float64 |                   // 0xca, 0xcb
+    UInt8 | UInt16 | UInt32 | UInt64 |   // 0xcc, 0xcd, 0xce, 0xcf
+    Int8 | Int16 | Int32 | Int64 |       // 0xd0, 0xd1, 0xd2, 0xd3
+    FixExt1 | FixExt2 | FixExt4 | FixExt8 | FixExt16 |  // 0xd4-0xd8
+    Str8 | Str16 | Str32 |               // 0xd9, 0xda, 0xdb
+    Array16 | Array32 |                   // 0xdc, 0xdd
+    Map16 | Map32                         // 0xde, 0xdf
+
+// ============================================================================
+// PACKING (Serialization)
+// ============================================================================
+
+// Pack value to binary
+@native
+fonksiyon pack(value: MsgpackValue) -> Sonuç[liste[bayt], yazı]
+
+// Pack nil
+@native
+fonksiyon pack_nil() -> liste[bayt]
+
+// Pack boolean
+@native
+fonksiyon pack_bool(value: mantıksal) -> liste[bayt]
+
+// Pack integer (automatic size selection)
+@native
+fonksiyon pack_int(value: tamsayı) -> liste[bayt]
+
+// Pack unsigned integer
+@native
+fonksiyon pack_uint(value: tamsayı) -> liste[bayt]
+
+// Pack float32
+@native
+fonksiyon pack_float32(value: ondalık) -> liste[bayt]
+
+// Pack float64
+@native
+fonksiyon pack_float64(value: ondalık) -> liste[bayt]
+
+// Pack string
+@native
+fonksiyon pack_string(value: yazı) -> liste[bayt]
+
+// Pack binary data
+@native
+fonksiyon pack_binary(value: liste[bayt]) -> liste[bayt]
+
+// Pack array
+@native
+fonksiyon pack_array(items: liste[MsgpackValue]) -> Sonuç[liste[bayt], yazı]
+
+// Pack map
+@native
+fonksiyon pack_map(pairs: liste[(MsgpackValue, MsgpackValue)]) -> Sonuç[liste[bayt], yazı]
+
+// Pack extension type
+@native
+fonksiyon pack_extension(type_id: tamsayı, data: liste[bayt]) -> liste[bayt]
+
+// Pack timestamp
+@native
+fonksiyon pack_timestamp(seconds: tamsayı, nanos: tamsayı) -> liste[bayt]
+
+// ============================================================================
+// UNPACKING (Deserialization)
+// ============================================================================
+
+// Unpack binary to value
+@native
+fonksiyon unpack(data: liste[bayt]) -> Sonuç[MsgpackValue, yazı]
+
+// Unpack from buffer with offset (returns value and new offset)
+@native
+fonksiyon unpack_from(data: liste[bayt], offset: tamsayı) -> Sonuç[(MsgpackValue, tamsayı), yazı]
+
+// Read format code
+@native
+fonksiyon read_format(data: liste[bayt], offset: tamsayı) -> Sonuç[(FormatCode, tamsayı), yazı]
+
+// Unpack specific types
+@native
+fonksiyon unpack_nil(data: liste[bayt], offset: tamsayı) -> Sonuç[tamsayı, yazı]
+
+@native
+fonksiyon unpack_bool(data: liste[bayt], offset: tamsayı) -> Sonuç[(mantıksal, tamsayı), yazı]
+
+@native
+fonksiyon unpack_int(data: liste[bayt], offset: tamsayı) -> Sonuç[(tamsayı, tamsayı), yazı]
+
+@native
+fonksiyon unpack_uint(data: liste[bayt], offset: tamsayı) -> Sonuç[(tamsayı, tamsayı), yazı]
+
+@native
+fonksiyon unpack_float32(data: liste[bayt], offset: tamsayı) -> Sonuç[(ondalık, tamsayı), yazı]
+
+@native
+fonksiyon unpack_float64(data: liste[bayt], offset: tamsayı) -> Sonuç[(ondalık, tamsayı), yazı]
+
+@native
+fonksiyon unpack_string(data: liste[bayt], offset: tamsayı) -> Sonuç[(yazı, tamsayı), yazı]
+
+@native
+fonksiyon unpack_binary(data: liste[bayt], offset: tamsayı) -> Sonuç[(liste[bayt], tamsayı), yazı]
+
+@native
+fonksiyon unpack_array(data: liste[bayt], offset: tamsayı) -> Sonuç[(liste[MsgpackValue], tamsayı), yazı]
+
+@native
+fonksiyon unpack_map(data: liste[bayt], offset: tamsayı) -> Sonuç[(liste[(MsgpackValue, MsgpackValue)], tamsayı), yazı]
+
+@native
+fonksiyon unpack_extension(data: liste[bayt], offset: tamsayı) -> Sonuç[((tamsayı, liste[bayt]), tamsayı), yazı]
+
+// ============================================================================
+// STREAMING API (Large Data)
+// ============================================================================
+
+tip MsgpackPacker = yapı yap
+    buffer: liste[bayt],
+    capacity: tamsayı
+son
+
+// Create new packer
+fonksiyon new_packer(capacity: tamsayı) -> MsgpackPacker
+    değer MsgpackPacker { buffer: [], capacity: capacity }
+son
+
+// Pack value into packer
+@native
+fonksiyon (self: MsgpackPacker) pack_value(value: MsgpackValue) -> Sonuç[boş, yazı]
+
+// Get packed data
+fonksiyon (self: MsgpackPacker) bytes() -> liste[bayt]
+    değer self.buffer
+son
+
+// Reset packer
+fonksiyon (self: MsgpackPacker) reset() -> boş
+    self.buffer = []
+son
+
+// Unpacker (streaming)
+tip MsgpackUnpacker = yapı yap
+    buffer: liste[bayt],
+    offset: tamsayı
+son
+
+// Create new unpacker
+fonksiyon new_unpacker(data: liste[bayt]) -> MsgpackUnpacker
+    değer MsgpackUnpacker { buffer: data, offset: 0 }
+son
+
+// Unpack next value
+@native
+fonksiyon (self: MsgpackUnpacker) next() -> Sonuç[MsgpackValue, yazı]
+
+// Check if more data available
+fonksiyon (self: MsgpackUnpacker) has_next() -> mantıksal
+    değer self.offset < self.buffer.uzunluk
+son
+
+// Reset unpacker
+fonksiyon (self: MsgpackUnpacker) reset() -> boş
+    self.offset = 0
+son
+
+// ============================================================================
+// FILE I/O
+// ============================================================================
+
+// Pack to file
+@native
+fonksiyon pack_to_file(value: MsgpackValue, path: yazı) -> Sonuç[boş, yazı]
+
+// Unpack from file
+@native
+fonksiyon unpack_from_file(path: yazı) -> Sonuç[MsgpackValue, yazı]
+
+// ============================================================================
+// CONVERSION (JSON Compatibility)
+// ============================================================================
+
+// Convert from JSON-like structure
+@native
+fonksiyon from_json(json_value: JsonDeger) -> MsgpackValue
+
+// Convert to JSON-like structure
+@native
+fonksiyon to_json(msgpack_value: MsgpackValue) -> JsonDeger
+
+// ============================================================================
+// EXTENSION TYPES (Custom Types)
+// ============================================================================
+
+// Extension type -1: Timestamp (built-in)
+sabit EXT_TIMESTAMP: tamsayı = -1
+
+// Register custom extension type
+tip ExtensionHandler = yapı yap
+    type_id: tamsayı,
+    pack: fonksiyon(boş) -> liste[bayt],
+    unpack: fonksiyon(liste[bayt]) -> Sonuç[boş, yazı]
+son
+
+// Extension registry (user-defined types)
+değişken extension_handlers: eşleme[tamsayı, ExtensionHandler] = {}
+
+// Register extension
+fonksiyon register_extension(handler: ExtensionHandler) -> boş
+    extension_handlers[handler.type_id] = handler
+son
+
+// ============================================================================
+// UTILITY FUNCTIONS
+// ============================================================================
+
+// Get packed size (without actually packing)
+@native
+fonksiyon compute_size(value: MsgpackValue) -> tamsayı
+
+// Validate msgpack data
+@native
+fonksiyon validate(data: liste[bayt]) -> Sonuç[boş, yazı]
+
+// Compare two msgpack values
+@native
+fonksiyon equal(a: MsgpackValue, b: MsgpackValue) -> mantıksal
+
+// Clone msgpack value
+@native
+fonksiyon clone(value: MsgpackValue) -> MsgpackValue
+
+// Get type name
+fonksiyon type_name(value: MsgpackValue) -> yazı
+    eşle value
+        Nil -> "nil"
+        Bool -> "bool"
+        Int -> "int"
+        UInt -> "uint"
+        Float32 -> "float32"
+        Float64 -> "float64"
+        String -> "string"
+        Binary -> "binary"
+        Array -> "array"
+        Map -> "map"
+        Extension -> "extension"
+        Timestamp -> "timestamp"
+    son
+son
+
+// ============================================================================
+// SIZE COMPARISON (MessagePack vs JSON)
+// ============================================================================
+
+// Compare sizes
+tip SizeComparison = yapı yap
+    msgpack_size: tamsayı,
+    json_size: tamsayı,
+    compression_ratio: ondalık  // json_size / msgpack_size
+son
+
+// Compare packed size with JSON
+@native
+fonksiyon compare_with_json(value: MsgpackValue) -> SizeComparison
+
+// ============================================================================
+// ÖRNEK KULLANIM (Example Usage)
+// ============================================================================
+
+// Örnek: IoT sensör verisi
+//
+// kullan msgpack as mp
+//
+// tip SensorData = {
+//     "device_id": "ESP32-001",
+//     "timestamp": 1638360000,
+//     "temperature": 23.5,
+//     "humidity": 65.2,
+//     "pressure": 1013.25,
+//     "battery": 87,
+//     "sensors": ["DHT22", "BMP280"]
+// }
+//
+// değişken data = mp::from_json(SensorData)
+// değişken packed = mp::pack(data)?
+// yazı("Packed size: ", packed.uzunluk, " bytes")  // ~80 bytes
+// yazı("JSON size: ", json::kaydet(SensorData).uzunluk, " bytes")  // ~160 bytes
+//
+// // Network transmission
+// network::send(packed)
+//
+// // Receiving side
+// değişken received = network::receive()
+// değişken unpacked = mp::unpack(received)?
+// değişken json_data = mp::to_json(unpacked)
+// yazı("Device: ", json_data["device_id"])
+// yazı("Temp: ", json_data["temperature"], "°C")

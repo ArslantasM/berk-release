@@ -1,0 +1,21 @@
+// Nuvoton SPI Module
+
+extern "C" {
+    fn SPI_Open(spi: *void, mode: u32, freq: u32);
+    fn SPI_WriteRead(spi: *void, tx: *const u8, rx: *u8, len: u32) -> u32;
+}
+
+pub struct SPI {
+    spi: *void,
+}
+
+impl SPI {
+    pub fn new(spi: *void, mode: u32, freq: u32) -> SPI {
+        unsafe { SPI_Open(spi, mode, freq); }
+        SPI { spi }
+    }
+    
+    pub fn transfer(&self, tx: &[u8], rx: &mut [u8]) -> u32 {
+        unsafe { SPI_WriteRead(self.spi, tx.as_ptr(), rx.as_mut_ptr(), tx.len() as u32) }
+    }
+}

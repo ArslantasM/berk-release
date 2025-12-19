@@ -1,0 +1,258 @@
+// =============================================================================
+// BERK Hardware Bridge - BinProto Demo
+// Özel Binary Protokol Framework
+// =============================================================================
+
+kullan std::binproto
+
+yazdır("=== BERK BinProto Demo ===\n")
+
+// -----------------------------------------------------------------------------
+// BinProto Nedir?
+// -----------------------------------------------------------------------------
+
+yazdır("🔧 BinProto - Özel Binary Protokol Framework")
+yazdır("-" * 40)
+
+yazdır("""
+BinProto, kendi ihtiyaçlarınıza göre özelleştirilebilir
+binary protokol oluşturmanızı sağlar.
+
+Özellikler:
+  • Özelleştirilebilir header/footer
+  • Çoklu checksum algoritmaları
+  • Hazır preset'ler
+  • Otomatik değer kodlama/çözme
+  • CRC hesaplama
+""")
+
+// -----------------------------------------------------------------------------
+// Preset Protokoller
+// -----------------------------------------------------------------------------
+
+yazdır("\n📦 Hazır Preset Protokoller:")
+yazdır("-" * 40)
+
+yazdır("""
+Preset       Header      Checksum    Footer
+--------------------------------------------------
+"standard"   AA 55       XOR         0D 0A
+"arduino"    3C (<)      SUM         3E (>)
+"modbus_like" (yok)      CRC16       (yok)
+"simple"     FF          (yok)       (yok)
+"sensor"     02 (STX)    XOR         03 (ETX)
+""")
+
+yazdır("""
+kullan std::binproto
+
+// Preset kullan
+olsun proto = binproto::create_preset("arduino")
+
+// Veya özel protokol oluştur
+olsun proto = binproto::create_simple(
+    [0xAA, 0x55],   // Header
+    "crc16",        // Checksum: "xor", "sum", "crc16", "crc32", "none"
+    [0x0D, 0x0A]    // Footer
+)
+""")
+
+// -----------------------------------------------------------------------------
+// Bağlantı ve İletişim
+// -----------------------------------------------------------------------------
+
+yazdır("\n🔌 Bağlantı ve İletişim:")
+yazdır("-" * 40)
+
+yazdır("""
+// Protokol ile port aç
+olsun conn = binproto::open(proto, "COM6", 115200)
+
+// Protokol bilgisi
+olsun bilgi = binproto::get_info(conn)
+yazdır("Header: {:?}", bilgi["header"])
+yazdır("Checksum: {}", bilgi["checksum_type"])
+
+// Komut gönder (otomatik çerçeveleme)
+binproto::send(conn, 0x01, [0x10, 0x20, 0x30])
+// Gönderilen: [HEADER][CMD][LEN][DATA...][CHECKSUM][FOOTER]
+
+// Yanıt al
+olsun [cmd, payload] = binproto::receive(conn)
+yazdır("Komut: 0x{:02X}", cmd)
+yazdır("Veri: {:?}", payload)
+
+// İstek/Yanıt (tek çağrıda)
+olsun [cmd, yanit] = binproto::request(conn, 0x01, [0x10], 1000)
+""")
+
+// -----------------------------------------------------------------------------
+// Değer Kodlama/Çözme
+// -----------------------------------------------------------------------------
+
+yazdır("\n🔢 Değer Kodlama/Çözme:")
+yazdır("-" * 40)
+
+yazdır("""
+Desteklenen Tipler:
+  u8, i8       - 8-bit (1 byte)
+  u16, i16     - 16-bit (2 bytes, big-endian)
+  u32, i32     - 32-bit (4 bytes, big-endian)
+  f32, float   - IEEE 754 float (4 bytes)
+  f64, double  - IEEE 754 double (8 bytes)
+""")
+
+yazdır("""
+// Değer → Byte dizisi
+olsun bytes = binproto::encode_value(1000, "u16")
+yazdır("1000 as u16: {:?}", bytes)  // [0x03, 0xE8]
+
+olsun bytes = binproto::encode_value(3.14, "f32")
+yazdır("3.14 as f32: {:?}", bytes)  // [0x40, 0x48, 0xF5, 0xC3]
+
+olsun bytes = binproto::encode_value(-50, "i8")
+yazdır("-50 as i8: {:?}", bytes)    // [0xCE]
+
+// Byte dizisi → Değer
+olsun deger = binproto::decode_value([0x03, 0xE8], "u16")
+yazdır("Değer: {}", deger)  // 1000
+
+olsun sicaklik = binproto::decode_value([0x41, 0xC8, 0x00, 0x00], "f32")
+yazdır("Sıcaklık: {}", sicaklik)  // 25.0
+""")
+
+// -----------------------------------------------------------------------------
+// Float Kodlama (Yeni!)
+// -----------------------------------------------------------------------------
+
+yazdır("\n📐 Float Kodlama (Gelişmiş):")
+yazdır("-" * 40)
+
+yazdır("""
+// Float formatları
+olsun bytes = binproto::encode_float(3.14159, "f32be")  // Big-endian
+olsun bytes = binproto::encode_float(3.14159, "f32le")  // Little-endian
+olsun bytes = binproto::encode_float(3.14159, "f64be")  // Double BE
+olsun bytes = binproto::encode_float(3.14159, "f64le")  // Double LE
+
+// Float çözme
+olsun deger = binproto::decode_float(bytes, "f32be")
+""")
+
+// -----------------------------------------------------------------------------
+// CRC Hesaplama
+// -----------------------------------------------------------------------------
+
+yazdır("\n🔐 CRC/Checksum Hesaplama:")
+yazdır("-" * 40)
+
+yazdır("""
+olsun veri = [0x01, 0x02, 0x03, 0x04, 0x05]
+
+// XOR checksum
+olsun xor_cs = binproto::calculate_crc(veri, "xor")
+yazdır("XOR: 0x{:02X}", xor_cs)
+
+// SUM checksum
+olsun sum_cs = binproto::calculate_crc(veri, "sum")
+yazdır("SUM: 0x{:02X}", sum_cs)
+
+// CRC-16 Modbus
+olsun crc16 = binproto::calculate_crc(veri, "crc16_modbus")
+yazdır("CRC-16: 0x{:04X}", crc16)
+
+// CRC-32
+olsun crc32 = binproto::calculate_crc(veri, "crc32")
+yazdır("CRC-32: 0x{:08X}", crc32)
+
+// LRC (Longitudinal Redundancy Check)
+olsun lrc = binproto::calculate_crc(veri, "lrc")
+yazdır("LRC: 0x{:02X}", lrc)
+""")
+
+// -----------------------------------------------------------------------------
+// Payload Oluşturma
+// -----------------------------------------------------------------------------
+
+yazdır("\n📦 Payload Oluşturma:")
+yazdır("-" * 40)
+
+yazdır("""
+// Karmaşık payload oluştur
+olsun payload = binproto::build_payload([
+    [0x01, "u8"],           // Komut
+    [1000, "u16"],          // Değer 1
+    [25.5, "f32"],          // Sıcaklık
+    [0xDEADBEEF, "u32"]     // Magic number
+])
+yazdır("Payload: {:?}", payload)
+// 1 + 2 + 4 + 4 = 11 bytes
+
+// Paketi gönder
+binproto::send_raw(conn, payload)
+""")
+
+// -----------------------------------------------------------------------------
+// İstatistikler
+// -----------------------------------------------------------------------------
+
+yazdır("\n📊 Bağlantı İstatistikleri:")
+yazdır("-" * 40)
+
+yazdır("""
+olsun stats = binproto::get_stats(conn)
+yazdır("RX buffer: {} bytes", stats["buffer_size"])
+yazdır("Port: {}", stats["port"])
+
+// Buffer temizle
+binproto::flush(conn)
+""")
+
+// -----------------------------------------------------------------------------
+// Tam Örnek: Sensör Ağı Gateway
+// -----------------------------------------------------------------------------
+
+yazdır("\n🌐 Tam Örnek: Sensör Ağı Gateway")
+yazdır("-" * 40)
+
+yazdır("""
+kullan std::binproto
+
+// Özel sensör protokolü
+olsun proto = binproto::create_simple(
+    [0xAA, 0x55],  // Header
+    "crc16",       // CRC-16 checksum
+    [0x0D]         // Footer
+)
+
+olsun gateway = binproto::open(proto, "COM6", 115200)
+
+// Komut tanımları
+sabit CMD_READ_SENSOR  = 0x01
+sabit CMD_SET_CONFIG   = 0x02
+sabit CMD_RESET        = 0xFF
+
+// 4 sensör düğümünü sorgula
+döngü node_id için 1..5 yap
+    // Sensör okuma isteği: [NODE_ID, SENSOR_TYPE]
+    olsun istek = binproto::build_payload([
+        [node_id, "u8"],
+        [0x01, "u8"]    // Sıcaklık sensörü
+    ])
+    
+    olsun [cmd, yanit] = binproto::request(gateway, CMD_READ_SENSOR, istek, 500)
+    
+    eğer cmd == CMD_READ_SENSOR ise
+        olsun sicaklik = binproto::decode_value(yanit[0..4], "f32")
+        olsun nem = binproto::decode_value(yanit[4..8], "f32")
+        
+        yazdır("Düğüm {}: {:.1f}°C, {:.0f}% nem", node_id, sicaklik, nem)
+    değilse
+        yazdır("Düğüm {}: Yanıt yok", node_id)
+    son
+son
+
+binproto::close(gateway)
+""")
+
+yazdır("\n✅ BinProto demo tamamlandı!")

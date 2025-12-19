@@ -1,0 +1,843 @@
+//! # Physics Module
+//!
+//! Physics simulation (kinematics, dynamics, rigid body).
+//!
+//! Fizik simülasyonu (kinematik, dinamik, katı cisim).
+//!
+//! ## Features / Özellikler
+//!
+//! - **Kinematics**: Motion equations / Hareket denklemleri
+//! - **Dynamics**: Forces, torque / Kuvvet, tork
+//! - **Rigid body**: Physics simulation / Katı cisim fiziği
+//! - **Collision**: Detection / Çarpışma tespiti
+//! - **Conservation**: Energy, momentum / Enerji, momentum koruma
+//! - **Oscillators**: Harmonic / Harmonik osilatörler
+//! - **Orbital**: Gravitation / Yörünge mekaniği
+//! - **Electromagnetism**: EM basics / Elektromanyetizma
+//! - **Thermodynamics**: Laws / Termodinamik
+//! - **Units**: SI conversions / Birim dönüştürme
+//!
+//! ## Example / Örnek
+//!
+//! ```berk
+//! kullan physics
+//!
+//! değişken cisim = physics.rigid_body(kütle: 10.0, hız: [1.0, 0.0, 0.0])
+//! değişken kuvvet = [0.0, -9.8, 0.0]  // Yerçekimi
+//! physics.apply_force(cisim, kuvvet, dt: 0.016)
+//! ```
+//!
+//! Inspired by: Bullet Physics + PyDy + Julia
+
+// ============================================================================
+// BERK STANDART KÜTÜPHANESİ - FİZİK MODÜLÜ
+// BERK STANDARD LIBRARY - PHYSICS MODULE
+// ============================================================================
+//
+// HEDEF SEVİYE: Lisans + Yüksek Lisans + Mühendislik Simülasyonu
+// TARGET LEVEL: Undergraduate + Graduate + Engineering Simulation
+//
+// İLHAM KAYNAKLARI / INSPIRED BY:
+//   • Rust: rapier (rigid body physics), nphysics, parry (collision)
+//   • Python: PyDy (multibody dynamics), SciPy physics
+//   • C++: Bullet Physics, PhysX, Box2D
+//   • Julia: DifferentialEquations.jl, Unitful.jl
+//   • MATLAB Simulink / Simscape
+//   • Classical mechanics textbooks (Goldstein, Taylor)
+//
+// KAPSAM / SCOPE:
+//   ✓ Kinematik (Kinematics) - hareket denklemleri
+//   ✓ Dinamik (Dynamics) - kuvvet ve tork
+//   ✓ Rigid body physics (katı cisim fiziği)
+//   ✓ Çarpışma tespiti (Collision detection)
+//   ✓ Enerji ve momentum korunumu
+//   ✓ Harmonik osilatörler
+//   ✓ Gravitasyon ve orbital mekanik
+//   ✓ Elektromanyetizma temelleri
+//   ✓ Termodinamik
+//   ✓ Dalga ve optik
+//   ✓ Birim dönüşümleri (SI units)
+//
+// ============================================================================
+
+kullan math  // Matematik fonksiyonları için
+
+// ============================================================================
+// FİZİKSEL SABİTLER / PHYSICAL CONSTANTS (SI Units)
+// ============================================================================
+// math.berk'te tanımlı olanlar:
+// LIGHT_SPEED, PLANCK, BOLTZMANN, AVOGADRO, GAS_CONSTANT, GRAVITATIONAL
+
+sabit EARTH_GRAVITY = 9.80665                  // g (m/s²) - Yerçekimi ivmesi
+sabit EARTH_RADIUS = 6371000.0                 // (m) - Dünya yarıçapı
+sabit EARTH_MASS = 5.972e24                    // (kg) - Dünya kütlesi
+
+sabit ELECTRON_CHARGE = 1.602176634e-19        // e (C) - Elektron yükü
+sabit VACUUM_PERMITTIVITY = 8.854187817e-12    // ε₀ (F/m) - Boşluğun dielektrik sabiti
+sabit VACUUM_PERMEABILITY = 1.256637062e-6     // μ₀ (H/m) - Boşluğun manyetik geçirgenliği
+sabit COULOMB_CONSTANT = 8.987551787e9         // k = 1/(4πε₀) (N·m²/C²)
+
+sabit STEFAN_BOLTZMANN = 5.670374419e-8        // σ (W/(m²·K⁴)) - Stefan-Boltzmann sabiti
+sabit WIEN_DISPLACEMENT = 2.897771955e-3       // b (m·K) - Wien's displacement constant
+
+sabit ATMOSPHERE_PRESSURE = 101325.0           // (Pa) - Standart atmosfer basıncı
+sabit WATER_DENSITY = 1000.0                   // (kg/m³) - Su yoğunluğu (4°C)
+sabit AIR_DENSITY = 1.225                      // (kg/m³) - Hava yoğunluğu (15°C, deniz seviyesi)
+sabit SOUND_SPEED_AIR = 343.0                  // (m/s) - Ses hızı (20°C hava)
+
+// ============================================================================
+// VEK TÖR İŞLEMLERİ / VECTOR OPERATIONS (3D)
+// ============================================================================
+// NOT: Gelecekte linalg.berk'e taşınabilir
+// NOTE: May move to linalg.berk in the future
+
+// Vektör büyüklüğü / Vector magnitude
+// |v| = sqrt(x² + y² + z²)
+fonksiyon vec3_magnitude(x: ondalık, y: ondalık, z: ondalık) -> ondalık yap
+    dön math::hypot3(x, y, z)
+son
+
+// Vektör normalize / Vector normalize
+// v̂ = v / |v|
+fonksiyon vec3_normalize(x: ondalık, y: ondalık, z: ondalık) -> (ondalık, ondalık, ondalık) yap
+    değişken mag = vec3_magnitude(x, y, z)
+    eğer mag == 0.0 ise dön (0.0, 0.0, 0.0)
+    dön (x/mag, y/mag, z/mag)
+son
+
+// İç çarpım / Dot product
+// v · w = vₓwₓ + vᵧwᵧ + vᵤwᵤ
+fonksiyon vec3_dot(vx: ondalık, vy: ondalık, vz: ondalık, wx: ondalık, wy: ondalık, wz: ondalık) -> ondalık yap
+    dön vx*wx + vy*wy + vz*wz
+son
+
+// Dış çarpım / Cross product
+// v × w = (vᵧwᵤ - vᵤwᵧ, vᵤwₓ - vₓwᵤ, vₓwᵧ - vᵧwₓ)
+fonksiyon vec3_cross(vx: ondalık, vy: ondalık, vz: ondalık, wx: ondalık, wy: ondalık, wz: ondalık) -> (ondalık, ondalık, ondalık) yap
+    değişken cx = vy*wz - vz*wy
+    değişken cy = vz*wx - vx*wz
+    değişken cz = vx*wy - vy*wx
+    dön (cx, cy, cz)
+son
+
+// Vektör arası açı (radyan)
+// cos(θ) = (v · w) / (|v| |w|)
+fonksiyon vec3_angle(vx: ondalık, vy: ondalık, vz: ondalık, wx: ondalık, wy: ondalık, wz: ondalık) -> ondalık yap
+    değişken dot = vec3_dot(vx, vy, vz, wx, wy, wz)
+    değişken mag_v = vec3_magnitude(vx, vy, vz)
+    değişken mag_w = vec3_magnitude(wx, wy, wz)
+    eğer mag_v == 0.0 ise dön 0.0
+    eğer mag_w == 0.0 ise dön 0.0
+    değişken cos_theta = dot / (mag_v * mag_w)
+    dön math::acos(cos_theta)
+son
+
+// ============================================================================
+// KİNEMATİK / KINEMATICS
+// ============================================================================
+
+/// Calculates position under constant acceleration.
+///
+/// Sabit ivme altında konumu hesaplar.
+///
+/// # Parameters / Parametreler
+///
+/// - `x0`: Initial position (m) / Başlangıç konumu (m)
+/// - `v0`: Initial velocity (m/s) / Başlangıç hızı (m/s)
+/// - `a`: Acceleration (m/s²) / İvme (m/s²)
+/// - `t`: Time elapsed (s) / Geçen süre (s)
+///
+/// # Returns / Dönüş Değeri
+///
+/// Position at time t (m) / t anındaki konum (m)
+///
+/// # Formula / Formül
+///
+/// x(t) = x₀ + v₀t + ½at²
+///
+/// # Example / Örnek
+///
+/// ```berk
+/// // Free fall from 100m
+/// değişken h = physics.position_constant_accel(100.0, 0.0, -9.8, 2.0)
+/// // h ≈ 80.4 m (after 2 seconds)
+/// ```
+fonksiyon position_constant_accel(x0: ondalık, v0: ondalık, a: ondalık, t: ondalık) -> ondalık yap
+    dön x0 + v0*t + 0.5*a*t*t
+son
+
+/// Calculates velocity under constant acceleration.
+///
+/// Sabit ivme altında hızı hesaplar.
+///
+/// # Parameters / Parametreler
+///
+/// - `v0`: Initial velocity (m/s) / Başlangıç hızı (m/s)
+/// - `a`: Acceleration (m/s²) / İvme (m/s²)
+/// - `t`: Time elapsed (s) / Geçen süre (s)
+///
+/// # Returns / Dönüş Değeri
+///
+/// Velocity at time t (m/s) / t anındaki hız (m/s)
+///
+/// # Formula / Formül
+///
+/// v(t) = v₀ + at
+///
+/// # Example / Örnek
+///
+/// ```berk
+/// // Car acceleration
+/// değişken v = physics.velocity_constant_accel(0.0, 5.0, 10.0)
+/// // v = 50 m/s (after 10 seconds of 5 m/s² accel)
+/// ```
+fonksiyon velocity_constant_accel(v0: ondalık, a: ondalık, t: ondalık) -> ondalık yap
+    dön v0 + a*t
+son
+
+/// Calculates height during free fall.
+///
+/// Serbest düşüş sırasında yüksekliği hesaplar.
+///
+/// # Parameters / Parametreler
+///
+/// - `h0`: Initial height (m) / Başlangıç yüksekliği (m)
+/// - `t`: Time of fall (s) / Düşme süresi (s)
+///
+/// # Returns / Dönüş Değeri
+///
+/// Height at time t (m) / t anındaki yükseklik (m)
+///
+/// # Formula / Formül
+///
+/// h(t) = h₀ - ½gt² (g = 9.81 m/s²)
+///
+/// # Example / Örnek
+///
+/// ```berk
+/// değişken h = physics.free_fall_distance(100.0, 3.0)
+/// // h ≈ 55.9 m (after 3 seconds from 100m)
+/// ```
+fonksiyon free_fall_distance(h0: ondalık, t: ondalık) -> ondalık yap
+    dön h0 - 0.5 * EARTH_GRAVITY * t * t
+son
+
+// Serbest düşüş - hız
+// Free fall velocity
+// v(t) = -gt
+fonksiyon free_fall_velocity(t: ondalık) -> ondalık yap
+    dön -EARTH_GRAVITY * t
+son
+
+// Atış hareketi - menzil (projectile range)
+// R = v₀² sin(2θ) / g
+fonksiyon projectile_range(v0: ondalık, açı_derece: ondalık) -> ondalık yap
+    değişken açı_rad = math::deg2rad(açı_derece)
+    dön (v0 * v0 * math::sin(2.0 * açı_rad)) / EARTH_GRAVITY
+son
+
+// Atış hareketi - maksimum yükseklik
+// h_max = v₀² sin²(θ) / (2g)
+fonksiyon projectile_max_height(v0: ondalık, açı_derece: ondalık) -> ondalık yap
+    değişken açı_rad = math::deg2rad(açı_derece)
+    değişken sin_theta = math::sin(açı_rad)
+    dön (v0 * v0 * sin_theta * sin_theta) / (2.0 * EARTH_GRAVITY)
+son
+
+// Çembersel hareket - merkezcil ivme
+// Centripetal acceleration: a = v²/r
+fonksiyon centripetal_acceleration(v: ondalık, r: ondalık) -> ondalık yap
+    eğer r == 0.0 ise dön 0.0
+    dön (v * v) / r
+son
+
+// Açısal hız - devir/dakika → rad/s
+// Angular velocity: RPM to rad/s
+fonksiyon rpm_to_rad_per_sec(rpm: ondalık) -> ondalık yap
+    // ω = 2π × (RPM / 60)
+    dön (2.0 * math::PI * rpm) / 60.0
+son
+
+// Doğrusal hız ↔ Açısal hız
+// Linear velocity from angular: v = ωr
+fonksiyon angular_to_linear_velocity(omega: ondalık, r: ondalık) -> ondalık yap
+    dön omega * r
+son
+
+// ============================================================================
+// DİNAMİK / DYNAMICS (Newton's Laws)
+// ============================================================================
+
+// Newton'un 2. Yasası: F = ma
+// Force from mass and acceleration
+fonksiyon force_from_ma(m: ondalık, a: ondalık) -> ondalık yap
+    dön m * a
+son
+
+// İvme: a = F/m
+// Acceleration from force and mass
+fonksiyon acceleration_from_force(F: ondalık, m: ondalık) -> ondalık yap
+    eğer m == 0.0 ise dön 0.0
+    dön F / m
+son
+
+// Ağırlık: W = mg
+// Weight from mass
+fonksiyon weight(m: ondalık) -> ondalık yap
+    dön m * EARTH_GRAVITY
+son
+
+// Sürtünme kuvveti: f = μN
+// Friction force: f = coefficient × normal force
+fonksiyon friction_force(mu: ondalık, normal_force: ondalık) -> ondalık yap
+    dön mu * normal_force
+son
+
+// Yay kuvveti (Hooke): F = -kx
+// Spring force (Hooke's law)
+fonksiyon spring_force(k: ondalık, x: ondalık) -> ondalık yap
+    dön -k * x
+son
+
+// Basit harmonik osilatör - periyot
+// Simple harmonic oscillator period: T = 2π√(m/k)
+fonksiyon sho_period(m: ondalık, k: ondalık) -> ondalık yap
+    eğer k == 0.0 ise dön 0.0
+    dön 2.0 * math::PI * math::sqrt(m / k)
+son
+
+// Basit harmonik osilatör - frekans
+// SHO frequency: f = 1/T = (1/2π)√(k/m)
+fonksiyon sho_frequency(m: ondalık, k: ondalık) -> ondalık yap
+    eğer m == 0.0 ise dön 0.0
+    dön (1.0 / (2.0 * math::PI)) * math::sqrt(k / m)
+son
+
+// Basit harmonik osilatör - konum
+// x(t) = A cos(ωt + φ)
+fonksiyon sho_position(A: ondalık, omega: ondalık, t: ondalık, phi: ondalık) -> ondalık yap
+    dön A * math::cos(omega * t + phi)
+son
+
+// Basit harmonik osilatör - hız
+// v(t) = -Aω sin(ωt + φ)
+fonksiyon sho_velocity(A: ondalık, omega: ondalık, t: ondalık, phi: ondalık) -> ondalık yap
+    dön -A * omega * math::sin(omega * t + phi)
+son
+
+// Sarkacın periyodu (küçük açılar için)
+// Pendulum period: T = 2π√(L/g)
+fonksiyon pendulum_period(L: ondalık) -> ondalık yap
+    dön 2.0 * math::PI * math::sqrt(L / EARTH_GRAVITY)
+son
+
+// ============================================================================
+// MOMENTUM VE ÇARPIŞMA / MOMENTUM AND COLLISION
+// ============================================================================
+
+// Momentum: p = mv
+fonksiyon momentum(m: ondalık, v: ondalık) -> ondalık yap
+    dön m * v
+son
+
+// İmpuls: J = Δp = FΔt
+fonksiyon impulse_from_force(F: ondalık, dt: ondalık) -> ondalık yap
+    dön F * dt
+son
+
+// Elastik çarpışma (1D) - final hızlar
+// Elastic collision in 1D
+// v₁' = ((m₁-m₂)v₁ + 2m₂v₂) / (m₁+m₂)
+// v₂' = ((m₂-m₁)v₂ + 2m₁v₁) / (m₁+m₂)
+fonksiyon elastic_collision_1d(m1: ondalık, v1: ondalık, m2: ondalık, v2: ondalık) -> (ondalık, ondalık) yap
+    değişken m_toplam = m1 + m2
+    eğer m_toplam == 0.0 ise dön (0.0, 0.0)
+    
+    değişken v1_final = ((m1 - m2) * v1 + 2.0 * m2 * v2) / m_toplam
+    değişken v2_final = ((m2 - m1) * v2 + 2.0 * m1 * v1) / m_toplam
+    
+    dön (v1_final, v2_final)
+son
+
+// Tam esnek olmayan çarpışma (yapışkan)
+// Completely inelastic collision (objects stick)
+// v' = (m₁v₁ + m₂v₂) / (m₁ + m₂)
+fonksiyon inelastic_collision_1d(m1: ondalık, v1: ondalık, m2: ondalık, v2: ondalık) -> ondalık yap
+    değişken m_toplam = m1 + m2
+    eğer m_toplam == 0.0 ise dön 0.0
+    dön (m1*v1 + m2*v2) / m_toplam
+son
+
+// Geri tepme hızı (recoil velocity)
+// m₁v₁ + m₂v₂ = 0 → v₁ = -m₂v₂/m₁
+fonksiyon recoil_velocity(m_projectile: ondalık, v_projectile: ondalık, m_object: ondalık) -> ondalık yap
+    eğer m_object == 0.0 ise dön 0.0
+    dön -(m_projectile * v_projectile) / m_object
+son
+
+// ============================================================================
+// ENERJİ / ENERGY
+// ============================================================================
+
+// Kinetik enerji: KE = ½mv²
+fonksiyon kinetic_energy(m: ondalık, v: ondalık) -> ondalık yap
+    dön 0.5 * m * v * v
+son
+
+// Potansiyel enerji (yerçekimi): PE = mgh
+fonksiyon potential_energy_gravity(m: ondalık, h: ondalık) -> ondalık yap
+    dön m * EARTH_GRAVITY * h
+son
+
+// Yay potansiyel enerjisi: PE = ½kx²
+fonksiyon potential_energy_spring(k: ondalık, x: ondalık) -> ondalık yap
+    dön 0.5 * k * x * x
+son
+
+// Toplam mekanik enerji
+fonksiyon mechanical_energy(KE: ondalık, PE: ondalık) -> ondalık yap
+    dön KE + PE
+son
+
+// Güç: P = W/t = Fv
+fonksiyon power_from_force(F: ondalık, v: ondalık) -> ondalık yap
+    dön F * v
+son
+
+fonksiyon power_from_work(W: ondalık, t: ondalık) -> ondalık yap
+    eğer t == 0.0 ise dön 0.0
+    dön W / t
+son
+
+// İş: W = Fd (kuvvet ve yer değiştirme paralel)
+fonksiyon work_parallel(F: ondalık, d: ondalık) -> ondalık yap
+    dön F * d
+son
+
+// İş (açılı): W = Fd cos(θ)
+fonksiyon work_angle(F: ondalık, d: ondalık, açı_derece: ondalık) -> ondalık yap
+    değişken açı_rad = math::deg2rad(açı_derece)
+    dön F * d * math::cos(açı_rad)
+son
+
+// ============================================================================
+// DÖN ME DİNAMİĞİ / ROTATIONAL DYNAMICS
+// ============================================================================
+
+// Tork: τ = rF sin(θ) - basit hali τ = rF (dik kuvvet)
+// Torque: τ = r × F
+fonksiyon torque(r: ondalık, F: ondalık) -> ondalık yap
+    dön r * F
+son
+
+// Açısal momentum: L = Iω
+fonksiyon angular_momentum(I: ondalık, omega: ondalık) -> ondalık yap
+    dön I * omega
+son
+
+// Dönme kinetik enerjisi: KE_rot = ½Iω²
+fonksiyon rotational_kinetic_energy(I: ondalık, omega: ondalık) -> ondalık yap
+    dön 0.5 * I * omega * omega
+son
+
+// Atalet momenti - nokta kütle: I = mr²
+fonksiyon moment_of_inertia_point(m: ondalık, r: ondalık) -> ondalık yap
+    dön m * r * r
+son
+
+// Atalet momenti - katı silindir (eksen merkez): I = ½mr²
+fonksiyon moment_of_inertia_solid_cylinder(m: ondalık, r: ondalık) -> ondalık yap
+    dön 0.5 * m * r * r
+son
+
+// Atalet momenti - ince halka: I = mr²
+fonksiyon moment_of_inertia_thin_ring(m: ondalık, r: ondalık) -> ondalık yap
+    dön m * r * r
+son
+
+// Atalet momenti - katı küre (eksen merkez): I = (2/5)mr²
+fonksiyon moment_of_inertia_solid_sphere(m: ondalık, r: ondalık) -> ondalık yap
+    dön (2.0 / 5.0) * m * r * r
+son
+
+// Atalet momenti - ince çubuk (eksen merkez): I = (1/12)ml²
+fonksiyon moment_of_inertia_thin_rod_center(m: ondalık, L: ondalık) -> ondalık yap
+    dön (1.0 / 12.0) * m * L * L
+son
+
+// ============================================================================
+// GRAVİTASYON / GRAVITATION
+// ============================================================================
+
+// Newton'un evrensel çekim yasası
+// Universal gravitation: F = G(m₁m₂)/r²
+fonksiyon gravitational_force(m1: ondalık, m2: ondalık, r: ondalık) -> ondalık yap
+    eğer r == 0.0 ise dön 0.0
+    dön math::GRAVITATIONAL * (m1 * m2) / (r * r)
+son
+
+// Gravitasyonel potansiyel enerji: U = -Gm₁m₂/r
+fonksiyon gravitational_potential_energy(m1: ondalık, m2: ondalık, r: ondalık) -> ondalık yap
+    eğer r == 0.0 ise dön 0.0
+    dön -math::GRAVITATIONAL * (m1 * m2) / r
+son
+
+// Yörünge hızı (dairesel): v = √(GM/r)
+fonksiyon orbital_velocity(M: ondalık, r: ondalık) -> ondalık yap
+    eğer r == 0.0 ise dön 0.0
+    dön math::sqrt((math::GRAVITATIONAL * M) / r)
+son
+
+// Kaçış hızı: v_esc = √(2GM/r)
+fonksiyon escape_velocity(M: ondalık, r: ondalık) -> ondalık yap
+    eğer r == 0.0 ise dön 0.0
+    dön math::sqrt((2.0 * math::GRAVITATIONAL * M) / r)
+son
+
+// Kepler'in 3. Yasası: T² = (4π²/GM)r³
+// Orbital period from radius
+fonksiyon orbital_period(M: ondalık, r: ondalık) -> ondalık yap
+    eğer M == 0.0 ise dön 0.0
+    değişken k = (4.0 * math::PI * math::PI) / (math::GRAVITATIONAL * M)
+    dön math::sqrt(k * r * r * r)
+son
+
+// Dünya yüzeyindeki kaçış hızı
+fonksiyon earth_escape_velocity() -> ondalık yap
+    dön escape_velocity(EARTH_MASS, EARTH_RADIUS)
+son
+
+// ============================================================================
+// ELEKTROMAN YETİZMA / ELECTROMAGNETISM
+// ============================================================================
+
+// Coulomb yasası: F = k(q₁q₂)/r²
+// Coulomb's law
+fonksiyon coulomb_force(q1: ondalık, q2: ondalık, r: ondalık) -> ondalık yap
+    eğer r == 0.0 ise dön 0.0
+    dön COULOMB_CONSTANT * (q1 * q2) / (r * r)
+son
+
+// Elektrik alan: E = F/q = kQ/r²
+// Electric field strength
+fonksiyon electric_field(Q: ondalık, r: ondalık) -> ondalık yap
+    eğer r == 0.0 ise dön 0.0
+    dön COULOMB_CONSTANT * Q / (r * r)
+son
+
+// Elektrik potansiyel: V = kQ/r
+fonksiyon electric_potential(Q: ondalık, r: ondalık) -> ondalık yap
+    eğer r == 0.0 ise dön 0.0
+    dön COULOMB_CONSTANT * Q / r
+son
+
+// Kapasitör enerjisi: U = ½CV²
+fonksiyon capacitor_energy(C: ondalık, V: ondalık) -> ondalık yap
+    dön 0.5 * C * V * V
+son
+
+// Ohm yasası: V = IR
+fonksiyon ohms_law_voltage(I: ondalık, R: ondalık) -> ondalık yap
+    dön I * R
+son
+
+fonksiyon ohms_law_current(V: ondalık, R: ondalık) -> ondalık yap
+    eğer R == 0.0 ise dön 0.0
+    dön V / R
+son
+
+fonksiyon ohms_law_resistance(V: ondalık, I: ondalık) -> ondalık yap
+    eğer I == 0.0 ise dön 0.0
+    dön V / I
+son
+
+// Elektrik gücü: P = VI = I²R = V²/R
+fonksiyon electric_power_VI(V: ondalık, I: ondalık) -> ondalık yap
+    dön V * I
+son
+
+fonksiyon electric_power_I2R(I: ondalık, R: ondalık) -> ondalık yap
+    dön I * I * R
+son
+
+fonksiyon electric_power_V2R(V: ondalık, R: ondalık) -> ondalık yap
+    eğer R == 0.0 ise dön 0.0
+    dön (V * V) / R
+son
+
+// Manyetik kuvvet (Lorentz): F = qvB sin(θ)
+fonksiyon magnetic_force_lorentz(q: ondalık, v: ondalık, B: ondalık, açı_derece: ondalık) -> ondalık yap
+    değişken açı_rad = math::deg2rad(açı_derece)
+    dön q * v * B * math::sin(açı_rad)
+son
+
+// ============================================================================
+// TERMODİNAMİK / THERMODYNAMICS
+// ============================================================================
+
+// İdeal gaz yasası: PV = nRT
+// Pressure from ideal gas law
+fonksiyon ideal_gas_pressure(n: ondalık, T: ondalık, V: ondalık) -> ondalık yap
+    eğer V == 0.0 ise dön 0.0
+    dön (n * math::GAS_CONSTANT * T) / V
+son
+
+// Volume from ideal gas law
+fonksiyon ideal_gas_volume(n: ondalık, T: ondalık, P: ondalık) -> ondalık yap
+    eğer P == 0.0 ise dön 0.0
+    dön (n * math::GAS_CONSTANT * T) / P
+son
+
+// Temperature from ideal gas law
+fonksiyon ideal_gas_temperature(P: ondalık, V: ondalık, n: ondalık) -> ondalık yap
+    eğer n == 0.0 ise dön 0.0
+    dön (P * V) / (n * math::GAS_CONSTANT)
+son
+
+// Kinetik teori - ortalama hız: v_rms = √(3RT/M)
+// Root-mean-square velocity
+fonksiyon rms_velocity(T: ondalık, M_molar: ondalık) -> ondalık yap
+    eğer M_molar == 0.0 ise dön 0.0
+    dön math::sqrt((3.0 * math::GAS_CONSTANT * T) / M_molar)
+son
+
+// Isı enerjisi: Q = mcΔT
+// Heat energy
+fonksiyon heat_energy(m: ondalık, c: ondalık, dT: ondalık) -> ondalık yap
+    dön m * c * dT
+son
+
+// Latent ısı: Q = mL
+fonksiyon latent_heat(m: ondalık, L: ondalık) -> ondalık yap
+    dön m * L
+son
+
+// Stefan-Boltzmann yasası: P = σAT⁴
+// Radiated power
+fonksiyon stefan_boltzmann_power(A: ondalık, T: ondalık) -> ondalık yap
+    dön STEFAN_BOLTZMANN * A * T * T * T * T
+son
+
+// Wien'in yer değiştirme yasası: λ_max = b/T
+// Peak wavelength
+fonksiyon wien_peak_wavelength(T: ondalık) -> ondalık yap
+    eğer T == 0.0 ise dön 0.0
+    dön WIEN_DISPLACEMENT / T
+son
+
+// Carnot verimliliği: η = 1 - T_c/T_h
+// Carnot efficiency
+fonksiyon carnot_efficiency(T_hot: ondalık, T_cold: ondalık) -> ondalık yap
+    eğer T_hot == 0.0 ise dön 0.0
+    dön 1.0 - (T_cold / T_hot)
+son
+
+// ============================================================================
+// DALGA VE OPTİK / WAVES AND OPTICS
+// ============================================================================
+
+// Dalga denklemi: v = fλ
+// Wave velocity
+fonksiyon wave_velocity(f: ondalık, lambda: ondalık) -> ondalık yap
+    dön f * lambda
+son
+
+// Frekans hesaplama
+fonksiyon wave_frequency(v: ondalık, lambda: ondalık) -> ondalık yap
+    eğer lambda == 0.0 ise dön 0.0
+    dön v / lambda
+son
+
+// Dalga boyu hesaplama
+fonksiyon wave_wavelength(v: ondalık, f: ondalık) -> ondalık yap
+    eğer f == 0.0 ise dön 0.0
+    dön v / f
+son
+
+// Açısal frekans: ω = 2πf
+fonksiyon angular_frequency(f: ondalık) -> ondalık yap
+    dön 2.0 * math::PI * f
+son
+
+// Dalga sayısı: k = 2π/λ
+fonksiyon wave_number(lambda: ondalık) -> ondalık yap
+    eğer lambda == 0.0 ise dön 0.0
+    dön (2.0 * math::PI) / lambda
+son
+
+// Doppler kayması (klasik): f' = f(v ± v_o)/(v ∓ v_s)
+// Doppler effect (observer approaching source)
+fonksiyon doppler_shift_approaching(f: ondalık, v_sound: ondalık, v_observer: ondalık, v_source: ondalık) -> ondalık yap
+    değişken payda = v_sound - v_source
+    eğer payda == 0.0 ise dön 0.0
+    dön f * (v_sound + v_observer) / payda
+son
+
+// Snell yasası: n₁ sin(θ₁) = n₂ sin(θ₂)
+// Refraction angle (Snell's law)
+fonksiyon snell_refraction_angle(n1: ondalık, theta1_derece: ondalık, n2: ondalık) -> ondalık yap
+    eğer n2 == 0.0 ise dön 0.0
+    değişken theta1_rad = math::deg2rad(theta1_derece)
+    değişken sin_theta2 = (n1 * math::sin(theta1_rad)) / n2
+    
+    // Tam yansıma kontrolü
+    eğer sin_theta2 > 1.0 ise dön -1.0  // Total internal reflection
+    
+    değişken theta2_rad = math::asin(sin_theta2)
+    dön math::rad2deg(theta2_rad)
+son
+
+// Kritik açı (tam yansıma): θ_c = arcsin(n₂/n₁)
+fonksiyon critical_angle(n1: ondalık, n2: ondalık) -> ondalık yap
+    eğer n1 == 0.0 ise dön 0.0
+    değişken oran = n2 / n1
+    eğer oran > 1.0 ise dön -1.0  // No critical angle
+    dön math::rad2deg(math::asin(oran))
+son
+
+// Mercek denklemi: 1/f = 1/s_o + 1/s_i
+// Lens equation - image distance
+fonksiyon lens_image_distance(f: ondalık, s_object: ondalık) -> ondalık yap
+    eğer f == 0.0 ise dön 0.0
+    eğer s_object == f ise dön 0.0  // At focal point
+    dön (f * s_object) / (s_object - f)
+son
+
+// Büyütme: m = -s_i/s_o = h_i/h_o
+fonksiyon lens_magnification(s_image: ondalık, s_object: ondalık) -> ondalık yap
+    eğer s_object == 0.0 ise dön 0.0
+    dön -s_image / s_object
+son
+
+// ============================================================================
+// AKIŞKANLAR / FLUID MECHANICS
+// ============================================================================
+
+// Basınç: P = F/A
+fonksiyon pressure_from_force(F: ondalık, A: ondalık) -> ondalık yap
+    eğer A == 0.0 ise dön 0.0
+    dön F / A
+son
+
+// Hidrostatik basınç: P = ρgh
+// Hydrostatic pressure
+fonksiyon hydrostatic_pressure(rho: ondalık, h: ondalık) -> ondalık yap
+    dön rho * EARTH_GRAVITY * h
+son
+
+// Kaldırma kuvveti (Archimedes): F_b = ρVg
+// Buoyant force
+fonksiyon buoyant_force(rho_fluid: ondalık, V: ondalık) -> ondalık yap
+    dön rho_fluid * V * EARTH_GRAVITY
+son
+
+// Süreklilik denklemi: A₁v₁ = A₂v₂
+// Continuity equation
+fonksiyon continuity_velocity(A1: ondalık, v1: ondalık, A2: ondalık) -> ondalık yap
+    eğer A2 == 0.0 ise dön 0.0
+    dön (A1 * v1) / A2
+son
+
+// Bernoulli denklemi (basitleştirilmiş): P + ½ρv² + ρgh = sabit
+// Pressure from Bernoulli (horizontal flow)
+fonksiyon bernoulli_pressure(rho: ondalık, v: ondalık) -> ondalık yap
+    dön 0.5 * rho * v * v
+son
+
+// ============================================================================
+// BİRİM DÖNÜŞÜMLERİ / UNIT CONVERSIONS
+// ============================================================================
+
+// Enerji
+fonksiyon joule_to_calorie(J: ondalık) -> ondalık yap
+    dön J / 4.184
+son
+
+fonksiyon calorie_to_joule(cal: ondalık) -> ondalık yap
+    dön cal * 4.184
+son
+
+fonksiyon joule_to_kwh(J: ondalık) -> ondalık yap
+    dön J / 3600000.0
+son
+
+fonksiyon electronvolt_to_joule(eV: ondalık) -> ondalık yap
+    dön eV * ELECTRON_CHARGE
+son
+
+// Güç
+fonksiyon watt_to_horsepower(W: ondalık) -> ondalık yap
+    dön W / 745.7
+son
+
+fonksiyon horsepower_to_watt(hp: ondalık) -> ondalık yap
+    dön hp * 745.7
+son
+
+// Basınç
+fonksiyon pascal_to_atm(Pa: ondalık) -> ondalık yap
+    dön Pa / ATMOSPHERE_PRESSURE
+son
+
+fonksiyon atm_to_pascal(atm: ondalık) -> ondalık yap
+    dön atm * ATMOSPHERE_PRESSURE
+son
+
+fonksiyon pascal_to_bar(Pa: ondalık) -> ondalık yap
+    dön Pa / 100000.0
+son
+
+// Sıcaklık
+fonksiyon celsius_to_kelvin(C: ondalık) -> ondalık yap
+    dön C + 273.15
+son
+
+fonksiyon kelvin_to_celsius(K: ondalık) -> ondalık yap
+    dön K - 273.15
+son
+
+fonksiyon celsius_to_fahrenheit(C: ondalık) -> ondalık yap
+    dön C * 9.0/5.0 + 32.0
+son
+
+fonksiyon fahrenheit_to_celsius(F: ondalık) -> ondalık yap
+    dön (F - 32.0) * 5.0/9.0
+son
+
+// ============================================================================
+// English Versions / İngilizce Alias'lar
+// ============================================================================
+
+function velocity_const_accel(v0: float, a: float, t: float) -> float do
+    return velocity_constant_accel(v0, a, t)
+end
+
+function projectile_max_h(v0: float, angle_deg: float) -> float do
+    return projectile_max_height(v0, angle_deg)
+end
+
+function escape_vel(M: float, r: float) -> float do
+    return escape_velocity(M, r)
+end
+
+function electric_pow_VI(V: float, I: float) -> float do
+    return electric_power_VI(V, I)
+end
+
+// ============================================================================
+// SONUÇ / CONCLUSION
+// ============================================================================
+// Bu modül klasik mekanik, elektromanyetizma, termodinamik ve dalgalar
+// konularında üniversite seviyesinde fizik kütüphanesi sağlar.
+//
+// This module provides university-level physics library covering classical
+// mechanics, electromagnetism, thermodynamics, and waves.
+//
+// Gelecek eklenmeler / Future additions:
+//   • Kuantum mekanik sabitleri ve formülleri
+//   • Relativistik mekanik
+//   • Rigid body collision detection (rapier benzeri)
+//   • Constraint solver (joints, springs)
+//   • Molecular dynamics
+//   • Computational fluid dynamics (CFD) basics
+// ============================================================================

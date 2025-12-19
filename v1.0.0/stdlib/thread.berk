@@ -1,0 +1,611 @@
+//! # Thread Module
+//!
+//! Advanced threading and concurrency library.
+//!
+//! Gelişmiş iş parçacığı ve eşzamanlılık kütüphanesi.
+//!
+//! ## Features / Özellikler
+//!
+//! - **Thread creation**: Spawn, join, detach / İş parçacığı oluşturma
+//! - **Thread pool**: Work-stealing scheduler / İş çalınan zamanlayıcı
+//! - **Channels**: mpsc, mpmc, oneshot / Kanallar
+//! - **Synchronization**: Mutex, RwLock, Semaphore / Senkronizasyon
+//! - **Atomics**: Lock-free primitives / Kilitlemesiz atomik işlemler
+//! - **Condition variables**: Wait, notify / Koşul değişkenleri
+//! - **Barriers & Latches**: Synchronization points / Senkronizasyon noktaları
+//!
+//! ## Example / Örnek
+//!
+//! ```berk
+//! kullan thread
+//!
+//! değişken t = thread.spawn(fonksiyon() yap
+//!     io.println("İş parçacığında")
+//! son)
+//! thread.join(t)
+//! ```
+//!
+//! Backend: Rust std::thread + crossbeam
+
+modül thread
+
+kullan result
+kullan time
+
+// ============================================================================
+// THREAD CREATION & MANAGEMENT
+// ============================================================================
+
+tip Thread = yapı yap
+    id: tamsayı,
+    name: Seçenek[yazı],
+    handle: tamsayı  // Opaque handle
+son
+
+// Spawn thread with closure
+@native
+fonksiyon spawn[T](func: fonksiyon() -> T) -> Thread
+
+// Spawn with name
+@native
+fonksiyon spawn_named[T](name: yazı, func: fonksiyon() -> T) -> Thread
+
+// Wait for thread to finish (join)
+@native
+fonksiyon join[T](thread: Thread) -> Sonuç[T, yazı]
+
+// Current thread ID
+@native
+fonksiyon current_id() -> tamsayı
+
+// Current thread
+@native
+fonksiyon current() -> Thread
+
+// Sleep current thread
+fonksiyon sleep(dur: time::Duration) -> boş
+yap
+    time::sleep(dur)
+son
+
+// Yield execution to other threads
+@native
+fonksiyon yield_now() -> boş
+
+// Check if thread is finished
+@native
+fonksiyon is_finished(thread: Thread) -> mantıksal
+
+// Detach thread (don't wait for completion)
+@native
+fonksiyon detach(thread: Thread) -> boş
+
+// ============================================================================
+// THREAD POOL (Work-Stealing Scheduler)
+// ============================================================================
+
+tip ThreadPool = yapı yap
+    workers: liste[Thread],
+    queue: WorkQueue,
+    max_threads: tamsayı,
+    active_count: tamsayı
+son
+
+tip WorkQueue = yapı yap
+    tasks: liste[Task],
+    lock: Mutex
+son
+
+tip Task = yapı yap
+    id: tamsayı,
+    func: fonksiyon() -> herhangi
+son
+
+// Create thread pool
+@native
+fonksiyon pool_new(num_threads: tamsayı) -> ThreadPool
+
+// Create pool with CPU count threads
+fonksiyon pool_cpu_count() -> ThreadPool
+yap
+    kullan sys
+    değişken count = sys::cpu_threads()
+    dön pool_new(count)
+son
+
+// Submit task to pool
+@native
+fonksiyon pool_execute[T](pool: ThreadPool, func: fonksiyon() -> T) -> PoolHandle[T]
+
+tip PoolHandle[T] = yapı yap
+    task_id: tamsayı,
+    completed: mantıksal
+son
+
+// Wait for task completion
+@native
+fonksiyon pool_wait[T](handle: PoolHandle[T]) -> Sonuç[T, yazı]
+
+// Wait for all tasks
+@native
+fonksiyon pool_join(pool: ThreadPool) -> Sonuç[boş, yazı]
+
+// Shutdown pool gracefully
+@native
+fonksiyon pool_shutdown(pool: ThreadPool) -> Sonuç[boş, yazı]
+
+// Active thread count
+fonksiyon pool_active(pool: ThreadPool) -> tamsayı
+yap
+    dön pool.active_count
+son
+
+// ============================================================================
+// MUTEX (Mutual Exclusion Lock)
+// ============================================================================
+
+tip Mutex[T] = yapı yap
+    data: T,
+    lock_handle: tamsayı,
+    poisoned: mantıksal
+son
+
+tip MutexGuard[T] = yapı yap
+    mutex: Mutex[T],
+    locked: mantıksal
+son
+
+// Create mutex
+fonksiyon mutex_new[T](data: T) -> Mutex[T]
+yap
+    dön Mutex[T] yap
+        data: data,
+        lock_handle: 0,  // @native will initialize
+        poisoned: yanlış
+    son
+son
+
+// Lock mutex (blocking)
+@native
+fonksiyon mutex_lock[T](mutex: Mutex[T]) -> Sonuç[MutexGuard[T], yazı]
+
+// Try lock (non-blocking)
+@native
+fonksiyon mutex_try_lock[T](mutex: Mutex[T]) -> Seçenek[MutexGuard[T]]
+
+// Unlock mutex
+@native
+fonksiyon mutex_unlock[T](guard: MutexGuard[T]) -> boş
+
+// Is locked
+@native
+fonksiyon mutex_is_locked[T](mutex: Mutex[T]) -> mantıksal
+
+// ============================================================================
+// RWLOCK (Read-Write Lock)
+// ============================================================================
+
+tip RwLock[T] = yapı yap
+    data: T,
+    lock_handle: tamsayı,
+    readers: tamsayı,
+    writer: mantıksal
+son
+
+tip RwLockReadGuard[T] = yapı yap
+    lock: RwLock[T]
+son
+
+tip RwLockWriteGuard[T] = yapı yap
+    lock: RwLock[T]
+son
+
+// Create RwLock
+fonksiyon rwlock_new[T](data: T) -> RwLock[T]
+yap
+    dön RwLock[T] yap
+        data: data,
+        lock_handle: 0,
+        readers: 0,
+        writer: yanlış
+    son
+son
+
+// Read lock (multiple readers allowed)
+@native
+fonksiyon rwlock_read[T](lock: RwLock[T]) -> Sonuç[RwLockReadGuard[T], yazı]
+
+// Write lock (exclusive)
+@native
+fonksiyon rwlock_write[T](lock: RwLock[T]) -> Sonuç[RwLockWriteGuard[T], yazı]
+
+// Try read lock
+@native
+fonksiyon rwlock_try_read[T](lock: RwLock[T]) -> Seçenek[RwLockReadGuard[T]]
+
+// Try write lock
+@native
+fonksiyon rwlock_try_write[T](lock: RwLock[T]) -> Seçenek[RwLockWriteGuard[T]]
+
+// ============================================================================
+// SEMAPHORE
+// ============================================================================
+
+tip Semaphore = yapı yap
+    count: tamsayı,
+    max_count: tamsayı,
+    handle: tamsayı
+son
+
+// Create semaphore
+@native
+fonksiyon semaphore_new(initial: tamsayı, max: tamsayı) -> Semaphore
+
+// Acquire (P operation, decrement)
+@native
+fonksiyon semaphore_acquire(sem: Semaphore) -> Sonuç[boş, yazı]
+
+// Try acquire (non-blocking)
+@native
+fonksiyon semaphore_try_acquire(sem: Semaphore) -> mantıksal
+
+// Release (V operation, increment)
+@native
+fonksiyon semaphore_release(sem: Semaphore) -> Sonuç[boş, yazı]
+
+// Current count
+@native
+fonksiyon semaphore_count(sem: Semaphore) -> tamsayı
+
+// ============================================================================
+// CHANNELS (Message Passing)
+// ============================================================================
+
+// MPSC (Multi-Producer Single-Consumer)
+tip Sender[T] = yapı yap
+    channel_id: tamsayı
+son
+
+tip Receiver[T] = yapı yap
+    channel_id: tamsayı
+son
+
+// Create bounded channel (fixed capacity)
+@native
+fonksiyon channel_bounded[T](capacity: tamsayı) -> (Sender[T], Receiver[T])
+
+// Create unbounded channel
+@native
+fonksiyon channel_unbounded[T]() -> (Sender[T], Receiver[T])
+
+// Send message (blocking if full)
+@native
+fonksiyon channel_send[T](sender: Sender[T], value: T) -> Sonuç[boş, yazı]
+
+// Try send (non-blocking)
+@native
+fonksiyon channel_try_send[T](sender: Sender[T], value: T) -> Sonuç[mantıksal, yazı]
+
+// Receive message (blocking)
+@native
+fonksiyon channel_recv[T](receiver: Receiver[T]) -> Sonuç[T, yazı]
+
+// Try receive (non-blocking)
+@native
+fonksiyon channel_try_recv[T](receiver: Receiver[T]) -> Seçenek[T]
+
+// Receive with timeout
+@native
+fonksiyon channel_recv_timeout[T](receiver: Receiver[T], timeout: time::Duration) -> Sonuç[Seçenek[T], yazı]
+
+// Channel length
+@native
+fonksiyon channel_len[T](receiver: Receiver[T]) -> tamsayı
+
+// Is channel empty
+@native
+fonksiyon channel_is_empty[T](receiver: Receiver[T]) -> mantıksal
+
+// Clone sender (multiple producers)
+@native
+fonksiyon sender_clone[T](sender: Sender[T]) -> Sender[T]
+
+// ============================================================================
+// ONESHOT CHANNEL (Single Message)
+// ============================================================================
+
+tip OneshotSender[T] = yapı yap
+    channel_id: tamsayı,
+    consumed: mantıksal
+son
+
+tip OneshotReceiver[T] = yapı yap
+    channel_id: tamsayı
+son
+
+// Create oneshot channel
+@native
+fonksiyon oneshot[T]() -> (OneshotSender[T], OneshotReceiver[T])
+
+// Send (consumes sender)
+@native
+fonksiyon oneshot_send[T](sender: OneshotSender[T], value: T) -> Sonuç[boş, yazı]
+
+// Receive (blocking)
+@native
+fonksiyon oneshot_recv[T](receiver: OneshotReceiver[T]) -> Sonuç[T, yazı]
+
+// ============================================================================
+// ATOMIC OPERATIONS (Lock-Free)
+// ============================================================================
+
+tip AtomicInt = yapı yap
+    value: tamsayı,
+    ptr: tamsayı  // Aligned pointer
+son
+
+tip AtomicBool = yapı yap
+    value: mantıksal,
+    ptr: tamsayı
+son
+
+// Create atomic int
+@native
+fonksiyon atomic_int(initial: tamsayı) -> AtomicInt
+
+// Load (acquire semantics)
+@native
+fonksiyon atomic_load(atomic: AtomicInt) -> tamsayı
+
+// Store (release semantics)
+@native
+fonksiyon atomic_store(atomic: AtomicInt, value: tamsayı) -> boş
+
+// Fetch and add (returns old value)
+@native
+fonksiyon atomic_fetch_add(atomic: AtomicInt, delta: tamsayı) -> tamsayı
+
+// Fetch and sub
+@native
+fonksiyon atomic_fetch_sub(atomic: AtomicInt, delta: tamsayı) -> tamsayı
+
+// Compare and swap (returns old value)
+@native
+fonksiyon atomic_compare_exchange(atomic: AtomicInt, expected: tamsayı, new: tamsayı) -> (mantıksal, tamsayı)
+
+// Swap (exchange)
+@native
+fonksiyon atomic_swap(atomic: AtomicInt, new: tamsayı) -> tamsayı
+
+// Increment (returns new value)
+fonksiyon atomic_increment(atomic: AtomicInt) -> tamsayı
+yap
+    dön atomic_fetch_add(atomic, 1) + 1
+son
+
+// Decrement
+fonksiyon atomic_decrement(atomic: AtomicInt) -> tamsayı
+yap
+    dön atomic_fetch_sub(atomic, 1) - 1
+son
+
+// Atomic bool operations
+@native
+fonksiyon atomic_bool(initial: mantıksal) -> AtomicBool
+
+@native
+fonksiyon atomic_bool_load(atomic: AtomicBool) -> mantıksal
+
+@native
+fonksiyon atomic_bool_store(atomic: AtomicBool, value: mantıksal) -> boş
+
+@native
+fonksiyon atomic_bool_swap(atomic: AtomicBool, new: mantıksal) -> mantıksal
+
+// ============================================================================
+// CONDITION VARIABLE
+// ============================================================================
+
+tip CondVar = yapı yap
+    handle: tamsayı,
+    waiters: tamsayı
+son
+
+// Create condition variable
+@native
+fonksiyon condvar_new() -> CondVar
+
+// Wait (atomically releases mutex and waits)
+@native
+fonksiyon condvar_wait[T](condvar: CondVar, guard: MutexGuard[T]) -> Sonuç[MutexGuard[T], yazı]
+
+// Wait with timeout
+@native
+fonksiyon condvar_wait_timeout[T](condvar: CondVar, guard: MutexGuard[T], timeout: time::Duration) -> Sonuç[(MutexGuard[T], mantıksal), yazı]
+
+// Notify one waiting thread
+@native
+fonksiyon condvar_notify_one(condvar: CondVar) -> boş
+
+// Notify all waiting threads
+@native
+fonksiyon condvar_notify_all(condvar: CondVar) -> boş
+
+// ============================================================================
+// BARRIER
+// ============================================================================
+
+tip Barrier = yapı yap
+    count: tamsayı,
+    current: tamsayı,
+    generation: tamsayı,
+    handle: tamsayı
+son
+
+// Create barrier for N threads
+@native
+fonksiyon barrier_new(count: tamsayı) -> Barrier
+
+// Wait at barrier (blocks until all threads arrive)
+@native
+fonksiyon barrier_wait(barrier: Barrier) -> BarrierWaitResult
+
+tip BarrierWaitResult = yapı yap
+    is_leader: mantıksal  // True for last thread to arrive
+son
+
+// ============================================================================
+// LATCH (One-time Synchronization)
+// ============================================================================
+
+tip Latch = yapı yap
+    count: tamsayı,
+    handle: tamsayı
+son
+
+// Create latch with count
+@native
+fonksiyon latch_new(count: tamsayı) -> Latch
+
+// Count down
+@native
+fonksiyon latch_count_down(latch: Latch) -> boş
+
+// Wait for count to reach zero
+@native
+fonksiyon latch_wait(latch: Latch) -> boş
+
+// Current count
+@native
+fonksiyon latch_count(latch: Latch) -> tamsayı
+
+// ============================================================================
+// ONCE (Run Once Initialization)
+// ============================================================================
+
+tip Once = yapı yap
+    done: AtomicBool,
+    lock: Mutex[boş]
+son
+
+// Create Once
+fonksiyon once_new() -> Once
+yap
+    dön Once yap
+        done: atomic_bool(yanlış),
+        lock: mutex_new(boş)
+    son
+son
+
+// Call function once
+@native
+fonksiyon once_call(once: Once, func: fonksiyon() -> boş) -> boş
+
+// ============================================================================
+// THREAD-LOCAL STORAGE
+// ============================================================================
+
+tip ThreadLocal[T] = yapı yap
+    key: tamsayı,
+    initial: fonksiyon() -> T
+son
+
+// Create thread-local variable
+@native
+fonksiyon thread_local[T](initial: fonksiyon() -> T) -> ThreadLocal[T]
+
+// Get thread-local value
+@native
+fonksiyon tl_get[T](tl: ThreadLocal[T]) -> T
+
+// Set thread-local value
+@native
+fonksiyon tl_set[T](tl: ThreadLocal[T], value: T) -> boş
+
+// ============================================================================
+// SPINLOCK (Busy-Wait Lock)
+// ============================================================================
+
+tip Spinlock = yapı yap
+    locked: AtomicBool
+son
+
+// Create spinlock
+fonksiyon spinlock_new() -> Spinlock
+yap
+    dön Spinlock yap
+        locked: atomic_bool(yanlış)
+    son
+son
+
+// Lock (busy-wait)
+@native
+fonksiyon spinlock_lock(lock: Spinlock) -> boş
+
+// Try lock
+@native
+fonksiyon spinlock_try_lock(lock: Spinlock) -> mantıksal
+
+// Unlock
+@native
+fonksiyon spinlock_unlock(lock: Spinlock) -> boş
+
+// ============================================================================
+// THREAD AFFINITY & PRIORITY
+// ============================================================================
+
+// Set thread CPU affinity
+@native
+fonksiyon set_affinity(thread: Thread, cpu_ids: liste[tamsayı]) -> Sonuç[boş, yazı]
+
+// Set thread priority (-20 to +19, lower = higher priority)
+@native
+fonksiyon set_priority(thread: Thread, priority: tamsayı) -> Sonuç[boş, yazı]
+
+// Get CPU count
+@native
+fonksiyon cpu_count() -> tamsayı
+
+// ============================================================================
+// SCOPED THREADS (Lifetime-Bound)
+// ============================================================================
+
+tip Scope = yapı yap
+    threads: liste[Thread]
+son
+
+// Create scoped thread group
+@native
+fonksiyon scope_new() -> Scope
+
+// Spawn thread in scope
+@native
+fonksiyon scope_spawn[T](scope: Scope, func: fonksiyon() -> T) -> boş
+
+// Wait for all scoped threads
+@native
+fonksiyon scope_join(scope: Scope) -> Sonuç[boş, yazı]
+
+// ============================================================================
+// UTILITIES
+// ============================================================================
+
+// Park current thread (blocks until unpark)
+@native
+fonksiyon park() -> boş
+
+// Unpark thread
+@native
+fonksiyon unpark(thread: Thread) -> boş
+
+// Park with timeout
+@native
+fonksiyon park_timeout(timeout: time::Duration) -> boş
+
+// Get available parallelism (CPU cores)
+fonksiyon available_parallelism() -> tamsayı
+yap
+    dön cpu_count()
+son
+
+son  // modül thread

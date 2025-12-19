@@ -1,0 +1,137 @@
+/// ═══════════════════════════════════════════════════════════════════════════
+/// BERK Kutuphane Demo - IO Modulu
+/// Giris/Cikis islemleri
+/// ═══════════════════════════════════════════════════════════════════════════
+
+kullan std::io
+
+yaz("============================================================")
+yaz("         Kutuphane Demo: IO (Giris/Cikis) Modulu            ")
+yaz("============================================================")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 1: Temel Cikti
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 1: Temel Cikti ---")
+
+yaz("   Merhaba Dunya!")
+yaz("   Bu bir BERK cikti ornegi")
+yaz("   Turkce karakterler: isçöügü ISÇÖÜGÜ")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 2: Degisken Yazdirma
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 2: Degisken Yazdirma ---")
+
+değişken ad = "BERK"
+değişken versiyon = 1
+değişken ondalik = 3.14159
+değişken durum = doğru
+
+yaz("   String: ", ad)
+yaz("   Tamsayi: ", versiyon)
+yaz("   Ondalik: ", ondalik)
+yaz("   Boolean: ", durum)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 3: Coklu Parametre
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 3: Coklu Parametre ---")
+
+değişken x = 10
+değişken y = 20
+değişken z = x + y
+
+yaz("   x = ", x, ", y = ", y, ", toplam = ", z)
+
+değişken isim = "Ahmet"
+değişken yas = 25
+yaz("   Isim: ", isim, " - Yas: ", yas)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 4: Formatli Cikti
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 4: Formatli Cikti ---")
+
+yaz("   ┌────────────────────────────────┐")
+yaz("   │     BERK Programlama Dili      │")
+yaz("   │     Versiyon: 1.0.0            │")
+yaz("   │     Lisans: MIT                │")
+yaz("   └────────────────────────────────┘")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 5: Tablo Ciktisi
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 5: Tablo Ciktisi ---")
+
+yaz("   ┌──────┬─────────────┬──────────┐")
+yaz("   │  No  │  Urun       │  Fiyat   │")
+yaz("   ├──────┼─────────────┼──────────┤")
+yaz("   │  1   │  Elma       │  5.50    │")
+yaz("   │  2   │  Armut      │  7.25    │")
+yaz("   │  3   │  Muz        │  12.00   │")
+yaz("   └──────┴─────────────┴──────────┘")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 6: Log Seviyeleri
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 6: Log Seviyeleri ---")
+
+fonksiyon log_info(mesaj: metin) yap
+    yaz("   [INFO] ", mesaj)
+son
+
+fonksiyon log_warn(mesaj: metin) yap
+    yaz("   [WARN] ", mesaj)
+son
+
+fonksiyon log_error(mesaj: metin) yap
+    yaz("   [ERROR] ", mesaj)
+son
+
+fonksiyon log_debug(mesaj: metin) yap
+    yaz("   [DEBUG] ", mesaj)
+son
+
+log_info("Uygulama baslatildi")
+log_debug("Konfigürasyon yukleniyor...")
+log_warn("Eski API kullaniliyor")
+log_error("Baglanti hatasi!")
+log_info("Uygulama sonlandirildi")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 7: Ilerleme Gosterimi
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 7: Ilerleme Gosterimi ---")
+
+fonksiyon ilerleme_ciz(yuzde: tamsayı) yap
+    değişken dolu = yuzde / 10
+    değişken bos = 10 - dolu
+    
+    eğer yuzde == 25 ise
+        yaz("   [##........] %25")
+    son
+    eğer yuzde == 50 ise
+        yaz("   [#####.....] %50")
+    son
+    eğer yuzde == 75 ise
+        yaz("   [#######...] %75")
+    son
+    eğer yuzde == 100 ise
+        yaz("   [##########] %100 Tamamlandi!")
+    son
+son
+
+ilerleme_ciz(25)
+ilerleme_ciz(50)
+ilerleme_ciz(75)
+ilerleme_ciz(100)
+
+yaz("\n[OK] IO kutuphane demosu tamamlandi!")

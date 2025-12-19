@@ -1,0 +1,528 @@
+// RP2040 SPI Module
+// Hardware Abstraction Layer for RP2040's SPI peripheral
+// 
+// RP2040 Features:
+// - 2x SPI interfaces (SPI0, SPI1)
+// - Master or slave operation
+// - Up to 62.5 Mbps (system clock / 2)
+// - Programmable clock rate and format
+// - 4 to 16 bits per data frame
+// - Motorola SPI, Texas Instruments SSI, National Semiconductor Microwire
+// - 8 x 16-bit TX/RX FIFOs
+// - DMA support
+//
+// Pico SDK: hardware_spi
+
+extern "C" {
+    // Pico SDK SPI Functions
+    fn spi_init(spi: *void, baudrate: u32) -> u32;
+    fn spi_deinit(spi: *void);
+    fn spi_set_baudrate(spi: *void, baudrate: u32) -> u32;
+    fn spi_set_format(spi: *void, data_bits: u32, cpol: u32, cpha: u32, order: u32);
+    fn spi_set_slave(spi: *void, slave: bool);
+    
+    fn spi_is_writable(spi: *void) -> bool;
+    fn spi_is_readable(spi: *void) -> bool;
+    fn spi_write_blocking(spi: *void, src: *const u8, len: u32) -> i32;
+    fn spi_read_blocking(spi: *void, repeated_tx: u8, dst: *u8, len: u32) -> i32;
+    fn spi_write_read_blocking(spi: *void, src: *const u8, dst: *u8, len: u32) -> i32;
+    
+    fn spi_write16_blocking(spi: *void, src: *const u16, len: u32) -> i32;
+    fn spi_read16_blocking(spi: *void, repeated_tx: u16, dst: *u16, len: u32) -> i32;
+    fn spi_write16_read16_blocking(spi: *void, src: *const u16, dst: *u16, len: u32) -> i32;
+    
+    fn spi_get_dreq(spi: *void, is_tx: bool) -> u32;
+    
+    // GPIO Functions
+    fn gpio_set_function(gpio: u32, fn_code: u32);
+    fn gpio_put(gpio: u32, value: bool);
+    fn gpio_set_dir(gpio: u32, out: bool);
+    fn gpio_init(gpio: u32);
+    
+    // Hardware addresses
+    const SPI0_BASE: *void = 0x4003C000 as *void;
+    const SPI1_BASE: *void = 0x40040000 as *void;
+}
+
+// GPIO Function codes for SPI
+const GPIO_FUNC_SPI: u32 = 1;
+
+// Default SPI0 pins for Pico board
+const PICO_DEFAULT_SPI_SCK_PIN: u32 = 18;   // GP18 (SPI0 SCK)
+const PICO_DEFAULT_SPI_MOSI_PIN: u32 = 19;  // GP19 (SPI0 TX/MOSI)
+const PICO_DEFAULT_SPI_MISO_PIN: u32 = 16;  // GP16 (SPI0 RX/MISO)
+const PICO_DEFAULT_SPI_CS_PIN: u32 = 17;    // GP17 (SPI0 CSn)
+
+// SPI1 alternative pins
+const SPI1_SCK_PIN: u32 = 10;   // GP10
+const SPI1_MOSI_PIN: u32 = 11;  // GP11
+const SPI1_MISO_PIN: u32 = 12;  // GP12
+const SPI1_CS_PIN: u32 = 13;    // GP13
+
+// SPI mode definitions (CPOL/CPHA)
+const SPI_MODE_0: (u32, u32) = (0, 0);  // CPOL=0, CPHA=0
+const SPI_MODE_1: (u32, u32) = (0, 1);  // CPOL=0, CPHA=1
+const SPI_MODE_2: (u32, u32) = (1, 0);  // CPOL=1, CPHA=0
+const SPI_MODE_3: (u32, u32) = (1, 1);  // CPOL=1, CPHA=1
+
+// Bit order
+const SPI_MSB_FIRST: u32 = 0;
+const SPI_LSB_FIRST: u32 = 1;
+
+// Standard SPI speeds
+const SPI_SPEED_125KHZ: u32 = 125000;
+const SPI_SPEED_1MHZ: u32 = 1000000;
+const SPI_SPEED_10MHZ: u32 = 10000000;
+const SPI_SPEED_20MHZ: u32 = 20000000;
+const SPI_SPEED_MAX: u32 = 62500000;  // 62.5 MHz
+
+pub struct SPI {
+    port: *void,
+    sck_pin: u32,
+    mosi_pin: u32,
+    miso_pin: u32,
+    cs_pin: u32,
+    baudrate: u32,
+    data_bits: u32,
+}
+
+pub struct SPIConfig {
+    pub baudrate: u32,
+    pub data_bits: u32,
+    pub cpol: u32,
+    pub cpha: u32,
+    pub bit_order: u32,
+}
+
+impl SPIConfig {
+    // Default configuration: Mode 0, 8-bit, MSB first, 1 MHz
+    pub fn default() -> SPIConfig {
+        SPIConfig {
+            baudrate: SPI_SPEED_1MHZ,
+            data_bits: 8,
+            cpol: 0,
+            cpha: 0,
+            bit_order: SPI_MSB_FIRST,
+        }
+    }
+    
+    // Create config with specific mode
+    pub fn with_mode(mode: (u32, u32)) -> SPIConfig {
+        SPIConfig {
+            baudrate: SPI_SPEED_1MHZ,
+            data_bits: 8,
+            cpol: mode.0,
+            cpha: mode.1,
+            bit_order: SPI_MSB_FIRST,
+        }
+    }
+}
+
+impl SPI {
+    // Initialize SPI with default pins and configuration
+    pub fn new_default(port: u8) -> SPI {
+        Self::new_with_config(port, &SPIConfig::default())
+    }
+    
+    // Initialize SPI with default pins and custom baudrate
+    pub fn new(port: u8, baudrate: u32) -> SPI {
+        let mut config = SPIConfig::default();
+        config.baudrate = baudrate;
+        Self::new_with_config(port, &config)
+    }
+    
+    // Initialize SPI with custom pins
+    pub fn new_with_pins(
+        port: u8,
+        sck: u32,
+        mosi: u32,
+        miso: u32,
+        cs: u32,
+        baudrate: u32
+    ) -> SPI {
+        let spi_base = if port == 0 { SPI0_BASE } else { SPI1_BASE };
+        
+        // Initialize SPI peripheral
+        unsafe {
+            let actual_rate = spi_init(spi_base, baudrate);
+            
+            // Configure GPIO pins for SPI function
+            gpio_set_function(sck, GPIO_FUNC_SPI);
+            gpio_set_function(mosi, GPIO_FUNC_SPI);
+            gpio_set_function(miso, GPIO_FUNC_SPI);
+            
+            // CS pin as manual GPIO output
+            gpio_init(cs);
+            gpio_set_dir(cs, true);  // Output
+            gpio_put(cs, true);       // High (inactive)
+        }
+        
+        SPI {
+            port: spi_base,
+            sck_pin: sck,
+            mosi_pin: mosi,
+            miso_pin: miso,
+            cs_pin: cs,
+            baudrate,
+            data_bits: 8,
+        }
+    }
+    
+    // Initialize SPI with full configuration
+    pub fn new_with_config(port: u8, config: &SPIConfig) -> SPI {
+        let spi_base = if port == 0 { SPI0_BASE } else { SPI1_BASE };
+        let (sck, mosi, miso, cs) = if port == 0 {
+            (PICO_DEFAULT_SPI_SCK_PIN, PICO_DEFAULT_SPI_MOSI_PIN,
+             PICO_DEFAULT_SPI_MISO_PIN, PICO_DEFAULT_SPI_CS_PIN)
+        } else {
+            (SPI1_SCK_PIN, SPI1_MOSI_PIN, SPI1_MISO_PIN, SPI1_CS_PIN)
+        };
+        
+        // Initialize SPI peripheral
+        unsafe {
+            let actual_rate = spi_init(spi_base, config.baudrate);
+            
+            // Set format
+            spi_set_format(spi_base, config.data_bits, config.cpol, 
+                          config.cpha, config.bit_order);
+            
+            // Configure GPIO pins
+            gpio_set_function(sck, GPIO_FUNC_SPI);
+            gpio_set_function(mosi, GPIO_FUNC_SPI);
+            gpio_set_function(miso, GPIO_FUNC_SPI);
+            
+            // CS pin as manual GPIO
+            gpio_init(cs);
+            gpio_set_dir(cs, true);
+            gpio_put(cs, true);
+        }
+        
+        SPI {
+            port: spi_base,
+            sck_pin: sck,
+            mosi_pin: mosi,
+            miso_pin: miso,
+            cs_pin: cs,
+            baudrate: config.baudrate,
+            data_bits: config.data_bits,
+        }
+    }
+    
+    // Change SPI baudrate
+    pub fn set_baudrate(&mut self, baudrate: u32) -> u32 {
+        unsafe {
+            let actual = spi_set_baudrate(self.port, baudrate);
+            self.baudrate = actual;
+            actual
+        }
+    }
+    
+    // Set SPI format
+    pub fn set_format(&mut self, data_bits: u32, cpol: u32, cpha: u32, bit_order: u32) {
+        unsafe {
+            spi_set_format(self.port, data_bits, cpol, cpha, bit_order);
+        }
+        self.data_bits = data_bits;
+    }
+    
+    // Set SPI mode (0-3)
+    pub fn set_mode(&mut self, mode: (u32, u32)) {
+        unsafe {
+            spi_set_format(self.port, self.data_bits, mode.0, mode.1, SPI_MSB_FIRST);
+        }
+    }
+    
+    // Chip select control
+    pub fn select(&self) {
+        unsafe {
+            gpio_put(self.cs_pin, false);  // Active low
+        }
+    }
+    
+    pub fn deselect(&self) {
+        unsafe {
+            gpio_put(self.cs_pin, true);   // Inactive high
+        }
+    }
+    
+    // Check if TX is ready
+    pub fn is_writable(&self) -> bool {
+        unsafe {
+            spi_is_writable(self.port)
+        }
+    }
+    
+    // Check if RX has data
+    pub fn is_readable(&self) -> bool {
+        unsafe {
+            spi_is_readable(self.port)
+        }
+    }
+    
+    // Write data (blocking)
+    pub fn write(&self, data: &[u8]) -> i32 {
+        unsafe {
+            spi_write_blocking(
+                self.port,
+                data.as_ptr() as *const u8,
+                data.len() as u32
+            )
+        }
+    }
+    
+    // Read data (blocking, sends repeated_tx during read)
+    pub fn read(&self, buffer: &mut [u8], repeated_tx: u8) -> i32 {
+        unsafe {
+            spi_read_blocking(
+                self.port,
+                repeated_tx,
+                buffer.as_mut_ptr() as *u8,
+                buffer.len() as u32
+            )
+        }
+    }
+    
+    // Write and read simultaneously (full-duplex)
+    pub fn transfer(&self, tx_data: &[u8], rx_buffer: &mut [u8]) -> i32 {
+        let len = if tx_data.len() < rx_buffer.len() {
+            tx_data.len()
+        } else {
+            rx_buffer.len()
+        };
+        
+        unsafe {
+            spi_write_read_blocking(
+                self.port,
+                tx_data.as_ptr() as *const u8,
+                rx_buffer.as_mut_ptr() as *u8,
+                len as u32
+            )
+        }
+    }
+    
+    // Write 16-bit data (blocking)
+    pub fn write16(&self, data: &[u16]) -> i32 {
+        unsafe {
+            spi_write16_blocking(
+                self.port,
+                data.as_ptr() as *const u16,
+                data.len() as u32
+            )
+        }
+    }
+    
+    // Read 16-bit data (blocking)
+    pub fn read16(&self, buffer: &mut [u16], repeated_tx: u16) -> i32 {
+        unsafe {
+            spi_read16_blocking(
+                self.port,
+                repeated_tx,
+                buffer.as_mut_ptr() as *u16,
+                buffer.len() as u32
+            )
+        }
+    }
+    
+    // Transfer 16-bit data
+    pub fn transfer16(&self, tx_data: &[u16], rx_buffer: &mut [u16]) -> i32 {
+        let len = if tx_data.len() < rx_buffer.len() {
+            tx_data.len()
+        } else {
+            rx_buffer.len()
+        };
+        
+        unsafe {
+            spi_write16_read16_blocking(
+                self.port,
+                tx_data.as_ptr() as *const u16,
+                rx_buffer.as_mut_ptr() as *u16,
+                len as u32
+            )
+        }
+    }
+    
+    // Write single byte with CS control
+    pub fn write_byte(&self, byte: u8) {
+        self.select();
+        let data: [u8; 1] = [byte];
+        self.write(&data);
+        self.deselect();
+    }
+    
+    // Read single byte with CS control
+    pub fn read_byte(&self) -> u8 {
+        self.select();
+        let mut buffer: [u8; 1] = [0];
+        self.read(&mut buffer, 0xFF);
+        self.deselect();
+        buffer[0]
+    }
+    
+    // Transfer single byte with CS control
+    pub fn transfer_byte(&self, byte: u8) -> u8 {
+        self.select();
+        let tx: [u8; 1] = [byte];
+        let mut rx: [u8; 1] = [0];
+        self.transfer(&tx, &mut rx);
+        self.deselect();
+        rx[0]
+    }
+    
+    // Get DMA DREQ number for TX
+    pub fn get_tx_dreq(&self) -> u32 {
+        unsafe {
+            spi_get_dreq(self.port, true)
+        }
+    }
+    
+    // Get DMA DREQ number for RX
+    pub fn get_rx_dreq(&self) -> u32 {
+        unsafe {
+            spi_get_dreq(self.port, false)
+        }
+    }
+    
+    // Deinitialize SPI
+    pub fn deinit(&self) {
+        unsafe {
+            spi_deinit(self.port);
+        }
+    }
+}
+
+// Helper function: Initialize SPI0 with default settings
+pub fn init_spi0_default() -> SPI {
+    SPI::new_default(0)
+}
+
+// Helper function: Initialize SPI1 with default settings
+pub fn init_spi1_default() -> SPI {
+    SPI::new_default(1)
+}
+
+// Example: SD Card communication
+pub fn example_sd_card() {
+    let spi = SPI::new(0, SPI_SPEED_1MHZ);
+    
+    spi.select();
+    
+    // Send CMD0 (GO_IDLE_STATE)
+    let cmd: [u8; 6] = [
+        0x40,        // Command 0
+        0x00, 0x00, 0x00, 0x00,  // Argument
+        0x95,        // CRC
+    ];
+    
+    spi.write(&cmd);
+    
+    // Read response
+    let mut response: [u8; 1] = [0xFF];
+    for _ in 0..10 {
+        spi.read(&mut response, 0xFF);
+        if response[0] != 0xFF {
+            break;
+        }
+    }
+    
+    spi.deselect();
+    
+    if response[0] == 0x01 {
+        println!("SD Card in idle state");
+    }
+}
+
+// Example: MAX7219 LED Matrix Display
+pub fn example_max7219() {
+    let spi = SPI::new(0, SPI_SPEED_10MHZ);
+    
+    // Initialize MAX7219
+    let init_cmds: [(u8, u8); 4] = [
+        (0x09, 0x00),  // No decode
+        (0x0A, 0x08),  // Intensity (medium)
+        (0x0B, 0x07),  // Scan limit (8 digits)
+        (0x0C, 0x01),  // Normal operation
+    ];
+    
+    for (reg, value) in init_cmds {
+        spi.select();
+        let data: [u8; 2] = [reg, value];
+        spi.write(&data);
+        spi.deselect();
+    }
+    
+    // Display pattern on row 1
+    spi.select();
+    let pattern: [u8; 2] = [0x01, 0b10101010];
+    spi.write(&pattern);
+    spi.deselect();
+}
+
+// Example: W5500 Ethernet Controller
+pub fn example_w5500_ethernet() {
+    let mut spi = SPI::new(0, SPI_SPEED_10MHZ);
+    spi.set_mode(SPI_MODE_0);
+    
+    // Read chip version
+    spi.select();
+    
+    let read_cmd: [u8; 3] = [
+        0x00, 0x39,  // Address (version register)
+        0x00,        // Read mode
+    ];
+    
+    spi.write(&read_cmd);
+    
+    let mut version: [u8; 1] = [0];
+    spi.read(&mut version, 0x00);
+    
+    spi.deselect();
+    
+    if version[0] == 0x04 {
+        println!("W5500 detected, version: 0x{:02X}", version[0]);
+    }
+}
+
+// Example: NRF24L01+ Radio Module
+pub fn example_nrf24l01() {
+    let spi = SPI::new(0, SPI_SPEED_1MHZ);
+    
+    // Read CONFIG register (0x00)
+    spi.select();
+    
+    let cmd: [u8; 1] = [0x00];  // R_REGISTER + CONFIG
+    spi.write(&cmd);
+    
+    let mut config: [u8; 1] = [0];
+    spi.read(&mut config, 0xFF);
+    
+    spi.deselect();
+    
+    println!("NRF24L01+ CONFIG: 0x{:02X}", config[0]);
+    
+    // Write CONFIG register (power up)
+    spi.select();
+    let write_cmd: [u8; 2] = [0x20, 0x0E];  // W_REGISTER + CONFIG, PWR_UP
+    spi.write(&write_cmd);
+    spi.deselect();
+}
+
+// Example: High-speed data transfer (DMA-ready)
+pub fn example_high_speed_transfer() {
+    let spi = SPI::new(0, SPI_SPEED_MAX);  // 62.5 MHz
+    
+    // Large data buffer
+    let mut tx_buffer: [u8; 1024] = [0; 1024];
+    let mut rx_buffer: [u8; 1024] = [0; 1024];
+    
+    // Fill with test pattern
+    for i in 0..1024 {
+        tx_buffer[i] = (i & 0xFF) as u8;
+    }
+    
+    // Transfer data
+    spi.select();
+    spi.transfer(&tx_buffer, &mut rx_buffer);
+    spi.deselect();
+    
+    println!("Transferred {} bytes at {} baud", 1024, SPI_SPEED_MAX);
+}

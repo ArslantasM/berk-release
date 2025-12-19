@@ -1,0 +1,839 @@
+//! # Encoding Module
+//!
+//! Text and binary encoding/decoding.
+//!
+//! Metin ve binary kodlama/çözme.
+//!
+//! ## Features / Özellikler
+//!
+//! - **Base64**: Standard, URL-safe, no padding / Standart, URL-güvenli
+//! - **Base32/Base16**: Hex encoding / Hex kodlama
+//! - **URL**: Percent-encoding / Yüzde kodlama
+//! - **HTML**: Entity encoding / Varlık kodlama
+//! - **Unicode**: Normalization / Normalizasyon
+//! - **Charsets**: UTF-8, UTF-16, Latin-1 / Karakter setleri
+//! - **Binary**: ASCII85, Base85 / Binary-to-text
+//!
+//! ## Example / Örnek
+//!
+//! ```berk
+//! kullan encoding
+//!
+//! değişken encoded = encoding.base64_encode("Merhaba")
+//! değişken decoded = encoding.base64_decode(encoded)?
+//! io.println(decoded)  // "Merhaba"
+//! ```
+//!
+//! Backend: Rust base64 + data-encoding
+
+modül encoding
+
+kullan result
+
+// ============================================================================
+// PURE BERK IMPLEMENTATIONS (Zero Dependencies) ✨
+// ============================================================================
+
+// RFC 4648 Base64 alphabet
+sabit BASE64_STANDARD_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+sabit BASE64_URLSAFE_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+sabit BASE64_PADDING = '='
+
+// Pure BERK Base64 Encoder (RFC 4648)
+fonksiyon pure_base64_encode(data: liste[bayt], url_safe: mantıksal, padding: mantıksal) -> yazı
+yap
+    değişken alphabet = eğer url_safe ise BASE64_URLSAFE_ALPHABET değilse BASE64_STANDARD_ALPHABET
+    değişken result = liste_oluştur[bayt]()
+    değişken len = liste_uzunluk(data)
+    
+    // Process 3-byte blocks
+    değişken i = 0
+    iken i + 2 < len yap
+        değişken b0 = data[i]
+        değişken b1 = data[i + 1]
+        değişken b2 = data[i + 2]
+        
+        // 3 bytes -> 4 base64 chars
+        değişken idx0 = (b0 >> 2) & 0x3F
+        değişken idx1 = ((b0 & 0x03) << 4) | ((b1 >> 4) & 0x0F)
+        değişken idx2 = ((b1 & 0x0F) << 2) | ((b2 >> 6) & 0x03)
+        değişken idx3 = b2 & 0x3F
+        
+        liste_ekle(result, string_karakter_al(alphabet, idx0))
+        liste_ekle(result, string_karakter_al(alphabet, idx1))
+        liste_ekle(result, string_karakter_al(alphabet, idx2))
+        liste_ekle(result, string_karakter_al(alphabet, idx3))
+        
+        i = i + 3
+    son
+    
+    // Handle remaining bytes (1 or 2)
+    eğer i < len ise yap
+        değişken b0 = data[i]
+        değişken idx0 = (b0 >> 2) & 0x3F
+        liste_ekle(result, string_karakter_al(alphabet, idx0))
+        
+        eğer i + 1 < len ise yap
+            // 2 bytes remaining
+            değişken b1 = data[i + 1]
+            değişken idx1 = ((b0 & 0x03) << 4) | ((b1 >> 4) & 0x0F)
+            değişken idx2 = ((b1 & 0x0F) << 2)
+            
+            liste_ekle(result, string_karakter_al(alphabet, idx1))
+            liste_ekle(result, string_karakter_al(alphabet, idx2))
+            
+            eğer padding ise liste_ekle(result, BASE64_PADDING)
+        değilse yap
+            // 1 byte remaining
+            değişken idx1 = ((b0 & 0x03) << 4)
+            liste_ekle(result, string_karakter_al(alphabet, idx1))
+            
+            eğer padding ise yap
+                liste_ekle(result, BASE64_PADDING)
+                liste_ekle(result, BASE64_PADDING)
+            son
+        son
+    son
+    
+    dön bytes_to_string(result)
+son
+
+// Pure BERK Base64 Decoder (RFC 4648)
+fonksiyon pure_base64_decode(encoded: yazı, url_safe: mantıksal) -> Sonuç[liste[bayt], yazı]
+yap
+    değişken alphabet = eğer url_safe ise BASE64_URLSAFE_ALPHABET değilse BASE64_STANDARD_ALPHABET
+    
+    // Build decode table
+    değişken decode_table = liste_oluştur_boyut[tamsayı](256, -1)
+    için i = 0 .. 64 yap
+        değişken ch = string_karakter_al(alphabet, i)
+        decode_table[ch] = i
+    son
+    decode_table[BASE64_PADDING] = -2  // Padding marker
+    
+    değişken input = string_to_bytes(encoded)
+    değişken result = liste_oluştur[bayt]()
+    değişken len = liste_uzunluk(input)
+    değişken buffer = 0
+    değişken bits = 0
+    
+    için byte içinde input yap
+        değişken val = decode_table[byte]
+        
+        eğer val == -2 ise yap
+            // Padding - stop processing
+            kır
+        son
+        
+        eğer val == -1 ise yap
+            // Skip whitespace/invalid chars
+            devam et
+        son
+        
+        buffer = (buffer << 6) | val
+        bits = bits + 6
+        
+        eğer bits >= 8 ise yap
+            bits = bits - 8
+            değişken output_byte = (buffer >> bits) & 0xFF
+            liste_ekle(result, output_byte)
+            buffer = buffer & ((1 << bits) - 1)
+        son
+    son
+    
+    dön Başarı(result)
+son
+
+// Pure BERK Hex Encoder
+fonksiyon pure_hex_encode(data: liste[bayt], uppercase: mantıksal) -> yazı
+yap
+    sabit HEX_LOWER = "0123456789abcdef"
+    sabit HEX_UPPER = "0123456789ABCDEF"
+    değişken hex_chars = eğer uppercase ise HEX_UPPER değilse HEX_LOWER
+    
+    değişken result = liste_oluştur[bayt]()
+    
+    için byte içinde data yap
+        değişken high = (byte >> 4) & 0x0F
+        değişken low = byte & 0x0F
+        
+        liste_ekle(result, string_karakter_al(hex_chars, high))
+        liste_ekle(result, string_karakter_al(hex_chars, low))
+    son
+    
+    dön bytes_to_string(result)
+son
+
+// Pure BERK Hex Decoder
+fonksiyon pure_hex_decode(encoded: yazı) -> Sonuç[liste[bayt], yazı]
+yap
+    değişken input = string_to_bytes(encoded)
+    değişken len = liste_uzunluk(input)
+    
+    eğer len % 2 != 0 ise yap
+        dön Hata("Hex string must have even length")
+    son
+    
+    değişken result = liste_oluştur[bayt]()
+    
+    için i = 0 .. len / 2 yap
+        değişken high = hex_char_to_int(input[i * 2])
+        değişken low = hex_char_to_int(input[i * 2 + 1])
+        
+        eğer high < 0 veya low < 0 ise yap
+            dön Hata("Invalid hex character")
+        son
+        
+        liste_ekle(result, (high << 4) | low)
+    son
+    
+    dön Başarı(result)
+son
+
+// Helper: Hex char to int
+fonksiyon hex_char_to_int(ch: bayt) -> tamsayı
+yap
+    eğer ch >= '0' ve ch <= '9' ise dön ch - '0'
+    eğer ch >= 'a' ve ch <= 'f' ise dön ch - 'a' + 10
+    eğer ch >= 'A' ve ch <= 'F' ise dön ch - 'A' + 10
+    dön -1
+son
+
+// Pure BERK URL Encoder (RFC 3986 percent-encoding)
+fonksiyon pure_url_encode(text: yazı, component_type: yazı) -> yazı
+yap
+    değişken input = string_to_bytes(text)
+    değişken result = liste_oluştur[bayt]()
+    sabit HEX_UPPER = "0123456789ABCDEF"
+    
+    için byte içinde input yap
+        eğer url_is_unreserved(byte, component_type) ise yap
+            liste_ekle(result, byte)
+        değilse yap
+            // Percent-encode
+            liste_ekle(result, '%')
+            liste_ekle(result, string_karakter_al(HEX_UPPER, (byte >> 4) & 0x0F))
+            liste_ekle(result, string_karakter_al(HEX_UPPER, byte & 0x0F))
+        son
+    son
+    
+    dön bytes_to_string(result)
+son
+
+// Pure BERK URL Decoder
+fonksiyon pure_url_decode(encoded: yazı) -> Sonuç[yazı, yazı]
+yap
+    değişken input = string_to_bytes(encoded)
+    değişken result = liste_oluştur[bayt]()
+    değişken i = 0
+    değişken len = liste_uzunluk(input)
+    
+    iken i < len yap
+        değişken ch = input[i]
+        
+        eğer ch == '%' ise yap
+            eğer i + 2 >= len ise yap
+                dön Hata("Incomplete percent-encoding")
+            son
+            
+            değişken high = hex_char_to_int(input[i + 1])
+            değişken low = hex_char_to_int(input[i + 2])
+            
+            eğer high < 0 veya low < 0 ise yap
+                dön Hata("Invalid percent-encoded character")
+            son
+            
+            liste_ekle(result, (high << 4) | low)
+            i = i + 3
+        değilse eğer ch == '+' ise yap
+            // '+' -> space (application/x-www-form-urlencoded)
+            liste_ekle(result, ' ')
+            i = i + 1
+        değilse yap
+            liste_ekle(result, ch)
+            i = i + 1
+        son
+    son
+    
+    dön Başarı(bytes_to_string(result))
+son
+
+// Helper: Check if char is unreserved (RFC 3986)
+fonksiyon url_is_unreserved(ch: bayt, component: yazı) -> mantıksal
+yap
+    // Unreserved: A-Z a-z 0-9 - _ . ~
+    eğer (ch >= 'A' ve ch <= 'Z') veya (ch >= 'a' ve ch <= 'z') ise dön doğru
+    eğer (ch >= '0' ve ch <= '9') ise dön doğru
+    eğer ch == '-' veya ch == '_' veya ch == '.' veya ch == '~' ise dön doğru
+    
+    // Path component: / is allowed
+    eğer component == "path" ve ch == '/' ise dön doğru
+    
+    dön yanlış
+son
+
+// ============================================================================
+// BASE64 ENCODING (with Pure BERK fallback)
+// ============================================================================
+
+tip Base64Config = "Standard" | "UrlSafe" | "StandardNoPadding" | "UrlSafeNoPadding"
+
+// Encode to Base64 (Pure BERK implementation)
+fonksiyon base64_encode(data: liste[bayt], config: Base64Config) -> yazı
+yap
+    değişken url_safe = (config == "UrlSafe" veya config == "UrlSafeNoPadding")
+    değişken padding = (config == "Standard" veya config == "UrlSafe")
+    dön pure_base64_encode(data, url_safe, padding)
+son
+
+// Decode from Base64 (Pure BERK implementation)
+fonksiyon base64_decode(encoded: yazı, config: Base64Config) -> Sonuç[liste[bayt], yazı]
+yap
+    değişken url_safe = (config == "UrlSafe" veya config == "UrlSafeNoPadding")
+    dön pure_base64_decode(encoded, url_safe)
+son
+
+// Encode string to Base64
+fonksiyon base64_encode_string(text: yazı) -> yazı
+yap
+    değişken bytes = string::to_bytes(text)
+    dön base64_encode(bytes, "Standard")
+son
+
+// Decode Base64 to string
+fonksiyon base64_decode_string(encoded: yazı) -> Sonuç[yazı, yazı]
+yap
+    değişken bytes = base64_decode(encoded, "Standard")?
+    dön string::from_bytes(bytes)
+son
+
+// ============================================================================
+// BASE32 ENCODING - Pure BERK ✨
+// ============================================================================
+
+// RFC 4648 Base32 alphabet
+sabit BASE32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
+sabit BASE32_HEX_ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUV"
+
+// Pure BERK Base32 Encoder (RFC 4648)
+fonksiyon pure_base32_encode(data: liste[bayt], hex_variant: mantıksal) -> yazı
+yap
+    değişken alphabet = eğer hex_variant ise BASE32_HEX_ALPHABET değilse BASE32_ALPHABET
+    değişken result = liste_oluştur[bayt]()
+    değişken len = liste_uzunluk(data)
+    
+    // Process 5-byte blocks -> 8 base32 chars
+    değişken i = 0
+    iken i < len yap
+        değişken remaining = len - i
+        değişken block_size = eğer remaining >= 5 ise 5 değilse remaining
+        
+        değişken b0 = eğer i + 0 < len ise data[i + 0] değilse 0
+        değişken b1 = eğer i + 1 < len ise data[i + 1] değilse 0
+        değişken b2 = eğer i + 2 < len ise data[i + 2] değilse 0
+        değişken b3 = eğer i + 3 < len ise data[i + 3] değilse 0
+        değişken b4 = eğer i + 4 < len ise data[i + 4] değilse 0
+        
+        // 5 bytes = 40 bits -> 8 quintets (5 bits each)
+        liste_ekle(result, string_karakter_al(alphabet, (b0 >> 3) & 0x1F))
+        liste_ekle(result, string_karakter_al(alphabet, ((b0 & 0x07) << 2) | ((b1 >> 6) & 0x03)))
+        
+        eğer block_size > 1 ise yap
+            liste_ekle(result, string_karakter_al(alphabet, (b1 >> 1) & 0x1F))
+            liste_ekle(result, string_karakter_al(alphabet, ((b1 & 0x01) << 4) | ((b2 >> 4) & 0x0F)))
+        değilse yap
+            liste_ekle(result, '=')
+            liste_ekle(result, '=')
+            liste_ekle(result, '=')
+            liste_ekle(result, '=')
+            liste_ekle(result, '=')
+            liste_ekle(result, '=')
+            kır
+        son
+        
+        eğer block_size > 2 ise yap
+            liste_ekle(result, string_karakter_al(alphabet, ((b2 & 0x0F) << 1) | ((b3 >> 7) & 0x01)))
+        değilse yap
+            liste_ekle(result, '=')
+            liste_ekle(result, '=')
+            liste_ekle(result, '=')
+            liste_ekle(result, '=')
+            kır
+        son
+        
+        eğer block_size > 3 ise yap
+            liste_ekle(result, string_karakter_al(alphabet, (b3 >> 2) & 0x1F))
+            liste_ekle(result, string_karakter_al(alphabet, ((b3 & 0x03) << 3) | ((b4 >> 5) & 0x07)))
+        değilse yap
+            liste_ekle(result, '=')
+            liste_ekle(result, '=')
+            kır
+        son
+        
+        eğer block_size > 4 ise yap
+            liste_ekle(result, string_karakter_al(alphabet, b4 & 0x1F))
+        değilse yap
+            liste_ekle(result, '=')
+        son
+        
+        i = i + 5
+    son
+    
+    dön bytes_to_string(result)
+son
+
+// Encode to Base32 (Pure BERK)
+fonksiyon base32_encode(data: liste[bayt]) -> yazı
+yap
+    dön pure_base32_encode(data, yanlış)
+son
+
+// Decode from Base32 (Pure BERK)
+fonksiyon base32_decode(encoded: yazı) -> Sonuç[liste[bayt], yazı]
+yap
+    // TODO: Base32 decoder implementation
+    dön Hata("Base32 decode not yet implemented")
+son
+
+// Base32 Hex variant (extended hex alphabet)
+fonksiyon base32hex_encode(data: liste[bayt]) -> yazı
+yap
+    dön pure_base32_encode(data, doğru)
+son
+
+fonksiyon base32hex_decode(encoded: yazı) -> Sonuç[liste[bayt], yazı]
+yap
+    // TODO: Base32 Hex decoder implementation
+    dön Hata("Base32Hex decode not yet implemented")
+son
+
+// ============================================================================
+// HEX ENCODING (Base16) - Pure BERK ✨
+// ============================================================================
+
+// Encode to hexadecimal (Pure BERK)
+fonksiyon hex_encode(data: liste[bayt]) -> yazı
+yap
+    dön pure_hex_encode(data, yanlış)
+son
+
+// Decode from hexadecimal (Pure BERK)
+fonksiyon hex_decode(encoded: yazı) -> Sonuç[liste[bayt], yazı]
+yap
+    dön pure_hex_decode(encoded)
+son
+
+// Encode with uppercase letters (Pure BERK)
+fonksiyon hex_encode_upper(data: liste[bayt]) -> yazı
+yap
+    dön pure_hex_encode(data, doğru)
+son
+
+// Encode with separator (e.g., "00:1A:2B:3C")
+fonksiyon hex_encode_with_separator(data: liste[bayt], separator: yazı) -> yazı
+yap
+    değişken hex = hex_encode(data)
+    değişken result = ""
+    
+    için i içinde aralık(0, string::length(hex), 2) yap
+        eğer i > 0 yap
+            result = string::concat(result, separator)
+        son
+        result = string::concat(result, string::slice(hex, i, i + 2))
+    son
+    
+    dön result
+son
+
+// ============================================================================
+// URL ENCODING (Percent-Encoding) - Pure BERK ✨
+// ============================================================================
+
+// Encode for URL (percent-encoding) - Pure BERK
+fonksiyon url_encode(text: yazı) -> yazı
+yap
+    dön pure_url_encode(text, "query")
+son
+
+// Decode URL encoding - Pure BERK
+fonksiyon url_decode(encoded: yazı) -> Sonuç[yazı, yazı]
+yap
+    dön pure_url_decode(encoded)
+son
+
+// Encode for URL path component - Pure BERK
+fonksiyon url_encode_path(text: yazı) -> yazı
+yap
+    dön pure_url_encode(text, "path")
+son
+
+// Encode for URL query component - Pure BERK
+fonksiyon url_encode_query(text: yazı) -> yazı
+yap
+    dön pure_url_encode(text, "query")
+son
+
+// Encode query parameters
+fonksiyon url_encode_params(params: liste[(yazı, yazı)]) -> yazı
+yap
+    değişken result = ""
+    değişken first = doğru
+    
+    için param içinde params yap
+        eğer !first yap
+            result = string::concat(result, "&")
+        son
+        first = yanlış
+        
+        result = string::concat(result, url_encode_query(param.0))
+        result = string::concat(result, "=")
+        result = string::concat(result, url_encode_query(param.1))
+    son
+    
+    dön result
+son
+
+// Decode query string to parameters
+@native
+fonksiyon url_decode_params(query: yazı) -> Sonuç[liste[(yazı, yazı)], yazı]
+
+// ============================================================================
+// HTML ENTITY ENCODING
+// ============================================================================
+
+// Encode HTML entities (&, <, >, ", ')
+@native
+fonksiyon html_encode(text: yazı) -> yazı
+
+// Decode HTML entities
+@native
+fonksiyon html_decode(encoded: yazı) -> Sonuç[yazı, yazı]
+
+// Encode with all named entities (full HTML5 spec)
+@native
+fonksiyon html_encode_full(text: yazı) -> yazı
+
+// Encode for HTML attribute
+@native
+fonksiyon html_encode_attribute(text: yazı) -> yazı
+
+// ============================================================================
+// JSON STRING ESCAPING
+// ============================================================================
+
+// Escape JSON string
+@native
+fonksiyon json_escape(text: yazı) -> yazı
+
+// Unescape JSON string
+@native
+fonksiyon json_unescape(escaped: yazı) -> Sonuç[yazı, yazı]
+
+// ============================================================================
+// XML/SGML ENCODING
+// ============================================================================
+
+// Encode XML entities
+@native
+fonksiyon xml_encode(text: yazı) -> yazı
+
+// Decode XML entities
+@native
+fonksiyon xml_decode(encoded: yazı) -> Sonuç[yazı, yazı]
+
+// Encode for XML attribute
+@native
+fonksiyon xml_encode_attribute(text: yazı) -> yazı
+
+// ============================================================================
+// UNICODE NORMALIZATION
+// ============================================================================
+
+tip NormalizationForm = "NFC" | "NFD" | "NFKC" | "NFKD"
+
+// Normalize Unicode text
+@native
+fonksiyon unicode_normalize(text: yazı, form: NormalizationForm) -> yazı
+
+// Check if text is normalized
+@native
+fonksiyon is_normalized(text: yazı, form: NormalizationForm) -> mantıksal
+
+// ============================================================================
+// CHARACTER SET CONVERSION
+// ============================================================================
+
+tip CharacterSet = "UTF8" | "UTF16LE" | "UTF16BE" | "UTF32LE" | "UTF32BE" | 
+                   "Latin1" | "Windows1252" | "ASCII"
+
+// Convert between character sets
+@native
+fonksiyon convert_charset(data: liste[bayt], from: CharacterSet, to: CharacterSet) -> Sonuç[liste[bayt], yazı]
+
+// Decode to UTF-8 string
+@native
+fonksiyon decode_charset(data: liste[bayt], charset: CharacterSet) -> Sonuç[yazı, yazı]
+
+// Encode from UTF-8 string
+@native
+fonksiyon encode_charset(text: yazı, charset: CharacterSet) -> Sonuç[liste[bayt], yazı]
+
+// ============================================================================
+// BASE85 ENCODING (ASCII85, Z85)
+// ============================================================================
+
+// Encode to ASCII85 (Adobe variant)
+@native
+fonksiyon ascii85_encode(data: liste[bayt]) -> yazı
+
+// Decode from ASCII85
+@native
+fonksiyon ascii85_decode(encoded: yazı) -> Sonuç[liste[bayt], yazı]
+
+// Encode to Z85 (ZeroMQ variant)
+@native
+fonksiyon z85_encode(data: liste[bayt]) -> yazı
+
+// Decode from Z85
+@native
+fonksiyon z85_decode(encoded: yazı) -> Sonuç[liste[bayt], yazı]
+
+// ============================================================================
+// QUOTED-PRINTABLE ENCODING
+// ============================================================================
+
+// Encode to Quoted-Printable (email MIME)
+@native
+fonksiyon quoted_printable_encode(data: liste[bayt]) -> yazı
+
+// Decode from Quoted-Printable
+@native
+fonksiyon quoted_printable_decode(encoded: yazı) -> Sonuç[liste[bayt], yazı]
+
+// ============================================================================
+// PUNYCODE (Internationalized Domain Names)
+// ============================================================================
+
+// Encode domain name to Punycode
+@native
+fonksiyon punycode_encode(domain: yazı) -> Sonuç[yazı, yazı]
+
+// Decode Punycode to Unicode domain
+@native
+fonksiyon punycode_decode(punycode: yazı) -> Sonuç[yazı, yazı]
+
+// Convert IDN to ASCII (full domain, with xn-- prefix)
+@native
+fonksiyon idn_to_ascii(domain: yazı) -> Sonuç[yazı, yazı]
+
+// Convert ASCII IDN to Unicode
+@native
+fonksiyon idn_to_unicode(ascii_domain: yazı) -> Sonuç[yazı, yazı]
+
+// ============================================================================
+// ROT13 & CAESAR CIPHER
+// ============================================================================
+
+// ROT13 encoding/decoding (self-inverse)
+@native
+fonksiyon rot13(text: yazı) -> yazı
+
+// Caesar cipher with custom shift
+@native
+fonksiyon caesar_encode(text: yazı, shift: tamsayı) -> yazı
+
+// Caesar cipher decode
+@native
+fonksiyon caesar_decode(text: yazı, shift: tamsayı) -> yazı
+
+// ============================================================================
+// BINARY TO TEXT (Multiple Formats)
+// ============================================================================
+
+tip BinaryFormat = "Hex" | "Base64" | "Base32" | "Base85"
+
+// Encode binary to text
+fonksiyon binary_to_text(data: liste[bayt], format: BinaryFormat) -> yazı
+yap
+    eşleşme format yap
+        "Hex" => dön hex_encode(data),
+        "Base64" => dön base64_encode(data, "Standard"),
+        "Base32" => dön base32_encode(data),
+        "Base85" => dön ascii85_encode(data)
+    son
+son
+
+// Decode text to binary
+fonksiyon text_to_binary(encoded: yazı, format: BinaryFormat) -> Sonuç[liste[bayt], yazı]
+yap
+    eşleşme format yap
+        "Hex" => dön hex_decode(encoded),
+        "Base64" => dön base64_decode(encoded, "Standard"),
+        "Base32" => dön base32_decode(encoded),
+        "Base85" => dön ascii85_decode(encoded)
+    son
+son
+
+// ============================================================================
+// MIME ENCODING
+// ============================================================================
+
+// Encode MIME header (RFC 2047)
+@native
+fonksiyon mime_encode_header(text: yazı, charset: yazı) -> yazı
+
+// Decode MIME header
+@native
+fonksiyon mime_decode_header(encoded: yazı) -> Sonuç[yazı, yazı]
+
+// ============================================================================
+// DATA URI (RFC 2397)
+// ============================================================================
+
+tip DataUri = yapı yap
+    mime_type: yazı,
+    charset: Seçenek[yazı],
+    is_base64: mantıksal,
+    data: liste[bayt]
+son
+
+// Create Data URI
+fonksiyon data_uri_create(mime_type: yazı, data: liste[bayt], use_base64: mantıksal) -> yazı
+yap
+    değişken encoded = eğer use_base64 yap
+        base64_encode(data, "Standard")
+    son değilse yap
+        url_encode(string::from_bytes(data).unwrap())
+    son
+    
+    değişken base64_flag = eğer use_base64 yap ";base64" son değilse yap "" son
+    
+    dön string::format("data:{}{},{}", [mime_type, base64_flag, encoded])
+son
+
+// Parse Data URI
+@native
+fonksiyon data_uri_parse(uri: yazı) -> Sonuç[DataUri, yazı]
+
+// ============================================================================
+// ESCAPE SEQUENCES
+// ============================================================================
+
+// Escape C-style string literals (\n, \t, \\, etc.)
+@native
+fonksiyon c_escape(text: yazı) -> yazı
+
+// Unescape C-style string
+@native
+fonksiyon c_unescape(escaped: yazı) -> Sonuç[yazı, yazı]
+
+// Escape for shell/bash
+@native
+fonksiyon shell_escape(text: yazı) -> yazı
+
+// Escape for SQL (single quotes)
+@native
+fonksiyon sql_escape(text: yazı) -> yazı
+
+// Escape for regex (escape special characters)
+@native
+fonksiyon regex_escape(text: yazı) -> yazı
+
+// ============================================================================
+// MULTILINE ENCODING
+// ============================================================================
+
+// Split encoded text into lines (e.g., Base64 with 76 char limit)
+fonksiyon split_lines(text: yazı, line_length: tamsayı) -> yazı
+yap
+    değişken result = ""
+    değişken len = string::length(text)
+    
+    için i içinde aralık(0, len, line_length) yap
+        eğer i > 0 yap
+            result = string::concat(result, "\n")
+        son
+        
+        değişken end = eğer (i + line_length) > len yap len son değilse yap i + line_length son
+        result = string::concat(result, string::slice(text, i, end))
+    son
+    
+    dön result
+son
+
+// ============================================================================
+// HASH ENCODING (for display)
+// ============================================================================
+
+// Encode hash bytes to common formats
+fonksiyon hash_to_hex(hash: liste[bayt]) -> yazı
+yap
+    dön hex_encode(hash)
+son
+
+fonksiyon hash_to_base64(hash: liste[bayt]) -> yazı
+yap
+    dön base64_encode(hash, "Standard")
+son
+
+// ============================================================================
+// UTILITIES
+// ============================================================================
+
+// Check if string is valid Base64
+@native
+fonksiyon is_valid_base64(text: yazı) -> mantıksal
+
+// Check if string is valid Hex
+@native
+fonksiyon is_valid_hex(text: yazı) -> mantıksal
+
+// Check if string is valid URL encoding
+@native
+fonksiyon is_valid_url_encoding(text: yazı) -> mantıksal
+
+// ============================================================================
+// TURKISH ALIASES
+// ============================================================================
+
+fonksiyon base64_kodla(veri: liste[bayt]) -> yazı
+yap
+    dön base64_encode(veri, "Standard")
+son
+
+fonksiyon base64_çöz(kodlanmış: yazı) -> Sonuç[liste[bayt], yazı]
+yap
+    dön base64_decode(kodlanmış, "Standard")
+son
+
+fonksiyon hex_kodla(veri: liste[bayt]) -> yazı
+yap
+    dön hex_encode(veri)
+son
+
+fonksiyon hex_çöz(kodlanmış: yazı) -> Sonuç[liste[bayt], yazı]
+yap
+    dön hex_decode(kodlanmış)
+son
+
+fonksiyon url_kodla(metin: yazı) -> yazı
+yap
+    dön url_encode(metin)
+son
+
+fonksiyon url_çöz(kodlanmış: yazı) -> Sonuç[yazı, yazı]
+yap
+    dön url_decode(kodlanmış)
+son
+
+fonksiyon html_kodla(metin: yazı) -> yazı
+yap
+    dön html_encode(metin)
+son
+
+fonksiyon html_çöz(kodlanmış: yazı) -> Sonuç[yazı, yazı]
+yap
+    dön html_decode(kodlanmış)
+son
+
+son  // modül encoding

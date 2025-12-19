@@ -1,0 +1,267 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// BERK Standard Library - Binary Protocol Module
+// Hardware Bridge Phase HAL 6.0
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Esnek binary protokol framework'ü.
+// Özel cihazlar ve sensörler için konfigüre edilebilir iletişim.
+//
+// Örnek:
+//   kullan std::binproto
+//   olsun proto = binproto::create("arduino")  // veya "modbus_like", "simple"
+//   olsun conn = binproto::open(proto, "COM6", 9600)
+//   binproto::send(conn, 0x01, [0x10, 0x20])
+//   olsun cevap = binproto::receive(conn, 1000)
+//   binproto::close(conn)
+//
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Hazır Protokol Şablonları
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Hazır protokol şablonu oluştur
+/// preset: "standard", "arduino", "modbus_like", "simple", "sensor"
+/// Döner: Protocol ID
+@native("binproto_create_preset")
+dpiş create(preset: Metin) -> Tam
+
+/// Protokol oluştur - Türkçe
+@native("binproto_create_preset")
+dpiş olustur(sablon: Metin) -> Tam
+
+/// Özel protokol tanımla
+/// Döner: Protocol ID
+@native("binproto_create_custom")
+dpiş create_custom(
+    start_byte: Tam,        // Başlangıç byte'ı (ör: 0x02)
+    end_byte: Tam,          // Bitiş byte'ı (ör: 0x03)
+    escape_byte: Tam,       // Escape byte'ı (0 = yok)
+    length_bytes: Tam,      // Uzunluk alanı boyutu (1 veya 2)
+    length_includes_header: Mantık,  // Uzunluk header dahil mi?
+    crc_type: Metin,        // "none", "xor", "sum", "crc16", "crc32"
+    crc_position: Metin     // "before_end", "after_end"
+) -> Tam
+
+/// Özel protokol - Türkçe
+@native("binproto_create_custom")
+dpiş ozel_olustur(
+    baslangic: Tam,
+    bitis: Tam,
+    kacis: Tam,
+    uzunluk_boyut: Tam,
+    uzunluk_header_dahil: Mantık,
+    crc_tipi: Metin,
+    crc_pozisyon: Metin
+) -> Tam
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Bağlantı Yönetimi
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Protokol ile seri port aç
+/// protocol_id: create/create_custom'dan dönen ID
+/// port: Port adı
+/// baud_rate: Baud hızı
+/// Döner: Connection handle
+@native("binproto_open")
+dpiş open(protocol_id: Tam, port: Metin, baud_rate: Tam) -> Tam
+
+/// Protokol aç - Türkçe
+@native("binproto_open")
+dpiş ac(protokol_id: Tam, port: Metin, baud: Tam) -> Tam
+
+/// Gelişmiş port açma
+@native("binproto_open_advanced")
+dpiş open_advanced(protocol_id: Tam, port: Metin, baud_rate: Tam,
+                   data_bits: Tam, parity: Metin, stop_bits: Tam) -> Tam
+
+/// Gelişmiş aç - Türkçe
+@native("binproto_open_advanced")
+dpiş gelismis_ac(protokol_id: Tam, port: Metin, baud: Tam,
+                 veri_bit: Tam, parite: Metin, stop_bit: Tam) -> Tam
+
+/// Bağlantıyı kapat
+@native("binproto_close")
+dpiş close(handle: Tam) -> Mantık
+
+/// Kapat - Türkçe
+@native("binproto_close")
+dpiş kapat(handle: Tam) -> Mantık
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Mesaj Gönderme
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Komut/veri paketi gönder
+/// command: Komut byte'ı
+/// payload: Veri byte dizisi
+@native("binproto_send")
+dpiş send(handle: Tam, command: Tam, payload: Dizi) -> Mantık
+
+/// Gönder - Türkçe
+@native("binproto_send")
+dpiş gonder(handle: Tam, komut: Tam, veri: Dizi) -> Mantık
+
+/// Ham byte dizisi gönder (protokol çerçeveleme olmadan)
+@native("binproto_send_raw")
+dpiş send_raw(handle: Tam, data: Dizi) -> Mantık
+
+/// Ham gönder - Türkçe
+@native("binproto_send_raw")
+dpiş ham_gonder(handle: Tam, veri: Dizi) -> Mantık
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Mesaj Alma
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Paket al
+/// timeout_ms: Zaman aşımı
+/// Döner: {command: Tam, payload: Dizi, valid: Mantık}
+@native("binproto_receive")
+dpiş receive(handle: Tam, timeout_ms: Tam) -> Harita
+
+/// Al - Türkçe
+@native("binproto_receive")
+dpiş al(handle: Tam, zaman_asimi: Tam) -> Harita
+
+/// Ham byte al
+/// count: Okunacak byte sayısı
+/// timeout_ms: Zaman aşımı
+@native("binproto_receive_raw")
+dpiş receive_raw(handle: Tam, count: Tam, timeout_ms: Tam) -> Dizi
+
+/// Ham al - Türkçe
+@native("binproto_receive_raw")
+dpiş ham_al(handle: Tam, adet: Tam, zaman_asimi: Tam) -> Dizi
+
+/// Bekleyen veri var mı?
+@native("binproto_available")
+dpiş available(handle: Tam) -> Tam
+
+/// Bekleyen - Türkçe
+@native("binproto_available")
+dpiş bekleyen(handle: Tam) -> Tam
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Veri Kodlama/Çözme
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Değeri byte dizisine kodla
+/// value: Kodlanacak değer
+/// format: "u8", "u16le", "u16be", "u32le", "u32be", "i8", "i16le", "i16be", 
+///         "i32le", "i32be", "f32le", "f32be"
+@native("binproto_encode_value")
+dpiş encode_value(value: Tam, format: Metin) -> Dizi
+
+/// Değer kodla - Türkçe
+@native("binproto_encode_value")
+dpiş deger_kodla(deger: Tam, format: Metin) -> Dizi
+
+/// Float değeri kodla
+@native("binproto_encode_float")
+dpiş encode_float(value: Ondalık, format: Metin) -> Dizi
+
+/// Float kodla - Türkçe
+@native("binproto_encode_float")
+dpiş ondalik_kodla(deger: Ondalık, format: Metin) -> Dizi
+
+/// Byte dizisini çöz
+/// data: Byte dizisi
+/// format: Veri formatı
+@native("binproto_decode_value")
+dpiş decode_value(data: Dizi, format: Metin) -> Tam
+
+/// Değer çöz - Türkçe
+@native("binproto_decode_value")
+dpiş deger_coz(veri: Dizi, format: Metin) -> Tam
+
+/// Float çöz
+@native("binproto_decode_float")
+dpiş decode_float(data: Dizi, format: Metin) -> Ondalık
+
+/// Float çöz - Türkçe
+@native("binproto_decode_float")
+dpiş ondalik_coz(veri: Dizi, format: Metin) -> Ondalık
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Paket Oluşturma Yardımcıları
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Çoklu değerden paket oluştur
+/// values: [(değer, format), ...] şeklinde dizi
+@native("binproto_build_payload")
+dpiş build_payload(values: Dizi) -> Dizi
+
+/// Payload oluştur - Türkçe
+@native("binproto_build_payload")
+dpiş veri_olustur(degerler: Dizi) -> Dizi
+
+/// CRC hesapla
+/// data: Veri byte dizisi
+/// crc_type: "xor", "sum", "crc16", "crc32"
+@native("binproto_calculate_crc")
+dpiş calculate_crc(data: Dizi, crc_type: Metin) -> Tam
+
+/// CRC hesapla - Türkçe
+@native("binproto_calculate_crc")
+dpiş crc_hesapla(veri: Dizi, tip: Metin) -> Tam
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Protokol Bilgisi
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Protokol bilgisini al
+/// Döner: {start_byte, end_byte, escape_byte, length_bytes, crc_type, ...}
+@native("binproto_get_info")
+dpiş get_info(protocol_id: Tam) -> Harita
+
+/// Protokol bilgisi - Türkçe
+@native("binproto_get_info")
+dpiş bilgi(protokol_id: Tam) -> Harita
+
+/// İstatistikleri al
+@native("binproto_get_stats")
+dpiş get_stats(handle: Tam) -> Harita
+
+/// İstatistik - Türkçe
+@native("binproto_get_stats")
+dpiş istatistik(handle: Tam) -> Harita
+
+/// Buffer temizle
+@native("binproto_flush")
+dpiş flush(handle: Tam) -> Mantık
+
+/// Temizle - Türkçe
+@native("binproto_flush")
+dpiş temizle(handle: Tam) -> Mantık
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Hazır Protokol Açıklamaları
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// "standard":
+//   - Start: 0x02 (STX), End: 0x03 (ETX)
+//   - 2-byte length, CRC16
+//   - Endüstriyel standart format
+//
+// "arduino":
+//   - Start: 0xAA 0x55
+//   - 1-byte length, XOR checksum
+//   - Basit mikrodenetleyici protokolü
+//
+// "modbus_like":
+//   - Slave ID + Function Code yapısı
+//   - CRC16-Modbus
+//   - PLC benzeri iletişim
+//
+// "simple":
+//   - Sadece length + payload + checksum
+//   - Minimum overhead
+//   - Kaynak kısıtlı cihazlar için
+//
+// "sensor":
+//   - Start: 0xFE
+//   - 1-byte type, 1-byte length
+//   - XOR checksum
+//   - Sensör veri formatı
+//

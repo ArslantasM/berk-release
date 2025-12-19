@@ -1,0 +1,803 @@
+// ============================================================================
+// BERK SENSOR API - Sensör Bileşeni
+// ============================================================================
+// Sensör = Ölçüm üreten bileşen, sürücü değil.
+// Bu veri ne? Hangi birimde? Ne kadar güvenilir? Ne zaman ölçüldü?
+// ============================================================================
+
+modül sensor::component
+
+import sensor::measurement::{Measurement, Vector3Measurement, Unit, Timestamp, Confidence}
+import sensor::calibration::{CalibrationProfile, AxisCalibration}
+import sensor::filter::{Filter, FilterType, FilterChain}
+
+// ============================================================================
+// SENSÖR ARAYÜZÜ
+// ============================================================================
+
+/// Sensör arayüz türü
+pub tip SensorInterface = özyinelemeli yap
+    | I2C(sayı, sayı)           // (bus_id, address)
+    | SPI(sayı, sayı)           // (bus_id, cs_pin)
+    | ADC(sayı, sayı)           // (adc_id, channel)
+    | GPIO(sayı)                // pin
+    | UART(sayı)                // port
+    | Virtual                   // Sanal/test sensör
+son
+
+/// Sensör türü (anlamsal sınıf)
+pub tip SensorType = özyinelemeli yap
+    // Skaler sensörler
+    | Temperature
+    | Humidity
+    | Pressure
+    | Light
+    | Distance
+    | Voltage
+    | Current
+    | Sound
+    | Gas
+    | pH
+    | CO2
+    
+    // Vektörel sensörler
+    | Accelerometer
+    | Gyroscope
+    | Magnetometer
+    | IMU                       // 6/9 DOF
+    
+    // Olay tabanlı
+    | Motion                    // PIR
+    | Proximity
+    | Touch
+    | Button
+    | Switch
+    | Hall
+    
+    // Streaming
+    | Microphone
+    | Camera
+    | Radar
+    | Lidar
+    
+    // Özel
+    | Custom(yazı)
+son
+
+impl SensorType:
+    /// Varsayılan birim
+    pub fn default_unit(self) döndür Unit:
+        eşleştir self:
+            SensorType::Temperature: Unit::Celsius
+            SensorType::Humidity: Unit::RelativeHumidity
+            SensorType::Pressure: Unit::Hectopascal
+            SensorType::Light: Unit::Lux
+            SensorType::Distance: Unit::Meter
+            SensorType::Voltage: Unit::Volt
+            SensorType::Current: Unit::Milliampere
+            SensorType::Sound: Unit::Decibel
+            SensorType::Accelerometer: Unit::G
+            SensorType::Gyroscope: Unit::DegreesPerSecond
+            SensorType::Magnetometer: Unit::MicroTesla
+            SensorType::IMU: Unit::G
+            _: Unit::Raw
+        son
+    son
+    
+    /// Skaler mi?
+    pub fn is_scalar(self) döndür mantıksal:
+        eşleştir self:
+            SensorType::Temperature | SensorType::Humidity | SensorType::Pressure |
+            SensorType::Light | SensorType::Distance | SensorType::Voltage |
+            SensorType::Current | SensorType::Sound | SensorType::Gas |
+            SensorType::pH | SensorType::CO2: doğru
+            _: yanlış
+        son
+    son
+    
+    /// Vektörel mi?
+    pub fn is_vector(self) döndür mantıksal:
+        eşleştir self:
+            SensorType::Accelerometer | SensorType::Gyroscope | 
+            SensorType::Magnetometer | SensorType::IMU: doğru
+            _: yanlış
+        son
+    son
+    
+    /// Olay tabanlı mı?
+    pub fn is_event_based(self) döndür mantıksal:
+        eşleştir self:
+            SensorType::Motion | SensorType::Proximity | SensorType::Touch |
+            SensorType::Button | SensorType::Switch | SensorType::Hall: doğru
+            _: yanlış
+        son
+    son
+son
+
+// ============================================================================
+// SENSÖR DURUMU
+// ============================================================================
+
+/// Sensör durumu
+pub tip SensorState = özyinelemeli yap
+    | Uninitialized     // Başlatılmamış
+    | Ready             // Hazır
+    | Reading           // Okuma yapıyor
+    | Error(yazı)       // Hata
+    | Sleeping          // Uyku modunda
+    | Calibrating       // Kalibrasyon yapıyor
+son
+
+/// Sensör hata türleri
+pub tip SensorError = özyinelemeli yap
+    | NotInitialized
+    | CommunicationError
+    | Timeout
+    | InvalidData
+    | NotSupported
+    | NotCalibrated
+    | OutOfRange
+    | Other(yazı)
+son
+
+// ============================================================================
+// SENSÖR BİLEŞENİ
+// ============================================================================
+
+/// Ana sensör bileşeni
+pub tip Sensor = yapı yap
+    /// Benzersiz ID
+    id: yazı,
+    
+    /// Sensör türü
+    sensor_type: SensorType,
+    
+    /// Arayüz
+    interface: SensorInterface,
+    
+    /// Birim
+    unit: Unit,
+    
+    /// Durum
+    state: SensorState,
+    
+    /// Kalibrasyon profili
+    calibration: Seçenek[CalibrationProfile],
+    
+    /// Filtre zinciri
+    filter: Seçenek[FilterChain],
+    
+    /// Örnekleme hızı (Hz)
+    sample_rate_hz: ondalık,
+    
+    /// Son ölçüm
+    last_measurement: Seçenek[Measurement],
+    
+    /// Son okuma zamanı
+    last_read_time: sayı,
+    
+    /// Okuma sayacı
+    read_count: sayı,
+    
+    /// Native handle
+    _handle: sayı,
+son
+
+impl Sensor:
+    // ========================================================================
+    // OLUŞTURMA
+    // ========================================================================
+    
+    /// Yeni sensör oluştur
+    pub fn new(id: yazı, sensor_type: SensorType, interface: SensorInterface) döndür Sensor:
+        döndür Sensor {
+            id: id,
+            sensor_type: sensor_type,
+            interface: interface,
+            unit: sensor_type.default_unit(),
+            state: SensorState::Uninitialized,
+            calibration: Hiçbiri,
+            filter: Hiçbiri,
+            sample_rate_hz: 10.0,
+            last_measurement: Hiçbiri,
+            last_read_time: 0,
+            read_count: 0,
+            _handle: 0,
+        }
+    son
+    
+    /// I2C sensör oluştur
+    pub fn i2c(id: yazı, sensor_type: SensorType, bus: sayı, address: sayı) döndür Sensor:
+        döndür Sensor::new(id, sensor_type, SensorInterface::I2C(bus, address))
+    son
+    
+    /// SPI sensör oluştur
+    pub fn spi(id: yazı, sensor_type: SensorType, bus: sayı, cs: sayı) döndür Sensor:
+        döndür Sensor::new(id, sensor_type, SensorInterface::SPI(bus, cs))
+    son
+    
+    /// ADC sensör oluştur
+    pub fn adc(id: yazı, sensor_type: SensorType, adc: sayı, channel: sayı) döndür Sensor:
+        döndür Sensor::new(id, sensor_type, SensorInterface::ADC(adc, channel))
+    son
+    
+    /// GPIO sensör oluştur
+    pub fn gpio(id: yazı, sensor_type: SensorType, pin: sayı) döndür Sensor:
+        döndür Sensor::new(id, sensor_type, SensorInterface::GPIO(pin))
+    son
+    
+    /// Sanal/test sensör oluştur
+    pub fn virtual_sensor(id: yazı, sensor_type: SensorType) döndür Sensor:
+        döndür Sensor::new(id, sensor_type, SensorInterface::Virtual)
+    son
+    
+    // ========================================================================
+    // YAPILANDIRMA
+    // ========================================================================
+    
+    /// Birim ayarla
+    pub fn with_unit(mut self, unit: Unit) döndür Sensor:
+        self.unit = unit
+        döndür self
+    son
+    
+    /// Örnekleme hızı ayarla
+    pub fn with_sample_rate(mut self, hz: ondalık) döndür Sensor:
+        self.sample_rate_hz = hz
+        döndür self
+    son
+    
+    /// Kalibrasyon profili ekle
+    pub fn with_calibration(mut self, profile: CalibrationProfile) döndür Sensor:
+        self.calibration = Bazı(profile)
+        döndür self
+    son
+    
+    /// Filtre ekle
+    pub fn with_filter(mut self, chain: FilterChain) döndür Sensor:
+        self.filter = Bazı(chain)
+        döndür self
+    son
+    
+    /// Offset kalibrasyonu
+    pub fn calibrate(mut self, offset: ondalık, gain: ondalık) döndür Sensor:
+        değişken profile = CalibrationProfile::for_scalar(self.id.clone(), offset, gain)
+        self.calibration = Bazı(profile)
+        döndür self
+    son
+    
+    // ========================================================================
+    // BAŞLATMA
+    // ========================================================================
+    
+    /// Sensörü başlat
+    pub fn init(mut self) döndür Sonuç[void, SensorError]:
+        // Native: sensor_init(self.interface, &self._handle)
+        self.state = SensorState::Ready
+        döndür Tamam(())
+    son
+    
+    /// Sensörü kapat
+    pub fn close(mut self) döndür void:
+        // Native: sensor_close(self._handle)
+        self.state = SensorState::Uninitialized
+    son
+    
+    /// Hazır mı?
+    pub fn is_ready(self) döndür mantıksal:
+        döndür self.state == SensorState::Ready
+    son
+    
+    // ========================================================================
+    // OKUMA
+    // ========================================================================
+    
+    /// Ham değer oku
+    pub fn read_raw(mut self) döndür Sonuç[sayı, SensorError]:
+        eğer self.state != SensorState::Ready:
+            döndür Hata(SensorError::NotInitialized)
+        son
+        
+        self.state = SensorState::Reading
+        
+        // Native: sensor_read_raw(self._handle)
+        değişken raw_value = 0  // Placeholder
+        
+        self.state = SensorState::Ready
+        döndür Tamam(raw_value)
+    son
+    
+    /// Ölçüm oku (kalibre + filtreli)
+    pub fn read(mut self) döndür Sonuç[Measurement, SensorError]:
+        eğer self.state != SensorState::Ready:
+            döndür Hata(SensorError::NotInitialized)
+        son
+        
+        self.state = SensorState::Reading
+        
+        // Native: sensor_read_raw(self._handle)
+        değişken raw_value = 0.0  // Placeholder
+        
+        değişken value = raw_value
+        
+        // Kalibrasyon uygula
+        eğer self.calibration.is_some():
+            değişken profile = self.calibration.unwrap()
+            eğer profile.axis.is_some():
+                değişken cal = profile.axis.unwrap()
+                value = cal.apply(value)
+            son
+        son
+        
+        // Filtre uygula
+        eğer self.filter.is_some():
+            value = self.filter.unwrap().apply(value)
+        son
+        
+        // Güven seviyesi hesapla
+        değişken confidence = Confidence::high()
+        
+        değişken measurement = Measurement {
+            value: value,
+            unit: self.unit,
+            timestamp: Timestamp::now(),
+            confidence: confidence,
+            source: self.id.clone(),
+            metadata: Hiçbiri,
+        }
+        
+        self.last_measurement = Bazı(measurement.clone())
+        self.last_read_time = measurement.timestamp.monotonic
+        self.read_count = self.read_count + 1
+        self.state = SensorState::Ready
+        
+        döndür Tamam(measurement)
+    son
+    
+    /// Son ölçümü al (yeni okuma yapmadan)
+    pub fn get_last(self) döndür Seçenek[Measurement]:
+        döndür self.last_measurement
+    son
+    
+    /// Sensör ID'si
+    pub fn get_id(self) döndür yazı:
+        döndür self.id.clone()
+    son
+    
+    /// Sensör türü
+    pub fn get_type(self) döndür SensorType:
+        döndür self.sensor_type
+    son
+son
+
+// ============================================================================
+// TÜRLENMİŞ SENSÖRLER
+// ============================================================================
+
+/// Sıcaklık sensörü
+pub tip TemperatureSensor = yapı yap
+    sensor: Sensor,
+son
+
+impl TemperatureSensor:
+    pub fn new(id: yazı, bus: sayı, address: sayı) döndür TemperatureSensor:
+        döndür TemperatureSensor {
+            sensor: Sensor::i2c(id, SensorType::Temperature, bus, address)
+                .with_unit(Unit::Celsius),
+        }
+    son
+    
+    /// BME280 preset
+    pub fn bme280(bus: sayı) döndür TemperatureSensor:
+        döndür TemperatureSensor::new("bme280_temp", bus, 0x76)
+    son
+    
+    /// BMP280 preset
+    pub fn bmp280(bus: sayı) döndür TemperatureSensor:
+        döndür TemperatureSensor::new("bmp280_temp", bus, 0x76)
+    son
+    
+    /// TMP36 (ADC) preset
+    pub fn tmp36(adc: sayı, channel: sayı) döndür TemperatureSensor:
+        döndür TemperatureSensor {
+            sensor: Sensor::adc("tmp36", SensorType::Temperature, adc, channel)
+                .with_unit(Unit::Celsius),
+        }
+    son
+    
+    pub fn init(mut self) döndür Sonuç[void, SensorError]:
+        döndür self.sensor.init()
+    son
+    
+    pub fn read(mut self) döndür Sonuç[Measurement, SensorError]:
+        döndür self.sensor.read()
+    son
+    
+    /// Celsius olarak oku
+    pub fn read_celsius(mut self) döndür Sonuç[ondalık, SensorError]:
+        değişken m = self.read()?
+        döndür Tamam(m.value)
+    son
+    
+    /// Fahrenheit olarak oku
+    pub fn read_fahrenheit(mut self) döndür Sonuç[ondalık, SensorError]:
+        değişken m = self.read()?
+        döndür Tamam(m.value * 9.0 / 5.0 + 32.0)
+    son
+    
+    /// Kelvin olarak oku
+    pub fn read_kelvin(mut self) döndür Sonuç[ondalık, SensorError]:
+        değişken m = self.read()?
+        döndür Tamam(m.value + 273.15)
+    son
+son
+
+/// Nem sensörü
+pub tip HumiditySensor = yapı yap
+    sensor: Sensor,
+son
+
+impl HumiditySensor:
+    pub fn new(id: yazı, bus: sayı, address: sayı) döndür HumiditySensor:
+        döndür HumiditySensor {
+            sensor: Sensor::i2c(id, SensorType::Humidity, bus, address)
+                .with_unit(Unit::RelativeHumidity),
+        }
+    son
+    
+    /// DHT22 preset
+    pub fn dht22(pin: sayı) döndür HumiditySensor:
+        döndür HumiditySensor {
+            sensor: Sensor::gpio("dht22", SensorType::Humidity, pin)
+                .with_unit(Unit::RelativeHumidity),
+        }
+    son
+    
+    pub fn init(mut self) döndür Sonuç[void, SensorError]:
+        döndür self.sensor.init()
+    son
+    
+    pub fn read(mut self) döndür Sonuç[Measurement, SensorError]:
+        döndür self.sensor.read()
+    son
+    
+    /// %RH olarak oku
+    pub fn read_percent(mut self) döndür Sonuç[ondalık, SensorError]:
+        değişken m = self.read()?
+        döndür Tamam(m.value)
+    son
+son
+
+/// Basınç sensörü
+pub tip PressureSensor = yapı yap
+    sensor: Sensor,
+son
+
+impl PressureSensor:
+    pub fn new(id: yazı, bus: sayı, address: sayı) döndür PressureSensor:
+        döndür PressureSensor {
+            sensor: Sensor::i2c(id, SensorType::Pressure, bus, address)
+                .with_unit(Unit::Hectopascal),
+        }
+    son
+    
+    /// BMP280/BME280 preset
+    pub fn bmp280(bus: sayı) döndür PressureSensor:
+        döndür PressureSensor::new("bmp280", bus, 0x76)
+    son
+    
+    pub fn init(mut self) döndür Sonuç[void, SensorError]:
+        döndür self.sensor.init()
+    son
+    
+    pub fn read(mut self) döndür Sonuç[Measurement, SensorError]:
+        döndür self.sensor.read()
+    son
+    
+    /// hPa olarak oku
+    pub fn read_hpa(mut self) döndür Sonuç[ondalık, SensorError]:
+        değişken m = self.read()?
+        döndür Tamam(m.value)
+    son
+    
+    /// Yükseklik tahmini (metre)
+    pub fn read_altitude(mut self, sea_level_hpa: ondalık) döndür Sonuç[ondalık, SensorError]:
+        değişken m = self.read()?
+        // Barometrik formül
+        değişken altitude = 44330.0 * (1.0 - (m.value / sea_level_hpa).pow(0.1903))
+        döndür Tamam(altitude)
+    son
+son
+
+/// Işık sensörü
+pub tip LightSensor = yapı yap
+    sensor: Sensor,
+son
+
+impl LightSensor:
+    pub fn new(id: yazı, bus: sayı, address: sayı) döndür LightSensor:
+        döndür LightSensor {
+            sensor: Sensor::i2c(id, SensorType::Light, bus, address)
+                .with_unit(Unit::Lux),
+        }
+    son
+    
+    /// BH1750 preset
+    pub fn bh1750(bus: sayı) döndür LightSensor:
+        döndür LightSensor::new("bh1750", bus, 0x23)
+    son
+    
+    /// VEML7700 preset
+    pub fn veml7700(bus: sayı) döndür LightSensor:
+        döndür LightSensor::new("veml7700", bus, 0x10)
+    son
+    
+    /// LDR (ADC) preset
+    pub fn ldr(adc: sayı, channel: sayı) döndür LightSensor:
+        döndür LightSensor {
+            sensor: Sensor::adc("ldr", SensorType::Light, adc, channel)
+                .with_unit(Unit::Lux),
+        }
+    son
+    
+    pub fn init(mut self) döndür Sonuç[void, SensorError]:
+        döndür self.sensor.init()
+    son
+    
+    pub fn read(mut self) döndür Sonuç[Measurement, SensorError]:
+        döndür self.sensor.read()
+    son
+    
+    /// Lux olarak oku
+    pub fn read_lux(mut self) döndür Sonuç[ondalık, SensorError]:
+        değişken m = self.read()?
+        döndür Tamam(m.value)
+    son
+son
+
+/// Mesafe sensörü
+pub tip DistanceSensor = yapı yap
+    sensor: Sensor,
+son
+
+impl DistanceSensor:
+    /// Ultrasonik preset (HC-SR04)
+    pub fn ultrasonic(trigger_pin: sayı, echo_pin: sayı) döndür DistanceSensor:
+        döndür DistanceSensor {
+            sensor: Sensor::gpio("hcsr04", SensorType::Distance, trigger_pin)
+                .with_unit(Unit::Centimeter),
+        }
+    son
+    
+    /// VL53L0X (ToF) preset
+    pub fn vl53l0x(bus: sayı) döndür DistanceSensor:
+        döndür DistanceSensor {
+            sensor: Sensor::i2c("vl53l0x", SensorType::Distance, bus, 0x29)
+                .with_unit(Unit::Millimeter),
+        }
+    son
+    
+    pub fn init(mut self) döndür Sonuç[void, SensorError]:
+        döndür self.sensor.init()
+    son
+    
+    pub fn read(mut self) döndür Sonuç[Measurement, SensorError]:
+        döndür self.sensor.read()
+    son
+    
+    /// Santimetre olarak oku
+    pub fn read_cm(mut self) döndür Sonuç[ondalık, SensorError]:
+        değişken m = self.read()?
+        döndür Tamam(m.value)
+    son
+son
+
+// ============================================================================
+// VEKTÖREL SENSÖRLER
+// ============================================================================
+
+/// IMU (Inertial Measurement Unit)
+pub tip IMU = yapı yap
+    /// Sensör bilgisi
+    id: yazı,
+    interface: SensorInterface,
+    state: SensorState,
+    
+    /// DOF (Degrees of Freedom)
+    dof: sayı,  // 6 veya 9
+    
+    /// İvmeölçer aralığı
+    accel_range_g: sayı,  // 2, 4, 8, 16
+    
+    /// Jiroskop aralığı
+    gyro_range_dps: sayı,  // 250, 500, 1000, 2000
+    
+    /// Filtreler
+    accel_filter: Seçenek[FilterChain],
+    gyro_filter: Seçenek[FilterChain],
+    
+    /// Son ölçümler
+    last_accel: Seçenek[Vector3Measurement],
+    last_gyro: Seçenek[Vector3Measurement],
+    last_mag: Seçenek[Vector3Measurement],
+    
+    /// Native handle
+    _handle: sayı,
+son
+
+impl IMU:
+    /// Yeni IMU oluştur
+    pub fn new(id: yazı, bus: sayı, address: sayı) döndür IMU:
+        döndür IMU {
+            id: id,
+            interface: SensorInterface::I2C(bus, address),
+            state: SensorState::Uninitialized,
+            dof: 6,
+            accel_range_g: 2,
+            gyro_range_dps: 250,
+            accel_filter: Hiçbiri,
+            gyro_filter: Hiçbiri,
+            last_accel: Hiçbiri,
+            last_gyro: Hiçbiri,
+            last_mag: Hiçbiri,
+            _handle: 0,
+        }
+    son
+    
+    /// MPU6050 preset
+    pub fn mpu6050(bus: sayı) döndür IMU:
+        döndür IMU::new("mpu6050", bus, 0x68)
+    son
+    
+    /// MPU9250 preset (9-DOF)
+    pub fn mpu9250(bus: sayı) döndür IMU:
+        değişken mut imu = IMU::new("mpu9250", bus, 0x68)
+        imu.dof = 9
+        döndür imu
+    son
+    
+    /// LSM6DS3 preset
+    pub fn lsm6ds3(bus: sayı) döndür IMU:
+        döndür IMU::new("lsm6ds3", bus, 0x6A)
+    son
+    
+    /// BNO055 preset (9-DOF, sensor fusion dahil)
+    pub fn bno055(bus: sayı) döndür IMU:
+        değişken mut imu = IMU::new("bno055", bus, 0x28)
+        imu.dof = 9
+        döndür imu
+    son
+    
+    /// İvmeölçer aralığı ayarla
+    pub fn with_accel_range(mut self, range_g: sayı) döndür IMU:
+        self.accel_range_g = range_g
+        döndür self
+    son
+    
+    /// Jiroskop aralığı ayarla
+    pub fn with_gyro_range(mut self, range_dps: sayı) döndür IMU:
+        self.gyro_range_dps = range_dps
+        döndür self
+    son
+    
+    /// Filtre ekle
+    pub fn with_accel_filter(mut self, chain: FilterChain) döndür IMU:
+        self.accel_filter = Bazı(chain)
+        döndür self
+    son
+    
+    pub fn with_gyro_filter(mut self, chain: FilterChain) döndür IMU:
+        self.gyro_filter = Bazı(chain)
+        döndür self
+    son
+    
+    /// Başlat
+    pub fn init(mut self) döndür Sonuç[void, SensorError]:
+        // Native: imu_init(self.interface, self.accel_range_g, self.gyro_range_dps, &self._handle)
+        self.state = SensorState::Ready
+        döndür Tamam(())
+    son
+    
+    /// İvmeölçer oku
+    pub fn accel(mut self) döndür Sonuç[Vector3Measurement, SensorError]:
+        eğer self.state != SensorState::Ready:
+            döndür Hata(SensorError::NotInitialized)
+        son
+        
+        // Native: imu_read_accel(self._handle, &x, &y, &z)
+        değişken x = 0.0
+        değişken y = 0.0
+        değişken z = 0.0
+        
+        // Filtre uygula
+        eğer self.accel_filter.is_some():
+            // Her eksen için ayrı filtre
+        son
+        
+        değişken measurement = Vector3Measurement::new(x, y, z, Unit::G, self.id.clone())
+        self.last_accel = Bazı(measurement.clone())
+        
+        döndür Tamam(measurement)
+    son
+    
+    /// Jiroskop oku
+    pub fn gyro(mut self) döndür Sonuç[Vector3Measurement, SensorError]:
+        eğer self.state != SensorState::Ready:
+            döndür Hata(SensorError::NotInitialized)
+        son
+        
+        // Native: imu_read_gyro(self._handle, &x, &y, &z)
+        değişken x = 0.0
+        değişken y = 0.0
+        değişken z = 0.0
+        
+        değişken measurement = Vector3Measurement::new(x, y, z, Unit::DegreesPerSecond, self.id.clone())
+        self.last_gyro = Bazı(measurement.clone())
+        
+        döndür Tamam(measurement)
+    son
+    
+    /// Manyetometre oku (9-DOF için)
+    pub fn mag(mut self) döndür Sonuç[Vector3Measurement, SensorError]:
+        eğer self.dof < 9:
+            döndür Hata(SensorError::NotSupported)
+        son
+        
+        eğer self.state != SensorState::Ready:
+            döndür Hata(SensorError::NotInitialized)
+        son
+        
+        // Native: imu_read_mag(self._handle, &x, &y, &z)
+        değişken x = 0.0
+        değişken y = 0.0
+        değişken z = 0.0
+        
+        değişken measurement = Vector3Measurement::new(x, y, z, Unit::MicroTesla, self.id.clone())
+        self.last_mag = Bazı(measurement.clone())
+        
+        döndür Tamam(measurement)
+    son
+    
+    /// Tümünü oku
+    pub fn read_all(mut self) döndür Sonuç[(Vector3Measurement, Vector3Measurement), SensorError]:
+        değişken accel = self.accel()?
+        değişken gyro = self.gyro()?
+        döndür Tamam((accel, gyro))
+    son
+    
+    /// Sıcaklık oku (çoğu IMU'da dahili)
+    pub fn read_temperature(mut self) döndür Sonuç[Measurement, SensorError]:
+        // Native: imu_read_temp(self._handle)
+        değişken temp = 25.0  // Placeholder
+        döndür Tamam(Measurement::new(temp, Unit::Celsius, self.id.clone()))
+    son
+son
+
+// ============================================================================
+// CONVENIENCE FUNCTIONS
+// ============================================================================
+
+/// Sensör aç
+pub fn open(id: yazı, sensor_type: SensorType, interface: SensorInterface) döndür Sensor:
+    döndür Sensor::new(id, sensor_type, interface)
+son
+
+/// I2C sensör aç
+pub fn open_i2c(id: yazı, sensor_type: SensorType, bus: sayı, address: sayı) döndür Sensor:
+    döndür Sensor::i2c(id, sensor_type, bus, address)
+son
+
+/// ADC sensör aç
+pub fn open_adc(id: yazı, sensor_type: SensorType, adc: sayı, channel: sayı) döndür Sensor:
+    döndür Sensor::adc(id, sensor_type, adc, channel)
+son
+
+/// Sıcaklık sensörü
+pub fn temperature(id: yazı) döndür TemperatureSensor:
+    döndür TemperatureSensor::new(id, 0, 0x76)
+son
+
+/// IMU
+pub fn imu(id: yazı) döndür IMU:
+    döndür IMU::new(id, 0, 0x68)
+son

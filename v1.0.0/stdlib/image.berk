@@ -1,0 +1,1770 @@
+//! # Image Module
+//!
+//! Image processing system (GIMP + stb_image inspired).
+//!
+//! Görüntü işleme sistemi (GIMP + stb_image esinlenildi).
+//!
+//! ## Features / Özellikler
+//!
+//! - **Formats**: PNG, JPG, BMP, TGA, GIF / Formatlar
+//! - **Color spaces**: RGB, HSV, HSL, LAB, CMYK / Renk uzayları
+//! - **Transformations**: Rotate, scale, crop, flip / Dönüştürmeler
+//! - **Filters**: Blur, sharpen, edge detection / Filtreler
+//! - **Pixels**: Get/set, draw primitives / Piksel manipülasyonu
+//! - **Histogram**: Analysis, equalization / Histogram analizi
+//! - **Blending**: Alpha compositing modes / Karıştırma modları
+//! - **Interpolation**: Nearest, bilinear, bicubic / İnterpolasyon
+//!
+//! ## Example / Örnek
+//!
+//! ```berk
+//! kullan image
+//!
+//! değişken img = image.load("foto.png")?
+//! img = image.blur(img, radius: 5.0)
+//! image.save(img, "cikti.png")
+//! ```
+//!
+//! Backend: stb_image + GIMP algorithms
+
+modül image
+
+kullan string
+kullan io
+kullan math
+
+// ============================================================================
+// TÜRLER (Types)
+// ============================================================================
+
+// Görüntü (RGBA veya Grayscale)
+tip Goruntu = yapı yap
+    genişlik: tamsayı,
+    yükseklik: tamsayı,
+    kanal_sayısı: tamsayı,  // 1 (Grayscale), 3 (RGB), 4 (RGBA)
+    bit_derinliği: tamsayı,  // 8 (u8), 16 (u16), 32 (f32)
+    piksel_verisi: liste[bayt],
+    renk_uzayı: RenkUzayı
+son
+
+tip RenkUzayı = "RGB" | "RGBA" | "Grayscale" | "GrayscaleAlpha" | "HSV" | "HSL" | "LAB" | "CMYK"
+
+// Renk (RGBA 0-255 veya 0.0-1.0)
+tip Renk = yapı yap
+    r: ondalık,  // 0.0-1.0
+    g: ondalık,
+    b: ondalık,
+    a: ondalık   // Alpha
+son
+
+tip RenkRGB = yapı yap r: bayt, g: bayt, b: bayt son
+tip RenkRGBA = yapı yap r: bayt, g: bayt, b: bayt, a: bayt son
+tip RenkHSV = yapı yap h: ondalık, s: ondalık, v: ondalık son  // h: 0-360, s/v: 0-1
+tip RenkHSL = yapı yap h: ondalık, s: ondalık, l: ondalık son  // h: 0-360, s/l: 0-1
+tip RenkLAB = yapı yap l: ondalık, a: ondalık, b: ondalık son  // CIE L*a*b*
+
+// Görüntü formatları
+tip GorüntuFormat = "PNG" | "JPEG" | "BMP" | "TGA" | "GIF" | "WebP"
+
+// Görüntü hataları
+tip GorüntuHata = yapı yap
+    mesaj: yazı,
+    hata_türü: yazı  // "io", "format", "decode", "encode", "invalid_size"
+son
+
+// Interpolasyon yöntemleri
+tip Interpolasyon = "Nearest" | "Bilinear" | "Bicubic" | "Lanczos"
+
+// Filtre çekirdekleri (convolution kernel)
+tip FiltreKernel = yapı yap
+    boyut: tamsayı,    // 3x3, 5x5, 7x7 vb.
+    veriler: liste[ondalık],
+    normalize: mantıksal
+son
+
+// Histogram (her kanal için 0-255 dağılımı)
+tip Histogram = yapı yap
+    kırmızı: liste[tamsayı],    // 256 elemanlı
+    yeşil: liste[tamsayı],
+    mavi: liste[tamsayı],
+    parlaklık: liste[tamsayı]   // Luminance
+son
+
+// Blend mode (compositing işlemleri)
+tip KarisimModu = "Normal" | "Multiply" | "Screen" | "Overlay" | "Add" | "Subtract" | 
+                   "Difference" | "Darken" | "Lighten" | "ColorDodge" | "ColorBurn"
+
+// Matrix3x3 (2D transformasyon matrisi - GIMP style)
+tip Matrix3 = yapı yap
+    coef: liste[ondalık]  // 9 elemanlı [m00, m01, m02, m10, m11, m12, m20, m21, m22]
+son
+
+// ============================================================================
+// DOSYA I/O (File Input/Output)
+// ============================================================================
+
+// Görüntü yükle (stb_image)
+fonksiyon yukle(dosya_yolu: yazı) -> Sonuç[Goruntu, GorüntuHata]
+yap
+    // stb_image ile yükle
+    değişken format = dosya_uzantısı_al(dosya_yolu)
+    değişken veri = stbi_load(dosya_yolu)
+    
+    eğer veri.hata_mı() ise yap
+        dön Hata(GorüntuHata yap
+            mesaj: "Görüntü yüklenemedi: " + dosya_yolu,
+            hata_türü: "decode"
+        son)
+    son
+    
+    dön Tamam(veri.unwrap())
+son
+
+// Görüntü kaydet (stb_image_write)
+fonksiyon kaydet(goruntu: Goruntu, dosya_yolu: yazı, kalite: tamsayı = 90) -> Sonuç[boş, GorüntuHata]
+yap
+    değişken format = dosya_uzantısı_al(dosya_yolu)
+    
+    değişken sonuç = eşleşme format yap
+        "png" -> stbi_write_png(dosya_yolu, goruntu),
+        "jpg" -> stbi_write_jpg(dosya_yolu, goruntu, kalite),
+        "bmp" -> stbi_write_bmp(dosya_yolu, goruntu),
+        "tga" -> stbi_write_tga(dosya_yolu, goruntu),
+        _ -> Hata("Desteklenmeyen format: " + format)
+    son
+    
+    eğer sonuç.hata_mı() ise yap
+        dön Hata(GorüntuHata yap
+            mesaj: "Görüntü kaydedilemedi: " + dosya_yolu,
+            hata_türü: "encode"
+        son)
+    son
+    
+    dön Tamam(boş)
+son
+
+// Bellekten görüntü yükle (base64, raw bytes)
+fonksiyon bellekten_yukle(veri: liste[bayt], kanal_sayısı: tamsayı = 4) -> Sonuç[Goruntu, GorüntuHata]
+yap
+    değişken sonuç = stbi_load_from_memory(veri, kanal_sayısı)
+    
+    eğer sonuç.hata_mı() ise yap
+        dön Hata(GorüntuHata yap
+            mesaj: "Bellek verisi çözümlenemedi",
+            hata_türü: "decode"
+        son)
+    son
+    
+    dön Tamam(sonuç.unwrap())
+son
+
+// Görüntüyü byte array'e encode et (PNG veya JPG)
+fonksiyon bellege_kaydet(goruntu: Goruntu, format: GorüntuFormat) -> Sonuç[liste[bayt], GorüntuHata]
+yap
+    değişken buffer = eşleşme format yap
+        "PNG" -> stbi_write_png_to_mem(goruntu),
+        "JPEG" -> stbi_write_jpg_to_mem(goruntu, kalite: 90),
+        "BMP" -> stbi_write_bmp_to_mem(goruntu),
+        _ -> Hata("Desteklenmeyen format")
+    son
+    
+    eğer buffer.hata_mı() ise yap
+        dön Hata(GorüntuHata yap
+            mesaj: "Görüntü encode edilemedi",
+            hata_türü: "encode"
+        son)
+    son
+    
+    dön Tamam(buffer.unwrap())
+son
+
+// ============================================================================
+// GÖRÜNTÜ OLUŞTURMA (Image Creation)
+// ============================================================================
+
+// Boş görüntü oluştur
+fonksiyon olustur(genişlik: tamsayı, yükseklik: tamsayı, renk: Renk = renk_siyah()) -> Goruntu
+yap
+    değişken piksel_sayısı = genişlik * yükseklik * 4
+    değişken veri = yeni_liste(piksel_sayısı, 0 as bayt)
+    
+    // Rengi doldur
+    döngü i: 0..piksel_sayısı, adım: 4 yap
+        veri[i] = (renk.r * 255.0) as bayt
+        veri[i + 1] = (renk.g * 255.0) as bayt
+        veri[i + 2] = (renk.b * 255.0) as bayt
+        veri[i + 3] = (renk.a * 255.0) as bayt
+    son
+    
+    dön Goruntu yap
+        genişlik: genişlik,
+        yükseklik: yükseklik,
+        kanal_sayısı: 4,
+        bit_derinliği: 8,
+        piksel_verisi: veri,
+        renk_uzayı: "RGBA"
+    son
+son
+
+// Gradyan görüntü oluştur
+fonksiyon gradyan_olustur(genişlik: tamsayı, yükseklik: tamsayı, 
+                          renk1: Renk, renk2: Renk, yön: yazı = "yatay") -> Goruntu
+yap
+    değişken img = olustur(genişlik, yükseklik, renk_siyah())
+    
+    döngü y: 0..yükseklik yap
+        döngü x: 0..genişlik yap
+            değişken t = eğer yön == "yatay" ise x as ondalık / genişlik as ondalık 
+                        değilse y as ondalık / yükseklik as ondalık
+            
+            değişken renk = renk_harmanla(renk1, renk2, t)
+            piksel_ayarla(img, x, y, renk)
+        son
+    son
+    
+    dön img
+son
+
+// ============================================================================
+// PİKSEL ERİŞİMİ (Pixel Access)
+// ============================================================================
+
+// Piksel değeri oku
+fonksiyon piksel_al(goruntu: Goruntu, x: tamsayı, y: tamsayı) -> Seçenek[Renk]
+yap
+    eğer x < 0 veya x >= goruntu.genişlik veya y < 0 veya y >= goruntu.yükseklik ise yap
+        dön Hiç
+    son
+    
+    değişken index = (y * goruntu.genişlik + x) * goruntu.kanal_sayısı
+    değişken veri = goruntu.piksel_verisi
+    
+    eğer goruntu.kanal_sayısı == 4 ise yap
+        dön Bazı(Renk yap
+            r: veri[index] as ondalık / 255.0,
+            g: veri[index + 1] as ondalık / 255.0,
+            b: veri[index + 2] as ondalık / 255.0,
+            a: veri[index + 3] as ondalık / 255.0
+        son)
+    son değilse eğer goruntu.kanal_sayısı == 3 ise yap
+        dön Bazı(Renk yap
+            r: veri[index] as ondalık / 255.0,
+            g: veri[index + 1] as ondalık / 255.0,
+            b: veri[index + 2] as ondalık / 255.0,
+            a: 1.0
+        son)
+    son değilse yap
+        // Grayscale
+        değişken gri = veri[index] as ondalık / 255.0
+        dön Bazı(Renk yap r: gri, g: gri, b: gri, a: 1.0 son)
+    son
+son
+
+// Piksel değeri yaz
+fonksiyon piksel_ayarla(goruntu: değişken Goruntu, x: tamsayı, y: tamsayı, renk: Renk) -> boş
+yap
+    eğer x < 0 veya x >= goruntu.genişlik veya y < 0 veya y >= goruntu.yükseklik ise yap
+        dön
+    son
+    
+    değişken index = (y * goruntu.genişlik + x) * goruntu.kanal_sayısı
+    değişken veri = goruntu.piksel_verisi
+    
+    eğer goruntu.kanal_sayısı >= 3 ise yap
+        veri[index] = (renk.r * 255.0) as bayt
+        veri[index + 1] = (renk.g * 255.0) as bayt
+        veri[index + 2] = (renk.b * 255.0) as bayt
+        
+        eğer goruntu.kanal_sayısı == 4 ise yap
+            veri[index + 3] = (renk.a * 255.0) as bayt
+        son
+    son değilse yap
+        // Grayscale: RGB'den luminance hesapla
+        değişken luma = renk.r * 0.299 + renk.g * 0.587 + renk.b * 0.114
+        veri[index] = (luma * 255.0) as bayt
+    son
+son
+
+// ============================================================================
+// RENK DÖNÜŞÜMLERİ (Color Conversions) - GIMP Style
+// ============================================================================
+
+// RGB -> HSV (GIMP gimpcolorspace.c)
+fonksiyon rgb_to_hsv(renk: Renk) -> RenkHSV
+yap
+    değişken r = renk.r
+    değişken g = renk.g
+    değişken b = renk.b
+    
+    değişken max_val = math::max(math::max(r, g), b)
+    değişken min_val = math::min(math::min(r, g), b)
+    değişken delta = max_val - min_val
+    
+    // Value
+    değişken v = max_val
+    
+    // Saturation
+    değişken s = eğer max_val > 0.0 ise delta / max_val değilse 0.0
+    
+    // Hue
+    değişken h = eğer delta == 0.0 ise yap
+        0.0
+    son değilse eğer max_val == r ise yap
+        60.0 * (((g - b) / delta) % 6.0)
+    son değilse eğer max_val == g ise yap
+        60.0 * (((b - r) / delta) + 2.0)
+    son değilse yap
+        60.0 * (((r - g) / delta) + 4.0)
+    son
+    
+    eğer h < 0.0 ise h = h + 360.0
+    
+    dön RenkHSV yap h: h, s: s, v: v son
+son
+
+// HSV -> RGB
+fonksiyon hsv_to_rgb(hsv: RenkHSV) -> Renk
+yap
+    değişken h = hsv.h
+    değişken s = hsv.s
+    değişken v = hsv.v
+    
+    eğer s == 0.0 ise yap
+        dön Renk yap r: v, g: v, b: v, a: 1.0 son
+    son
+    
+    h = h / 60.0
+    değişken i = math::floor(h) as tamsayı
+    değişken f = h - i as ondalık
+    
+    değişken p = v * (1.0 - s)
+    değişken q = v * (1.0 - s * f)
+    değişken t = v * (1.0 - s * (1.0 - f))
+    
+    değişken (r, g, b) = eşleşme i % 6 yap
+        0 -> (v, t, p),
+        1 -> (q, v, p),
+        2 -> (p, v, t),
+        3 -> (p, q, v),
+        4 -> (t, p, v),
+        _ -> (v, p, q)
+    son
+    
+    dön Renk yap r: r, g: g, b: b, a: 1.0 son
+son
+
+// RGB -> HSL
+fonksiyon rgb_to_hsl(renk: Renk) -> RenkHSL
+yap
+    değişken r = renk.r
+    değişken g = renk.g
+    değişken b = renk.b
+    
+    değişken max_val = math::max(math::max(r, g), b)
+    değişken min_val = math::min(math::min(r, g), b)
+    değişken delta = max_val - min_val
+    
+    // Lightness
+    değişken l = (max_val + min_val) / 2.0
+    
+    // Saturation
+    değişken s = eğer delta == 0.0 ise yap
+        0.0
+    son değilse eğer l < 0.5 ise yap
+        delta / (max_val + min_val)
+    son değilse yap
+        delta / (2.0 - max_val - min_val)
+    son
+    
+    // Hue (same as HSV)
+    değişken h = eğer delta == 0.0 ise yap
+        0.0
+    son değilse eğer max_val == r ise yap
+        60.0 * (((g - b) / delta) % 6.0)
+    son değilse eğer max_val == g ise yap
+        60.0 * (((b - r) / delta) + 2.0)
+    son değilse yap
+        60.0 * (((r - g) / delta) + 4.0)
+    son
+    
+    eğer h < 0.0 ise h = h + 360.0
+    
+    dön RenkHSL yap h: h, s: s, l: l son
+son
+
+// HSL -> RGB
+fonksiyon hsl_to_rgb(hsl: RenkHSL) -> Renk
+yap
+    değişken h = hsl.h
+    değişken s = hsl.s
+    değişken l = hsl.l
+    
+    eğer s == 0.0 ise yap
+        dön Renk yap r: l, g: l, b: l, a: 1.0 son
+    son
+    
+    değişken q = eğer l < 0.5 ise l * (1.0 + s) değilse l + s - l * s
+    değişken p = 2.0 * l - q
+    
+    h = h / 360.0
+    
+    değişken r = hue_to_rgb(p, q, h + 1.0/3.0)
+    değişken g = hue_to_rgb(p, q, h)
+    değişken b = hue_to_rgb(p, q, h - 1.0/3.0)
+    
+    dön Renk yap r: r, g: g, b: b, a: 1.0 son
+son
+
+// HSL yardımcı fonksiyon
+fonksiyon hue_to_rgb(p: ondalık, q: ondalık, t: ondalık) -> ondalık
+yap
+    değişken t2 = eğer t < 0.0 ise t + 1.0 değilse eğer t > 1.0 ise t - 1.0 değilse t
+    
+    eğer t2 < 1.0/6.0 ise yap
+        dön p + (q - p) * 6.0 * t2
+    son değilse eğer t2 < 1.0/2.0 ise yap
+        dön q
+    son değilse eğer t2 < 2.0/3.0 ise yap
+        dön p + (q - p) * (2.0/3.0 - t2) * 6.0
+    son değilse yap
+        dön p
+    son
+son
+
+// Grayscale'e çevir (luminance)
+fonksiyon gri_tonlama(goruntu: Goruntu) -> Goruntu
+yap
+    değişken yeni = olustur(goruntu.genişlik, goruntu.yükseklik, renk_siyah())
+    
+    döngü y: 0..goruntu.yükseklik yap
+        döngü x: 0..goruntu.genişlik yap
+            değişken renk = piksel_al(goruntu, x, y).unwrap()
+            değişken luma = renk.r * 0.299 + renk.g * 0.587 + renk.b * 0.114
+            piksel_ayarla(yeni, x, y, Renk yap r: luma, g: luma, b: luma, a: renk.a son)
+        son
+    son
+    
+    dön yeni
+son
+
+// ============================================================================
+// GEOMETRİK TRANSFORMASYONLAR (Geometric Transformations)
+// ============================================================================
+
+// Görüntüyü ölçeklendir
+fonksiyon olceklendir(goruntu: Goruntu, yeni_genişlik: tamsayı, yeni_yükseklik: tamsayı, 
+                      interpolasyon: Interpolasyon = "Bilinear") -> Goruntu
+yap
+    değişken yeni = olustur(yeni_genişlik, yeni_yükseklik, renk_siyah())
+    
+    değişken x_oran = goruntu.genişlik as ondalık / yeni_genişlik as ondalık
+    değişken y_oran = goruntu.yükseklik as ondalık / yeni_yükseklik as ondalık
+    
+    döngü y: 0..yeni_yükseklik yap
+        döngü x: 0..yeni_genişlik yap
+            değişken kaynak_x = x as ondalık * x_oran
+            değişken kaynak_y = y as ondalık * y_oran
+            
+            değişken renk = eşleşme interpolasyon yap
+                "Nearest" -> piksel_al(goruntu, kaynak_x as tamsayı, kaynak_y as tamsayı),
+                "Bilinear" -> bilinear_interpolate(goruntu, kaynak_x, kaynak_y),
+                "Bicubic" -> bicubic_interpolate(goruntu, kaynak_x, kaynak_y),
+                _ -> piksel_al(goruntu, kaynak_x as tamsayı, kaynak_y as tamsayı)
+            son
+            
+            eğer renk.bazı_mı() ise yap
+                piksel_ayarla(yeni, x, y, renk.unwrap())
+            son
+        son
+    son
+    
+    dön yeni
+son
+
+// Bilinear interpolasyon (GIMP gimpbilinear.c)
+fonksiyon bilinear_interpolate(goruntu: Goruntu, x: ondalık, y: ondalık) -> Seçenek[Renk]
+yap
+    değişken x1 = math::floor(x) as tamsayı
+    değişken y1 = math::floor(y) as tamsayı
+    değişken x2 = x1 + 1
+    değişken y2 = y1 + 1
+    
+    // Sınır kontrolü
+    eğer x1 < 0 veya x2 >= goruntu.genişlik veya y1 < 0 veya y2 >= goruntu.yükseklik ise yap
+        dön Hiç
+    son
+    
+    // 4 köşe pikseli
+    değişken q11 = piksel_al(goruntu, x1, y1).unwrap()
+    değişken q21 = piksel_al(goruntu, x2, y1).unwrap()
+    değişken q12 = piksel_al(goruntu, x1, y2).unwrap()
+    değişken q22 = piksel_al(goruntu, x2, y2).unwrap()
+    
+    // Ağırlıklar
+    değişken fx = x - x1 as ondalık
+    değişken fy = y - y1 as ondalık
+    
+    // Bilinear interpolasyon: f(x,y) = (1-fx)(1-fy)Q11 + fx(1-fy)Q21 + (1-fx)fy*Q12 + fx*fy*Q22
+    değişken w11 = (1.0 - fx) * (1.0 - fy)
+    değişken w21 = fx * (1.0 - fy)
+    değişken w12 = (1.0 - fx) * fy
+    değişken w22 = fx * fy
+    
+    dön Bazı(Renk yap
+        r: q11.r * w11 + q21.r * w21 + q12.r * w12 + q22.r * w22,
+        g: q11.g * w11 + q21.g * w21 + q12.g * w12 + q22.g * w22,
+        b: q11.b * w11 + q21.b * w21 + q12.b * w12 + q22.b * w22,
+        a: q11.a * w11 + q21.a * w21 + q12.a * w12 + q22.a * w22
+    son)
+son
+
+// Bicubic interpolasyon (4x4 kernel)
+fonksiyon bicubic_interpolate(goruntu: Goruntu, x: ondalık, y: ondalık) -> Seçenek[Renk]
+yap
+    değişken x_int = math::floor(x) as tamsayı
+    değişken y_int = math::floor(y) as tamsayı
+    
+    değişken fx = x - x_int as ondalık
+    değişken fy = y - y_int as ondalık
+    
+    // Cubic kernel ağırlıkları
+    değişken wx = cubic_weights(fx)
+    değişken wy = cubic_weights(fy)
+    
+    değişken r_toplam = 0.0
+    değişken g_toplam = 0.0
+    değişken b_toplam = 0.0
+    değişken a_toplam = 0.0
+    
+    // 4x4 grid üzerinde toplama
+    döngü dy: -1..3 yap
+        döngü dx: -1..3 yap
+            değişken px = x_int + dx
+            değişken py = y_int + dy
+            
+            eğer px >= 0 ve px < goruntu.genişlik ve py >= 0 ve py < goruntu.yükseklik ise yap
+                değişken renk = piksel_al(goruntu, px, py).unwrap()
+                değişken w = wx[dx + 1] * wy[dy + 1]
+                
+                r_toplam = r_toplam + renk.r * w
+                g_toplam = g_toplam + renk.g * w
+                b_toplam = b_toplam + renk.b * w
+                a_toplam = a_toplam + renk.a * w
+            son
+        son
+    son
+    
+    dön Bazı(Renk yap
+        r: clamp(r_toplam, 0.0, 1.0),
+        g: clamp(g_toplam, 0.0, 1.0),
+        b: clamp(b_toplam, 0.0, 1.0),
+        a: clamp(a_toplam, 0.0, 1.0)
+    son)
+son
+
+// Cubic kernel ağırlıkları (Catmull-Rom spline)
+fonksiyon cubic_weights(t: ondalık) -> liste[ondalık]
+yap
+    değişken a = -0.5  // Sharpness parameter
+    
+    değişken t2 = t * t
+    değişken t3 = t2 * t
+    
+    değişken w0 = a * (-t3 + 2.0*t2 - t)
+    değişken w1 = a * (3.0*t3 - 5.0*t2 + 2.0)
+    değişken w2 = a * (-3.0*t3 + 4.0*t2 + t)
+    değişken w3 = a * (t3 - t2)
+    
+    dön [w0, w1, w2, w3]
+son
+
+// Görüntüyü döndür (GIMP gimpmatrix.c style)
+fonksiyon dondur(goruntu: Goruntu, açı: ondalık, interpolasyon: Interpolasyon = "Bilinear") -> Goruntu
+yap
+    // Radyana çevir
+    değişken rad = açı * math::PI / 180.0
+    değişken cos_a = math::cos(rad)
+    değişken sin_a = math::sin(rad)
+    
+    // Yeni boyutları hesapla (rotated bounding box)
+    değişken w = goruntu.genişlik as ondalık
+    değişken h = goruntu.yükseklik as ondalık
+    
+    değişken yeni_w = math::ceil(math::abs(w * cos_a) + math::abs(h * sin_a)) as tamsayı
+    değişken yeni_h = math::ceil(math::abs(w * sin_a) + math::abs(h * cos_a)) as tamsayı
+    
+    değişken yeni = olustur(yeni_w, yeni_h, renk_seffaf())
+    
+    // Merkez noktaları
+    değişken cx = w / 2.0
+    değişken cy = h / 2.0
+    değişken ncx = yeni_w as ondalık / 2.0
+    değişken ncy = yeni_h as ondalık / 2.0
+    
+    döngü y: 0..yeni_h yap
+        döngü x: 0..yeni_w yap
+            // Ters transformasyon (hedeften kaynağa)
+            değişken dx = x as ondalık - ncx
+            değişken dy = y as ondalık - ncy
+            
+            değişken kaynak_x = dx * cos_a + dy * sin_a + cx
+            değişken kaynak_y = -dx * sin_a + dy * cos_a + cy
+            
+            değişken renk = eşleşme interpolasyon yap
+                "Nearest" -> piksel_al(goruntu, kaynak_x as tamsayı, kaynak_y as tamsayı),
+                "Bilinear" -> bilinear_interpolate(goruntu, kaynak_x, kaynak_y),
+                "Bicubic" -> bicubic_interpolate(goruntu, kaynak_x, kaynak_y),
+                _ -> Hiç
+            son
+            
+            eğer renk.bazı_mı() ise yap
+                piksel_ayarla(yeni, x, y, renk.unwrap())
+            son
+        son
+    son
+    
+    dön yeni
+son
+
+// Görüntüyü çevir (flip)
+fonksiyon cevir(goruntu: Goruntu, yön: yazı = "yatay") -> Goruntu
+yap
+    değişken yeni = olustur(goruntu.genişlik, goruntu.yükseklik, renk_siyah())
+    
+    döngü y: 0..goruntu.yükseklik yap
+        döngü x: 0..goruntu.genişlik yap
+            değişken (kaynak_x, kaynak_y) = eşleşme yön yap
+                "yatay" -> (goruntu.genişlik - 1 - x, y),
+                "dikey" -> (x, goruntu.yükseklik - 1 - y),
+                _ -> (x, y)
+            son
+            
+            değişken renk = piksel_al(goruntu, kaynak_x, kaynak_y).unwrap()
+            piksel_ayarla(yeni, x, y, renk)
+        son
+    son
+    
+    dön yeni
+son
+
+// Görüntüyü kırp (crop)
+fonksiyon kirp(goruntu: Goruntu, x: tamsayı, y: tamsayı, genişlik: tamsayı, yükseklik: tamsayı) -> Goruntu
+yap
+    değişken yeni = olustur(genişlik, yükseklik, renk_siyah())
+    
+    döngü dy: 0..yükseklik yap
+        döngü dx: 0..genişlik yap
+            değişken kaynak_x = x + dx
+            değişken kaynak_y = y + dy
+            
+            eğer kaynak_x >= 0 ve kaynak_x < goruntu.genişlik ve 
+               kaynak_y >= 0 ve kaynak_y < goruntu.yükseklik ise yap
+                değişken renk = piksel_al(goruntu, kaynak_x, kaynak_y).unwrap()
+                piksel_ayarla(yeni, dx, dy, renk)
+            son
+        son
+    son
+    
+    dön yeni
+son
+
+// ============================================================================
+// FİLTRELER (Filters - Convolution)
+// ============================================================================
+
+// Gaussian blur
+fonksiyon bulaniklastir(goruntu: Goruntu, radius: ondalık = 5.0) -> Goruntu
+yap
+    // Gaussian kernel oluştur
+    değişken kernel = gaussian_kernel_olustur(radius)
+    dön convolution_uygula(goruntu, kernel)
+son
+
+// Sharpen (keskinleştir)
+fonksiyon keskinlestir(goruntu: Goruntu) -> Goruntu
+yap
+    değişken kernel = FiltreKernel yap
+        boyut: 3,
+        veriler: [
+             0.0, -1.0,  0.0,
+            -1.0,  5.0, -1.0,
+             0.0, -1.0,  0.0
+        ],
+        normalize: yanlış
+    son
+    
+    dön convolution_uygula(goruntu, kernel)
+son
+
+// Edge detection (Sobel)
+fonksiyon kenar_bul(goruntu: Goruntu) -> Goruntu
+yap
+    // Önce grayscale'e çevir
+    değişken gri = gri_tonlama(goruntu)
+    
+    // Sobel X
+    değişken sobel_x = FiltreKernel yap
+        boyut: 3,
+        veriler: [
+            -1.0,  0.0,  1.0,
+            -2.0,  0.0,  2.0,
+            -1.0,  0.0,  1.0
+        ],
+        normalize: yanlış
+    son
+    
+    // Sobel Y
+    değişken sobel_y = FiltreKernel yap
+        boyut: 3,
+        veriler: [
+            -1.0, -2.0, -1.0,
+             0.0,  0.0,  0.0,
+             1.0,  2.0,  1.0
+        ],
+        normalize: yanlış
+    son
+    
+    değişken gx = convolution_uygula(gri, sobel_x)
+    değişken gy = convolution_uygula(gri, sobel_y)
+    
+    // Gradient magnitude: sqrt(gx^2 + gy^2)
+    değişken sonuç = olustur(goruntu.genişlik, goruntu.yükseklik, renk_siyah())
+    
+    döngü y: 0..goruntu.yükseklik yap
+        döngü x: 0..goruntu.genişlik yap
+            değişken px = piksel_al(gx, x, y).unwrap()
+            değişken py = piksel_al(gy, x, y).unwrap()
+            
+            değişken magnitude = math::sqrt(px.r * px.r + py.r * py.r)
+            magnitude = clamp(magnitude, 0.0, 1.0)
+            
+            piksel_ayarla(sonuç, x, y, Renk yap r: magnitude, g: magnitude, b: magnitude, a: 1.0 son)
+        son
+    son
+    
+    dön sonuç
+son
+
+// Emboss (kabartma)
+fonksiyon kabartma(goruntu: Goruntu) -> Goruntu
+yap
+    değişken kernel = FiltreKernel yap
+        boyut: 3,
+        veriler: [
+            -2.0, -1.0,  0.0,
+            -1.0,  1.0,  1.0,
+             0.0,  1.0,  2.0
+        ],
+        normalize: yanlış
+    son
+    
+    dön convolution_uygula(goruntu, kernel)
+son
+
+// Genel convolution uygula
+fonksiyon convolution_uygula(goruntu: Goruntu, kernel: FiltreKernel) -> Goruntu
+yap
+    değişken yeni = olustur(goruntu.genişlik, goruntu.yükseklik, renk_siyah())
+    değişken yarı_boyut = kernel.boyut / 2
+    
+    // Kernel toplamını hesapla (normalize için)
+    değişken kernel_toplam = eğer kernel.normalize ise yap
+        değişken toplam = 0.0
+        döngü val: kernel.veriler yap
+            toplam = toplam + val
+        son
+        eğer toplam == 0.0 ise 1.0 değilse toplam
+    son değilse 1.0
+    
+    döngü y: yarı_boyut..(goruntu.yükseklik - yarı_boyut) yap
+        döngü x: yarı_boyut..(goruntu.genişlik - yarı_boyut) yap
+            değişken r_toplam = 0.0
+            değişken g_toplam = 0.0
+            değişken b_toplam = 0.0
+            
+            // Kernel üzerinde dolaş
+            döngü ky: 0..kernel.boyut yap
+                döngü kx: 0..kernel.boyut yap
+                    değişken px = x + kx - yarı_boyut
+                    değişken py = y + ky - yarı_boyut
+                    
+                    değişken renk = piksel_al(goruntu, px, py).unwrap()
+                    değişken w = kernel.veriler[ky * kernel.boyut + kx]
+                    
+                    r_toplam = r_toplam + renk.r * w
+                    g_toplam = g_toplam + renk.g * w
+                    b_toplam = b_toplam + renk.b * w
+                son
+            son
+            
+            piksel_ayarla(yeni, x, y, Renk yap
+                r: clamp(r_toplam / kernel_toplam, 0.0, 1.0),
+                g: clamp(g_toplam / kernel_toplam, 0.0, 1.0),
+                b: clamp(b_toplam / kernel_toplam, 0.0, 1.0),
+                a: 1.0
+            son)
+        son
+    son
+    
+    dön yeni
+son
+
+// Gaussian kernel oluştur
+fonksiyon gaussian_kernel_olustur(radius: ondalık) -> FiltreKernel
+yap
+    değişken boyut = (math::ceil(radius) as tamsayı * 2 + 1)
+    değişken sigma = radius / 3.0
+    değişken veriler = yeni_liste(boyut * boyut, 0.0)
+    
+    değişken merkez = boyut / 2
+    değişken toplam = 0.0
+    
+    döngü y: 0..boyut yap
+        döngü x: 0..boyut yap
+            değişken dx = (x - merkez) as ondalık
+            değişken dy = (y - merkez) as ondalık
+            
+            değişken exponent = -(dx*dx + dy*dy) / (2.0 * sigma * sigma)
+            değişken değer = math::exp(exponent) / (2.0 * math::PI * sigma * sigma)
+            
+            veriler[y * boyut + x] = değer
+            toplam = toplam + değer
+        son
+    son
+    
+    dön FiltreKernel yap
+        boyut: boyut,
+        veriler: veriler,
+        normalize: doğru
+    son
+son
+
+// ============================================================================
+// HİSTOGRAM (Histogram Analysis)
+// ============================================================================
+
+// Histogram hesapla
+fonksiyon histogram_olustur(goruntu: Goruntu) -> Histogram
+yap
+    değişken kirmizi = yeni_liste(256, 0)
+    değişken yesil = yeni_liste(256, 0)
+    değişken mavi = yeni_liste(256, 0)
+    değişken parlaklik = yeni_liste(256, 0)
+    
+    döngü y: 0..goruntu.yükseklik yap
+        döngü x: 0..goruntu.genişlik yap
+            değişken renk = piksel_al(goruntu, x, y).unwrap()
+            
+            değişken r_idx = (renk.r * 255.0) as tamsayı
+            değişken g_idx = (renk.g * 255.0) as tamsayı
+            değişken b_idx = (renk.b * 255.0) as tamsayı
+            
+            kirmizi[r_idx] = kirmizi[r_idx] + 1
+            yesil[g_idx] = yesil[g_idx] + 1
+            mavi[b_idx] = mavi[b_idx] + 1
+            
+            // Luminance (GIMP style)
+            değişken luma = (renk.r * 0.299 + renk.g * 0.587 + renk.b * 0.114) * 255.0
+            değişken luma_idx = clamp(luma as tamsayı, 0, 255)
+            parlaklik[luma_idx] = parlaklik[luma_idx] + 1
+        son
+    son
+    
+    dön Histogram yap
+        kırmızı: kirmizi,
+        yeşil: yesil,
+        mavi: mavi,
+        parlaklık: parlaklik
+    son
+son
+
+// Histogram eşitleme (contrast enhancement)
+fonksiyon histogram_esitle(goruntu: Goruntu) -> Goruntu
+yap
+    değişken hist = histogram_olustur(goruntu)
+    
+    // Cumulative Distribution Function (CDF) hesapla
+    değişken cdf = yeni_liste(256, 0)
+    cdf[0] = hist.parlaklık[0]
+    
+    döngü i: 1..256 yap
+        cdf[i] = cdf[i - 1] + hist.parlaklık[i]
+    son
+    
+    değişken piksel_sayısı = goruntu.genişlik * goruntu.yükseklik
+    değişken yeni = olustur(goruntu.genişlik, goruntu.yükseklik, renk_siyah())
+    
+    döngü y: 0..goruntu.yükseklik yap
+        döngü x: 0..goruntu.genişlik yap
+            değişken renk = piksel_al(goruntu, x, y).unwrap()
+            
+            // Her kanal için eşitleme uygula
+            değişken r_idx = (renk.r * 255.0) as tamsayı
+            değişken g_idx = (renk.g * 255.0) as tamsayı
+            değişken b_idx = (renk.b * 255.0) as tamsayı
+            
+            değişken yeni_r = (cdf[r_idx] as ondalık / piksel_sayısı as ondalık)
+            değişken yeni_g = (cdf[g_idx] as ondalık / piksel_sayısı as ondalık)
+            değişken yeni_b = (cdf[b_idx] as ondalık / piksel_sayısı as ondalık)
+            
+            piksel_ayarla(yeni, x, y, Renk yap
+                r: yeni_r, g: yeni_g, b: yeni_b, a: renk.a
+            son)
+        son
+    son
+    
+    dön yeni
+son
+
+// ============================================================================
+// COMPOSITING (Alpha Blending)
+// ============================================================================
+
+// İki görüntüyü birleştir (blend)
+fonksiyon birlestir(alt: Goruntu, ust: Goruntu, x: tamsayı, y: tamsayı, mod: KarisimModu = "Normal") -> Goruntu
+yap
+    değişken sonuç = goruntu_kopyala(alt)
+    
+    döngü dy: 0..ust.yükseklik yap
+        döngü dx: 0..ust.genişlik yap
+            değişken hedef_x = x + dx
+            değişken hedef_y = y + dy
+            
+            eğer hedef_x >= 0 ve hedef_x < alt.genişlik ve 
+               hedef_y >= 0 ve hedef_y < alt.yükseklik ise yap
+                değişken alt_renk = piksel_al(sonuç, hedef_x, hedef_y).unwrap()
+                değişken ust_renk = piksel_al(ust, dx, dy).unwrap()
+                
+                değişken karışım = blend_renk(alt_renk, ust_renk, mod)
+                piksel_ayarla(sonuç, hedef_x, hedef_y, karışım)
+            son
+        son
+    son
+    
+    dön sonuç
+son
+
+// Renk karışım fonksiyonu
+fonksiyon blend_renk(alt: Renk, ust: Renk, mod: KarisimModu) -> Renk
+yap
+    // Alpha compositing
+    değişken alpha = ust.a
+    
+    değişken karışım = eşleşme mod yap
+        "Normal" -> ust,
+        "Multiply" -> Renk yap 
+            r: alt.r * ust.r, 
+            g: alt.g * ust.g, 
+            b: alt.b * ust.b, 
+            a: ust.a 
+        son,
+        "Screen" -> Renk yap
+            r: 1.0 - (1.0 - alt.r) * (1.0 - ust.r),
+            g: 1.0 - (1.0 - alt.g) * (1.0 - ust.g),
+            b: 1.0 - (1.0 - alt.b) * (1.0 - ust.b),
+            a: ust.a
+        son,
+        "Add" -> Renk yap
+            r: clamp(alt.r + ust.r, 0.0, 1.0),
+            g: clamp(alt.g + ust.g, 0.0, 1.0),
+            b: clamp(alt.b + ust.b, 0.0, 1.0),
+            a: ust.a
+        son,
+        "Subtract" -> Renk yap
+            r: clamp(alt.r - ust.r, 0.0, 1.0),
+            g: clamp(alt.g - ust.g, 0.0, 1.0),
+            b: clamp(alt.b - ust.b, 0.0, 1.0),
+            a: ust.a
+        son,
+        _ -> ust
+    son
+    
+    // Alpha blending: result = alpha * foreground + (1 - alpha) * background
+    dön Renk yap
+        r: alpha * karışım.r + (1.0 - alpha) * alt.r,
+        g: alpha * karışım.g + (1.0 - alpha) * alt.g,
+        b: alpha * karışım.b + (1.0 - alpha) * alt.b,
+        a: alpha + alt.a * (1.0 - alpha)
+    son
+son
+
+// ============================================================================
+// YARDIMCI FONKSİYONLAR (Utility Functions)
+// ============================================================================
+
+// Renk sabitleri
+fonksiyon renk_siyah() -> Renk yap dön Renk yap r: 0.0, g: 0.0, b: 0.0, a: 1.0 son son
+fonksiyon renk_beyaz() -> Renk yap dön Renk yap r: 1.0, g: 1.0, b: 1.0, a: 1.0 son son
+fonksiyon renk_kirmizi() -> Renk yap dön Renk yap r: 1.0, g: 0.0, b: 0.0, a: 1.0 son son
+fonksiyon renk_yesil() -> Renk yap dön Renk yap r: 0.0, g: 1.0, b: 0.0, a: 1.0 son son
+fonksiyon renk_mavi() -> Renk yap dön Renk yap r: 0.0, g: 0.0, b: 1.0, a: 1.0 son son
+fonksiyon renk_seffaf() -> Renk yap dön Renk yap r: 0.0, g: 0.0, b: 0.0, a: 0.0 son son
+
+// Renk harmanla (linear interpolation)
+fonksiyon renk_harmanla(renk1: Renk, renk2: Renk, t: ondalık) -> Renk
+yap
+    dön Renk yap
+        r: renk1.r * (1.0 - t) + renk2.r * t,
+        g: renk1.g * (1.0 - t) + renk2.g * t,
+        b: renk1.b * (1.0 - t) + renk2.b * t,
+        a: renk1.a * (1.0 - t) + renk2.a * t
+    son
+son
+
+// Clamp fonksiyonu (GIMP CLAMP0255)
+fonksiyon clamp(değer: ondalık, min: ondalık, max: ondalık) -> ondalık
+yap
+    eğer değer < min ise yap
+        dön min
+    son değilse eğer değer > max ise yap
+        dön max
+    son değilse yap
+        dön değer
+    son
+son
+
+// Görüntü kopyala
+fonksiyon goruntu_kopyala(goruntu: Goruntu) -> Goruntu
+yap
+    dön Goruntu yap
+        genişlik: goruntu.genişlik,
+        yükseklik: goruntu.yükseklik,
+        kanal_sayısı: goruntu.kanal_sayısı,
+        bit_derinliği: goruntu.bit_derinliği,
+        piksel_verisi: goruntu.piksel_verisi.kopyala(),
+        renk_uzayı: goruntu.renk_uzayı
+    son
+son
+
+// Dosya uzantısı al
+fonksiyon dosya_uzantısı_al(yol: yazı) -> yazı
+yap
+    değişken parçalar = yol.böl(".")
+    eğer parçalar.uzunluk > 1 ise yap
+        dön parçalar[parçalar.uzunluk - 1].küçük_harf()
+    son değilse yap
+        dön ""
+    son
+son
+
+// Varsayılan oluştur fonksiyonları
+fonksiyon varsayılan_görüntü() -> Goruntu
+yap
+    dön olustur(1, 1, renk_siyah())
+son
+
+// ============================================================================
+// EXTERNAL C BINDINGS (stb_image integration)
+// ============================================================================
+
+// C fonksiyon bildirimleri (runtime'da implement edilecek)
+dış fonksiyon stbi_load(dosya: yazı) -> Sonuç[Goruntu, yazı]
+dış fonksiyon stbi_load_from_memory(veri: liste[bayt], kanal: tamsayı) -> Sonuç[Goruntu, yazı]
+dış fonksiyon stbi_write_png(dosya: yazı, goruntu: Goruntu) -> Sonuç[boş, yazı]
+dış fonksiyon stbi_write_jpg(dosya: yazı, goruntu: Goruntu, kalite: tamsayı) -> Sonuç[boş, yazı]
+dış fonksiyon stbi_write_bmp(dosya: yazı, goruntu: Goruntu) -> Sonuç[boş, yazı]
+dış fonksiyon stbi_write_tga(dosya: yazı, goruntu: Goruntu) -> Sonuç[boş, yazı]
+dış fonksiyon stbi_write_png_to_mem(goruntu: Goruntu) -> Sonuç[liste[bayt], yazı]
+dış fonksiyon stbi_write_jpg_to_mem(goruntu: Goruntu, kalite: tamsayı) -> Sonuç[liste[bayt], yazı]
+dış fonksiyon stbi_write_bmp_to_mem(goruntu: Goruntu) -> Sonuç[liste[bayt], yazı]
+
+// ============================================================================
+// ADVANCED IMAGE CODECS & PROCESSING (Yeni - v1.7)
+// ============================================================================
+
+// PNG Codec (zlib compression support)
+tip PngAyarlar = yapı yap
+    sikistirma_seviyesi: tamsayı,  // 0-9 (0=none, 9=max)
+    filtre_türü: PngFiltre,
+    interlacing: mantıksal,  // Adam7 interlacing
+    seffaflik_optimizasyonu: mantıksal
+son
+
+tip PngFiltre = "None" | "Sub" | "Up" | "Average" | "Paeth" | "Adaptive"
+
+// PNG yükleme (chunk-based parsing)
+fonksiyon png_yukle_detayli(dosya_yolu: yazı) -> Sonuç[Goruntu, GorüntuHata]
+yap
+    değişken veri = io::dosya_oku(dosya_yolu).hata_donustur(|e| GorüntuHata yap
+        mesaj: "Dosya okunamadı: " + e.mesaj,
+        hata_türü: "io"
+    son)?
+    
+    // PNG signature check (89 50 4E 47 0D 0A 1A 0A)
+    eğer veri.uzunluk < 8 veya veri[0] != 137 veya veri[1] != 80 ise yap
+        dön Hata(GorüntuHata yap mesaj: "Geçersiz PNG signature", hata_türü: "format" son)
+    son
+    
+    değişken chunks = png_parse_chunks(veri)?
+    değişken goruntu = png_decode_chunks(chunks)?
+    
+    dön Tamam(goruntu)
+son
+
+// PNG chunk parsing
+fonksiyon png_parse_chunks(veri: liste[bayt]) -> Sonuç[liste[PngChunk], GorüntuHata]
+yap
+    değişken chunks = liste_oluştur[PngChunk]()
+    değişken pos = 8  // Skip signature
+    
+    iken pos < veri.uzunluk yap
+        eğer pos + 12 > veri.uzunluk ise yap
+            kır
+        son
+        
+        // Length (4 bytes, big-endian)
+        değişken uzunluk = (veri[pos] << 24) | (veri[pos + 1] << 16) | 
+                           (veri[pos + 2] << 8) | veri[pos + 3]
+        pos = pos + 4
+        
+        // Type (4 bytes ASCII)
+        değişken tür = string::from_bytes(veri[pos..pos + 4])
+        pos = pos + 4
+        
+        // Data (length bytes)
+        değişken chunk_veri = veri[pos..pos + uzunluk]
+        pos = pos + uzunluk
+        
+        // CRC (4 bytes)
+        değişken crc = (veri[pos] << 24) | (veri[pos + 1] << 16) | 
+                       (veri[pos + 2] << 8) | veri[pos + 3]
+        pos = pos + 4
+        
+        // CRC doğrulama
+        değişken calculated_crc = crc32(tür.as_bytes() + chunk_veri)
+        eğer calculated_crc != crc ise yap
+            dön Hata(GorüntuHata yap mesaj: "CRC hatası: " + tür, hata_türü: "decode" son)
+        son
+        
+        liste_ekle(chunks, PngChunk yap tür: tür, veri: chunk_veri son)
+        
+        // IEND chunk görüldü mü?
+        eğer tür == "IEND" ise yap
+            kır
+        son
+    son
+    
+    dön Tamam(chunks)
+son
+
+tip PngChunk = yapı yap
+    tür: yazı,  // "IHDR", "PLTE", "IDAT", "IEND" vb.
+    veri: liste[bayt]
+son
+
+// PNG chunk decoding (IHDR, IDAT, PLTE)
+fonksiyon png_decode_chunks(chunks: liste[PngChunk]) -> Sonuç[Goruntu, GorüntuHata]
+yap
+    // IHDR chunk (header) bul
+    değişken ihdr = chunks.bul(|c| c.tür == "IHDR").unwrap()
+    değişken genişlik = (ihdr.veri[0] << 24) | (ihdr.veri[1] << 16) | 
+                        (ihdr.veri[2] << 8) | ihdr.veri[3]
+    değişken yükseklik = (ihdr.veri[4] << 24) | (ihdr.veri[5] << 16) | 
+                         (ihdr.veri[6] << 8) | ihdr.veri[7]
+    değişken bit_derinliği = ihdr.veri[8]
+    değişken renk_türü = ihdr.veri[9]  // 0=Gray, 2=RGB, 3=Indexed, 4=GrayAlpha, 6=RGBA
+    
+    // IDAT chunks (compressed pixel data) birleştir
+    değişken idat_veri = liste_oluştur[bayt]()
+    her biri chunk içinde chunks yap
+        eğer chunk.tür == "IDAT" ise yap
+            idat_veri = idat_veri + chunk.veri
+        son
+    son
+    
+    // zlib decompress
+    değişken ham_veri = zlib_decompress(idat_veri)?
+    
+    // Filter'ları uygula (PNG scanline filtering)
+    değişken piksel_veri = png_unfilter(ham_veri, genişlik, yükseklik, renk_türü)?
+    
+    değişken kanal_sayısı = eşleşme renk_türü yap
+        0 -> 1,  // Grayscale
+        2 -> 3,  // RGB
+        3 -> 3,  // Indexed (pallete'den RGB'ye dönüştürülecek)
+        4 -> 2,  // Grayscale + Alpha
+        6 -> 4,  // RGBA
+        _ -> dön Hata(GorüntuHata yap mesaj: "Desteklenmeyen renk türü", hata_türü: "format" son)
+    son
+    
+    dön Tamam(Goruntu yap
+        genişlik: genişlik,
+        yükseklik: yükseklik,
+        kanal_sayısı: kanal_sayısı,
+        bit_derinliği: bit_derinliği,
+        piksel_verisi: piksel_veri,
+        renk_uzayı: eğer kanal_sayısı == 4 ise "RGBA" değilse "RGB"
+    son)
+son
+
+// PNG unfiltering (scanline filters)
+fonksiyon png_unfilter(veri: liste[bayt], genişlik: tamsayı, yükseklik: tamsayı, 
+                        renk_türü: tamsayı) -> Sonuç[liste[bayt], GorüntuHata]
+yap
+    değişken bpp = eşleşme renk_türü yap  // Bytes per pixel
+        0 -> 1,
+        2 -> 3,
+        4 -> 2,
+        6 -> 4,
+        _ -> 3
+    son
+    
+    değişken scanline_boyut = genişlik * bpp
+    değişken sonuc = liste_oluştur[bayt]()
+    değişken onceki_satir = liste_oluştur[bayt](scanline_boyut, 0)
+    
+    değişken pos = 0
+    her biri y içinde aralık(yükseklik) yap
+        // Filter type (her satırın başında)
+        değişken filtre = veri[pos]
+        pos = pos + 1
+        
+        değişken satir = veri[pos..pos + scanline_boyut]
+        pos = pos + scanline_boyut
+        
+        // Filter uygula
+        değişken filtered_satir = eşleşme filtre yap
+            0 -> satir,  // None
+            1 -> png_unfilter_sub(satir, bpp),
+            2 -> png_unfilter_up(satir, onceki_satir),
+            3 -> png_unfilter_average(satir, onceki_satir, bpp),
+            4 -> png_unfilter_paeth(satir, onceki_satir, bpp),
+            _ -> dön Hata(GorüntuHata yap mesaj: "Geçersiz filter türü", hata_türü: "decode" son)
+        son
+        
+        sonuc = sonuc + filtered_satir
+        onceki_satir = filtered_satir
+    son
+    
+    dön Tamam(sonuc)
+son
+
+// PNG filter functions
+fonksiyon png_unfilter_sub(satir: liste[bayt], bpp: tamsayı) -> liste[bayt]
+yap
+    değişken sonuc = satir.kopyala()
+    her biri i içinde aralık(bpp, satir.uzunluk) yap
+        sonuc[i] = (sonuc[i] + sonuc[i - bpp]) % 256
+    son
+    dön sonuc
+son
+
+fonksiyon png_unfilter_up(satir: liste[bayt], onceki: liste[bayt]) -> liste[bayt]
+yap
+    değişken sonuc = liste_oluştur[bayt]()
+    her biri i içinde aralık(satir.uzunluk) yap
+        liste_ekle(sonuc, (satir[i] + onceki[i]) % 256)
+    son
+    dön sonuc
+son
+
+fonksiyon png_unfilter_average(satir: liste[bayt], onceki: liste[bayt], bpp: tamsayı) -> liste[bayt]
+yap
+    değişken sonuc = satir.kopyala()
+    her biri i içinde aralık(satir.uzunluk) yap
+        değişken a = eğer i >= bpp ise sonuc[i - bpp] değilse 0
+        değişken b = onceki[i]
+        sonuc[i] = (sonuc[i] + ((a + b) / 2)) % 256
+    son
+    dön sonuc
+son
+
+fonksiyon png_unfilter_paeth(satir: liste[bayt], onceki: liste[bayt], bpp: tamsayı) -> liste[bayt]
+yap
+    değişken sonuc = satir.kopyala()
+    her biri i içinde aralık(satir.uzunluk) yap
+        değişken a = eğer i >= bpp ise sonuc[i - bpp] değilse 0
+        değişken b = onceki[i]
+        değişken c = eğer i >= bpp ise onceki[i - bpp] değilse 0
+        sonuc[i] = (sonuc[i] + paeth_predictor(a, b, c)) % 256
+    son
+    dön sonuc
+son
+
+// Paeth predictor algorithm (PNG spec)
+fonksiyon paeth_predictor(a: tamsayı, b: tamsayı, c: tamsayı) -> tamsayı
+yap
+    değişken p = a + b - c
+    değişken pa = math::abs(p - a)
+    değişken pb = math::abs(p - b)
+    değişken pc = math::abs(p - c)
+    
+    eğer pa <= pb ve pa <= pc ise yap
+        dön a
+    son değilse eğer pb <= pc ise yap
+        dön b
+    son değilse yap
+        dön c
+    son
+son
+
+// JPEG Codec (DCT-based compression)
+tip JpegAyarlar = yapı yap
+    kalite: tamsayı,  // 1-100
+    chroma_subsampling: JpegChroma,  // 4:4:4, 4:2:2, 4:2:0
+    optimize_huffman: mantıksal,
+    progressive: mantıksal,  // Progressive JPEG
+    smooth_factor: tamsayı  // 0-100
+son
+
+tip JpegChroma = "444" | "422" | "420"  // Chroma subsampling
+
+// JPEG DCT (Discrete Cosine Transform) - 8x8 block
+fonksiyon jpeg_dct_8x8(block: liste[ondalık]) -> liste[ondalık]
+yap
+    değişken dct = liste_oluştur[ondalık](64, 0.0)
+    
+    // 2D DCT: F(u,v) = C(u)*C(v) * Σ Σ f(x,y) * cos(...) 
+    her biri u içinde aralık(8) yap
+        her biri v içinde aralık(8) yap
+            değişken sum = 0.0
+            
+            her biri x içinde aralık(8) yap
+                her biri y içinde aralık(8) yap
+                    değişken pixel = block[y * 8 + x]
+                    değişken cos_u = math::cos((2.0 * x as ondalık + 1.0) * u as ondalık * math::PI / 16.0)
+                    değişken cos_v = math::cos((2.0 * y as ondalık + 1.0) * v as ondalık * math::PI / 16.0)
+                    sum = sum + pixel * cos_u * cos_v
+                son
+            son
+            
+            değişken cu = eğer u == 0 ise 1.0 / math::sqrt(2.0) değilse 1.0
+            değişken cv = eğer v == 0 ise 1.0 / math::sqrt(2.0) değilse 1.0
+            
+            dct[v * 8 + u] = 0.25 * cu * cv * sum
+        son
+    son
+    
+    dön dct
+son
+
+// JPEG IDCT (Inverse DCT)
+fonksiyon jpeg_idct_8x8(dct: liste[ondalık]) -> liste[ondalık]
+yap
+    değişken block = liste_oluştur[ondalık](64, 0.0)
+    
+    her biri x içinde aralık(8) yap
+        her biri y içinde aralık(8) yap
+            değişken sum = 0.0
+            
+            her biri u içinde aralık(8) yap
+                her biri v içinde aralık(8) yap
+                    değişken cu = eğer u == 0 ise 1.0 / math::sqrt(2.0) değilse 1.0
+                    değişken cv = eğer v == 0 ise 1.0 / math::sqrt(2.0) değilse 1.0
+                    değişken dct_val = dct[v * 8 + u]
+                    değişken cos_u = math::cos((2.0 * x as ondalık + 1.0) * u as ondalık * math::PI / 16.0)
+                    değişken cos_v = math::cos((2.0 * y as ondalık + 1.0) * v as ondalık * math::PI / 16.0)
+                    sum = sum + cu * cv * dct_val * cos_u * cos_v
+                son
+            son
+            
+            block[y * 8 + x] = clamp(0.25 * sum, 0.0, 255.0)
+        son
+    son
+    
+    dön block
+son
+
+// JPEG quantization matrix (quality-based)
+fonksiyon jpeg_quantization_matrix(kalite: tamsayı) -> liste[tamsayı]
+yap
+    // Standard JPEG luminance quantization matrix
+    değişken base_matrix = [
+        16, 11, 10, 16, 24, 40, 51, 61,
+        12, 12, 14, 19, 26, 58, 60, 55,
+        14, 13, 16, 24, 40, 57, 69, 56,
+        14, 17, 22, 29, 51, 87, 80, 62,
+        18, 22, 37, 56, 68, 109, 103, 77,
+        24, 35, 55, 64, 81, 104, 113, 92,
+        49, 64, 78, 87, 103, 121, 120, 101,
+        72, 92, 95, 98, 112, 100, 103, 99
+    ]
+    
+    // Scale based on quality (1-100)
+    değişken scale = eğer kalite < 50 ise yap
+        5000.0 / kalite as ondalık
+    son değilse yap
+        200.0 - 2.0 * kalite as ondalık
+    son
+    
+    değişken quantized = liste_oluştur[tamsayı]()
+    her biri değer içinde base_matrix yap
+        değişken scaled = ((değer as ondalık * scale + 50.0) / 100.0) as tamsayı
+        liste_ekle(quantized, math::max(1, math::min(255, scaled)))
+    son
+    
+    dön quantized
+son
+
+// BMP Codec (uncompressed RGB)
+fonksiyon bmp_yukle(dosya_yolu: yazı) -> Sonuç[Goruntu, GorüntuHata]
+yap
+    değişken veri = io::dosya_oku(dosya_yolu).hata_donustur(|e| GorüntuHata yap
+        mesaj: "Dosya okunamadı: " + e.mesaj,
+        hata_türü: "io"
+    son)?
+    
+    // BMP header parsing (BITMAPFILEHEADER + BITMAPINFOHEADER)
+    eğer veri[0] != 66 veya veri[1] != 77 ise yap  // "BM" signature
+        dön Hata(GorüntuHata yap mesaj: "Geçersiz BMP signature", hata_türü: "format" son)
+    son
+    
+    değişken dosya_boyutu = bmp_read_u32(veri, 2)
+    değişken pixel_offset = bmp_read_u32(veri, 10)
+    
+    // BITMAPINFOHEADER (40 bytes)
+    değişken header_boyut = bmp_read_u32(veri, 14)
+    değişken genişlik = bmp_read_i32(veri, 18)
+    değişken yükseklik = bmp_read_i32(veri, 22)
+    değişken bit_sayısı = bmp_read_u16(veri, 28)
+    değişken sıkıştırma = bmp_read_u32(veri, 30)
+    
+    // Only uncompressed BMPs supported
+    eğer sıkıştırma != 0 ise yap
+        dön Hata(GorüntuHata yap mesaj: "Sıkıştırılmış BMP desteklenmiyor", hata_türü: "format" son)
+    son
+    
+    // Convert BGR to RGB
+    değişken kanal_sayısı = bit_sayısı / 8
+    değişken piksel_veri = bmp_bgr_to_rgb(veri[pixel_offset..], genişlik, math::abs(yükseklik), kanal_sayısı)
+    
+    dön Tamam(Goruntu yap
+        genişlik: genişlik,
+        yükseklik: math::abs(yükseklik),
+        kanal_sayısı: kanal_sayısı,
+        bit_derinliği: 8,
+        piksel_verisi: piksel_veri,
+        renk_uzayı: eğer kanal_sayısı == 4 ise "RGBA" değilse "RGB"
+    son)
+son
+
+// BMP BGR to RGB conversion (BMP stores pixels as BGR)
+fonksiyon bmp_bgr_to_rgb(veri: liste[bayt], genişlik: tamsayı, yükseklik: tamsayı, 
+                          kanal: tamsayı) -> liste[bayt]
+yap
+    değişken sonuc = liste_oluştur[bayt]()
+    değişken satir_boyut = ((genişlik * kanal + 3) / 4) * 4  // 4-byte aligned
+    
+    // BMP stores rows bottom-to-top
+    her biri y içinde aralık(yükseklik) yap
+        değişken satir_offset = (yükseklik - 1 - y) * satir_boyut
+        
+        her biri x içinde aralık(genişlik) yap
+            değişken pixel_offset = satir_offset + x * kanal
+            
+            // Swap B and R
+            liste_ekle(sonuc, veri[pixel_offset + 2])  // R
+            liste_ekle(sonuc, veri[pixel_offset + 1])  // G
+            liste_ekle(sonuc, veri[pixel_offset + 0])  // B
+            eğer kanal == 4 ise yap
+                liste_ekle(sonuc, veri[pixel_offset + 3])  // A
+            son
+        son
+    son
+    
+    dön sonuc
+son
+
+// BMP helper functions (little-endian)
+fonksiyon bmp_read_u16(veri: liste[bayt], offset: tamsayı) -> tamsayı
+yap
+    dön veri[offset] | (veri[offset + 1] << 8)
+son
+
+fonksiyon bmp_read_u32(veri: liste[bayt], offset: tamsayı) -> tamsayı
+yap
+    dön veri[offset] | (veri[offset + 1] << 8) | 
+         (veri[offset + 2] << 16) | (veri[offset + 3] << 24)
+son
+
+fonksiyon bmp_read_i32(veri: liste[bayt], offset: tamsayı) -> tamsayı
+yap
+    değişken u32 = bmp_read_u32(veri, offset)
+    // Convert unsigned to signed (two's complement)
+    dön eğer u32 > 2147483647 ise u32 - 4294967296 değilse u32
+son
+
+// ============================================================================
+// ADVANCED IMAGE FILTERS (Production-Grade)
+// ============================================================================
+
+// Lanczos resampling (high-quality resize)
+fonksiyon lanczos_resize(goruntu: Goruntu, yeni_genişlik: tamsayı, yeni_yükseklik: tamsayı, 
+                          a: tamsayı = 3) -> Goruntu
+yap
+    değişken sonuc = olustur(yeni_genişlik, yeni_yükseklik, renk_siyah())
+    
+    değişken x_scale = goruntu.genişlik as ondalık / yeni_genişlik as ondalık
+    değişken y_scale = goruntu.yükseklik as ondalık / yeni_yükseklik as ondalık
+    
+    her biri y içinde aralık(yeni_yükseklik) yap
+        her biri x içinde aralık(yeni_genişlik) yap
+            değişken src_x = x as ondalık * x_scale
+            değişken src_y = y as ondalık * y_scale
+            
+            // Lanczos kernel convolution
+            değişken r_sum = 0.0
+            değişken g_sum = 0.0
+            değişken b_sum = 0.0
+            değişken weight_sum = 0.0
+            
+            değişken x_start = math::floor(src_x) as tamsayı - a + 1
+            değişken x_end = math::floor(src_x) as tamsayı + a
+            değişken y_start = math::floor(src_y) as tamsayı - a + 1
+            değişken y_end = math::floor(src_y) as tamsayı + a
+            
+            her biri ky içinde aralık(y_start, y_end + 1) yap
+                eğer ky < 0 veya ky >= goruntu.yükseklik ise yap
+                    devam et
+                son
+                
+                her biri kx içinde aralık(x_start, x_end + 1) yap
+                    eğer kx < 0 veya kx >= goruntu.genişlik ise yap
+                        devam et
+                    son
+                    
+                    değişken dx = src_x - kx as ondalık
+                    değişken dy = src_y - ky as ondalık
+                    
+                    değişken weight = lanczos_kernel(dx, a) * lanczos_kernel(dy, a)
+                    
+                    değişken renk = piksel_al(goruntu, kx, ky).unwrap()
+                    r_sum = r_sum + renk.r * weight
+                    g_sum = g_sum + renk.g * weight
+                    b_sum = b_sum + renk.b * weight
+                    weight_sum = weight_sum + weight
+                son
+            son
+            
+            eğer weight_sum > 0.0 ise yap
+                piksel_ayarla(sonuc, x, y, Renk yap
+                    r: clamp(r_sum / weight_sum, 0.0, 1.0),
+                    g: clamp(g_sum / weight_sum, 0.0, 1.0),
+                    b: clamp(b_sum / weight_sum, 0.0, 1.0),
+                    a: 1.0
+                son)
+            son
+        son
+    son
+    
+    dön sonuc
+son
+
+// Lanczos kernel function
+fonksiyon lanczos_kernel(x: ondalık, a: tamsayı) -> ondalık
+yap
+    eğer math::abs(x) < 0.0001 ise yap
+        dön 1.0
+    son
+    
+    eğer math::abs(x) >= a as ondalık ise yap
+        dön 0.0
+    son
+    
+    değişken pi_x = math::PI * x
+    dön a as ondalık * math::sin(pi_x) * math::sin(pi_x / a as ondalık) / (pi_x * pi_x)
+son
+
+// Unsharp masking (professional sharpening)
+fonksiyon unsharp_mask(goruntu: Goruntu, radius: ondalık, amount: ondalık, 
+                       threshold: ondalık) -> Goruntu
+yap
+    // 1. Gaussian blur ile bulanık versiyon oluştur
+    değişken bulanik = gaussian_blur(goruntu, radius, radius * 3.0)
+    
+    // 2. Original - Blurred = High-pass filter
+    değişken sonuc = goruntu_kopyala(goruntu)
+    
+    her biri y içinde aralık(goruntu.yükseklik) yap
+        her biri x içinde aralık(goruntu.genişlik) yap
+            değişken orijinal = piksel_al(goruntu, x, y).unwrap()
+            değişken bulanik_renk = piksel_al(bulanik, x, y).unwrap()
+            
+            // High-pass = Original - Blurred
+            değişken diff_r = orijinal.r - bulanik_renk.r
+            değişken diff_g = orijinal.g - bulanik_renk.g
+            değişken diff_b = orijinal.b - bulanik_renk.b
+            
+            // Threshold check (sadece belirli farkları keskinleştir)
+            eğer math::abs(diff_r) < threshold ve 
+               math::abs(diff_g) < threshold ve 
+               math::abs(diff_b) < threshold ise yap
+                devam et
+            son
+            
+            // Sharpened = Original + amount * high-pass
+            piksel_ayarla(sonuc, x, y, Renk yap
+                r: clamp(orijinal.r + amount * diff_r, 0.0, 1.0),
+                g: clamp(orijinal.g + amount * diff_g, 0.0, 1.0),
+                b: clamp(orijinal.b + amount * diff_b, 0.0, 1.0),
+                a: orijinal.a
+            son)
+        son
+    son
+    
+    dön sonuc
+son
+
+// Bilateral filter (edge-preserving smoothing)
+fonksiyon bilateral_filter(goruntu: Goruntu, sigma_spatial: ondalık, 
+                           sigma_range: ondalık, kernel_radius: tamsayı) -> Goruntu
+yap
+    değişken sonuc = goruntu_kopyala(goruntu)
+    
+    her biri y içinde aralık(goruntu.yükseklik) yap
+        her biri x içinde aralık(goruntu.genişlik) yap
+            değişken merkez = piksel_al(goruntu, x, y).unwrap()
+            
+            değişken r_sum = 0.0
+            değişken g_sum = 0.0
+            değişken b_sum = 0.0
+            değişken weight_sum = 0.0
+            
+            her biri dy içinde aralık(-kernel_radius, kernel_radius + 1) yap
+                her biri dx içinde aralık(-kernel_radius, kernel_radius + 1) yap
+                    değişken nx = x + dx
+                    değişken ny = y + dy
+                    
+                    eğer nx < 0 veya nx >= goruntu.genişlik veya 
+                       ny < 0 veya ny >= goruntu.yükseklik ise yap
+                        devam et
+                    son
+                    
+                    değişken komşu = piksel_al(goruntu, nx, ny).unwrap()
+                    
+                    // Spatial Gaussian
+                    değişken spatial_dist = math::sqrt((dx * dx + dy * dy) as ondalık)
+                    değişken spatial_weight = math::exp(-(spatial_dist * spatial_dist) / 
+                                                        (2.0 * sigma_spatial * sigma_spatial))
+                    
+                    // Range Gaussian (color distance)
+                    değişken color_dist = math::sqrt(
+                        (merkez.r - komşu.r) * (merkez.r - komşu.r) +
+                        (merkez.g - komşu.g) * (merkez.g - komşu.g) +
+                        (merkez.b - komşu.b) * (merkez.b - komşu.b)
+                    )
+                    değişken range_weight = math::exp(-(color_dist * color_dist) / 
+                                                      (2.0 * sigma_range * sigma_range))
+                    
+                    değişken weight = spatial_weight * range_weight
+                    
+                    r_sum = r_sum + komşu.r * weight
+                    g_sum = g_sum + komşu.g * weight
+                    b_sum = b_sum + komşu.b * weight
+                    weight_sum = weight_sum + weight
+                son
+            son
+            
+            piksel_ayarla(sonuc, x, y, Renk yap
+                r: r_sum / weight_sum,
+                g: g_sum / weight_sum,
+                b: b_sum / weight_sum,
+                a: merkez.a
+            son)
+        son
+    son
+    
+    dön sonuc
+son
+
+// Non-local means denoising (state-of-the-art noise reduction)
+fonksiyon non_local_means(goruntu: Goruntu, h: ondalık, search_radius: tamsayı, 
+                          patch_radius: tamsayı) -> Goruntu
+yap
+    değişken sonuc = goruntu_kopyala(goruntu)
+    
+    her biri y içinde aralık(goruntu.yükseklik) yap
+        her biri x içinde aralık(goruntu.genişlik) yap
+            değişken r_sum = 0.0
+            değişken g_sum = 0.0
+            değişken b_sum = 0.0
+            değişken weight_sum = 0.0
+            
+            // Search window içinde benzer patch'leri bul
+            her biri sy içinde aralık(-search_radius, search_radius + 1) yap
+                her biri sx içinde aralık(-search_radius, search_radius + 1) yap
+                    değişken cx = x + sx
+                    değişken cy = y + sy
+                    
+                    eğer cx < patch_radius veya cx >= goruntu.genişlik - patch_radius veya
+                       cy < patch_radius veya cy >= goruntu.yükseklik - patch_radius ise yap
+                        devam et
+                    son
+                    
+                    // Patch distance hesapla
+                    değişken patch_dist = nlm_patch_distance(goruntu, x, y, cx, cy, patch_radius)
+                    
+                    // Gaussian weight
+                    değişken weight = math::exp(-(patch_dist * patch_dist) / (h * h))
+                    
+                    değişken renk = piksel_al(goruntu, cx, cy).unwrap()
+                    r_sum = r_sum + renk.r * weight
+                    g_sum = g_sum + renk.g * weight
+                    b_sum = b_sum + renk.b * weight
+                    weight_sum = weight_sum + weight
+                son
+            son
+            
+            piksel_ayarla(sonuc, x, y, Renk yap
+                r: r_sum / weight_sum,
+                g: g_sum / weight_sum,
+                b: b_sum / weight_sum,
+                a: piksel_al(goruntu, x, y).unwrap().a
+            son)
+        son
+    son
+    
+    dön sonuc
+son
+
+// NLM patch distance
+fonksiyon nlm_patch_distance(goruntu: Goruntu, x1: tamsayı, y1: tamsayı, 
+                              x2: tamsayı, y2: tamsayı, radius: tamsayı) -> ondalık
+yap
+    değişken dist_sum = 0.0
+    değişken count = 0
+    
+    her biri dy içinde aralık(-radius, radius + 1) yap
+        her biri dx içinde aralık(-radius, radius + 1) yap
+            değişken p1 = piksel_al(goruntu, x1 + dx, y1 + dy).unwrap()
+            değişken p2 = piksel_al(goruntu, x2 + dx, y2 + dy).unwrap()
+            
+            dist_sum = dist_sum + 
+                      (p1.r - p2.r) * (p1.r - p2.r) +
+                      (p1.g - p2.g) * (p1.g - p2.g) +
+                      (p1.b - p2.b) * (p1.b - p2.b)
+            count = count + 1
+        son
+    son
+    
+    dön dist_sum / count as ondalık
+son
+
+// CRC32 checksum (PNG verification)
+fonksiyon crc32(veri: liste[bayt]) -> tamsayı
+yap
+    değişken crc = 0xFFFFFFFF
+    
+    her biri byte içinde veri yap
+        crc = crc ^ byte
+        her biri _ içinde aralık(8) yap
+            crc = eğer (crc & 1) != 0 ise yap
+                (crc >> 1) ^ 0xEDB88320
+            son değilse yap
+                crc >> 1
+            son
+        son
+    son
+    
+    dön crc ^ 0xFFFFFFFF
+son
+
+// zlib decompression (simplified - gerçek implementasyon DEFLATE kullanır)
+dış fonksiyon zlib_decompress(veri: liste[bayt]) -> Sonuç[liste[bayt], GorüntuHata]
+
+// ============================================================================
+// Son - image.berk (v1.7 Enhanced)
+// 46.2 KB - 1400+ satır
+// PNG chunk parsing, JPEG DCT, BMP codec, Lanczos resize, Unsharp mask,
+// Bilateral filter, Non-local means denoising
+// ============================================================================

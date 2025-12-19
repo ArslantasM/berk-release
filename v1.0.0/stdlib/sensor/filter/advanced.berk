@@ -1,0 +1,723 @@
+// ============================================================================
+// BERK SENSOR API - Gelişmiş Filtreler (Kalman Alternatifleri)
+// ============================================================================
+// Kalman tek seçenek değil, sadece bir araç.
+// Gerçek sistemlerde: EMA, Median, Complementary, Alpha-Beta kazanır.
+// ============================================================================
+
+modül sensor::filter::advanced
+
+import sensor::measurement::{Measurement, Confidence}
+
+// ============================================================================
+// ALPHA-BETA FİLTRESİ (Fakir ama Hızlı Kalman)
+// ============================================================================
+
+/// Alpha-Beta filtresi
+/// Kalman'ın %10 maliyetiyle %90 performansı
+/// IMU, encoder, hız tahmini için mükemmel
+pub tip AlphaBetaFilter = yapı yap
+    /// Alpha: pozisyon düzeltme katsayısı (0.1-0.5 tipik)
+    alpha: ondalık,
+    /// Beta: hız düzeltme katsayısı (0.001-0.1 tipik)
+    beta: ondalık,
+    /// Tahmin edilen pozisyon
+    x: ondalık,
+    /// Tahmin edilen hız
+    v: ondalık,
+    /// Son zaman (ms)
+    last_time_ms: sayı,
+    /// Başlatıldı mı?
+    initialized: mantıksal,
+son
+
+impl AlphaBetaFilter:
+    /// Yeni filtre oluştur
+    pub fn new(alpha: ondalık, beta: ondalık) döndür AlphaBetaFilter:
+        döndür AlphaBetaFilter {
+            alpha: alpha.clamp(0.01, 1.0),
+            beta: beta.clamp(0.001, 0.5),
+            x: 0.0,
+            v: 0.0,
+            last_time_ms: 0,
+            initialized: yanlış,
+        }
+    son
+    
+    /// Preset: Hızlı tepki (tracking)
+    pub fn fast() döndür AlphaBetaFilter:
+        döndür AlphaBetaFilter::new(0.5, 0.1)
+    son
+    
+    /// Preset: Dengeli
+    pub fn balanced() döndür AlphaBetaFilter:
+        döndür AlphaBetaFilter::new(0.2, 0.05)
+    son
+    
+    /// Preset: Smooth (yavaş değişim)
+    pub fn smooth() döndür AlphaBetaFilter:
+        döndür AlphaBetaFilter::new(0.1, 0.01)
+    son
+    
+    /// Preset: IMU için optimize
+    pub fn for_imu() döndür AlphaBetaFilter:
+        döndür AlphaBetaFilter::new(0.15, 0.005)
+    son
+    
+    /// Preset: Encoder için optimize
+    pub fn for_encoder() döndür AlphaBetaFilter:
+        döndür AlphaBetaFilter::new(0.3, 0.08)
+    son
+    
+    /// Güncelle (zaman damgalı)
+    pub fn update(mut self, measurement: ondalık, current_time_ms: sayı) döndür ondalık:
+        eğer !self.initialized:
+            self.x = measurement
+            self.v = 0.0
+            self.last_time_ms = current_time_ms
+            self.initialized = doğru
+            döndür measurement
+        son
+        
+        // Zaman farkı
+        değişken dt = (current_time_ms - self.last_time_ms) / 1000.0
+        eğer dt <= 0.0:
+            dt = 0.01
+        son
+        self.last_time_ms = current_time_ms
+        
+        // Tahmin (prediction)
+        değişken x_pred = self.x + self.v * dt
+        
+        // Hata (residual)
+        değişken residual = measurement - x_pred
+        
+        // Düzeltme (correction)
+        self.x = x_pred + self.alpha * residual
+        self.v = self.v + (self.beta / dt) * residual
+        
+        döndür self.x
+    son
+    
+    /// Basit güncelle (sabit dt varsayımı)
+    pub fn apply(mut self, measurement: ondalık) döndür ondalık:
+        eğer !self.initialized:
+            self.x = measurement
+            self.v = 0.0
+            self.initialized = doğru
+            döndür measurement
+        son
+        
+        // Sabit dt = 0.01s varsayımı
+        değişken dt = 0.01
+        
+        değişken x_pred = self.x + self.v * dt
+        değişken residual = measurement - x_pred
+        
+        self.x = x_pred + self.alpha * residual
+        self.v = self.v + (self.beta / dt) * residual
+        
+        döndür self.x
+    son
+    
+    /// Hız tahminini al
+    pub fn get_velocity(self) döndür ondalık:
+        döndür self.v
+    son
+    
+    /// Pozisyon tahminini al
+    pub fn get_position(self) döndür ondalık:
+        döndür self.x
+    son
+    
+    /// Reset
+    pub fn reset(mut self) döndür void:
+        self.x = 0.0
+        self.v = 0.0
+        self.initialized = yanlış
+    son
+son
+
+// ============================================================================
+// ALPHA-BETA-GAMMA FİLTRESİ (İvme tahmini ile)
+// ============================================================================
+
+/// Alpha-Beta-Gamma filtresi
+/// İvme tahmini ekler (daha yüksek dinamik sistemler için)
+pub tip AlphaBetaGammaFilter = yapı yap
+    alpha: ondalık,
+    beta: ondalık,
+    gamma: ondalık,
+    x: ondalık,      // Pozisyon
+    v: ondalık,      // Hız
+    a: ondalık,      // İvme
+    last_time_ms: sayı,
+    initialized: mantıksal,
+son
+
+impl AlphaBetaGammaFilter:
+    pub fn new(alpha: ondalık, beta: ondalık, gamma: ondalık) döndür AlphaBetaGammaFilter:
+        döndür AlphaBetaGammaFilter {
+            alpha: alpha,
+            beta: beta,
+            gamma: gamma,
+            x: 0.0,
+            v: 0.0,
+            a: 0.0,
+            last_time_ms: 0,
+            initialized: yanlış,
+        }
+    son
+    
+    /// Preset: Maneuvering target tracking
+    pub fn for_tracking() döndür AlphaBetaGammaFilter:
+        döndür AlphaBetaGammaFilter::new(0.5, 0.4, 0.1)
+    son
+    
+    pub fn update(mut self, measurement: ondalık, current_time_ms: sayı) döndür ondalık:
+        eğer !self.initialized:
+            self.x = measurement
+            self.v = 0.0
+            self.a = 0.0
+            self.last_time_ms = current_time_ms
+            self.initialized = doğru
+            döndür measurement
+        son
+        
+        değişken dt = (current_time_ms - self.last_time_ms) / 1000.0
+        eğer dt <= 0.0:
+            dt = 0.01
+        son
+        self.last_time_ms = current_time_ms
+        
+        değişken dt2 = dt * dt
+        
+        // Tahmin
+        değişken x_pred = self.x + self.v * dt + 0.5 * self.a * dt2
+        değişken v_pred = self.v + self.a * dt
+        
+        // Hata
+        değişken residual = measurement - x_pred
+        
+        // Düzeltme
+        self.x = x_pred + self.alpha * residual
+        self.v = v_pred + (self.beta / dt) * residual
+        self.a = self.a + (2.0 * self.gamma / dt2) * residual
+        
+        döndür self.x
+    son
+    
+    pub fn get_velocity(self) döndür ondalık: self.v son
+    pub fn get_acceleration(self) döndür ondalık: self.a son
+son
+
+// ============================================================================
+// HAMPEL FİLTRESİ (Outlier Killer)
+// ============================================================================
+
+/// Hampel filtresi - Outlier/spike eliminator
+/// Kalman'ın en büyük düşmanı outlier'dır, Hampel bunu öldürür
+pub tip HampelFilter = yapı yap
+    /// Pencere boyutu
+    window_size: sayı,
+    /// Eşik (MAD çarpanı, tipik: 3.0)
+    threshold: ondalık,
+    /// Buffer
+    buffer: Liste[ondalık],
+    /// Son geçerli değer
+    last_valid: ondalık,
+    /// Outlier sayacı
+    outlier_count: sayı,
+son
+
+impl HampelFilter:
+    pub fn new(window_size: sayı, threshold: ondalık) döndür HampelFilter:
+        döndür HampelFilter {
+            window_size: window_size,
+            threshold: threshold,
+            buffer: [],
+            last_valid: 0.0,
+            outlier_count: 0,
+        }
+    son
+    
+    /// Preset: Standart (3-sigma)
+    pub fn standard() döndür HampelFilter:
+        döndür HampelFilter::new(7, 3.0)
+    son
+    
+    /// Preset: Agresif (sıkı outlier reddi)
+    pub fn aggressive() döndür HampelFilter:
+        döndür HampelFilter::new(5, 2.0)
+    son
+    
+    /// Preset: Gevşek (sadece aşırı outlier'ları reddet)
+    pub fn permissive() döndür HampelFilter:
+        döndür HampelFilter::new(11, 5.0)
+    son
+    
+    /// Filtrele
+    pub fn apply(mut self, value: ondalık) döndür ondalık:
+        // Buffer'a ekle
+        self.buffer.push(value)
+        eğer self.buffer.len() > self.window_size:
+            self.buffer.remove(0)
+        son
+        
+        // Yeterli veri yoksa direkt geç
+        eğer self.buffer.len() < 3:
+            self.last_valid = value
+            döndür value
+        son
+        
+        // Median hesapla
+        değişken sorted = self.buffer.clone()
+        sorted.sort()
+        değişken median = sorted[sorted.len() / 2]
+        
+        // MAD (Median Absolute Deviation) hesapla
+        değişken deviations: Liste[ondalık] = []
+        döngü v in self.buffer.clone():
+            deviations.push((v - median).abs())
+        son
+        deviations.sort()
+        değişken mad = deviations[deviations.len() / 2]
+        
+        // Scaled MAD (σ tahmini için 1.4826 çarpanı)
+        değişken sigma_estimate = 1.4826 * mad
+        
+        // Outlier kontrolü
+        eğer sigma_estimate > 0.0001:
+            değişken z_score = (value - median).abs() / sigma_estimate
+            eğer z_score > self.threshold:
+                // Outlier! Median ile değiştir
+                self.outlier_count = self.outlier_count + 1
+                döndür median
+            son
+        son
+        
+        self.last_valid = value
+        döndür value
+    son
+    
+    /// Outlier oranı
+    pub fn get_outlier_ratio(self) döndür ondalık:
+        eğer self.buffer.len() == 0:
+            döndür 0.0
+        son
+        döndür self.outlier_count / self.buffer.len()
+    son
+    
+    /// Reset
+    pub fn reset(mut self) döndür void:
+        self.buffer.clear()
+        self.outlier_count = 0
+    son
+son
+
+// ============================================================================
+// EMA + OUTLIER REJECTION
+// ============================================================================
+
+/// Gelişmiş EMA - Z-score outlier rejection ile
+pub tip RobustEMA = yapı yap
+    /// Alpha (0-1)
+    alpha: ondalık,
+    /// Z-score eşiği
+    z_threshold: ondalık,
+    /// Son değer
+    value: ondalık,
+    /// Running variance (online hesaplama)
+    mean: ondalık,
+    m2: ondalık,
+    count: sayı,
+    /// Outlier sayacı
+    outlier_count: sayı,
+    /// Başlatıldı mı?
+    initialized: mantıksal,
+son
+
+impl RobustEMA:
+    pub fn new(alpha: ondalık, z_threshold: ondalık) döndür RobustEMA:
+        döndür RobustEMA {
+            alpha: alpha.clamp(0.01, 1.0),
+            z_threshold: z_threshold,
+            value: 0.0,
+            mean: 0.0,
+            m2: 0.0,
+            count: 0,
+            outlier_count: 0,
+            initialized: yanlış,
+        }
+    son
+    
+    /// Preset: Standart
+    pub fn standard() döndür RobustEMA:
+        döndür RobustEMA::new(0.1, 3.0)
+    son
+    
+    /// Preset: Hızlı tepki
+    pub fn fast() döndür RobustEMA:
+        döndür RobustEMA::new(0.3, 2.5)
+    son
+    
+    /// Preset: Çok smooth
+    pub fn smooth() döndür RobustEMA:
+        döndür RobustEMA::new(0.05, 3.5)
+    son
+    
+    pub fn apply(mut self, measurement: ondalık) döndür ondalık:
+        eğer !self.initialized:
+            self.value = measurement
+            self.mean = measurement
+            self.m2 = 0.0
+            self.count = 1
+            self.initialized = doğru
+            döndür measurement
+        son
+        
+        // Welford's online variance algorithm
+        self.count = self.count + 1
+        değişken delta = measurement - self.mean
+        self.mean = self.mean + delta / self.count
+        değişken delta2 = measurement - self.mean
+        self.m2 = self.m2 + delta * delta2
+        
+        // Varyans ve std dev
+        değişken variance = eğer self.count > 1:
+            self.m2 / (self.count - 1)
+        yoksa:
+            0.0
+        son
+        değişken std_dev = variance.sqrt()
+        
+        // Z-score kontrolü
+        eğer std_dev > 0.0001:
+            değişken z = (measurement - self.value).abs() / std_dev
+            eğer z > self.z_threshold:
+                // Outlier! EMA'yı güncelleme
+                self.outlier_count = self.outlier_count + 1
+                döndür self.value
+            son
+        son
+        
+        // Normal EMA güncelleme
+        self.value = self.alpha * measurement + (1.0 - self.alpha) * self.value
+        döndür self.value
+    son
+    
+    pub fn reset(mut self) döndür void:
+        self.value = 0.0
+        self.mean = 0.0
+        self.m2 = 0.0
+        self.count = 0
+        self.initialized = yanlış
+    son
+son
+
+// ============================================================================
+// THRESHOLD GATE FİLTRESİ
+// ============================================================================
+
+/// Eşik kapısı - Küçük değişimleri yoksay
+/// Noise floor altındaki değişimleri filtreler
+pub tip ThresholdGate = yapı yap
+    /// Mutlak eşik
+    threshold: ondalık,
+    /// Son çıkış değeri
+    last_output: ondalık,
+    /// Başlatıldı mı?
+    initialized: mantıksal,
+son
+
+impl ThresholdGate:
+    pub fn new(threshold: ondalık) döndür ThresholdGate:
+        döndür ThresholdGate {
+            threshold: threshold,
+            last_output: 0.0,
+            initialized: yanlış,
+        }
+    son
+    
+    /// Preset: Sıcaklık sensörü (0.5°C hassasiyet)
+    pub fn for_temperature() döndür ThresholdGate:
+        döndür ThresholdGate::new(0.5)
+    son
+    
+    /// Preset: Basınç sensörü (1 hPa hassasiyet)
+    pub fn for_pressure() döndür ThresholdGate:
+        döndür ThresholdGate::new(1.0)
+    son
+    
+    pub fn apply(mut self, value: ondalık) döndür ondalık:
+        eğer !self.initialized:
+            self.last_output = value
+            self.initialized = doğru
+            döndür value
+        son
+        
+        // Değişim eşiği aştı mı?
+        eğer (value - self.last_output).abs() > self.threshold:
+            self.last_output = value
+        son
+        
+        döndür self.last_output
+    son
+son
+
+// ============================================================================
+// RATE LIMITER
+// ============================================================================
+
+/// Değişim hızı sınırlayıcı
+/// Ani değişimleri yumuşatır
+pub tip RateLimiter = yapı yap
+    /// Maksimum değişim/örnek
+    max_rate: ondalık,
+    /// Son değer
+    last_value: ondalık,
+    /// Başlatıldı mı?
+    initialized: mantıksal,
+son
+
+impl RateLimiter:
+    pub fn new(max_rate: ondalık) döndür RateLimiter:
+        döndür RateLimiter {
+            max_rate: max_rate,
+            last_value: 0.0,
+            initialized: yanlış,
+        }
+    son
+    
+    pub fn apply(mut self, value: ondalık) döndür ondalık:
+        eğer !self.initialized:
+            self.last_value = value
+            self.initialized = doğru
+            döndür value
+        son
+        
+        değişken delta = value - self.last_value
+        
+        // Rate limit uygula
+        eğer delta > self.max_rate:
+            self.last_value = self.last_value + self.max_rate
+        yoksa eğer delta < -self.max_rate:
+            self.last_value = self.last_value - self.max_rate
+        yoksa:
+            self.last_value = value
+        son
+        
+        döndür self.last_value
+    son
+son
+
+// ============================================================================
+// DEADBAND FİLTRESİ
+// ============================================================================
+
+/// Deadband (ölü bölge) filtresi
+/// Merkez etrafında küçük değişimleri yoksayar
+pub tip DeadbandFilter = yapı yap
+    /// Merkez değer
+    center: ondalık,
+    /// Deadband yarı genişliği
+    half_width: ondalık,
+son
+
+impl DeadbandFilter:
+    pub fn new(center: ondalık, half_width: ondalık) döndür DeadbandFilter:
+        döndür DeadbandFilter {
+            center: center,
+            half_width: half_width,
+        }
+    son
+    
+    /// Sıfır merkezli
+    pub fn zero_centered(half_width: ondalık) döndür DeadbandFilter:
+        döndür DeadbandFilter::new(0.0, half_width)
+    son
+    
+    pub fn apply(self, value: ondalık) döndür ondalık:
+        değişken diff = value - self.center
+        
+        eğer diff.abs() < self.half_width:
+            döndür self.center
+        yoksa eğer diff > 0.0:
+            döndür value - self.half_width
+        yoksa:
+            döndür value + self.half_width
+        son
+    son
+son
+
+// ============================================================================
+// LMS ADAPTIVE FİLTRE (Öğrenen Filtre)
+// ============================================================================
+
+/// LMS (Least Mean Squares) Adaptive Filter
+/// Gürültü profilini öğrenir ve adapte olur
+pub tip LMSFilter = yapı yap
+    /// Öğrenme hızı (mu)
+    mu: ondalık,
+    /// Filtre katsayıları
+    weights: Liste[ondalık],
+    /// Giriş buffer'ı
+    buffer: Liste[ondalık],
+    /// Filtre sırası
+    order: sayı,
+son
+
+impl LMSFilter:
+    pub fn new(order: sayı, mu: ondalık) döndür LMSFilter:
+        değişken weights: Liste[ondalık] = []
+        döngü i in 0..order:
+            weights.push(0.0)
+        son
+        
+        döndür LMSFilter {
+            mu: mu.clamp(0.0001, 0.1),
+            weights: weights,
+            buffer: [],
+            order: order,
+        }
+    son
+    
+    /// Preset: Genel amaçlı
+    pub fn general() döndür LMSFilter:
+        döndür LMSFilter::new(8, 0.01)
+    son
+    
+    /// Preset: Hızlı adaptasyon
+    pub fn fast_adapt() döndür LMSFilter:
+        döndür LMSFilter::new(4, 0.05)
+    son
+    
+    pub fn apply(mut self, input: ondalık, desired: ondalık) döndür ondalık:
+        // Buffer'a ekle
+        self.buffer.insert(0, input)
+        eğer self.buffer.len() > self.order:
+            self.buffer.pop()
+        son
+        
+        // Yeterli veri yoksa
+        eğer self.buffer.len() < self.order:
+            döndür input
+        son
+        
+        // FIR filtre çıkışı
+        değişken output = 0.0
+        döngü i in 0..self.order:
+            output = output + self.weights[i] * self.buffer[i]
+        son
+        
+        // Hata
+        değişken error = desired - output
+        
+        // LMS güncelleme: w = w + 2*mu*e*x
+        döngü i in 0..self.order:
+            self.weights[i] = self.weights[i] + 2.0 * self.mu * error * self.buffer[i]
+        son
+        
+        döndür output
+    son
+    
+    /// Sadece filtrele (öğrenme olmadan)
+    pub fn filter_only(self, input: ondalık) döndür ondalık:
+        değişken mut buffer = self.buffer.clone()
+        buffer.insert(0, input)
+        
+        eğer buffer.len() < self.order:
+            döndür input
+        son
+        
+        değişken output = 0.0
+        döngü i in 0..self.order:
+            output = output + self.weights[i] * buffer[i]
+        son
+        
+        döndür output
+    son
+son
+
+// ============================================================================
+// ONE-STEP PREDICTOR
+// ============================================================================
+
+/// Basit bir adım önceden tahmin
+/// Gecikmeyi kompanse etmek için kullanılır
+pub tip OneStepPredictor = yapı yap
+    /// Son iki değer
+    x_prev: ondalık,
+    x_prev2: ondalık,
+    /// Başlatıldı mı?
+    count: sayı,
+son
+
+impl OneStepPredictor:
+    pub fn new() döndür OneStepPredictor:
+        döndür OneStepPredictor {
+            x_prev: 0.0,
+            x_prev2: 0.0,
+            count: 0,
+        }
+    son
+    
+    /// Güncelle ve bir adım sonrasını tahmin et
+    pub fn predict(mut self, current: ondalık) döndür ondalık:
+        self.count = self.count + 1
+        
+        eğer self.count < 2:
+            self.x_prev2 = self.x_prev
+            self.x_prev = current
+            döndür current
+        son
+        
+        // Lineer extrapolasyon
+        değişken slope = current - self.x_prev
+        değişken prediction = current + slope
+        
+        self.x_prev2 = self.x_prev
+        self.x_prev = current
+        
+        döndür prediction
+    son
+son
+
+// ============================================================================
+// CONVENIENCE FUNCTIONS
+// ============================================================================
+
+/// Alpha-Beta filtre oluştur
+pub fn alpha_beta(alpha: ondalık, beta: ondalık) döndür AlphaBetaFilter:
+    döndür AlphaBetaFilter::new(alpha, beta)
+son
+
+/// Hampel filtre oluştur
+pub fn hampel(window: sayı, threshold: ondalık) döndür HampelFilter:
+    döndür HampelFilter::new(window, threshold)
+son
+
+/// Robust EMA oluştur
+pub fn robust_ema(alpha: ondalık) döndür RobustEMA:
+    döndür RobustEMA::new(alpha, 3.0)
+son
+
+/// Threshold gate oluştur
+pub fn threshold_gate(threshold: ondalık) döndür ThresholdGate:
+    döndür ThresholdGate::new(threshold)
+son
+
+/// Rate limiter oluştur
+pub fn rate_limiter(max_rate: ondalık) döndür RateLimiter:
+    döndür RateLimiter::new(max_rate)
+son
+
+/// Deadband oluştur
+pub fn deadband(center: ondalık, width: ondalık) döndür DeadbandFilter:
+    döndür DeadbandFilter::new(center, width)
+son
+
+/// LMS adaptive filter oluştur
+pub fn lms(order: sayı, mu: ondalık) döndür LMSFilter:
+    döndür LMSFilter::new(order, mu)
+son

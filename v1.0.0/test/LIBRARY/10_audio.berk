@@ -1,0 +1,231 @@
+// =============================================================================
+// BERK Standard Library - Audio Module Demo
+// Ses işleme ve oynatma
+// =============================================================================
+
+kullan std::audio
+
+yazdır("=== BERK Audio Demo ===\n")
+
+// -----------------------------------------------------------------------------
+// Ses Oynatma
+// -----------------------------------------------------------------------------
+
+yazdır("🔊 Ses Oynatma:")
+yazdır("-" * 40)
+
+yazdır("""
+kullan std::audio
+
+// Ses dosyası yükle
+olsun ses = audio::load("music.mp3")
+yazdır("Süre: {:.2f} saniye", audio::duration(ses))
+yazdır("Kanal: {}", audio::channels(ses))
+yazdır("Sample rate: {} Hz", audio::sample_rate(ses))
+
+// Oynat
+audio::play(ses)
+
+// Kontroller
+bekle(2000)
+audio::pause(ses)
+yazdır("Duraklatıldı")
+
+bekle(1000)
+audio::resume(ses)
+yazdır("Devam ediyor")
+
+// Ses seviyesi (0.0 - 1.0)
+audio::set_volume(ses, 0.5)
+
+// Pozisyon atla
+audio::seek(ses, 30.0)  // 30. saniyeye
+
+// Durdur
+audio::stop(ses)
+""")
+
+// -----------------------------------------------------------------------------
+// Ses Sentezi
+// -----------------------------------------------------------------------------
+
+yazdır("\n🎹 Ses Sentezi:")
+yazdır("-" * 40)
+
+yazdır("""
+// Sinüs dalgası oluştur
+olsun sin_dalga = audio::generate_sine(440.0, 1.0)  // 440Hz (La), 1 saniye
+audio::play(sin_dalga)
+
+// Kare dalga
+olsun kare_dalga = audio::generate_square(440.0, 1.0)
+
+// Testere dişi dalga
+olsun testere = audio::generate_sawtooth(440.0, 1.0)
+
+// Beyaz gürültü
+olsun gurultu = audio::generate_noise(1.0)
+
+// Notalar çal
+olsun notalar = [
+    ["C4", 0.5],   // Do
+    ["D4", 0.5],   // Re
+    ["E4", 0.5],   // Mi
+    ["F4", 0.5],   // Fa
+    ["G4", 0.5],   // Sol
+    ["A4", 0.5],   // La
+    ["B4", 0.5],   // Si
+    ["C5", 1.0]    // Do (üst oktav)
+]
+
+her [nota, sure] için notalar yap
+    olsun freq = audio::note_to_freq(nota)
+    olsun ses = audio::generate_sine(freq, sure)
+    audio::play_sync(ses)  // Bitene kadar bekle
+son
+""")
+
+// -----------------------------------------------------------------------------
+// Ses Kaydı
+// -----------------------------------------------------------------------------
+
+yazdır("\n🎤 Ses Kaydı:")
+yazdır("-" * 40)
+
+yazdır("""
+// Mikrofon listesi
+olsun mikrofonlar = audio::list_input_devices()
+her mic için mikrofonlar yap
+    yazdır("  {}: {}", mic.id, mic.name)
+son
+
+// Kayıt başlat
+olsun kayit = audio::start_recording()
+yazdır("Kayıt başladı...")
+
+bekle(5000)  // 5 saniye kaydet
+
+// Kayıt durdur
+olsun buffer = audio::stop_recording(kayit)
+yazdır("Kayıt tamamlandı: {} sample", buffer.uzunluk())
+
+// Dosyaya kaydet
+audio::save(buffer, "kayit.wav")
+yazdır("Kaydedildi: kayit.wav")
+""")
+
+// -----------------------------------------------------------------------------
+// Ses Efektleri
+// -----------------------------------------------------------------------------
+
+yazdır("\n🎛️  Ses Efektleri:")
+yazdır("-" * 40)
+
+yazdır("""
+olsun ses = audio::load("voice.wav")
+
+// Ses yükselt/alçalt (dB)
+olsun yuksek = audio::amplify(ses, 6.0)    // +6 dB
+olsun alcak = audio::amplify(ses, -6.0)   // -6 dB
+
+// Fade in/out
+olsun fade_in = audio::fade_in(ses, 1.0)   // 1 saniye fade in
+olsun fade_out = audio::fade_out(ses, 1.0)
+
+// Hız değiştir (pitch koruyarak)
+olsun hizli = audio::time_stretch(ses, 1.5)   // %50 hızlı
+olsun yavas = audio::time_stretch(ses, 0.75)  // %25 yavaş
+
+// Pitch değiştir (hız koruyarak)
+olsun tiz = audio::pitch_shift(ses, 4)    // +4 yarım ton
+olsun pes = audio::pitch_shift(ses, -4)   // -4 yarım ton
+
+// Reverb
+olsun reverb = audio::add_reverb(ses, 0.5)  // 0.5 = oda boyutu
+
+// Echo
+olsun echo = audio::add_echo(ses, 0.3, 0.5)  // 0.3s gecikme, 0.5 feedback
+
+// Normalize
+olsun normalize = audio::normalize(ses)
+
+// Mono'ya çevir
+olsun mono = audio::to_mono(ses)
+
+// Stereo'ya çevir
+olsun stereo = audio::to_stereo(mono)
+""")
+
+// -----------------------------------------------------------------------------
+// Ses Analizi
+// -----------------------------------------------------------------------------
+
+yazdır("\n📊 Ses Analizi:")
+yazdır("-" * 40)
+
+yazdır("""
+olsun ses = audio::load("music.mp3")
+
+// RMS (ses seviyesi)
+olsun rms = audio::rms(ses)
+yazdır("RMS: {:.4f}", rms)
+
+// Peak
+olsun peak = audio::peak(ses)
+yazdır("Peak: {:.4f}", peak)
+
+// FFT (frekans analizi)
+olsun spektrum = audio::fft(ses)
+yazdır("Baskın frekans: {} Hz", spektrum.dominant_frequency)
+
+// Beat tespiti
+olsun bpm = audio::detect_bpm(ses)
+yazdır("BPM: {:.1f}", bpm)
+
+// Sessizlik tespiti
+olsun sessiz_bolumler = audio::detect_silence(ses, -40.0)  // -40 dB eşik
+yazdır("Sessiz bölüm sayısı: {}", sessiz_bolumler.uzunluk())
+""")
+
+// -----------------------------------------------------------------------------
+// Çoklu Ses
+// -----------------------------------------------------------------------------
+
+yazdır("\n🎼 Çoklu Ses Miksajı:")
+yazdır("-" * 40)
+
+yazdır("""
+// Mixer oluştur
+olsun mixer = audio::create_mixer()
+
+// Kanallar ekle
+olsun kanal1 = audio::mixer_add_channel(mixer, "drums")
+olsun kanal2 = audio::mixer_add_channel(mixer, "bass")
+olsun kanal3 = audio::mixer_add_channel(mixer, "melody")
+
+// Her kanala ses yükle
+audio::channel_load(kanal1, "drums.wav")
+audio::channel_load(kanal2, "bass.wav")
+audio::channel_load(kanal3, "melody.wav")
+
+// Kanal seviyeleri
+audio::channel_volume(kanal1, 0.8)
+audio::channel_volume(kanal2, 0.7)
+audio::channel_volume(kanal3, 0.6)
+
+// Pan (sol-sağ)
+audio::channel_pan(kanal1, 0.0)    // Orta
+audio::channel_pan(kanal2, -0.3)   // Biraz sol
+audio::channel_pan(kanal3, 0.3)    // Biraz sağ
+
+// Hepsini çal
+audio::mixer_play_all(mixer)
+
+// Master volume
+audio::mixer_master_volume(mixer, 0.9)
+
+// Mix'i dosyaya kaydet
+audio::mixer_export(mixer, "final_mix.wav")
+""")
+
+yazdır("\n✅ Audio demo tamamlandı!")

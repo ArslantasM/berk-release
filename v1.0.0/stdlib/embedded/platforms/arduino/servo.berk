@@ -1,0 +1,135 @@
+// Arduino Servo Module for BERK
+// Control servo motors easily
+//
+// Perfect for robotics projects! 🤖
+
+extern "C" {
+    fn Servo_attach(pin: u8) -> u8;
+    fn Servo_detach(servo: u8);
+    fn Servo_write(servo: u8, angle: u8);
+    fn Servo_writeMicroseconds(servo: u8, us: u16);
+    fn Servo_read(servo: u8) -> u8;
+}
+
+pub struct Servo {
+    id: u8,
+}
+
+impl Servo {
+    // Attach servo to pin
+    pub fn attach(pin: u8) -> Servo {
+        let id = unsafe { Servo_attach(pin) };
+        Servo { id }
+    }
+    
+    // Set servo angle (0-180°)
+    pub fn write(&self, angle: u8) {
+        unsafe { Servo_write(self.id, angle); }
+    }
+    
+    // Set servo position in microseconds (1000-2000µs)
+    pub fn write_microseconds(&self, us: u16) {
+        unsafe { Servo_writeMicroseconds(self.id, us); }
+    }
+    
+    // Read current angle
+    pub fn read(&self) -> u8 {
+        unsafe { Servo_read(self.id) }
+    }
+    
+    // Detach servo
+    pub fn detach(self) {
+        unsafe { Servo_detach(self.id); }
+    }
+}
+
+// 📱 VIRAL EXAMPLE: Servo sweep
+pub fn example_sweep() {
+    use super::time;
+    
+    let servo = Servo::attach(9);
+    
+    loop {
+        // Sweep 0 to 180
+        for angle in 0..=180 {
+            servo.write(angle);
+            time::delay_ms(15);
+        }
+        
+        // Sweep 180 to 0
+        for angle in (0..=180).rev() {
+            servo.write(angle);
+            time::delay_ms(15);
+        }
+    }
+}
+
+// 🤖 VIRAL EXAMPLE: Pan-tilt camera mount
+pub fn example_pan_tilt() {
+    use super::{gpio, time};
+    
+    let pan = Servo::attach(9);
+    let tilt = Servo::attach(10);
+    
+    let left_btn = gpio::pin(2).input_pullup();
+    let right_btn = gpio::pin(3).input_pullup();
+    let up_btn = gpio::pin(4).input_pullup();
+    let down_btn = gpio::pin(5).input_pullup();
+    
+    let mut pan_angle = 90u8;
+    let mut tilt_angle = 90u8;
+    
+    loop {
+        if left_btn.read() && pan_angle > 0 {
+            pan_angle -= 5;
+            pan.write(pan_angle);
+        }
+        if right_btn.read() && pan_angle < 180 {
+            pan_angle += 5;
+            pan.write(pan_angle);
+        }
+        if up_btn.read() && tilt_angle < 180 {
+            tilt_angle += 5;
+            tilt.write(tilt_angle);
+        }
+        if down_btn.read() && tilt_angle > 0 {
+            tilt_angle -= 5;
+            tilt.write(tilt_angle);
+        }
+        
+        time::delay_ms(50);
+    }
+}
+
+// 📏 VIRAL EXAMPLE: Distance-reactive servo
+pub fn example_distance_servo() {
+    use super::{gpio, time};
+    
+    let servo = Servo::attach(9);
+    let trig = gpio::pin(10).output();
+    let echo = gpio::pin(11).input();
+    
+    loop {
+        // Measure distance
+        trig.low();
+        time::delay_us(2);
+        trig.high();
+        time::delay_us(10);
+        trig.low();
+        
+        let duration = echo.pulse_in(true);
+        let distance = duration / 58;  // Convert to cm
+        
+        // Map distance to angle (10-100cm -> 0-180°)
+        let angle = if distance < 10 {
+            0
+        } else if distance > 100 {
+            180
+        } else {
+            ((distance - 10) * 2) as u8
+        };
+        
+        servo.write(angle);
+        time::delay_ms(100);
+    }
+}

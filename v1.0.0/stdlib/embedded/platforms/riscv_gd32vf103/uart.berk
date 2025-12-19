@@ -1,0 +1,195 @@
+// stdlib/embedded/platforms/riscv_gd32vf103/uart.berk
+// GD32VF103 UART Implementation
+
+kullan "embedded/bal/uart" olarak UART_BAL
+
+// UART instances (USART0-USART2 + UART3-4)
+açık enum UartPort yap
+    USART0 = 0,  // Most commonly used
+    USART1 = 1,
+    USART2 = 2,
+    UART3 = 3,
+    UART4 = 4,
+son
+
+// UART base addresses
+sabit USART0_BASE: u32 = 0x40013800
+sabit USART1_BASE: u32 = 0x40004400
+sabit USART2_BASE: u32 = 0x40004800
+sabit UART3_BASE: u32 = 0x40004C00
+sabit UART4_BASE: u32 = 0x40005000
+
+// Baud rate presets
+açık sabit BAUD_9600: u32 = 9600
+açık sabit BAUD_19200: u32 = 19200
+açık sabit BAUD_38400: u32 = 38400
+açık sabit BAUD_57600: u32 = 57600
+açık sabit BAUD_115200: u32 = 115200
+
+// Word length
+sabit USART_WL_8BIT: u32 = 0x00000000
+sabit USART_WL_9BIT: u32 = 0x00001000
+
+// Stop bits
+sabit USART_STB_1BIT: u32 = 0x00000000
+sabit USART_STB_2BIT: u32 = 0x00002000
+
+// Parity
+sabit USART_PM_NONE: u32 = 0x00000000
+sabit USART_PM_EVEN: u32 = 0x00000400
+sabit USART_PM_ODD: u32 = 0x00000600
+
+harici "C" yap
+    fonksiyon usart_deinit(usart_periph: u32)
+    fonksiyon usart_baudrate_set(usart_periph: u32, baudval: u32)
+    fonksiyon usart_parity_config(usart_periph: u32, paritycfg: u32)
+    fonksiyon usart_word_length_set(usart_periph: u32, wlen: u32)
+    fonksiyon usart_stop_bit_set(usart_periph: u32, stblen: u32)
+    fonksiyon usart_enable(usart_periph: u32)
+    fonksiyon usart_disable(usart_periph: u32)
+    fonksiyon usart_transmit_config(usart_periph: u32, txconfig: u32)
+    fonksiyon usart_receive_config(usart_periph: u32, rxconfig: u32)
+    fonksiyon usart_data_transmit(usart_periph: u32, data: u16)
+    fonksiyon usart_data_receive(usart_periph: u32) -> u16
+    fonksiyon usart_flag_get(usart_periph: u32, flag: u32) -> bool
+    fonksiyon rcu_periph_clock_enable(periph: u32)
+son
+
+// USART flags
+sabit USART_FLAG_TBE: u32 = 0x00000080   // Transmit buffer empty
+sabit USART_FLAG_RBNE: u32 = 0x00000020  // Read buffer not empty
+sabit USART_FLAG_TC: u32 = 0x00000040    // Transmission complete
+
+// RCU clock bits
+sabit RCU_USART0: u32 = 0x00004000
+sabit RCU_USART1: u32 = 0x00020000
+sabit RCU_USART2: u32 = 0x00040000
+sabit RCU_UART3: u32 = 0x00080000
+sabit RCU_UART4: u32 = 0x00100000
+
+// Enable configurations
+sabit USART_TRANSMIT_ENABLE: u32 = 0x00000008
+sabit USART_RECEIVE_ENABLE: u32 = 0x00000004
+
+fonksiyon uart_base_address(port: UartPort) -> u32 yap
+    seç port yap
+        durum UartPort::USART0 => dön USART0_BASE,
+        durum UartPort::USART1 => dön USART1_BASE,
+        durum UartPort::USART2 => dön USART2_BASE,
+        durum UartPort::UART3 => dön UART3_BASE,
+        durum UartPort::UART4 => dön UART4_BASE,
+    son
+son
+
+fonksiyon enable_uart_clock(port: UartPort) yap
+    değişken clock_bit: u32 = seç port yap
+        durum UartPort::USART0 => RCU_USART0,
+        durum UartPort::USART1 => RCU_USART1,
+        durum UartPort::USART2 => RCU_USART2,
+        durum UartPort::UART3 => RCU_UART3,
+        durum UartPort::UART4 => RCU_UART4,
+    son
+    rcu_periph_clock_enable(clock_bit)
+son
+
+yapı GD32VF103_UART_HAL yap
+    port: UartPort,
+    baud_rate: u32,
+    initialized: bool,
+son
+
+uygula GD32VF103_UART_HAL yap
+    açık fonksiyon yeni(port: UartPort, baud_rate: u32) -> GD32VF103_UART_HAL yap
+        enable_uart_clock(port)
+        değişken periph = uart_base_address(port)
+        
+        // Configure UART
+        usart_deinit(periph)
+        usart_baudrate_set(periph, baud_rate)
+        usart_word_length_set(periph, USART_WL_8BIT)
+        usart_stop_bit_set(periph, USART_STB_1BIT)
+        usart_parity_config(periph, USART_PM_NONE)
+        usart_transmit_config(periph, USART_TRANSMIT_ENABLE)
+        usart_receive_config(periph, USART_RECEIVE_ENABLE)
+        usart_enable(periph)
+        
+        dön GD32VF103_UART_HAL yap
+            port: port,
+            baud_rate: baud_rate,
+            initialized: doğru,
+        son
+    son
+    
+    açık fonksiyon write_byte(&kendim, byte: u8) yap
+        değişken periph = uart_base_address(kendim.port)
+        
+        // Wait for transmit buffer empty
+        döngü yap
+            eğer usart_flag_get(periph, USART_FLAG_TBE) yap
+                kır
+            son
+        son
+        
+        usart_data_transmit(periph, byte olarak u16)
+        
+        // Wait for transmission complete
+        döngü yap
+            eğer usart_flag_get(periph, USART_FLAG_TC) yap
+                kır
+            son
+        son
+    son
+    
+    açık fonksiyon write(&kendim, data: &[u8]) yap
+        için byte içinde data yap
+            kendim.write_byte(*byte)
+        son
+    son
+    
+    açık fonksiyon write_str(&kendim, s: &str) yap
+        değişken bytes = s.as_bytes()
+        kendim.write(bytes)
+    son
+    
+    açık fonksiyon read_byte(&kendim) -> Seçenek<u8> yap
+        değişken periph = uart_base_address(kendim.port)
+        
+        eğer usart_flag_get(periph, USART_FLAG_RBNE) yap
+            değişken data = usart_data_receive(periph)
+            dön Bazı(data olarak u8)
+        son değilse yap
+            dön Hiçbiri
+        son
+    son
+    
+    açık fonksiyon available(&kendim) -> bool yap
+        değişken periph = uart_base_address(kendim.port)
+        dön usart_flag_get(periph, USART_FLAG_RBNE)
+    son
+    
+    açık fonksiyon println(&kendim, s: &str) yap
+        kendim.write_str(s)
+        kendim.write_str("\r\n")
+    son
+son
+
+uygula UART_BAL::UartHAL için GD32VF103_UART_HAL yap
+    fonksiyon write_byte(&kendim, byte: u8) yap
+        kendim.write_byte(byte)
+    son
+    
+    fonksiyon read_byte(&kendim) -> Seçenek<u8> yap
+        dön kendim.read_byte()
+    son
+    
+    fonksiyon available(&kendim) -> bool yap
+        dön kendim.available()
+    son
+son
+
+açık tip UART_HAL = GD32VF103_UART_HAL
+
+// Default UART for debug output (USART0 at 115200)
+açık fonksiyon init_debug_uart() -> UART_HAL yap
+    dön UART_HAL::yeni(UartPort::USART0, BAUD_115200)
+son

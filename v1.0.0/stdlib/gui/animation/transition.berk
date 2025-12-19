@@ -1,0 +1,696 @@
+// ============================================================================
+// BERK GUI Framework - Transition System
+// ============================================================================
+// Sayfa/View geçişleri, modal animasyonları, widget geçişleri
+// iOS, Android ve web framework'lerinden ilham
+// ============================================================================
+
+modül gui::animation::transition
+
+kullan gui::animation::time::Time
+kullan gui::animation::easing::EasingType
+kullan gui::animation::spring::{Spring, SpringConfig}
+
+// ============================================================================
+// TRANSITION TYPE - Geçiş Türleri
+// ============================================================================
+
+/// Temel geçiş türleri
+pub tip TransitionType = özyinelemeli yap
+    // Fade geçişleri
+    | Fade                    // Basit fade
+    | CrossFade               // Çapraz fade (iki eleman aynı anda)
+    | FadeThrough             // Material fade through
+    
+    // Slide geçişleri
+    | SlideLeft               // Soldan
+    | SlideRight              // Sağdan
+    | SlideUp                 // Alttan
+    | SlideDown               // Üstten
+    | SlideInOut              // Biri içeri, biri dışarı
+    
+    // Scale geçişleri
+    | ScaleUp                 // Büyüyerek
+    | ScaleDown               // Küçülerek
+    | ScaleFade               // Scale + fade
+    
+    // 3D Geçişler
+    | FlipHorizontal          // Yatay çevir
+    | FlipVertical            // Dikey çevir
+    | CubeLeft                // Küp sol
+    | CubeRight               // Küp sağ
+    | CubeUp                  // Küp yukarı
+    | CubeDown                // Küp aşağı
+    
+    // iOS tarzı
+    | CupertinoSlide          // iOS navigation push
+    | CupertinoModal          // iOS modal present
+    | CupertinoFade           // iOS fade
+    
+    // Material Design
+    | MaterialShared          // Shared element transition
+    | MaterialFadeThrough     // Container transform
+    | MaterialElevation       // Elevation change
+    
+    // Özel
+    | Custom(fn(ondalık) döndür TransitionState)
+    | None                    // Geçiş yok
+son
+
+// ============================================================================
+// TRANSITION STATE - Geçiş Durumu
+// ============================================================================
+
+/// Geçiş sırasındaki değerler
+pub tip TransitionState = yapı yap
+    /// Çıkan öğenin opacity (0-1)
+    outgoing_opacity: ondalık,
+    /// Gelen öğenin opacity (0-1)
+    incoming_opacity: ondalık,
+    
+    /// Çıkan öğenin X offset
+    outgoing_x: ondalık,
+    /// Çıkan öğenin Y offset
+    outgoing_y: ondalık,
+    /// Gelen öğenin X offset
+    incoming_x: ondalık,
+    /// Gelen öğenin Y offset
+    incoming_y: ondalık,
+    
+    /// Çıkan öğenin scale
+    outgoing_scale: ondalık,
+    /// Gelen öğenin scale
+    incoming_scale: ondalık,
+    
+    /// Çıkan öğenin rotation (derece)
+    outgoing_rotation: ondalık,
+    /// Gelen öğenin rotation (derece)
+    incoming_rotation: ondalık,
+    
+    /// Z-order (hangisi önde)
+    incoming_on_top: mantıksal,
+son
+
+impl TransitionState:
+    /// Varsayılan durum
+    pub fn default() döndür TransitionState:
+        döndür TransitionState {
+            outgoing_opacity: 1.0,
+            incoming_opacity: 1.0,
+            outgoing_x: 0.0,
+            outgoing_y: 0.0,
+            incoming_x: 0.0,
+            incoming_y: 0.0,
+            outgoing_scale: 1.0,
+            incoming_scale: 1.0,
+            outgoing_rotation: 0.0,
+            incoming_rotation: 0.0,
+            incoming_on_top: doğru,
+        }
+    son
+    
+    /// Başlangıç durumu (t=0)
+    pub fn start() döndür TransitionState:
+        döndür TransitionState::default()
+    son
+    
+    /// Bitiş durumu (t=1)
+    pub fn end() döndür TransitionState:
+        döndür TransitionState {
+            outgoing_opacity: 0.0,
+            incoming_opacity: 1.0,
+            outgoing_x: 0.0,
+            outgoing_y: 0.0,
+            incoming_x: 0.0,
+            incoming_y: 0.0,
+            outgoing_scale: 1.0,
+            incoming_scale: 1.0,
+            outgoing_rotation: 0.0,
+            incoming_rotation: 0.0,
+            incoming_on_top: doğru,
+        }
+    son
+    
+    /// İki durum arasında interpolasyon
+    pub fn lerp(a: TransitionState, b: TransitionState, t: ondalık) döndür TransitionState:
+        değişken lerp_val = fn(from: ondalık, to: ondalık, t: ondalık) döndür ondalık:
+            döndür from + (to - from) * t
+        son
+        
+        döndür TransitionState {
+            outgoing_opacity: lerp_val(a.outgoing_opacity, b.outgoing_opacity, t),
+            incoming_opacity: lerp_val(a.incoming_opacity, b.incoming_opacity, t),
+            outgoing_x: lerp_val(a.outgoing_x, b.outgoing_x, t),
+            outgoing_y: lerp_val(a.outgoing_y, b.outgoing_y, t),
+            incoming_x: lerp_val(a.incoming_x, b.incoming_x, t),
+            incoming_y: lerp_val(a.incoming_y, b.incoming_y, t),
+            outgoing_scale: lerp_val(a.outgoing_scale, b.outgoing_scale, t),
+            incoming_scale: lerp_val(a.incoming_scale, b.incoming_scale, t),
+            outgoing_rotation: lerp_val(a.outgoing_rotation, b.outgoing_rotation, t),
+            incoming_rotation: lerp_val(a.incoming_rotation, b.incoming_rotation, t),
+            incoming_on_top: eğer t > 0.5: b.incoming_on_top yoksa: a.incoming_on_top son,
+        }
+    son
+son
+
+// ============================================================================
+// TRANSITION CALCULATOR - Geçiş Hesaplayıcı
+// ============================================================================
+
+/// Geçiş türüne göre durum hesapla
+pub fn calculate_transition(transition: TransitionType, t: ondalık, width: ondalık, height: ondalık) döndür TransitionState:
+    eşleştir transition:
+        TransitionType::Fade:
+            döndür fade_transition(t)
+        
+        TransitionType::CrossFade:
+            döndür cross_fade_transition(t)
+        
+        TransitionType::FadeThrough:
+            döndür fade_through_transition(t)
+        
+        TransitionType::SlideLeft:
+            döndür slide_transition(t, -width, 0.0, width, 0.0)
+        
+        TransitionType::SlideRight:
+            döndür slide_transition(t, width, 0.0, -width, 0.0)
+        
+        TransitionType::SlideUp:
+            döndür slide_transition(t, 0.0, -height, 0.0, height)
+        
+        TransitionType::SlideDown:
+            döndür slide_transition(t, 0.0, height, 0.0, -height)
+        
+        TransitionType::SlideInOut:
+            döndür slide_in_out_transition(t, width)
+        
+        TransitionType::ScaleUp:
+            döndür scale_transition(t, 0.8, 1.0)
+        
+        TransitionType::ScaleDown:
+            döndür scale_transition(t, 1.0, 0.8)
+        
+        TransitionType::ScaleFade:
+            döndür scale_fade_transition(t)
+        
+        TransitionType::FlipHorizontal:
+            döndür flip_transition(t, doğru)
+        
+        TransitionType::FlipVertical:
+            döndür flip_transition(t, yanlış)
+        
+        TransitionType::CubeLeft:
+            döndür cube_transition(t, -1.0, 0.0, width)
+        
+        TransitionType::CubeRight:
+            döndür cube_transition(t, 1.0, 0.0, width)
+        
+        TransitionType::CubeUp:
+            döndür cube_transition(t, 0.0, -1.0, height)
+        
+        TransitionType::CubeDown:
+            döndür cube_transition(t, 0.0, 1.0, height)
+        
+        TransitionType::CupertinoSlide:
+            döndür cupertino_slide_transition(t, width)
+        
+        TransitionType::CupertinoModal:
+            döndür cupertino_modal_transition(t, height)
+        
+        TransitionType::CupertinoFade:
+            döndür cupertino_fade_transition(t)
+        
+        TransitionType::MaterialShared:
+            döndür material_shared_transition(t)
+        
+        TransitionType::MaterialFadeThrough:
+            döndür material_fade_through_transition(t)
+        
+        TransitionType::MaterialElevation:
+            döndür material_elevation_transition(t)
+        
+        TransitionType::Custom(calc_fn):
+            döndür calc_fn(t)
+        
+        TransitionType::None:
+            döndür eğer t < 1.0: TransitionState::start() yoksa: TransitionState::end() son
+    son
+son
+
+// ============================================================================
+// TRANSITION IMPLEMENTATIONS
+// ============================================================================
+
+/// Basit fade
+fn fade_transition(t: ondalık) döndür TransitionState:
+    değişken state = TransitionState::default()
+    state.outgoing_opacity = 1.0 - t
+    state.incoming_opacity = t
+    döndür state
+son
+
+/// Cross fade (her ikisi de görünür)
+fn cross_fade_transition(t: ondalık) döndür TransitionState:
+    değişken state = TransitionState::default()
+    state.outgoing_opacity = 1.0 - t
+    state.incoming_opacity = t
+    state.incoming_on_top = t > 0.5
+    döndür state
+son
+
+/// Material fade through (ortada fade)
+fn fade_through_transition(t: ondalık) döndür TransitionState:
+    değişken state = TransitionState::default()
+    
+    eğer t < 0.35:
+        // Çıkış: fade out + scale down
+        değişken out_t = t / 0.35
+        state.outgoing_opacity = 1.0 - out_t
+        state.outgoing_scale = 1.0 - 0.08 * out_t
+        state.incoming_opacity = 0.0
+        state.incoming_scale = 0.92
+    yoksa:
+        // Giriş: fade in + scale up
+        değişken in_t = (t - 0.35) / 0.65
+        state.outgoing_opacity = 0.0
+        state.outgoing_scale = 0.92
+        state.incoming_opacity = in_t
+        state.incoming_scale = 0.92 + 0.08 * in_t
+    son
+    
+    döndür state
+son
+
+/// Slide geçişi
+fn slide_transition(t: ondalık, out_x: ondalık, out_y: ondalık, in_x: ondalık, in_y: ondalık) döndür TransitionState:
+    değişken state = TransitionState::default()
+    state.outgoing_x = out_x * t
+    state.outgoing_y = out_y * t
+    state.incoming_x = in_x * (1.0 - t)
+    state.incoming_y = in_y * (1.0 - t)
+    state.incoming_on_top = doğru
+    döndür state
+son
+
+/// Slide in/out (iOS navigation tarzı)
+fn slide_in_out_transition(t: ondalık, width: ondalık) döndür TransitionState:
+    değişken state = TransitionState::default()
+    // Çıkan: sola kayar, hafif fade ve scale
+    state.outgoing_x = -width * 0.3 * t
+    state.outgoing_opacity = 1.0 - 0.2 * t
+    state.outgoing_scale = 1.0 - 0.05 * t
+    // Gelen: sağdan girer
+    state.incoming_x = width * (1.0 - t)
+    state.incoming_on_top = doğru
+    döndür state
+son
+
+/// Scale geçişi
+fn scale_transition(t: ondalık, from_scale: ondalık, to_scale: ondalık) döndür TransitionState:
+    değişken state = TransitionState::default()
+    state.outgoing_opacity = 1.0 - t
+    state.incoming_opacity = t
+    state.outgoing_scale = 1.0 + (to_scale - 1.0) * t
+    state.incoming_scale = from_scale + (1.0 - from_scale) * t
+    döndür state
+son
+
+/// Scale + fade geçişi
+fn scale_fade_transition(t: ondalık) döndür TransitionState:
+    değişken state = TransitionState::default()
+    state.outgoing_opacity = 1.0 - t
+    state.outgoing_scale = 1.0 - 0.1 * t
+    state.incoming_opacity = t
+    state.incoming_scale = 0.9 + 0.1 * t
+    döndür state
+son
+
+/// Flip geçişi
+fn flip_transition(t: ondalık, horizontal: mantıksal) döndür TransitionState:
+    değişken state = TransitionState::default()
+    
+    // 0-180 derece dönüş
+    değişken rotation = 180.0 * t
+    
+    eğer t < 0.5:
+        state.outgoing_opacity = 1.0
+        state.incoming_opacity = 0.0
+        state.outgoing_rotation = rotation
+    yoksa:
+        state.outgoing_opacity = 0.0
+        state.incoming_opacity = 1.0
+        state.incoming_rotation = rotation - 180.0
+    son
+    
+    döndür state
+son
+
+/// 3D Cube geçişi
+fn cube_transition(t: ondalık, dir_x: ondalık, dir_y: ondalık, size: ondalık) döndür TransitionState:
+    değişken state = TransitionState::default()
+    
+    // Cube edge hareketi simülasyonu
+    değişken rotation = 90.0 * t
+    
+    state.outgoing_x = dir_x * size * t * 0.5
+    state.outgoing_y = dir_y * size * t * 0.5
+    state.outgoing_rotation = rotation * dir_x.signum()
+    state.outgoing_opacity = 1.0 - 0.3 * t
+    state.outgoing_scale = 1.0 - 0.1 * t
+    
+    state.incoming_x = -dir_x * size * (1.0 - t) * 0.5
+    state.incoming_y = -dir_y * size * (1.0 - t) * 0.5
+    state.incoming_rotation = (rotation - 90.0) * dir_x.signum()
+    state.incoming_opacity = 0.7 + 0.3 * t
+    state.incoming_scale = 0.9 + 0.1 * t
+    
+    state.incoming_on_top = t > 0.5
+    döndür state
+son
+
+/// iOS navigation slide
+fn cupertino_slide_transition(t: ondalık, width: ondalık) döndür TransitionState:
+    değişken state = TransitionState::default()
+    
+    // Çıkan: sola 1/3 kayar, hafif karartma
+    state.outgoing_x = -width * 0.33 * t
+    state.outgoing_opacity = 1.0 - 0.1 * t  // Hafif karartma
+    
+    // Gelen: sağdan tam genişlikle girer
+    state.incoming_x = width * (1.0 - t)
+    
+    // Gölge efekti için scale kullanılabilir
+    state.incoming_on_top = doğru
+    
+    döndür state
+son
+
+/// iOS modal present
+fn cupertino_modal_transition(t: ondalık, height: ondalık) döndür TransitionState:
+    değişken state = TransitionState::default()
+    
+    // Çıkan: hafif küçülme ve yukarı kayma
+    state.outgoing_scale = 1.0 - 0.08 * t
+    state.outgoing_y = -20.0 * t
+    state.outgoing_opacity = 1.0 - 0.1 * t
+    
+    // Gelen: alttan yukarı gelir
+    state.incoming_y = height * (1.0 - t)
+    
+    state.incoming_on_top = doğru
+    döndür state
+son
+
+/// iOS fade
+fn cupertino_fade_transition(t: ondalık) döndür TransitionState:
+    değişken state = TransitionState::default()
+    state.outgoing_opacity = 1.0 - t
+    state.incoming_opacity = t
+    // iOS'ta fade sırasında hafif scale
+    state.incoming_scale = 0.98 + 0.02 * t
+    döndür state
+son
+
+/// Material shared element
+fn material_shared_transition(t: ondalık) döndür TransitionState:
+    değişken state = TransitionState::default()
+    
+    eğer t < 0.25:
+        // Fade out container
+        değişken sub_t = t / 0.25
+        state.outgoing_opacity = 1.0 - sub_t * 0.3
+    yoksa eğer t < 0.75:
+        // Shared element morph (burada basit fade)
+        state.outgoing_opacity = 0.7
+        state.incoming_opacity = (t - 0.25) / 0.5
+    yoksa:
+        // Fade in new container
+        değişken sub_t = (t - 0.75) / 0.25
+        state.outgoing_opacity = 0.7 * (1.0 - sub_t)
+        state.incoming_opacity = 1.0
+    son
+    
+    döndür state
+son
+
+/// Material fade through
+fn material_fade_through_transition(t: ondalık) döndür TransitionState:
+    döndür fade_through_transition(t)
+son
+
+/// Material elevation
+fn material_elevation_transition(t: ondalık) döndür TransitionState:
+    değişken state = TransitionState::default()
+    
+    // Yükselen eleman büyür ve fade in
+    state.outgoing_opacity = 1.0 - t * 0.5  // Arka plan hafif karartılır
+    state.incoming_scale = 0.85 + 0.15 * t
+    state.incoming_opacity = t
+    
+    döndür state
+son
+
+// ============================================================================
+// TRANSITION - Geçiş Animasyonu
+// ============================================================================
+
+/// Transition durumu
+pub tip TransitionStatus = özyinelemeli yap
+    | Idle
+    | Running
+    | Completed
+    | Cancelled
+son
+
+/// Geçiş animasyonu
+pub tip Transition = yapı yap
+    /// Geçiş türü
+    transition_type: TransitionType,
+    /// Süre (ms)
+    duration: ondalık,
+    /// Easing
+    easing: EasingType,
+    /// Mevcut ilerleme
+    progress: ondalık,
+    /// Geçen süre
+    elapsed: ondalık,
+    /// Durum
+    status: TransitionStatus,
+    /// Görünüm boyutları
+    width: ondalık,
+    height: ondalık,
+    /// Ters yön
+    reversed: mantıksal,
+    /// Callback: başlangıçta
+    on_start: Seçenek[fn() döndür void],
+    /// Callback: her update'te
+    on_update: Seçenek[fn(TransitionState) döndür void],
+    /// Callback: tamamlandığında
+    on_complete: Seçenek[fn() döndür void],
+son
+
+impl Transition:
+    /// Yeni transition
+    pub fn new(transition_type: TransitionType) döndür Transition:
+        döndür Transition {
+            transition_type: transition_type,
+            duration: 300.0,
+            easing: EasingType::EaseInOut,
+            progress: 0.0,
+            elapsed: 0.0,
+            status: TransitionStatus::Idle,
+            width: 400.0,
+            height: 600.0,
+            reversed: yanlış,
+            on_start: Hiçbiri,
+            on_update: Hiçbiri,
+            on_complete: Hiçbiri,
+        }
+    son
+    
+    /// Süre ayarla
+    pub fn with_duration(mut self, ms: ondalık) döndür Transition:
+        self.duration = ms
+        döndür self
+    son
+    
+    /// Easing ayarla
+    pub fn with_easing(mut self, easing: EasingType) döndür Transition:
+        self.easing = easing
+        döndür self
+    son
+    
+    /// Boyutlar ayarla
+    pub fn with_size(mut self, width: ondalık, height: ondalık) döndür Transition:
+        self.width = width
+        self.height = height
+        döndür self
+    son
+    
+    /// Ters yön
+    pub fn reverse(mut self) döndür Transition:
+        self.reversed = doğru
+        döndür self
+    son
+    
+    /// Callback'ler
+    pub fn on_start(mut self, cb: fn() döndür void) döndür Transition:
+        self.on_start = Bazı(cb)
+        döndür self
+    son
+    
+    pub fn on_update(mut self, cb: fn(TransitionState) döndür void) döndür Transition:
+        self.on_update = Bazı(cb)
+        döndür self
+    son
+    
+    pub fn on_complete(mut self, cb: fn() döndür void) döndür Transition:
+        self.on_complete = Bazı(cb)
+        döndür self
+    son
+    
+    /// Başlat
+    pub fn start(mut self) döndür void:
+        self.status = TransitionStatus::Running
+        self.elapsed = 0.0
+        self.progress = 0.0
+        
+        eğer self.on_start.is_some():
+            self.on_start.unwrap()()
+        son
+    son
+    
+    /// İptal et
+    pub fn cancel(mut self) döndür void:
+        self.status = TransitionStatus::Cancelled
+    son
+    
+    /// Güncelle
+    pub fn update(mut self, delta_ms: ondalık) döndür void:
+        eğer self.status != TransitionStatus::Running:
+            döndür
+        son
+        
+        self.elapsed = self.elapsed + delta_ms
+        
+        // İlerleme hesapla
+        değişken linear_t = (self.elapsed / self.duration).min(1.0).max(0.0)
+        
+        // Ters yön
+        eğer self.reversed:
+            linear_t = 1.0 - linear_t
+        son
+        
+        // Easing uygula
+        kullan gui::animation::easing::ease
+        self.progress = ease(linear_t, self.easing)
+        
+        // Mevcut durumu hesapla
+        değişken state = calculate_transition(
+            self.transition_type,
+            self.progress,
+            self.width,
+            self.height
+        )
+        
+        // Update callback
+        eğer self.on_update.is_some():
+            self.on_update.unwrap()(state)
+        son
+        
+        // Tamamlandı mı?
+        eğer self.elapsed >= self.duration:
+            self.status = TransitionStatus::Completed
+            
+            eğer self.on_complete.is_some():
+                self.on_complete.unwrap()()
+            son
+        son
+    son
+    
+    /// Mevcut durum
+    pub fn get_state(self) döndür TransitionState:
+        döndür calculate_transition(
+            self.transition_type,
+            self.progress,
+            self.width,
+            self.height
+        )
+    son
+    
+    /// İlerleme (0-1)
+    pub fn get_progress(self) döndür ondalık:
+        döndür self.progress
+    son
+    
+    /// Çalışıyor mu?
+    pub fn is_running(self) döndür mantıksal:
+        döndür self.status == TransitionStatus::Running
+    son
+    
+    /// Tamamlandı mı?
+    pub fn is_complete(self) döndür mantıksal:
+        döndür self.status == TransitionStatus::Completed
+    son
+son
+
+// ============================================================================
+// PRESETS - Hazır Geçişler
+// ============================================================================
+
+/// iOS Push geçişi
+pub fn ios_push() döndür Transition:
+    döndür Transition::new(TransitionType::CupertinoSlide)
+        .with_duration(350.0)
+        .with_easing(EasingType::EaseOut)
+son
+
+/// iOS Modal geçişi
+pub fn ios_modal() döndür Transition:
+    döndür Transition::new(TransitionType::CupertinoModal)
+        .with_duration(400.0)
+        .with_easing(EasingType::EaseOut)
+son
+
+/// iOS Pop (geri) geçişi
+pub fn ios_pop() döndür Transition:
+    döndür Transition::new(TransitionType::CupertinoSlide)
+        .with_duration(350.0)
+        .with_easing(EasingType::EaseOut)
+        .reverse()
+son
+
+/// Material fade through geçişi
+pub fn material_fade() döndür Transition:
+    döndür Transition::new(TransitionType::MaterialFadeThrough)
+        .with_duration(300.0)
+        .with_easing(EasingType::EaseInOut)
+son
+
+/// Hızlı fade
+pub fn quick_fade() döndür Transition:
+    döndür Transition::new(TransitionType::Fade)
+        .with_duration(150.0)
+        .with_easing(EasingType::EaseOut)
+son
+
+/// Zoom in geçişi
+pub fn zoom_in() döndür Transition:
+    döndür Transition::new(TransitionType::ScaleUp)
+        .with_duration(250.0)
+        .with_easing(EasingType::EaseOutBack)
+son
+
+/// Flip geçişi
+pub fn flip() döndür Transition:
+    döndür Transition::new(TransitionType::FlipHorizontal)
+        .with_duration(500.0)
+        .with_easing(EasingType::EaseInOut)
+son
+
+/// Cube geçişi
+pub fn cube() döndür Transition:
+    döndür Transition::new(TransitionType::CubeLeft)
+        .with_duration(400.0)
+        .with_easing(EasingType::EaseInOut)
+son

@@ -1,0 +1,140 @@
+/// ═══════════════════════════════════════════════════════════════════════════
+/// BERK HAL - RISC-V Platformu Demo
+/// Hardware Abstraction Layer - Acik Kaynak Islemci
+/// ═══════════════════════════════════════════════════════════════════════════
+
+kullan std::io
+kullan std::riscv
+
+yaz("============================================================")
+yaz("         HAL Demo: RISC-V Platformu                         ")
+yaz("============================================================")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 1: RISC-V Mimarisi
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 1: RISC-V Mimarisi ---")
+
+yaz("\n   RISC-V Avantajlari:")
+yaz("   - Acik kaynak ISA (Instruction Set Architecture)")
+yaz("   - Ucretsiz ve lisans gerektirmez")
+yaz("   - Modular tasarim")
+yaz("   - Ozellestirilmis uzantilar")
+
+yaz("\n   Temel ISA Varyantlari:")
+yaz("   - RV32I: 32-bit tamsayi temel set")
+yaz("   - RV64I: 64-bit tamsayi temel set")
+yaz("   - RV128I: 128-bit (gelecek)")
+
+yaz("\n   Standart Uzantilar:")
+yaz("   - M: Carpma/Bolme")
+yaz("   - A: Atomik islemler")
+yaz("   - F: Tek hassasiyetli float")
+yaz("   - D: Cift hassasiyetli float")
+yaz("   - C: Sikistirilmis komutlar")
+yaz("   - Ornek: RV32IMAC, RV64GC")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 2: Populer RISC-V Cipleri
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 2: Populer RISC-V Cipleri ---")
+
+yaz("\n   SiFive:")
+yaz("   - FE310-G002: RV32IMAC, 320MHz")
+yaz("   - U74: RV64GC, Linux destekli")
+
+yaz("\n   ESP32-C3:")
+yaz("   - RV32IMC, 160MHz")
+yaz("   - WiFi + BLE entegre")
+
+yaz("\n   GD32VF103:")
+yaz("   - RV32IMAC, 108MHz")
+yaz("   - STM32 uyumlu cevresel birimler")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 3: Register Yapisi
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 3: Register Yapisi ---")
+
+yaz("\n   Genel Amacli Register'lar (32 adet):")
+yaz("   - reg0 (zero): Daima sifir")
+yaz("   - reg1 (ra): Return address")
+yaz("   - reg2 (sp): Stack pointer")
+yaz("   - reg3 (gp): Global pointer")
+yaz("   - reg4 (tp): Thread pointer")
+yaz("   - reg5-7: Gecici")
+yaz("   - reg8-9: Saved registers")
+yaz("   - reg10-17: Arguman/return")
+yaz("   - reg18-27: Saved registers")
+yaz("   - reg28-31: Gecici")
+
+yaz("\n   CSR (Control and Status Registers):")
+yaz("   - mstatus: Machine status")
+yaz("   - mtvec: Trap vector")
+yaz("   - mepc: Exception PC")
+yaz("   - mcause: Trap cause")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 4: Memory Map Ornegi
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 4: Memory Map (FE310) ---")
+
+yaz("\n   Adres Alanlari (Hex):")
+yaz("   - Debug ROM:  0x00000000")
+yaz("   - CLINT:      0x02000000")
+yaz("   - PLIC:       0x0C000000")
+yaz("   - AON:        0x10000000")
+yaz("   - GPIO:       0x10010000")
+yaz("   - UART0:      0x10013000")
+yaz("   - SPI0:       0x10024000")
+yaz("   - Flash XIP:  0x20000000")
+yaz("   - DTIM RAM:   0x80000000")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 5: GPIO Erisimi
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 5: GPIO Erisimi ---")
+
+// Decimal olarak adresler
+değişken gpio_base_addr = 268509184
+değişken gpio_input_val_offset = 0
+değişken gpio_input_en_offset = 4
+değişken gpio_output_en_offset = 8
+değişken gpio_output_val_offset = 12
+
+yaz("\n   GPIO Register Offset'leri:")
+yaz("   - GPIO_BASE:       268509184 (0x10012000)")
+yaz("   - GPIO_INPUT_VAL:  +0")
+yaz("   - GPIO_INPUT_EN:   +4")
+yaz("   - GPIO_OUTPUT_EN:  +8")
+yaz("   - GPIO_OUTPUT_VAL: +12")
+
+yaz("\n   Ornek: LED Yakmak")
+yaz("   - OUTPUT_EN |= (1 << pin)")
+yaz("   - OUTPUT_VAL |= (1 << pin)")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 6: Interrupt Yapisi
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 6: Interrupt Yapisi ---")
+
+yaz("\n   CLINT (Core Local Interrupter):")
+yaz("   - Software interrupt")
+yaz("   - Timer interrupt")
+
+yaz("\n   PLIC (Platform-Level Interrupt Controller):")
+yaz("   - External interrupt yonetimi")
+yaz("   - Oncelik seviyeleri")
+yaz("   - Interrupt enable/claim/complete")
+
+yaz("\n   Trap Turleri:")
+yaz("   - Exception: Senkron (instruction hatasi)")
+yaz("   - Interrupt: Asenkron (timer, external)")
+
+yaz("\n[OK] RISC-V HAL demosu tamamlandi!")

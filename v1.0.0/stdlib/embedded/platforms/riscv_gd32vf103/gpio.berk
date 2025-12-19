@@ -1,0 +1,229 @@
+// stdlib/embedded/platforms/riscv_gd32vf103/gpio.berk
+// GD32VF103 RISC-V GPIO HAL Implementation
+// GigaDevice GD32VF103 firmware library bindings
+
+kullan "embedded/bal/gpio" olarak GPIO_BAL
+
+// GD32VF103 GPIO ports (5 ports: A-E)
+açık enum Port yap
+    A = 0,
+    B = 1,
+    C = 2,
+    D = 3,
+    E = 4,
+son
+
+// GPIO mode definitions (from gd32vf103_gpio.h)
+sabit GPIO_MODE_AIN: u32 = 0x00        // Analog input
+sabit GPIO_MODE_IN_FLOATING: u32 = 0x04  // Floating input
+sabit GPIO_MODE_IPD: u32 = 0x28         // Input with pull-down
+sabit GPIO_MODE_IPU: u32 = 0x48         // Input with pull-up
+sabit GPIO_MODE_OUT_OD: u32 = 0x14      // Open-drain output
+sabit GPIO_MODE_OUT_PP: u32 = 0x10      // Push-pull output
+sabit GPIO_MODE_AF_OD: u32 = 0x1C       // Alternate function open-drain
+sabit GPIO_MODE_AF_PP: u32 = 0x18       // Alternate function push-pull
+
+// GPIO speed definitions
+sabit GPIO_OSPEED_2MHZ: u32 = 0x02     // Output max 2 MHz
+sabit GPIO_OSPEED_10MHZ: u32 = 0x01    // Output max 10 MHz
+sabit GPIO_OSPEED_50MHZ: u32 = 0x03    // Output max 50 MHz
+
+// GPIO pin definitions (16 pins per port)
+sabit GPIO_PIN_0: u16 = 0x0001
+sabit GPIO_PIN_1: u16 = 0x0002
+sabit GPIO_PIN_2: u16 = 0x0004
+sabit GPIO_PIN_3: u16 = 0x0008
+sabit GPIO_PIN_4: u16 = 0x0010
+sabit GPIO_PIN_5: u16 = 0x0020
+sabit GPIO_PIN_6: u16 = 0x0040
+sabit GPIO_PIN_7: u16 = 0x0080
+sabit GPIO_PIN_8: u16 = 0x0100
+sabit GPIO_PIN_9: u16 = 0x0200
+sabit GPIO_PIN_10: u16 = 0x0400
+sabit GPIO_PIN_11: u16 = 0x0800
+sabit GPIO_PIN_12: u16 = 0x1000
+sabit GPIO_PIN_13: u16 = 0x2000
+sabit GPIO_PIN_14: u16 = 0x4000
+sabit GPIO_PIN_15: u16 = 0x8000
+sabit GPIO_PIN_ALL: u16 = 0xFFFF
+
+// GPIO port base addresses (from gd32vf103.h)
+sabit GPIOA_BASE: u32 = 0x40010800
+sabit GPIOB_BASE: u32 = 0x40010C00
+sabit GPIOC_BASE: u32 = 0x40011000
+sabit GPIOD_BASE: u32 = 0x40011400
+sabit GPIOE_BASE: u32 = 0x40011800
+
+// RCU (Reset and Clock Unit) for GPIO clock enable
+sabit RCU_APB2EN: u32 = 0x40021018
+sabit RCU_APB2EN_PAEN: u32 = 0x00000004  // GPIOA clock
+sabit RCU_APB2EN_PBEN: u32 = 0x00000008  // GPIOB clock
+sabit RCU_APB2EN_PCEN: u32 = 0x00000010  // GPIOC clock
+sabit RCU_APB2EN_PDEN: u32 = 0x00000020  // GPIOD clock
+sabit RCU_APB2EN_PEEN: u32 = 0x00000040  // GPIOE clock
+
+// GD32VF103 firmware library functions
+harici "C" yap
+    fonksiyon gpio_init(gpio_periph: u32, mode: u32, speed: u32, pin: u16)
+    fonksiyon gpio_bit_set(gpio_periph: u32, pin: u16)
+    fonksiyon gpio_bit_reset(gpio_periph: u32, pin: u16)
+    fonksiyon gpio_input_bit_get(gpio_periph: u32, pin: u16) -> u8
+    fonksiyon gpio_output_bit_get(gpio_periph: u32, pin: u16) -> u8
+    fonksiyon gpio_bit_write(gpio_periph: u32, pin: u16, bit_value: u8)
+    fonksiyon gpio_port_write(gpio_periph: u32, port_value: u16)
+    fonksiyon gpio_pin_remap_config(remap: u32, newstate: u8)
+    fonksiyon rcu_periph_clock_enable(periph: u32)
+son
+
+// Helper: Get GPIO port base address
+fonksiyon port_base_address(port: Port) -> u32 yap
+    seç port yap
+        durum Port::A => dön GPIOA_BASE,
+        durum Port::B => dön GPIOB_BASE,
+        durum Port::C => dön GPIOC_BASE,
+        durum Port::D => dön GPIOD_BASE,
+        durum Port::E => dön GPIOE_BASE,
+    son
+son
+
+// Helper: Enable GPIO clock
+fonksiyon enable_gpio_clock(port: Port) yap
+    değişken clock_bit: u32 = seç port yap
+        durum Port::A => RCU_APB2EN_PAEN,
+        durum Port::B => RCU_APB2EN_PBEN,
+        durum Port::C => RCU_APB2EN_PCEN,
+        durum Port::D => RCU_APB2EN_PDEN,
+        durum Port::E => RCU_APB2EN_PEEN,
+    son
+    
+    rcu_periph_clock_enable(clock_bit)
+son
+
+// Helper: Convert pin number to pin mask
+fonksiyon pin_to_mask(pin: u8) -> u16 yap
+    dön 1 << pin
+son
+
+// BAL implementation for GD32VF103
+yapı GD32VF103_GPIO_HAL yap
+    port: Port,
+    initialized: bool,
+son
+
+uygula GD32VF103_GPIO_HAL yap
+    // Initialize GPIO HAL
+    fonksiyon yeni(port: Port) -> GD32VF103_GPIO_HAL yap
+        enable_gpio_clock(port)
+        
+        dön GD32VF103_GPIO_HAL yap
+            port: port,
+            initialized: doğru,
+        son
+    son
+    
+    // Configure pin mode
+    fonksiyon pin_mode(&değiştir kendim, pin: u8, mode: GPIO_BAL::Mode) yap
+        değişken periph = port_base_address(kendim.port)
+        değişken pin_mask = pin_to_mask(pin)
+        
+        değişken gd32_mode: u32 = seç mode yap
+            durum GPIO_BAL::Mode::Input => GPIO_MODE_IN_FLOATING,
+            durum GPIO_BAL::Mode::Output => GPIO_MODE_OUT_PP,
+            durum GPIO_BAL::Mode::InputPullUp => GPIO_MODE_IPU,
+            durum GPIO_BAL::Mode::InputPullDown => GPIO_MODE_IPD,
+            durum GPIO_BAL::Mode::OutputOpenDrain => GPIO_MODE_OUT_OD,
+            durum GPIO_BAL::Mode::Analog => GPIO_MODE_AIN,
+        son
+        
+        gpio_init(periph, gd32_mode, GPIO_OSPEED_50MHZ, pin_mask)
+    son
+    
+    // Write digital value
+    fonksiyon digital_write(&kendim, pin: u8, value: bool) yap
+        değişken periph = port_base_address(kendim.port)
+        değişken pin_mask = pin_to_mask(pin)
+        
+        eğer value yap
+            gpio_bit_set(periph, pin_mask)
+        son değilse yap
+            gpio_bit_reset(periph, pin_mask)
+        son
+    son
+    
+    // Read digital value
+    fonksiyon digital_read(&kendim, pin: u8) -> bool yap
+        değişken periph = port_base_address(kendim.port)
+        değişken pin_mask = pin_to_mask(pin)
+        
+        değişken bit_val = gpio_input_bit_get(periph, pin_mask)
+        dön bit_val != 0
+    son
+    
+    // Toggle pin
+    fonksiyon toggle(&değiştir kendim, pin: u8) yap
+        değişken current = kendim.digital_read(pin)
+        kendim.digital_write(pin, !current)
+    son
+son
+
+// Export BAL implementation
+açık tip GPIO_HAL = GD32VF103_GPIO_HAL
+
+// Convenience functions
+açık fonksiyon gpio_init_port(port: Port) -> GPIO_HAL yap
+    dön GPIO_HAL::yeni(port)
+son
+
+// LED helper for Longan Nano board
+// Red LED: PC13, Green LED: PA1, Blue LED: PA2
+açık sabit LED_RED_PORT: Port = Port::C
+açık sabit LED_RED_PIN: u8 = 13
+açık sabit LED_GREEN_PORT: Port = Port::A
+açık sabit LED_GREEN_PIN: u8 = 1
+açık sabit LED_BLUE_PORT: Port = Port::A
+açık sabit LED_BLUE_PIN: u8 = 2
+
+açık fonksiyon init_leds() yap
+    değişken mut gpio_c = gpio_init_port(LED_RED_PORT)
+    gpio_c.pin_mode(LED_RED_PIN, GPIO_BAL::Mode::Output)
+    
+    değişken mut gpio_a = gpio_init_port(LED_GREEN_PORT)
+    gpio_a.pin_mode(LED_GREEN_PIN, GPIO_BAL::Mode::Output)
+    gpio_a.pin_mode(LED_BLUE_PIN, GPIO_BAL::Mode::Output)
+son
+
+açık fonksiyon led_on(color: &str) yap
+    seç color yap
+        "red" | "kırmızı" => yap
+            değişken mut gpio = gpio_init_port(LED_RED_PORT)
+            gpio.digital_write(LED_RED_PIN, yanlış)  // Active low
+        son,
+        "green" | "yeşil" => yap
+            değişken mut gpio = gpio_init_port(LED_GREEN_PORT)
+            gpio.digital_write(LED_GREEN_PIN, yanlış)  // Active low
+        son,
+        "blue" | "mavi" => yap
+            değişken mut gpio = gpio_init_port(LED_BLUE_PORT)
+            gpio.digital_write(LED_BLUE_PIN, yanlış)  // Active low
+        son,
+        _ => {},
+    son
+son
+
+açık fonksiyon led_off(color: &str) yap
+    seç color yap
+        "red" | "kırmızı" => yap
+            değişken mut gpio = gpio_init_port(LED_RED_PORT)
+            gpio.digital_write(LED_RED_PIN, doğru)  // Active low
+        son,
+        "green" | "yeşil" => yap
+            değişken mut gpio = gpio_init_port(LED_GREEN_PORT)
+            gpio.digital_write(LED_GREEN_PIN, doğru)  // Active low
+        son,
+        "blue" | "mavi" => yap
+            değişken mut gpio = gpio_init_port(LED_BLUE_PORT)
+            gpio.digital_write(LED_BLUE_PIN, doğru)  // Active low
+        son,
+        _ => {},
+    son
+son

@@ -1,0 +1,224 @@
+// stdlib/embedded/platforms/riscv_fe310/gpio.berk
+// SiFive FE310 RISC-V GPIO HAL Implementation
+// Freedom Metal framework bindings
+
+kullan "embedded/bal/gpio" olarak GPIO_BAL
+
+// FE310 has 32 GPIO pins (0-31)
+açık sabit GPIO_COUNT: u8 = 32
+
+// GPIO base addresses (memory-mapped I/O)
+sabit GPIO_BASE: u32 = 0x10012000
+
+// GPIO register offsets
+sabit GPIO_INPUT_VAL: u32 = 0x00    // Pin value
+sabit GPIO_INPUT_EN: u32 = 0x04     // Input enable
+sabit GPIO_OUTPUT_EN: u32 = 0x08    // Output enable
+sabit GPIO_OUTPUT_VAL: u32 = 0x0C   // Output value
+sabit GPIO_PULLUP_EN: u32 = 0x10    // Pull-up enable
+sabit GPIO_DRIVE: u32 = 0x14        // Drive strength
+sabit GPIO_RISE_IE: u32 = 0x18      // Rising edge interrupt enable
+sabit GPIO_RISE_IP: u32 = 0x1C      // Rising edge interrupt pending
+sabit GPIO_FALL_IE: u32 = 0x20      // Falling edge interrupt enable
+sabit GPIO_FALL_IP: u32 = 0x24      // Falling edge interrupt pending
+sabit GPIO_HIGH_IE: u32 = 0x28      // High level interrupt enable
+sabit GPIO_HIGH_IP: u32 = 0x2C      // High level interrupt pending
+sabit GPIO_LOW_IE: u32 = 0x30       // Low level interrupt enable
+sabit GPIO_LOW_IP: u32 = 0x34       // Low level interrupt pending
+sabit GPIO_IOF_EN: u32 = 0x38       // I/O function enable
+sabit GPIO_IOF_SEL: u32 = 0x3C      // I/O function select
+sabit GPIO_OUTPUT_XOR: u32 = 0x40   // Output XOR (invert)
+
+// Freedom Metal GPIO functions
+harici "C" yap
+    // Direct register access (Freedom Metal provides these)
+    fonksiyon metal_gpio_enable_input(base: u32, pin: u32)
+    fonksiyon metal_gpio_disable_input(base: u32, pin: u32)
+    fonksiyon metal_gpio_enable_output(base: u32, pin: u32)
+    fonksiyon metal_gpio_disable_output(base: u32, pin: u32)
+    fonksiyon metal_gpio_set_pin(base: u32, pin: u32, value: u32)
+    fonksiyon metal_gpio_get_pin(base: u32, pin: u32) -> u32
+    fonksiyon metal_gpio_enable_pinmux(base: u32, pin: u32, func: u32)
+    fonksiyon metal_gpio_disable_pinmux(base: u32, pin: u32)
+son
+
+// Direct register read/write (volatile)
+harici "C" yap
+    fonksiyon volatile_read_u32(addr: *sabit u32) -> u32
+    fonksiyon volatile_write_u32(addr: *değiştir u32, value: u32)
+son
+
+// Helper: Read GPIO register
+fonksiyon gpio_read_reg(offset: u32) -> u32 yap
+    değişken addr = (GPIO_BASE + offset) olarak *sabit u32
+    dön volatile_read_u32(addr)
+son
+
+// Helper: Write GPIO register
+fonksiyon gpio_write_reg(offset: u32, value: u32) yap
+    değişken addr = (GPIO_BASE + offset) olarak *değiştir u32
+    volatile_write_u32(addr, value)
+son
+
+// Helper: Set bit in register
+fonksiyon gpio_set_bit(offset: u32, pin: u8) yap
+    değişken current = gpio_read_reg(offset)
+    değişken mask = 1 << pin
+    gpio_write_reg(offset, current | mask)
+son
+
+// Helper: Clear bit in register
+fonksiyon gpio_clear_bit(offset: u32, pin: u8) yap
+    değişken current = gpio_read_reg(offset)
+    değişken mask = 1 << pin
+    gpio_write_reg(offset, current & !mask)
+son
+
+// Helper: Test bit in register
+fonksiyon gpio_test_bit(offset: u32, pin: u8) -> bool yap
+    değişken value = gpio_read_reg(offset)
+    değişken mask = 1 << pin
+    dön (value & mask) != 0
+son
+
+yapı FE310_GPIO_HAL yap
+    initialized: bool,
+son
+
+uygula FE310_GPIO_HAL yap
+    açık fonksiyon yeni() -> FE310_GPIO_HAL yap
+        dön FE310_GPIO_HAL yap initialized: doğru son
+    son
+    
+    açık fonksiyon pin_mode(&değiştir kendim, pin: u8, mode: GPIO_BAL::Mode) yap
+        eğer pin >= GPIO_COUNT yap
+            dön  // Invalid pin
+        son
+        
+        // Disable I/O function (use as GPIO)
+        gpio_clear_bit(GPIO_IOF_EN, pin)
+        
+        seç mode yap
+            durum GPIO_BAL::Mode::Input => yap
+                gpio_set_bit(GPIO_INPUT_EN, pin)
+                gpio_clear_bit(GPIO_OUTPUT_EN, pin)
+                gpio_clear_bit(GPIO_PULLUP_EN, pin)
+            son,
+            
+            durum GPIO_BAL::Mode::Output => yap
+                gpio_clear_bit(GPIO_INPUT_EN, pin)
+                gpio_set_bit(GPIO_OUTPUT_EN, pin)
+            son,
+            
+            durum GPIO_BAL::Mode::InputPullUp => yap
+                gpio_set_bit(GPIO_INPUT_EN, pin)
+                gpio_clear_bit(GPIO_OUTPUT_EN, pin)
+                gpio_set_bit(GPIO_PULLUP_EN, pin)
+            son,
+            
+            durum GPIO_BAL::Mode::InputPullDown => yap
+                // FE310 doesn't have pull-down, use floating input
+                gpio_set_bit(GPIO_INPUT_EN, pin)
+                gpio_clear_bit(GPIO_OUTPUT_EN, pin)
+                gpio_clear_bit(GPIO_PULLUP_EN, pin)
+            son,
+            
+            durum GPIO_BAL::Mode::OutputOpenDrain => yap
+                // FE310 doesn't have true open-drain, use regular output
+                gpio_clear_bit(GPIO_INPUT_EN, pin)
+                gpio_set_bit(GPIO_OUTPUT_EN, pin)
+            son,
+            
+            durum GPIO_BAL::Mode::Analog => yap
+                // Disable both input and output (high-impedance)
+                gpio_clear_bit(GPIO_INPUT_EN, pin)
+                gpio_clear_bit(GPIO_OUTPUT_EN, pin)
+            son,
+        son
+    son
+    
+    açık fonksiyon digital_write(&kendim, pin: u8, value: bool) yap
+        eğer pin >= GPIO_COUNT yap
+            dön  // Invalid pin
+        son
+        
+        eğer value yap
+            gpio_set_bit(GPIO_OUTPUT_VAL, pin)
+        son değilse yap
+            gpio_clear_bit(GPIO_OUTPUT_VAL, pin)
+        son
+    son
+    
+    açık fonksiyon digital_read(&kendim, pin: u8) -> bool yap
+        eğer pin >= GPIO_COUNT yap
+            dön yanlış  // Invalid pin
+        son
+        
+        dön gpio_test_bit(GPIO_INPUT_VAL, pin)
+    son
+    
+    açık fonksiyon toggle(&değiştir kendim, pin: u8) yap
+        değişken current = kendim.digital_read(pin)
+        kendim.digital_write(pin, !current)
+    son
+son
+
+uygula GPIO_BAL::GpioHAL için FE310_GPIO_HAL yap
+    fonksiyon pin_mode(&değiştir kendim, pin: u8, mode: GPIO_BAL::Mode) yap
+        kendim.pin_mode(pin, mode)
+    son
+    
+    fonksiyon digital_write(&kendim, pin: u8, value: bool) yap
+        kendim.digital_write(pin, value)
+    son
+    
+    fonksiyon digital_read(&kendim, pin: u8) -> bool yap
+        dön kendim.digital_read(pin)
+    son
+    
+    fonksiyon toggle(&değiştir kendim, pin: u8) yap
+        kendim.toggle(pin)
+    son
+son
+
+açık tip GPIO_HAL = FE310_GPIO_HAL
+
+// LED helpers for HiFive1 Rev B board
+// Red LED: GPIO 22, Green LED: GPIO 19, Blue LED: GPIO 21
+açık sabit LED_RED_PIN: u8 = 22
+açık sabit LED_GREEN_PIN: u8 = 19
+açık sabit LED_BLUE_PIN: u8 = 21
+
+açık fonksiyon init_leds() yap
+    değişken mut gpio = GPIO_HAL::yeni()
+    gpio.pin_mode(LED_RED_PIN, GPIO_BAL::Mode::Output)
+    gpio.pin_mode(LED_GREEN_PIN, GPIO_BAL::Mode::Output)
+    gpio.pin_mode(LED_BLUE_PIN, GPIO_BAL::Mode::Output)
+    
+    // Turn all LEDs off (active low on HiFive1)
+    gpio.digital_write(LED_RED_PIN, doğru)
+    gpio.digital_write(LED_GREEN_PIN, doğru)
+    gpio.digital_write(LED_BLUE_PIN, doğru)
+son
+
+açık fonksiyon led_on(color: &str) yap
+    değişken mut gpio = GPIO_HAL::yeni()
+    
+    seç color yap
+        "red" | "kırmızı" => gpio.digital_write(LED_RED_PIN, yanlış),  // Active low
+        "green" | "yeşil" => gpio.digital_write(LED_GREEN_PIN, yanlış),
+        "blue" | "mavi" => gpio.digital_write(LED_BLUE_PIN, yanlış),
+        _ => {},
+    son
+son
+
+açık fonksiyon led_off(color: &str) yap
+    değişken mut gpio = GPIO_HAL::yeni()
+    
+    seç color yap
+        "red" | "kırmızı" => gpio.digital_write(LED_RED_PIN, doğru),  // Active low
+        "green" | "yeşil" => gpio.digital_write(LED_GREEN_PIN, doğru),
+        "blue" | "mavi" => gpio.digital_write(LED_BLUE_PIN, doğru),
+        _ => {},
+    son
+son

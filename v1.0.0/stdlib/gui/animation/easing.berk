@@ -1,0 +1,450 @@
+// ============================================================================
+// BERK GUI Framework - Easing Functions
+// ============================================================================
+// Profesyonel easing fonksiyonları - CSS, After Effects uyumlu
+// ============================================================================
+
+modül gui::animation::easing
+
+kullan std::math
+
+// ============================================================================
+// EASING TYPE
+// ============================================================================
+
+/// Easing fonksiyon tipi
+pub tip EasingType = özyinelemeli yap
+    // ========== TEMEL ==========
+    | Linear
+    
+    // ========== QUAD ==========
+    | QuadIn
+    | QuadOut
+    | QuadInOut
+    
+    // ========== CUBIC ==========
+    | CubicIn
+    | CubicOut
+    | CubicInOut
+    
+    // ========== QUART ==========
+    | QuartIn
+    | QuartOut
+    | QuartInOut
+    
+    // ========== QUINT ==========
+    | QuintIn
+    | QuintOut
+    | QuintInOut
+    
+    // ========== SINE ==========
+    | SineIn
+    | SineOut
+    | SineInOut
+    
+    // ========== EXPO ==========
+    | ExpoIn
+    | ExpoOut
+    | ExpoInOut
+    
+    // ========== CIRC ==========
+    | CircIn
+    | CircOut
+    | CircInOut
+    
+    // ========== BACK ==========
+    | BackIn
+    | BackOut
+    | BackInOut
+    | BackInCustom(ondalık)   // overshoot miktarı
+    | BackOutCustom(ondalık)
+    | BackInOutCustom(ondalık)
+    
+    // ========== ELASTIC ==========
+    | ElasticIn
+    | ElasticOut
+    | ElasticInOut
+    | ElasticInCustom(ondalık, ondalık)   // amplitude, period
+    | ElasticOutCustom(ondalık, ondalık)
+    
+    // ========== BOUNCE ==========
+    | BounceIn
+    | BounceOut
+    | BounceInOut
+    
+    // ========== CUSTOM ==========
+    | CubicBezier(ondalık, ondalık, ondalık, ondalık)  // p1x, p1y, p2x, p2y
+    | Steps(sayı, mantıksal)   // steps, jump at start?
+    | Spring(ondalık, ondalık, ondalık)  // mass, stiffness, damping
+son
+
+// ============================================================================
+// EASING FUNCTION
+// ============================================================================
+
+/// Easing fonksiyonlarını hesapla
+pub fn ease(easing: EasingType, t: ondalık) döndür ondalık:
+    değişken t_clamped = t.clamp(0.0, 1.0)
+    
+    eşleştir easing:
+        // ========== LINEAR ==========
+        EasingType::Linear:
+            döndür t_clamped
+        
+        // ========== QUAD ==========
+        EasingType::QuadIn:
+            döndür t_clamped * t_clamped
+        
+        EasingType::QuadOut:
+            döndür 1.0 - (1.0 - t_clamped) * (1.0 - t_clamped)
+        
+        EasingType::QuadInOut:
+            eğer t_clamped < 0.5:
+                döndür 2.0 * t_clamped * t_clamped
+            değilse:
+                döndür 1.0 - (-2.0 * t_clamped + 2.0).powi(2) / 2.0
+            son
+        
+        // ========== CUBIC ==========
+        EasingType::CubicIn:
+            döndür t_clamped * t_clamped * t_clamped
+        
+        EasingType::CubicOut:
+            döndür 1.0 - (1.0 - t_clamped).powi(3)
+        
+        EasingType::CubicInOut:
+            eğer t_clamped < 0.5:
+                döndür 4.0 * t_clamped * t_clamped * t_clamped
+            değilse:
+                döndür 1.0 - (-2.0 * t_clamped + 2.0).powi(3) / 2.0
+            son
+        
+        // ========== QUART ==========
+        EasingType::QuartIn:
+            döndür t_clamped.powi(4)
+        
+        EasingType::QuartOut:
+            döndür 1.0 - (1.0 - t_clamped).powi(4)
+        
+        EasingType::QuartInOut:
+            eğer t_clamped < 0.5:
+                döndür 8.0 * t_clamped.powi(4)
+            değilse:
+                döndür 1.0 - (-2.0 * t_clamped + 2.0).powi(4) / 2.0
+            son
+        
+        // ========== QUINT ==========
+        EasingType::QuintIn:
+            döndür t_clamped.powi(5)
+        
+        EasingType::QuintOut:
+            döndür 1.0 - (1.0 - t_clamped).powi(5)
+        
+        EasingType::QuintInOut:
+            eğer t_clamped < 0.5:
+                döndür 16.0 * t_clamped.powi(5)
+            değilse:
+                döndür 1.0 - (-2.0 * t_clamped + 2.0).powi(5) / 2.0
+            son
+        
+        // ========== SINE ==========
+        EasingType::SineIn:
+            döndür 1.0 - (t_clamped * math::PI / 2.0).cos()
+        
+        EasingType::SineOut:
+            döndür (t_clamped * math::PI / 2.0).sin()
+        
+        EasingType::SineInOut:
+            döndür -(((t_clamped * math::PI).cos() - 1.0) / 2.0)
+        
+        // ========== EXPO ==========
+        EasingType::ExpoIn:
+            eğer t_clamped == 0.0:
+                döndür 0.0
+            değilse:
+                döndür 2.0.pow(10.0 * t_clamped - 10.0)
+            son
+        
+        EasingType::ExpoOut:
+            eğer t_clamped == 1.0:
+                döndür 1.0
+            değilse:
+                döndür 1.0 - 2.0.pow(-10.0 * t_clamped)
+            son
+        
+        EasingType::ExpoInOut:
+            eğer t_clamped == 0.0:
+                döndür 0.0
+            değilse eğer t_clamped == 1.0:
+                döndür 1.0
+            değilse eğer t_clamped < 0.5:
+                döndür 2.0.pow(20.0 * t_clamped - 10.0) / 2.0
+            değilse:
+                döndür (2.0 - 2.0.pow(-20.0 * t_clamped + 10.0)) / 2.0
+            son
+        
+        // ========== CIRC ==========
+        EasingType::CircIn:
+            döndür 1.0 - (1.0 - t_clamped * t_clamped).sqrt()
+        
+        EasingType::CircOut:
+            döndür (1.0 - (t_clamped - 1.0).powi(2)).sqrt()
+        
+        EasingType::CircInOut:
+            eğer t_clamped < 0.5:
+                döndür (1.0 - (1.0 - (2.0 * t_clamped).powi(2)).sqrt()) / 2.0
+            değilse:
+                döndür ((1.0 - (-2.0 * t_clamped + 2.0).powi(2)).sqrt() + 1.0) / 2.0
+            son
+        
+        // ========== BACK ==========
+        EasingType::BackIn:
+            döndür ease_back_in(t_clamped, 1.70158)
+        
+        EasingType::BackOut:
+            döndür ease_back_out(t_clamped, 1.70158)
+        
+        EasingType::BackInOut:
+            döndür ease_back_in_out(t_clamped, 1.70158)
+        
+        EasingType::BackInCustom(overshoot):
+            döndür ease_back_in(t_clamped, overshoot)
+        
+        EasingType::BackOutCustom(overshoot):
+            döndür ease_back_out(t_clamped, overshoot)
+        
+        EasingType::BackInOutCustom(overshoot):
+            döndür ease_back_in_out(t_clamped, overshoot)
+        
+        // ========== ELASTIC ==========
+        EasingType::ElasticIn:
+            döndür ease_elastic_in(t_clamped, 1.0, 0.3)
+        
+        EasingType::ElasticOut:
+            döndür ease_elastic_out(t_clamped, 1.0, 0.3)
+        
+        EasingType::ElasticInOut:
+            döndür ease_elastic_in_out(t_clamped, 1.0, 0.3)
+        
+        EasingType::ElasticInCustom(amp, period):
+            döndür ease_elastic_in(t_clamped, amp, period)
+        
+        EasingType::ElasticOutCustom(amp, period):
+            döndür ease_elastic_out(t_clamped, amp, period)
+        
+        // ========== BOUNCE ==========
+        EasingType::BounceIn:
+            döndür 1.0 - ease_bounce_out(1.0 - t_clamped)
+        
+        EasingType::BounceOut:
+            döndür ease_bounce_out(t_clamped)
+        
+        EasingType::BounceInOut:
+            eğer t_clamped < 0.5:
+                döndür (1.0 - ease_bounce_out(1.0 - 2.0 * t_clamped)) / 2.0
+            değilse:
+                döndür (1.0 + ease_bounce_out(2.0 * t_clamped - 1.0)) / 2.0
+            son
+        
+        // ========== CUSTOM ==========
+        EasingType::CubicBezier(p1x, p1y, p2x, p2y):
+            döndür ease_cubic_bezier(t_clamped, p1x, p1y, p2x, p2y)
+        
+        EasingType::Steps(steps, jump_start):
+            döndür ease_steps(t_clamped, steps, jump_start)
+        
+        EasingType::Spring(mass, stiffness, damping):
+            döndür ease_spring(t_clamped, mass, stiffness, damping)
+    son
+son
+
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+fn ease_back_in(t: ondalık, s: ondalık) döndür ondalık:
+    döndür t * t * ((s + 1.0) * t - s)
+son
+
+fn ease_back_out(t: ondalık, s: ondalık) döndür ondalık:
+    değişken t1 = t - 1.0
+    döndür t1 * t1 * ((s + 1.0) * t1 + s) + 1.0
+son
+
+fn ease_back_in_out(t: ondalık, s: ondalık) döndür ondalık:
+    değişken s2 = s * 1.525
+    eğer t < 0.5:
+        döndür (2.0 * t).powi(2) * ((s2 + 1.0) * 2.0 * t - s2) / 2.0
+    değilse:
+        döndür ((2.0 * t - 2.0).powi(2) * ((s2 + 1.0) * (t * 2.0 - 2.0) + s2) + 2.0) / 2.0
+    son
+son
+
+fn ease_elastic_in(t: ondalık, amplitude: ondalık, period: ondalık) döndür ondalık:
+    eğer t == 0.0:
+        döndür 0.0
+    son
+    eğer t == 1.0:
+        döndür 1.0
+    son
+    
+    değişken s = period / (2.0 * math::PI) * (1.0 / amplitude).asin()
+    döndür -(amplitude * 2.0.pow(10.0 * (t - 1.0)) * ((t - 1.0 - s) * (2.0 * math::PI) / period).sin())
+son
+
+fn ease_elastic_out(t: ondalık, amplitude: ondalık, period: ondalık) döndür ondalık:
+    eğer t == 0.0:
+        döndür 0.0
+    son
+    eğer t == 1.0:
+        döndür 1.0
+    son
+    
+    değişken s = period / (2.0 * math::PI) * (1.0 / amplitude).asin()
+    döndür amplitude * 2.0.pow(-10.0 * t) * ((t - s) * (2.0 * math::PI) / period).sin() + 1.0
+son
+
+fn ease_elastic_in_out(t: ondalık, amplitude: ondalık, period: ondalık) döndür ondalık:
+    eğer t == 0.0:
+        döndür 0.0
+    son
+    eğer t == 1.0:
+        döndür 1.0
+    son
+    
+    değişken s = period / (2.0 * math::PI) * (1.0 / amplitude).asin()
+    
+    eğer t < 0.5:
+        döndür -(amplitude * 2.0.pow(10.0 * (2.0 * t - 1.0)) * 
+                ((2.0 * t - 1.0 - s) * (2.0 * math::PI) / period).sin()) / 2.0
+    değilse:
+        döndür amplitude * 2.0.pow(-10.0 * (2.0 * t - 1.0)) * 
+               ((2.0 * t - 1.0 - s) * (2.0 * math::PI) / period).sin() / 2.0 + 1.0
+    son
+son
+
+fn ease_bounce_out(t: ondalık) döndür ondalık:
+    değişken n1 = 7.5625
+    değişken d1 = 2.75
+    
+    eğer t < 1.0 / d1:
+        döndür n1 * t * t
+    değilse eğer t < 2.0 / d1:
+        değişken t2 = t - 1.5 / d1
+        döndür n1 * t2 * t2 + 0.75
+    değilse eğer t < 2.5 / d1:
+        değişken t2 = t - 2.25 / d1
+        döndür n1 * t2 * t2 + 0.9375
+    değilse:
+        değişken t2 = t - 2.625 / d1
+        döndür n1 * t2 * t2 + 0.984375
+    son
+son
+
+fn ease_cubic_bezier(t: ondalık, p1x: ondalık, p1y: ondalık, p2x: ondalık, p2y: ondalık) döndür ondalık:
+    // Newton-Raphson ile t parametresini bul
+    değişken bez_t = t
+    
+    döngü _ in 0..8:
+        değişken x = bezier_value(bez_t, 0.0, p1x, p2x, 1.0)
+        değişken dx = bezier_derivative(bez_t, 0.0, p1x, p2x, 1.0)
+        
+        eğer dx.abs() < 0.0001:
+            kır
+        son
+        
+        bez_t = bez_t - (x - t) / dx
+        bez_t = bez_t.clamp(0.0, 1.0)
+    son
+    
+    döndür bezier_value(bez_t, 0.0, p1y, p2y, 1.0)
+son
+
+fn bezier_value(t: ondalık, p0: ondalık, p1: ondalık, p2: ondalık, p3: ondalık) döndür ondalık:
+    değişken u = 1.0 - t
+    döndür u * u * u * p0 + 3.0 * u * u * t * p1 + 3.0 * u * t * t * p2 + t * t * t * p3
+son
+
+fn bezier_derivative(t: ondalık, p0: ondalık, p1: ondalık, p2: ondalık, p3: ondalık) döndür ondalık:
+    değişken u = 1.0 - t
+    döndür 3.0 * u * u * (p1 - p0) + 6.0 * u * t * (p2 - p1) + 3.0 * t * t * (p3 - p2)
+son
+
+fn ease_steps(t: ondalık, steps: sayı, jump_start: mantıksal) döndür ondalık:
+    değişken step = (t * steps.to_float()).floor()
+    eğer jump_start:
+        step = step + 1.0
+    son
+    döndür (step / steps.to_float()).min(1.0)
+son
+
+fn ease_spring(t: ondalık, mass: ondalık, stiffness: ondalık, damping: ondalık) döndür ondalık:
+    // Kritik sönümlü yay simülasyonu
+    değişken omega = (stiffness / mass).sqrt()
+    değişken zeta = damping / (2.0 * (stiffness * mass).sqrt())
+    
+    eğer zeta < 1.0:
+        // Yetersiz sönümlü (oscillating)
+        değişken omega_d = omega * (1.0 - zeta * zeta).sqrt()
+        değişken decay = (-zeta * omega * t).exp()
+        döndür 1.0 - decay * ((zeta * omega * t / omega_d).sin() + (omega_d * t).cos())
+    değilse eğer zeta == 1.0:
+        // Kritik sönümlü
+        değişken decay = (-omega * t).exp()
+        döndür 1.0 - decay * (1.0 + omega * t)
+    değilse:
+        // Aşırı sönümlü
+        değişken s1 = -omega * (zeta + (zeta * zeta - 1.0).sqrt())
+        değişken s2 = -omega * (zeta - (zeta * zeta - 1.0).sqrt())
+        döndür 1.0 - ((s2 * (s1 * t).exp() - s1 * (s2 * t).exp()) / (s2 - s1))
+    son
+son
+
+// ============================================================================
+// CSS EASING PRESETS
+// ============================================================================
+
+/// CSS'de kullanılan standart easing değerleri
+pub modül css:
+    /// ease (varsayılan)
+    pub const EASE: EasingType = EasingType::CubicBezier(0.25, 0.1, 0.25, 1.0)
+    
+    /// ease-in
+    pub const EASE_IN: EasingType = EasingType::CubicBezier(0.42, 0.0, 1.0, 1.0)
+    
+    /// ease-out
+    pub const EASE_OUT: EasingType = EasingType::CubicBezier(0.0, 0.0, 0.58, 1.0)
+    
+    /// ease-in-out
+    pub const EASE_IN_OUT: EasingType = EasingType::CubicBezier(0.42, 0.0, 0.58, 1.0)
+    
+    /// linear
+    pub const LINEAR: EasingType = EasingType::Linear
+son
+
+/// Material Design easing
+pub modül material:
+    /// Standard easing
+    pub const STANDARD: EasingType = EasingType::CubicBezier(0.4, 0.0, 0.2, 1.0)
+    
+    /// Decelerate easing (entering elements)
+    pub const DECELERATE: EasingType = EasingType::CubicBezier(0.0, 0.0, 0.2, 1.0)
+    
+    /// Accelerate easing (exiting elements)
+    pub const ACCELERATE: EasingType = EasingType::CubicBezier(0.4, 0.0, 1.0, 1.0)
+    
+    /// Sharp easing
+    pub const SHARP: EasingType = EasingType::CubicBezier(0.4, 0.0, 0.6, 1.0)
+son
+
+/// Apple iOS easing
+pub modül ios:
+    /// iOS default spring
+    pub const SPRING: EasingType = EasingType::Spring(1.0, 500.0, 30.0)
+    
+    /// iOS bouncy spring
+    pub const BOUNCY: EasingType = EasingType::Spring(1.0, 400.0, 20.0)
+    
+    /// iOS stiff spring
+    pub const STIFF: EasingType = EasingType::Spring(1.0, 800.0, 40.0)
+son

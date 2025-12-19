@@ -1,0 +1,579 @@
+//! # Filesystem Module
+//!
+//! Advanced filesystem operations (Rust std::fs + Node.js fs + Python pathlib).
+//!
+//! Gelişmiş dosya sistemi işlemleri.
+//!
+//! ## Features / Özellikler
+//!
+//! ### Path Operations / Yol İşlemleri
+//! - `join()`, `normalize()`, `absolute()`, `relative()` - Path manipulation / Yol düzenleme
+//! - `filename()`, `dirname()`, `extension()` - Path components / Yol bileşenleri
+//!
+//! ### Directory Operations / Dizin İşlemleri
+//! - `create_dir()`, `create_dir_all()` - Create directories / Dizin oluşturma
+//! - `remove_dir()`, `remove_dir_all()` - Delete directories / Dizin silme
+//! - `read_dir()`, `walk_dir()` - Directory listing / Dizin listeleme
+//!
+//! ### File Operations / Dosya İşlemleri
+//! - `copy()`, `move()`, `remove()` - File operations / Dosya işlemleri
+//! - `metadata()` - File metadata (size, timestamps, permissions) / Meta veriler
+//!
+//! ### Permissions / İzinler
+//! - `chmod()`, `chown()` - Change permissions/owner / İzin/sahip değiştirme
+//!
+//! ### Symlinks
+//! - `symlink()`, `read_link()`, `canonicalize()` - Symbolic links / Sembolik bağlantılar
+//!
+//! ### File Watching / Dosya İzleme
+//! - `watch()` - Watch for file changes / Dosya değişikliklerini izle
+//! - Platform-specific: inotify (Linux), FSEvents (macOS), ReadDirectoryChangesW (Windows)
+//!
+//! ### Glob Patterns
+//! - `glob()` - Match files with patterns (*.txt, **/*.rs) / Desen eşleştirme
+//!
+//! ### Disk Usage / Disk Kullanımı
+//! - `disk_usage()`, `free_space()` - Disk statistics / Disk istatistikleri
+//!
+//! ## Example / Örnek
+//!
+//! ```berk
+//! kullan fs
+//!
+//! // Path operations / Yol işlemleri
+//! değişken yol = fs.join(["dizin", "alt", "dosya.txt"])
+//! değişken mutlak = fs.absolute(yol)?
+//!
+//! // Directory operations / Dizin işlemleri
+//! fs.create_dir_all("yeni/dizin/yolu")?
+//! değişken dosyalar = fs.read_dir(".")?
+//!
+//! // File operations / Dosya işlemleri
+//! fs.copy("kaynak.txt", "hedef.txt")?
+//! değişken meta = fs.metadata("dosya.txt")?
+//! io.println("Boyut: {meta.size} byte")
+//! ```
+//!
+//! ## Backend
+//!
+//! - Rust `std::fs`, `std::path`
+//! - libc filesystem operations
+//! - `notify` crate (file watching)
+//! - `glob` crate (pattern matching)
+
+modül fs
+
+kullan result
+kullan time
+
+// ============================================================================
+// PATH OPERATIONS
+// ============================================================================
+
+// Join paths
+@native
+fonksiyon join(parts: liste[yazı]) -> yazı
+
+// Normalize path (resolve . and ..)
+@native
+fonksiyon normalize(path: yazı) -> yazı
+
+// Absolute path
+@native
+fonksiyon absolute(path: yazı) -> Sonuç[yazı, yazı]
+
+// Relative path from base
+@native
+fonksiyon relative(from: yazı, to: yazı) -> yazı
+
+// Get filename (without directory)
+@native
+fonksiyon filename(path: yazı) -> yazı
+
+// Get directory (without filename)
+@native
+fonksiyon dirname(path: yazı) -> yazı
+
+// Get extension (.txt, .rs, etc.)
+@native
+fonksiyon extension(path: yazı) -> Seçenek[yazı]
+
+// Get basename (filename without extension)
+@native
+fonksiyon basename(path: yazı) -> yazı
+
+// Split path into components
+@native
+fonksiyon components(path: yazı) -> liste[yazı]
+
+// Is absolute path
+@native
+fonksiyon is_absolute(path: yazı) -> mantıksal
+
+// Is relative path
+fonksiyon is_relative(path: yazı) -> mantıksal
+yap
+    dön !is_absolute(path)
+son
+
+// ============================================================================
+// FILE/DIRECTORY CHECKS
+// ============================================================================
+
+// Path exists
+@native
+fonksiyon exists(path: yazı) -> mantıksal
+
+// Is file
+@native
+fonksiyon is_file(path: yazı) -> mantıksal
+
+// Is directory
+@native
+fonksiyon is_dir(path: yazı) -> mantıksal
+
+// Is symlink
+@native
+fonksiyon is_symlink(path: yazı) -> mantıksal
+
+// ============================================================================
+// DIRECTORY OPERATIONS
+// ============================================================================
+
+// Create directory
+@native
+fonksiyon create_dir(path: yazı) -> Sonuç[boş, yazı]
+
+// Create directory and all parents (mkdir -p)
+@native
+fonksiyon create_dir_all(path: yazı) -> Sonuç[boş, yazı]
+
+// Remove empty directory
+@native
+fonksiyon remove_dir(path: yazı) -> Sonuç[boş, yazı]
+
+// Remove directory and all contents (rm -rf)
+@native
+fonksiyon remove_dir_all(path: yazı) -> Sonuç[boş, yazı]
+
+// List directory contents
+@native
+fonksiyon read_dir(path: yazı) -> Sonuç[liste[DirEntry], yazı]
+
+tip DirEntry = yapı yap
+    path: yazı,
+    name: yazı,
+    is_file: mantıksal,
+    is_dir: mantıksal,
+    is_symlink: mantıksal
+son
+
+// ============================================================================
+// DIRECTORY WALKING (Recursive)
+// ============================================================================
+
+tip WalkEntry = yapı yap
+    path: yazı,
+    depth: tamsayı,
+    is_file: mantıksal,
+    is_dir: mantıksal,
+    is_symlink: mantıksal,
+    metadata: Seçenek[Metadata]
+son
+
+tip WalkOptions = yapı yap
+    max_depth: Seçenek[tamsayı],  // None = unlimited
+    follow_links: mantıksal,
+    include_hidden: mantıksal,
+    filter: Seçenek[fonksiyon(WalkEntry) -> mantıksal]
+son
+
+// Walk directory tree
+@native
+fonksiyon walk(path: yazı, options: WalkOptions) -> Sonuç[liste[WalkEntry], yazı]
+
+// Walk with callback (for large directories)
+@native
+fonksiyon walk_callback(path: yazı, options: WalkOptions, callback: fonksiyon(WalkEntry) -> boş) -> Sonuç[boş, yazı]
+
+// Find files matching predicate
+fonksiyon find_files(path: yazı, predicate: fonksiyon(WalkEntry) -> mantıksal) -> Sonuç[liste[yazı], yazı]
+yap
+    değişken options = WalkOptions yap
+        max_depth: Hiç,
+        follow_links: yanlış,
+        include_hidden: yanlış,
+        filter: Bazı(predicate)
+    son
+    
+    değişken entries = walk(path, options)?
+    değişken results = liste_oluştur[yazı]()
+    
+    için entry içinde entries yap
+        eğer entry.is_file yap
+            liste_ekle(results, entry.path)
+        son
+    son
+    
+    dön Tamam(results)
+son
+
+// ============================================================================
+// FILE METADATA
+// ============================================================================
+
+tip Metadata = yapı yap
+    size: tamsayı,  // Bytes
+    is_file: mantıksal,
+    is_dir: mantıksal,
+    is_symlink: mantıksal,
+    permissions: Permissions,
+    modified: tamsayı,  // Unix timestamp
+    created: tamsayı,
+    accessed: tamsayı,
+    readonly: mantıksal
+son
+
+// Get metadata
+@native
+fonksiyon metadata(path: yazı) -> Sonuç[Metadata, yazı]
+
+// Get metadata without following symlinks
+@native
+fonksiyon symlink_metadata(path: yazı) -> Sonuç[Metadata, yazı]
+
+// Get file size
+fonksiyon file_size(path: yazı) -> Sonuç[tamsayı, yazı]
+yap
+    değişken meta = metadata(path)?
+    dön Tamam(meta.size)
+son
+
+// ============================================================================
+// PERMISSIONS (Unix-style)
+// ============================================================================
+
+tip Permissions = yapı yap
+    mode: tamsayı,  // Unix mode (e.g., 0o755)
+    readonly: mantıksal
+son
+
+// Get permissions
+@native
+fonksiyon get_permissions(path: yazı) -> Sonuç[Permissions, yazı]
+
+// Set permissions (chmod)
+@native
+fonksiyon set_permissions(path: yazı, perms: Permissions) -> Sonuç[boş, yazı]
+
+// Set readonly flag
+@native
+fonksiyon set_readonly(path: yazı, readonly: mantıksal) -> Sonuç[boş, yazı]
+
+// Chmod (Unix-style octal, e.g., 0o755)
+@native
+fonksiyon chmod(path: yazı, mode: tamsayı) -> Sonuç[boş, yazı]
+
+// Chown (change owner - Unix only)
+@native
+fonksiyon chown(path: yazı, uid: tamsayı, gid: tamsayı) -> Sonuç[boş, yazı]
+
+// ============================================================================
+// SYMLINKS
+// ============================================================================
+
+// Create symlink
+@native
+fonksiyon create_symlink(target: yazı, link: yazı) -> Sonuç[boş, yazı]
+
+// Read symlink target
+@native
+fonksiyon read_link(link: yazı) -> Sonuç[yazı, yazı]
+
+// Canonicalize path (resolve all symlinks)
+@native
+fonksiyon canonicalize(path: yazı) -> Sonuç[yazı, yazı]
+
+// ============================================================================
+// FILE WATCHING (inotify/FSEvents/ReadDirectoryChangesW)
+// ============================================================================
+
+tip WatchEvent = yapı yap
+    path: yazı,
+    event_type: WatchEventType
+son
+
+tip WatchEventType = "Created" | "Modified" | "Deleted" | "Renamed"
+
+tip Watcher = yapı yap
+    handle: tamsayı,  // Opaque handle
+    paths: liste[yazı]
+son
+
+// Create file watcher
+@native
+fonksiyon watch(paths: liste[yazı]) -> Sonuç[Watcher, yazı]
+
+// Get next event (blocking)
+@native
+fonksiyon watch_next(watcher: Watcher) -> Sonuç[WatchEvent, yazı]
+
+// Get next event (with timeout in milliseconds)
+@native
+fonksiyon watch_next_timeout(watcher: Watcher, timeout_ms: tamsayı) -> Sonuç[Seçenek[WatchEvent], yazı]
+
+// Stop watching
+@native
+fonksiyon watch_stop(watcher: Watcher) -> Sonuç[boş, yazı]
+
+// ============================================================================
+// ATOMIC OPERATIONS
+// ============================================================================
+
+// Atomic rename (replaces destination)
+@native
+fonksiyon rename(from: yazı, to: yazı) -> Sonuç[boş, yazı]
+
+// Copy file
+@native
+fonksiyon copy(from: yazı, to: yazı) -> Sonuç[tamsayı, yazı]  // Returns bytes copied
+
+// Move file (copy + delete)
+fonksiyon move_file(from: yazı, to: yazı) -> Sonuç[boş, yazı]
+yap
+    copy(from, to)?
+    remove_file(from)?
+    dön Tamam(boş)
+son
+
+// Remove file
+@native
+fonksiyon remove_file(path: yazı) -> Sonuç[boş, yazı]
+
+// ============================================================================
+// GLOB PATTERNS
+// ============================================================================
+
+tip GlobOptions = yapı yap
+    case_insensitive: mantıksal,
+    follow_symlinks: mantıksal,
+    max_depth: Seçenek[tamsayı]
+son
+
+// Find files matching glob pattern
+@native
+fonksiyon glob(pattern: yazı, options: GlobOptions) -> Sonuç[liste[yazı], yazı]
+
+// Match single path against pattern
+@native
+fonksiyon glob_match(path: yazı, pattern: yazı) -> mantıksal
+
+// Common glob examples:
+// *.txt - all .txt files in current dir
+// **/*.rs - all .rs files recursively
+// src/**/test_*.rs - all test_*.rs files under src/
+// {foo,bar}.txt - foo.txt or bar.txt
+
+// ============================================================================
+// FILE COMPARISON
+// ============================================================================
+
+// Compare files byte-by-byte
+@native
+fonksiyon files_equal(path1: yazı, path2: yazı) -> Sonuç[mantıksal, yazı]
+
+// Compare file hashes (SHA-256)
+@native
+fonksiyon files_equal_hash(path1: yazı, path2: yazı) -> Sonuç[mantıksal, yazı]
+
+// Get file hash
+@native
+fonksiyon file_hash(path: yazı, algorithm: yazı = "SHA256") -> Sonuç[yazı, yazı]
+
+// ============================================================================
+// DISK USAGE
+// ============================================================================
+
+tip DiskUsage = yapı yap
+    total: tamsayı,  // Total bytes
+    used: tamsayı,
+    free: tamsayı,
+    available: tamsayı  // Free space for non-root users
+son
+
+// Get disk usage for path
+@native
+fonksiyon disk_usage(path: yazı) -> Sonuç[DiskUsage, yazı]
+
+// Get directory size (recursive)
+@native
+fonksiyon dir_size(path: yazı) -> Sonuç[tamsayı, yazı]
+
+// ============================================================================
+// TEMPORARY FILES/DIRECTORIES
+// ============================================================================
+
+// Create temporary file
+@native
+fonksiyon temp_file() -> Sonuç[yazı, yazı]  // Returns path
+
+// Create temporary directory
+@native
+fonksiyon temp_dir() -> Sonuç[yazı, yazı]
+
+// Get system temp directory
+@native
+fonksiyon system_temp_dir() -> yazı
+
+// ============================================================================
+// HOME/USER DIRECTORIES
+// ============================================================================
+
+// Get home directory (~/)
+@native
+fonksiyon home_dir() -> Seçenek[yazı]
+
+// Get config directory (~/.config or AppData)
+@native
+fonksiyon config_dir() -> Seçenek[yazı]
+
+// Get data directory (~/.local/share or AppData)
+@native
+fonksiyon data_dir() -> Seçenek[yazı]
+
+// Get cache directory (~/.cache or Temp)
+@native
+fonksiyon cache_dir() -> Seçenek[yazı]
+
+// ============================================================================
+// CURRENT DIRECTORY
+// ============================================================================
+
+// Get current working directory
+@native
+fonksiyon current_dir() -> Sonuç[yazı, yazı]
+
+// Set current working directory
+@native
+fonksiyon set_current_dir(path: yazı) -> Sonuç[boş, yazı]
+
+// ============================================================================
+// UTILITIES
+// ============================================================================
+
+// Create empty file
+fonksiyon touch(path: yazı) -> Sonuç[boş, yazı]
+yap
+    kullan io
+    değişken file = io::open(path, "Write")?
+    io::close(file)?
+    dön Tamam(boş)
+son
+
+// Check if path is empty directory
+fonksiyon is_empty_dir(path: yazı) -> Sonuç[mantıksal, yazı]
+yap
+    eğer !is_dir(path) yap
+        dön Hata("Not a directory")
+    son
+    
+    değişken entries = read_dir(path)?
+    dön Tamam(liste_uzunluk(entries) == 0)
+son
+
+// Get file extension without dot
+fonksiyon ext_no_dot(path: yazı) -> Seçenek[yazı]
+yap
+    değişken ext_opt = extension(path)
+    
+    eşleşme ext_opt yap
+        Bazı[ext] => yap
+            eğer string::starts_with(ext, ".") yap
+                dön Bazı(string::slice(ext, 1, string::length(ext)))
+            son
+            dön Bazı(ext)
+        son,
+        Hiç => dön Hiç
+    son
+son
+
+// ============================================================================
+// TURKISH ALIASES
+// ============================================================================
+
+fonksiyon birleştir(parçalar: liste[yazı]) -> yazı
+yap
+    dön join(parçalar)
+son
+
+fonksiyon var_mı(yol: yazı) -> mantıksal
+yap
+    dön exists(yol)
+son
+
+fonksiyon dosya_mı(yol: yazı) -> mantıksal
+yap
+    dön is_file(yol)
+son
+
+fonksiyon dizin_mi(yol: yazı) -> mantıksal
+yap
+    dön is_dir(yol)
+son
+
+fonksiyon dizin_oluştur(yol: yazı) -> Sonuç[boş, yazı]
+yap
+    dön create_dir_all(yol)
+son
+
+fonksiyon dizin_sil(yol: yazı) -> Sonuç[boş, yazı]
+yap
+    dön remove_dir_all(yol)
+son
+
+fonksiyon dizin_oku(yol: yazı) -> Sonuç[liste[DirEntry], yazı]
+yap
+    dön read_dir(yol)
+son
+
+fonksiyon dosya_sil(yol: yazı) -> Sonuç[boş, yazı]
+yap
+    dön remove_file(yol)
+son
+
+fonksiyon kopyala(kaynak: yazı, hedef: yazı) -> Sonuç[tamsayı, yazı]
+yap
+    dön copy(kaynak, hedef)
+son
+
+fonksiyon taşı(kaynak: yazı, hedef: yazı) -> Sonuç[boş, yazı]
+yap
+    dön move_file(kaynak, hedef)
+son
+
+fonksiyon dosya_boyutu(yol: yazı) -> Sonuç[tamsayı, yazı]
+yap
+    dön file_size(yol)
+son
+
+fonksiyon üst_veri(yol: yazı) -> Sonuç[Metadata, yazı]
+yap
+    dön metadata(yol)
+son
+
+fonksiyon çalışma_dizini() -> Sonuç[yazı, yazı]
+yap
+    dön current_dir()
+son
+
+fonksiyon çalışma_dizini_ayarla(yol: yazı) -> Sonuç[boş, yazı]
+yap
+    dön set_current_dir(yol)
+son
+
+fonksiyon ev_dizini() -> Seçenek[yazı]
+yap
+    dön home_dir()
+son
+
+son  // modül fs

@@ -1,0 +1,324 @@
+// stdlib/ai/timeseries.berk
+// Time Series Analysis and Forecasting
+// LSTM, Transformer, ARIMA, Prophet
+// 
+// Özellikler:
+// - Time series forecasting
+// - Anomaly detection
+// - Seasonality analysis
+// - Trend decomposition
+// - Statistical models
+
+import "ai/tensor" as tensor
+import "ai/nn" as nn
+import "collections" as coll
+
+/// Time series preprocessing
+pub mod preprocessing {
+    use tensor.Tensor
+    
+    /// Create lag features
+    @native("timeseries::create_lags")
+    pub fn create_lags(series: Tensor, lags: [u32]) -> Tensor {
+        // Returns (samples, n_lags)
+    }
+    
+    /// Differencing
+    @native("timeseries::difference")
+    pub fn difference(series: Tensor, order: u32 = 1) -> Tensor {
+        // Remove trend by differencing
+    }
+    
+    /// Seasonal decomposition
+    @native("timeseries::decompose")
+    pub fn decompose(series: Tensor, period: u32) -> (Tensor, Tensor, Tensor) {
+        // Returns (trend, seasonal, residual)
+    }
+    
+    /// Normalization
+    @native("timeseries::normalize")
+    pub fn normalize(series: Tensor, method: str = "zscore") -> (Tensor, Tensor, Tensor) {
+        // method: "zscore", "minmax"
+        // Returns (normalized, mean, std) or (normalized, min, max)
+    }
+}
+
+/// LSTM forecasting
+pub mod lstm {
+    use tensor.Tensor
+    use nn.Module
+    
+    /// LSTM config
+    pub struct LSTMConfig {
+        pub input_size: u32,
+        pub hidden_size: u32,
+        pub num_layers: u32,
+        pub dropout: f32,
+        pub bidirectional: bool,
+    }
+    
+    /// LSTM forecaster
+    pub struct LSTMForecaster {
+        config: LSTMConfig,
+        model: Module,
+        horizon: u32,  // Forecast horizon
+    }
+    
+    impl LSTMForecaster {
+        /// Create new LSTM forecaster
+        @native("timeseries::lstm_new")
+        pub fn new(config: LSTMConfig, horizon: u32) -> LSTMForecaster {}
+        
+        /// Fit model
+        @native("timeseries::lstm_fit")
+        pub fn fit(
+            mut self,
+            train_data: Tensor,
+            val_data: Option<Tensor> = None,
+            epochs: u32 = 100,
+            batch_size: u32 = 32,
+            learning_rate: f32 = 0.001
+        ) -> [f32] {
+            // Returns training losses
+        }
+        
+        /// Forecast
+        @native("timeseries::lstm_forecast")
+        pub fn forecast(self, history: Tensor, steps: u32 = 1) -> Tensor {
+            // history: (seq_len, features)
+            // Returns (steps, features)
+        }
+    }
+}
+
+/// Transformer forecasting
+pub mod transformer {
+    use tensor.Tensor
+    use nn.Module
+    
+    /// Transformer config
+    pub struct TransformerConfig {
+        pub d_model: u32,
+        pub n_heads: u32,
+        pub n_encoder_layers: u32,
+        pub n_decoder_layers: u32,
+        pub dim_feedforward: u32,
+        pub dropout: f32,
+    }
+    
+    /// Transformer forecaster
+    pub struct TransformerForecaster {
+        config: TransformerConfig,
+        model: Module,
+        horizon: u32,
+    }
+    
+    impl TransformerForecaster {
+        /// Create new Transformer forecaster
+        @native("timeseries::transformer_new")
+        pub fn new(config: TransformerConfig, horizon: u32) -> TransformerForecaster {}
+        
+        /// Fit model
+        @native("timeseries::transformer_fit")
+        pub fn fit(
+            mut self,
+            train_data: Tensor,
+            val_data: Option<Tensor> = None,
+            epochs: u32 = 100,
+            batch_size: u32 = 32,
+            learning_rate: f32 = 0.001
+        ) -> [f32] {}
+        
+        /// Forecast
+        @native("timeseries::transformer_forecast")
+        pub fn forecast(self, history: Tensor, steps: u32 = 1) -> Tensor {}
+    }
+}
+
+/// ARIMA statistical forecasting
+pub mod arima {
+    use tensor.Tensor
+    
+    /// ARIMA model
+    pub struct ARIMA {
+        p: u32,  // AR order
+        d: u32,  // Differencing order
+        q: u32,  // MA order
+    }
+    
+    impl ARIMA {
+        /// Create ARIMA model
+        @native("timeseries::arima_new")
+        pub fn new(p: u32, d: u32, q: u32) -> ARIMA {}
+        
+        /// Fit model
+        @native("timeseries::arima_fit")
+        pub fn fit(mut self, data: Tensor) {}
+        
+        /// Forecast
+        @native("timeseries::arima_forecast")
+        pub fn forecast(self, steps: u32) -> Tensor {
+            // Returns (steps,) forecast values
+        }
+        
+        /// Get model parameters
+        @native("timeseries::arima_params")
+        pub fn params(self) -> (Tensor, Tensor) {
+            // Returns (ar_params, ma_params)
+        }
+    }
+    
+    /// Auto-ARIMA model selection
+    @native("timeseries::auto_arima")
+    pub fn auto_arima(
+        data: Tensor,
+        max_p: u32 = 5,
+        max_d: u32 = 2,
+        max_q: u32 = 5
+    ) -> ARIMA {
+        // Find best (p,d,q) using AIC
+    }
+}
+
+/// Prophet forecasting (Facebook Prophet)
+pub mod prophet {
+    use tensor.Tensor
+    use coll.Map
+    
+    /// Prophet model
+    pub struct Prophet {
+        changepoint_prior_scale: f32,
+        seasonality_prior_scale: f32,
+        holidays_prior_scale: f32,
+        yearly_seasonality: bool,
+        weekly_seasonality: bool,
+        daily_seasonality: bool,
+    }
+    
+    impl Prophet {
+        /// Create Prophet model
+        @native("timeseries::prophet_new")
+        pub fn new(
+            changepoint_prior_scale: f32 = 0.05,
+            seasonality_prior_scale: f32 = 10.0,
+            yearly_seasonality: bool = true,
+            weekly_seasonality: bool = true
+        ) -> Prophet {}
+        
+        /// Fit model
+        @native("timeseries::prophet_fit")
+        pub fn fit(mut self, dates: Tensor, values: Tensor) {
+            // dates: Unix timestamps
+            // values: time series values
+        }
+        
+        /// Forecast
+        @native("timeseries::prophet_forecast")
+        pub fn forecast(self, future_dates: Tensor) -> Map<str, Tensor> {
+            // Returns {"yhat": predictions, "yhat_lower": lower_bound, "yhat_upper": upper_bound}
+        }
+    }
+}
+
+/// Anomaly detection
+pub mod anomaly {
+    use tensor.Tensor
+    
+    /// Anomaly detection result
+    pub struct Anomaly {
+        pub index: u32,
+        pub value: f32,
+        pub score: f32,
+        pub threshold: f32,
+    }
+    
+    /// Isolation Forest anomaly detection
+    @native("timeseries::isolation_forest")
+    pub fn isolation_forest(
+        data: Tensor,
+        contamination: f32 = 0.1,
+        n_estimators: u32 = 100
+    ) -> [Anomaly] {
+        // Returns list of detected anomalies
+    }
+    
+    /// Z-score anomaly detection
+    @native("timeseries::zscore_anomaly")
+    pub fn zscore_anomaly(data: Tensor, threshold: f32 = 3.0) -> [Anomaly] {
+        // Simple statistical outlier detection
+    }
+    
+    /// LSTM-based anomaly detection
+    @native("timeseries::lstm_anomaly")
+    pub fn lstm_anomaly(
+        data: Tensor,
+        window_size: u32 = 50,
+        threshold: f32 = 2.0
+    ) -> [Anomaly] {
+        // Prediction error-based anomaly detection
+    }
+}
+
+/// Time series metrics
+pub mod metrics {
+    use tensor.Tensor
+    
+    /// Mean Absolute Error
+    @native("timeseries::mae")
+    pub fn mae(y_true: Tensor, y_pred: Tensor) -> f32 {}
+    
+    /// Mean Squared Error
+    @native("timeseries::mse")
+    pub fn mse(y_true: Tensor, y_pred: Tensor) -> f32 {}
+    
+    /// Root Mean Squared Error
+    @native("timeseries::rmse")
+    pub fn rmse(y_true: Tensor, y_pred: Tensor) -> f32 {}
+    
+    /// Mean Absolute Percentage Error
+    @native("timeseries::mape")
+    pub fn mape(y_true: Tensor, y_pred: Tensor) -> f32 {}
+    
+    /// R² score
+    @native("timeseries::r2_score")
+    pub fn r2_score(y_true: Tensor, y_pred: Tensor) -> f32 {}
+}
+
+/// Example usage:
+/// ```berk
+/// import "ai/timeseries" as ts
+/// import "ai/tensor" as tensor
+/// 
+/// // Load time series data
+/// let data = tensor.from_array([1.2, 1.5, 1.8, 2.1, 2.3, 2.5, 2.8, 3.0, 3.2, 3.5])
+/// 
+/// // Seasonal decomposition
+/// let (trend, seasonal, residual) = ts.preprocessing.decompose(data, period: 4)
+/// yaz("Trend: {:?}", trend)
+/// 
+/// // LSTM forecasting
+/// let config = ts.lstm.LSTMConfig {
+///     input_size: 1,
+///     hidden_size: 64,
+///     num_layers: 2,
+///     dropout: 0.2,
+///     bidirectional: false,
+/// }
+/// let mut forecaster = ts.lstm.LSTMForecaster.new(config, horizon: 5)
+/// let losses = forecaster.fit(data, epochs: 50, batch_size: 16)
+/// let forecast = forecaster.forecast(data, steps: 5)
+/// yaz("5-step forecast: {:?}", forecast)
+/// 
+/// // ARIMA forecasting
+/// let arima = ts.arima.auto_arima(data, max_p: 5, max_d: 2, max_q: 5)
+/// let arima_forecast = arima.forecast(steps: 5)
+/// yaz("ARIMA forecast: {:?}", arima_forecast)
+/// 
+/// // Anomaly detection
+/// let anomalies = ts.anomaly.zscore_anomaly(data, threshold: 2.5)
+/// yaz("Detected {} anomalies", anomalies.len())
+/// for anomaly in anomalies {
+///     yaz("Anomaly at index {}: value={}, score={}", 
+///         anomaly.index, anomaly.value, anomaly.score)
+/// }
+/// ```

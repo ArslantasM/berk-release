@@ -1,0 +1,9 @@
+// GD32 PWM Module
+// Compatible with STM32 Timer/PWM implementation
+
+pub use stm32f4::pwm::*;
+
+// GD32 PWM notes:
+// - Same Advanced/General-purpose timers
+// - Compatible PWM generation
+// - Identical channel mapping

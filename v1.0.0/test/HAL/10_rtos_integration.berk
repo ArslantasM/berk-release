@@ -1,0 +1,426 @@
+/// ═══════════════════════════════════════════════════════════════════════════
+/// BERK HAL - RTOS Integration Demo
+/// FreeRTOS Entegrasyonu ve Task Yonetimi
+/// ═══════════════════════════════════════════════════════════════════════════
+
+kullan std::io
+kullan std::hal
+kullan std::sync
+
+yaz("============================================================")
+yaz("         HAL Demo: RTOS Integration                         ")
+yaz("         FreeRTOS Task ve Senkronizasyon                    ")
+yaz("============================================================")
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BOLUM 1: RTOS Temelleri
+// ═══════════════════════════════════════════════════════════════════════════
+
+yaz("\n--- BOLUM 1: RTOS Temelleri ---")
+
+yaz("\n   RTOS (Real-Time Operating System) Nedir?")
+yaz("   - Deterministik zamanlama")
+yaz("   - Multitasking (coklu gorev)")
+yaz("   - Oncelik tabanli preemption")
+yaz("   - Inter-task iletisim mekanizmalari")
+
+yaz("\n   Popüler RTOS Secenekleri:")
+yaz("   ┌────────────────┬─────────────────────────────────┐")
+yaz("   │ RTOS           │ Ozellik                         │")
+yaz("   ├────────────────┼─────────────────────────────────┤")
+yaz("   │ FreeRTOS       │ En yaygin, MIT lisans           │")
+yaz("   │ Zephyr         │ Linux Foundation, IoT odakli    │")
+yaz("   │ RIOT OS        │ IoT, enerji verimli             │")
+yaz("   │ embOS          │ Ticari, sertifikali             │")
+yaz("   │ ThreadX        │ Azure RTOS, ticari              │")
+yaz("   └────────────────┴─────────────────────────────────┘")
+
+yaz("\n   FreeRTOS Temel Kavramlar:")
+yaz("   - Task: Bagimsiz calisma birimi")
+yaz("   - Queue: Task arasi mesaj iletimi")
+yaz("   - Semaphore: Kaynak senkronizasyonu")
+yaz("   - Mutex: Mutual exclusion")
+yaz("   - Timer: Yazilim zamanlayici")
+yaz("   - Event Group: Coklu olay senkronizasyonu")
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BOLUM 2: Task Olusturma ve Yonetimi
+// ═══════════════════════════════════════════════════════════════════════════
+
+yaz("\n--- BOLUM 2: Task Yonetimi ---")
+
+// Task oncelikleri
+değişken PRIORITY_IDLE = 0
+değişken PRIORITY_LOW = 1
+değişken PRIORITY_NORMAL = 2
+değişken PRIORITY_HIGH = 3
+değişken PRIORITY_REALTIME = 4
+
+// Task durumlari
+yaz("\n   Task Durumlari:")
+yaz("   ┌──────────────┬───────────────────────────────────┐")
+yaz("   │ Durum        │ Aciklama                          │")
+yaz("   ├──────────────┼───────────────────────────────────┤")
+yaz("   │ Running      │ CPU uzerinde calisiyor            │")
+yaz("   │ Ready        │ Calisma kuyrugunda bekliyor       │")
+yaz("   │ Blocked      │ Kaynak/olay bekliyor              │")
+yaz("   │ Suspended    │ Durdurulmus                       │")
+yaz("   └──────────────┴───────────────────────────────────┘")
+
+// Task fonksiyonlari
+fonksiyon task_olustur(isim: metin, oncelik: tamsayı, stack_boyut: tamsayı) -> tamsayı yap
+    yaz("   Task olusturuldu: '", isim, "'")
+    yaz("   - Oncelik: ", oncelik)
+    yaz("   - Stack: ", stack_boyut, " words")
+    dön 1  // Task handle
+son
+
+fonksiyon task_sil(handle: tamsayı) yap
+    yaz("   Task silindi: handle=", handle)
+son
+
+fonksiyon task_beklet(ms: tamsayı) yap
+    // vTaskDelay(pdMS_TO_TICKS(ms))
+    yaz("   Task ", ms, " ms bekledi")
+son
+
+fonksiyon task_askiya_al(handle: tamsayı) yap
+    yaz("   Task askiya alindi: ", handle)
+son
+
+fonksiyon task_devam_ettir(handle: tamsayı) yap
+    yaz("   Task devam etti: ", handle)
+son
+
+// Ornek task'lar
+yaz("\n   Ornek Task Olusturma:")
+olsun sensor_task = task_olustur("SensorTask", PRIORITY_HIGH, 256)
+olsun display_task = task_olustur("DisplayTask", PRIORITY_NORMAL, 512)
+olsun comm_task = task_olustur("CommTask", PRIORITY_LOW, 256)
+olsun idle_task = task_olustur("IdleTask", PRIORITY_IDLE, 128)
+
+// Task kodu ornegi
+fonksiyon sensor_task_fonksiyon() yap
+    iken doğru yap
+        // 1. Sensor oku
+        yaz("   [SensorTask] Veri okundu")
+        
+        // 2. Queue'ya gonder
+        yaz("   [SensorTask] Queue'ya gonderildi")
+        
+        // 3. 100ms bekle
+        task_beklet(100)
+    son
+son
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BOLUM 3: Queue (Mesaj Kuyrugu)
+// ═══════════════════════════════════════════════════════════════════════════
+
+yaz("\n--- BOLUM 3: Queue (Mesaj Kuyrugu) ---")
+
+yaz("\n   Queue Ozellikleri:")
+yaz("   - FIFO (First In First Out)")
+yaz("   - Blocking ve non-blocking modlar")
+yaz("   - Interrupt-safe (FromISR versiyonlari)")
+
+// Queue fonksiyonlari
+fonksiyon queue_olustur(uzunluk: tamsayı, eleman_boyut: tamsayı) -> tamsayı yap
+    yaz("   Queue olusturuldu: ", uzunluk, " eleman, ", eleman_boyut, " bytes/eleman")
+    dön 1  // Queue handle
+son
+
+fonksiyon queue_gonder(handle: tamsayı, veri: tamsayı, timeout_ms: tamsayı) -> doğruyanlış yap
+    yaz("   Queue gonder: ", veri, " (timeout: ", timeout_ms, " ms)")
+    dön doğru
+son
+
+fonksiyon queue_al(handle: tamsayı, timeout_ms: tamsayı) -> tamsayı yap
+    yaz("   Queue al (timeout: ", timeout_ms, " ms)")
+    dön 42  // Alinan veri
+son
+
+fonksiyon queue_bos_mu(handle: tamsayı) -> doğruyanlış yap
+    dön yanlış
+son
+
+fonksiyon queue_dolu_mu(handle: tamsayı) -> doğruyanlış yap
+    dön yanlış
+son
+
+// Sensor veri yapisi
+yaz("\n   Ornek: Sensor Veri Queue")
+olsun sensor_queue = queue_olustur(10, 8)  // 10 eleman, 8 byte
+
+// Producer task
+fonksiyon producer_task() yap
+    olsun sicaklik = 25
+    olsun nem = 60
+    queue_gonder(sensor_queue, sicaklik, 100)
+    queue_gonder(sensor_queue, nem, 100)
+    yaz("   [Producer] Sicaklik: ", sicaklik, " Nem: ", nem)
+son
+
+// Consumer task
+fonksiyon consumer_task() yap
+    olsun veri = queue_al(sensor_queue, 1000)
+    yaz("   [Consumer] Alinan: ", veri)
+son
+
+producer_task()
+consumer_task()
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BOLUM 4: Semaphore ve Mutex
+// ═══════════════════════════════════════════════════════════════════════════
+
+yaz("\n--- BOLUM 4: Semaphore ve Mutex ---")
+
+yaz("\n   Semaphore vs Mutex:")
+yaz("   ┌────────────────┬────────────────────────────────────┐")
+yaz("   │ Ozellik        │ Semaphore     │ Mutex              │")
+yaz("   ├────────────────┼───────────────┼────────────────────┤")
+yaz("   │ Sayac          │ Var (0-N)     │ Binary (0-1)       │")
+yaz("   │ Sahiplik       │ Yok           │ Task sahipligi     │")
+yaz("   │ Priority Inv.  │ Yok           │ Priority inherit   │")
+yaz("   │ ISR kullanimi  │ Evet          │ Hayir              │")
+yaz("   └────────────────┴───────────────┴────────────────────┘")
+
+// Binary Semaphore
+fonksiyon sema_binary_olustur() -> tamsayı yap
+    yaz("   Binary Semaphore olusturuldu")
+    dön 1
+son
+
+fonksiyon sema_al(handle: tamsayı, timeout_ms: tamsayı) -> doğruyanlış yap
+    yaz("   Semaphore alindi (timeout: ", timeout_ms, " ms)")
+    dön doğru
+son
+
+fonksiyon sema_ver(handle: tamsayı) yap
+    yaz("   Semaphore verildi")
+son
+
+// Mutex
+fonksiyon mutex_olustur() -> tamsayı yap
+    yaz("   Mutex olusturuldu")
+    dön 1
+son
+
+fonksiyon mutex_al(handle: tamsayı, timeout_ms: tamsayı) -> doğruyanlış yap
+    yaz("   Mutex kilit alindi")
+    dön doğru
+son
+
+fonksiyon mutex_ver(handle: tamsayı) yap
+    yaz("   Mutex kilit birakildi")
+son
+
+// Ornek: ISR sinyali
+yaz("\n   Ornek: ISR -> Task Sinyali")
+olsun uart_rx_sema = sema_binary_olustur()
+
+fonksiyon uart_rx_isr() yap
+    // Veri alindi, task'i uyar
+    sema_ver(uart_rx_sema)
+    yaz("   [ISR] UART RX sinyali gonderildi")
+son
+
+fonksiyon uart_rx_task() yap
+    sema_al(uart_rx_sema, 0)  // Sonsuz bekle
+    yaz("   [Task] UART verisi isleniyor")
+son
+
+// Ornek: Paylasilan kaynak koruma
+yaz("\n   Ornek: SPI Bus Koruma")
+olsun spi_mutex = mutex_olustur()
+
+fonksiyon spi_transfer_guvenli(veri: tamsayı) yap
+    mutex_al(spi_mutex, 1000)
+    // Kritik bolum: SPI transfer
+    yaz("   SPI Transfer: ", veri)
+    mutex_ver(spi_mutex)
+son
+
+spi_transfer_guvenli(0xAB)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BOLUM 5: Yazilim Timer
+// ═══════════════════════════════════════════════════════════════════════════
+
+yaz("\n--- BOLUM 5: Yazilim Timer ---")
+
+yaz("\n   Timer Modlari:")
+yaz("   - One-shot: Tek seferlik calisir")
+yaz("   - Auto-reload: Periyodik tekrar")
+
+fonksiyon timer_olustur(isim: metin, period_ms: tamsayı, auto_reload: doğruyanlış) -> tamsayı yap
+    eğer auto_reload ise
+        yaz("   Timer '", isim, "': ", period_ms, " ms (periyodik)")
+    değilse
+        yaz("   Timer '", isim, "': ", period_ms, " ms (tek sefer)")
+    son
+    dön 1
+son
+
+fonksiyon timer_baslat(handle: tamsayı) yap
+    yaz("   Timer baslatildi")
+son
+
+fonksiyon timer_durdur(handle: tamsayı) yap
+    yaz("   Timer durduruldu")
+son
+
+fonksiyon timer_period_degistir(handle: tamsayı, yeni_period_ms: tamsayı) yap
+    yaz("   Timer period: ", yeni_period_ms, " ms")
+son
+
+// Timer ornekleri
+yaz("\n   Timer Ornekleri:")
+olsun led_timer = timer_olustur("LED_Blink", 500, doğru)
+olsun watchdog_timer = timer_olustur("WDT_Feed", 1000, doğru)
+olsun timeout_timer = timer_olustur("Timeout", 5000, yanlış)
+
+timer_baslat(led_timer)
+timer_baslat(watchdog_timer)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BOLUM 6: Event Groups
+// ═══════════════════════════════════════════════════════════════════════════
+
+yaz("\n--- BOLUM 6: Event Groups ---")
+
+yaz("\n   Event Group Kullanim Alanlari:")
+yaz("   - Birden fazla olayin beklenmesi")
+yaz("   - Task senkronizasyonu")
+yaz("   - Durum makinesi gecisleri")
+
+// Event bit tanimlari
+değişken BIT_SENSOR_READY = 1    // Bit 0
+değişken BIT_WIFI_CONNECTED = 2   // Bit 1
+değişken BIT_DATA_RECEIVED = 4    // Bit 2
+değişken BIT_BATTERY_OK = 8       // Bit 3
+
+fonksiyon event_group_olustur() -> tamsayı yap
+    yaz("   Event Group olusturuldu")
+    dön 1
+son
+
+fonksiyon event_set(handle: tamsayı, bits: tamsayı) yap
+    yaz("   Event bits set: 0x", bits)
+son
+
+fonksiyon event_clear(handle: tamsayı, bits: tamsayı) yap
+    yaz("   Event bits cleared: 0x", bits)
+son
+
+fonksiyon event_bekle(handle: tamsayı, bits: tamsayı, hepsi: doğruyanlış, temizle: doğruyanlış, timeout_ms: tamsayı) -> tamsayı yap
+    eğer hepsi ise
+        yaz("   Event bekle: TUM bitler (0x", bits, ")")
+    değilse
+        yaz("   Event bekle: HERHANGI bit (0x", bits, ")")
+    son
+    dön bits
+son
+
+// Ornek: Sistem baslangic senkronizasyonu
+yaz("\n   Ornek: Sistem Baslangic")
+olsun system_events = event_group_olustur()
+
+// Farkli task'lar hazir oldugunda
+event_set(system_events, BIT_SENSOR_READY)
+yaz("   [Sensor] Hazir")
+event_set(system_events, BIT_WIFI_CONNECTED)
+yaz("   [WiFi] Baglandi")
+event_set(system_events, BIT_BATTERY_OK)
+yaz("   [Power] Batarya OK")
+
+// Ana task tum sistemin hazir olmasini bekler
+değişken ALL_READY = BIT_SENSOR_READY + BIT_WIFI_CONNECTED + BIT_BATTERY_OK
+olsun events = event_bekle(system_events, ALL_READY, doğru, yanlış, 10000)
+yaz("   [Main] Sistem hazir, calisma basladi!")
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BOLUM 7: Task Istatistikleri ve Debug
+// ═══════════════════════════════════════════════════════════════════════════
+
+yaz("\n--- BOLUM 7: Task Istatistikleri ---")
+
+yaz("\n   FreeRTOS Debug Ozellikleri:")
+yaz("   - configUSE_TRACE_FACILITY = 1")
+yaz("   - configGENERATE_RUN_TIME_STATS = 1")
+
+fonksiyon task_listele() yap
+    yaz("\n   Task Listesi:")
+    yaz("   ┌──────────────┬─────────┬────────┬────────────┐")
+    yaz("   │ Isim         │ Durum   │ Onclk  │ Stack Kln  │")
+    yaz("   ├──────────────┼─────────┼────────┼────────────┤")
+    yaz("   │ SensorTask   │ Blocked │ 3      │ 128        │")
+    yaz("   │ DisplayTask  │ Ready   │ 2      │ 256        │")
+    yaz("   │ CommTask     │ Blocked │ 1      │ 192        │")
+    yaz("   │ IDLE         │ Ready   │ 0      │ 64         │")
+    yaz("   └──────────────┴─────────┴────────┴────────────┘")
+son
+
+fonksiyon cpu_kullanimi() yap
+    yaz("\n   CPU Kullanimi (Runtime Stats):")
+    yaz("   ┌──────────────┬────────────┬────────────┐")
+    yaz("   │ Task         │ Toplam     │ Yuzde      │")
+    yaz("   ├──────────────┼────────────┼────────────┤")
+    yaz("   │ SensorTask   │ 15234      │ 12%        │")
+    yaz("   │ DisplayTask  │ 45678      │ 35%        │")
+    yaz("   │ CommTask     │ 23456      │ 18%        │")
+    yaz("   │ IDLE         │ 45632      │ 35%        │")
+    yaz("   └──────────────┴────────────┴────────────┘")
+son
+
+task_listele()
+cpu_kullanimi()
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BOLUM 8: Sistem Mimarisi
+// ═══════════════════════════════════════════════════════════════════════════
+
+yaz("\n============================================================")
+yaz("              RTOS SISTEM MIMARISI                           ")
+yaz("============================================================")
+
+yaz("\n   ┌─────────────────────────────────────────────────────────┐")
+yaz("   │                    UYGULAMA KATMANI                     │")
+yaz("   │  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐    │")
+yaz("   │  │ Sensor  │  │ Display │  │  Comm   │  │  User   │    │")
+yaz("   │  │  Task   │  │  Task   │  │  Task   │  │  Task   │    │")
+yaz("   │  └────┬────┘  └────┬────┘  └────┬────┘  └────┬────┘    │")
+yaz("   │       │            │            │            │         │")
+yaz("   ├───────┼────────────┼────────────┼────────────┼─────────┤")
+yaz("   │       v            v            v            v         │")
+yaz("   │  ┌─────────────────────────────────────────────────┐   │")
+yaz("   │  │            FreeRTOS Kernel                      │   │")
+yaz("   │  │  • Scheduler  • IPC  • Memory  • Timers         │   │")
+yaz("   │  └─────────────────────────────────────────────────┘   │")
+yaz("   │                          │                             │")
+yaz("   ├──────────────────────────┼─────────────────────────────┤")
+yaz("   │                          v                             │")
+yaz("   │  ┌─────────────────────────────────────────────────┐   │")
+yaz("   │  │               HAL Katmani                       │   │")
+yaz("   │  │  • GPIO  • UART  • SPI  • I2C  • Timer • ADC    │   │")
+yaz("   │  └─────────────────────────────────────────────────┘   │")
+yaz("   │                          │                             │")
+yaz("   ├──────────────────────────┼─────────────────────────────┤")
+yaz("   │                          v                             │")
+yaz("   │  ┌─────────────────────────────────────────────────┐   │")
+yaz("   │  │                 HARDWARE                        │   │")
+yaz("   │  │          STM32 / ESP32 / Arduino                │   │")
+yaz("   │  └─────────────────────────────────────────────────┘   │")
+yaz("   └─────────────────────────────────────────────────────────┘")
+
+yaz("\n   Best Practices:")
+yaz("   - Her task tek bir sorumluluk tasimali")
+yaz("   - Stack boyutunu dikkatli belirle")
+yaz("   - Oncelikleri dogru ata (priority inversion)")
+yaz("   - Blocking yerine timeout kullan")
+yaz("   - Watchdog ile sistem sagligi izle")
+
+yaz("\n============================================================")
+yaz("         HAL RTOS Integration Demo Tamamlandi                ")
+yaz("============================================================")

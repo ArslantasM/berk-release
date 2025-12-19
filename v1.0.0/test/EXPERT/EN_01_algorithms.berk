@@ -1,0 +1,209 @@
+/// ═══════════════════════════════════════════════════════════════════════════
+/// BERK Expert Demo - Algorithms (English Version)
+/// Classic algorithms, optimization techniques
+/// ═══════════════════════════════════════════════════════════════════════════
+
+use std::io
+use std::math
+
+print("============================================================")
+print("         Expert Demo: Algorithms                            ")
+print("============================================================")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 1: GCD and LCM (Euclidean Algorithm)
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 1: GCD and LCM ---")
+
+fn gcd(a: int, b: int) -> int do
+    while b != 0 do
+        let temp = b
+        let remainder = a % b
+        b = remainder
+        a = temp
+    end
+    return a
+end
+
+fn lcm(a: int, b: int) -> int do
+    return (a * b) / gcd(a, b)
+end
+
+print("   Euclidean Algorithm:")
+print("   GCD(48, 18) = ", gcd(48, 18))
+print("   GCD(56, 42) = ", gcd(56, 42))
+print("   LCM(12, 18) = ", lcm(12, 18))
+print("   LCM(15, 20) = ", lcm(15, 20))
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 2: Factorial (Iterative vs Recursive)
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 2: Factorial ---")
+
+fn factorial_iterative(n: int) -> int do
+    let result = 1
+    let i = 2
+    while i <= n do
+        result = result * i
+        i = i + 1
+    end
+    return result
+end
+
+fn factorial_recursive(n: int) -> int do
+    if n <= 1 then
+        return 1
+    end
+    return n * factorial_recursive(n - 1)
+end
+
+print("   Iterative:")
+print("   5! = ", factorial_iterative(5))
+print("   7! = ", factorial_iterative(7))
+
+print("\n   Recursive:")
+print("   5! = ", factorial_recursive(5))
+print("   7! = ", factorial_recursive(7))
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 3: Fibonacci (Optimization)
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 3: Fibonacci ---")
+
+fn fib_recursive(n: int) -> int do
+    if n <= 1 then
+        return n
+    end
+    return fib_recursive(n - 1) + fib_recursive(n - 2)
+end
+
+fn fib_iterative(n: int) -> int do
+    if n <= 1 then
+        return n
+    end
+    
+    let prev = 0
+    let curr = 1
+    let i = 2
+    
+    while i <= n do
+        let next = prev + curr
+        prev = curr
+        curr = next
+        i = i + 1
+    end
+    
+    return curr
+end
+
+print("   Recursive Fibonacci:")
+print("   F(10) = ", fib_recursive(10))
+
+print("\n   Iterative Fibonacci (Optimized):")
+print("   F(10) = ", fib_iterative(10))
+print("   F(20) = ", fib_iterative(20))
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 4: Prime Numbers
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 4: Prime Numbers ---")
+
+fn is_prime(n: int) -> int do
+    if n < 2 then
+        return 0
+    end
+    
+    let i = 2
+    let limit = n / 2
+    while i <= limit do
+        let remainder = n % i
+        if remainder == 0 then
+            return 0
+        end
+        i = i + 1
+    end
+    return 1
+end
+
+print("   Prime Check (1=true, 0=false):")
+print("   is_prime(7) = ", is_prime(7))
+print("   is_prime(12) = ", is_prime(12))
+print("   is_prime(17) = ", is_prime(17))
+print("   is_prime(25) = ", is_prime(25))
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 5: Power Function
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 5: Power Function ---")
+
+fn power_simple(base: int, exp: int) -> int do
+    let result = 1
+    let i = 0
+    while i < exp do
+        result = result * base
+        i = i + 1
+    end
+    return result
+end
+
+fn power_fast(base: int, exp: int) -> int do
+    if exp == 0 then
+        return 1
+    end
+    
+    let half = power_fast(base, exp / 2)
+    let remainder = exp % 2
+    
+    if remainder == 0 then
+        return half * half
+    end
+    return base * half * half
+end
+
+print("   Simple Power:")
+print("   2^10 = ", power_simple(2, 10))
+
+print("\n   Fast Power (O(log n)):")
+print("   2^10 = ", power_fast(2, 10))
+print("   3^5 = ", power_fast(3, 5))
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 6: Binary Search
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 6: Binary Search ---")
+
+print("   Binary Search Algorithm:")
+print("   - Array must be sorted")
+print("   - Time Complexity: O(log n)")
+print("   - Space Complexity: O(1)")
+
+print("\n   Algorithm Steps:")
+print("   1. Find middle element")
+print("   2. If target = middle, found")
+print("   3. If target < middle, search left")
+print("   4. If target > middle, search right")
+print("   5. Repeat until found or empty")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 7: Sorting Algorithms
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 7: Sorting Algorithms ---")
+
+print("   ┌────────────────┬───────────────┬───────────────┐")
+print("   │ Algorithm      │ Best Case     │ Worst Case    │")
+print("   ├────────────────┼───────────────┼───────────────┤")
+print("   │ Bubble Sort    │ O(n)          │ O(n^2)        │")
+print("   │ Selection Sort │ O(n^2)        │ O(n^2)        │")
+print("   │ Insertion Sort │ O(n)          │ O(n^2)        │")
+print("   │ Merge Sort     │ O(n log n)    │ O(n log n)    │")
+print("   │ Quick Sort     │ O(n log n)    │ O(n^2)        │")
+print("   └────────────────┴───────────────┴───────────────┘")
+
+print("\n[OK] Algorithms demo completed!")

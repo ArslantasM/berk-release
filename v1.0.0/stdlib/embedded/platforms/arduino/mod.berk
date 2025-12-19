@@ -1,0 +1,164 @@
+// Arduino Platform for BERK Language
+// Complete Arduino compatibility with modern syntax!
+//
+// 🎯 30M Arduino users → BERK's viral growth engine
+//
+// This module exports all Arduino functionality in a clean, Rust-like API
+
+pub mod gpio;      // Digital I/O (digitalWrite, digitalRead, pinMode)
+pub mod analog;    // Analog I/O (analogRead, analogWrite)
+pub mod serial;    // Serial communication (Serial.print, Serial.read)
+pub mod time;      // Timing functions (delay, millis, micros)
+pub mod wire;      // I2C communication (Wire library)
+pub mod spi;       // SPI communication (SPI library)
+pub mod servo;     // Servo motor control
+pub mod tone;      // Tone generation (buzzer, speakers)
+
+// Re-export common items for convenience
+pub use gpio::{pin, DigitalPin};
+pub use analog::{read as analog_read, write as analog_write};
+pub use serial::{begin as serial_begin, println};
+pub use time::{delay_ms, millis};
+
+// 🚀 VIRAL SHOWCASE: Complete Arduino projects in BERK!
+
+// Example 1: Blink LED (cleaner than C++)
+pub fn showcase_blink() {
+    let led = pin(13).output();
+    loop {
+        led.high();
+        time::delay_ms(1000);
+        led.low();
+        time::delay_ms(1000);
+    }
+}
+
+// Example 2: Button-controlled RGB LED
+pub fn showcase_rgb() {
+    let button = pin(2).input_pullup();
+    let r_led = 9;
+    let g_led = 10;
+    let b_led = 11;
+    
+    let mut color = 0;
+    let mut last_state = false;
+    
+    loop {
+        let pressed = button.read();
+        
+        if pressed && !last_state {
+            color = (color + 1) % 8;
+            
+            analog::write(r_led, if color & 0b001 != 0 { 255 } else { 0 });
+            analog::write(g_led, if color & 0b010 != 0 { 255 } else { 0 });
+            analog::write(b_led, if color & 0b100 != 0 { 255 } else { 0 });
+        }
+        
+        last_state = pressed;
+        time::delay_ms(50);
+    }
+}
+
+// Example 3: Smart plant watering system 🌱
+pub fn showcase_smart_plant() {
+    serial::begin(9600);
+    
+    let moisture_pin = 0;  // Analog sensor
+    let pump_pin = pin(8).output();
+    let threshold = 300;   // Dry soil threshold
+    
+    serial::println("🌱 Smart Plant Monitor Started!");
+    
+    loop {
+        let moisture = analog::read(moisture_pin);
+        
+        serial::print("Moisture: ");
+        serial::print_int(moisture as i32);
+        
+        if moisture < threshold {
+            serial::println(" - DRY! Watering...");
+            pump_pin.high();
+            time::delay_ms(2000);  // Water for 2 seconds
+            pump_pin.low();
+        } else {
+            serial::println(" - OK");
+        }
+        
+        time::delay_ms(5000);  // Check every 5 seconds
+    }
+}
+
+// Example 4: Distance meter with servo indicator 📏
+pub fn showcase_distance_servo() {
+    let trig = pin(10).output();
+    let echo = pin(11).input();
+    let servo = servo::Servo::attach(9);
+    
+    serial::begin(9600);
+    
+    loop {
+        // Measure distance
+        trig.low();
+        time::delay_us(2);
+        trig.high();
+        time::delay_us(10);
+        trig.low();
+        
+        let duration = echo.pulse_in(true);
+        let distance_cm = duration / 58;
+        
+        // Map to servo angle (0-100cm → 0-180°)
+        let angle = if distance_cm > 100 {
+            180
+        } else {
+            (distance_cm * 180 / 100) as u8
+        };
+        
+        servo.write(angle);
+        
+        serial::print("Distance: ");
+        serial::print_int(distance_cm as i32);
+        serial::print("cm | Angle: ");
+        serial::print_int(angle as i32);
+        serial::println("°");
+        
+        time::delay_ms(200);
+    }
+}
+
+// Example 5: Musical doorbell 🎵
+pub fn showcase_doorbell() {
+    let button = pin(2).input_pullup();
+    let buzzer = 8;
+    let led = pin(13).output();
+    
+    serial::begin(9600);
+    serial::println("🔔 Smart Doorbell Ready!");
+    
+    loop {
+        if button.read() {
+            serial::println("🔔 Ding dong!");
+            
+            // LED on
+            led.high();
+            
+            // Play melody
+            tone::play_duration(buzzer, tone::NOTE_E4, 200);
+            time::delay_ms(250);
+            tone::play_duration(buzzer, tone::NOTE_C4, 400);
+            
+            // LED off
+            led.low();
+            
+            time::delay_ms(1000);
+        }
+    }
+}
+
+// 📊 Platform statistics for documentation
+pub const PLATFORM_NAME: &str = "Arduino";
+pub const USER_BASE: &str = "30M+ worldwide";
+pub const MARKET_SHARE: &str = "2% (80%+ hobbyist market)";
+pub const PRIMARY_USE: &str = "Education, makers, prototyping";
+pub const BOARDS: &str = "Uno, Mega, Nano, Leonardo, Due";
+pub const VIRAL_POTENTIAL: &str = "🔥 EXTREMELY HIGH - Active social media presence";

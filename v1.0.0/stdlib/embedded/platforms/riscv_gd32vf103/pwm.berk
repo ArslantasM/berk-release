@@ -1,0 +1,324 @@
+// stdlib/embedded/platforms/riscv_gd32vf103/pwm.berk
+// GD32VF103 PWM Implementation using Timers
+
+kullan "embedded/bal/pwm" olarak PWM_BAL
+
+// Timer peripherals that support PWM
+açık enum PwmTimer yap
+    TIMER0 = 0,  // Advanced timer (4 channels)
+    TIMER1 = 1,  // General purpose (4 channels)
+    TIMER2 = 2,  // General purpose (4 channels)
+    TIMER3 = 3,  // General purpose (4 channels)
+    TIMER4 = 4,  // General purpose (4 channels)
+son
+
+// PWM channels (0-3 for most timers)
+açık enum PwmChannel yap
+    CHANNEL_0 = 0,
+    CHANNEL_1 = 1,
+    CHANNEL_2 = 2,
+    CHANNEL_3 = 3,
+son
+
+// Timer base addresses
+sabit TIMER0_BASE: u32 = 0x40012C00
+sabit TIMER1_BASE: u32 = 0x40000000
+sabit TIMER2_BASE: u32 = 0x40000400
+sabit TIMER3_BASE: u32 = 0x40000800
+sabit TIMER4_BASE: u32 = 0x40000C00
+
+// Timer register offsets
+sabit TIMER_CTL0: u32 = 0x00    // Control register 0
+sabit TIMER_CTL1: u32 = 0x04    // Control register 1
+sabit TIMER_SMCFG: u32 = 0x08   // Slave mode configuration
+sabit TIMER_DMAINTEN: u32 = 0x0C // DMA/interrupt enable
+sabit TIMER_INTF: u32 = 0x10    // Interrupt flag
+sabit TIMER_SWEVG: u32 = 0x14   // Software event generation
+sabit TIMER_CHCTL0: u32 = 0x18  // Channel control 0 (CH0, CH1)
+sabit TIMER_CHCTL1: u32 = 0x1C  // Channel control 1 (CH2, CH3)
+sabit TIMER_CHCTL2: u32 = 0x20  // Channel control 2
+sabit TIMER_CNT: u32 = 0x24     // Counter
+sabit TIMER_PSC: u32 = 0x28     // Prescaler
+sabit TIMER_CAR: u32 = 0x2C     // Counter auto reload
+sabit TIMER_CREP: u32 = 0x30    // Counter repetition (TIMER0 only)
+sabit TIMER_CH0CV: u32 = 0x34   // Channel 0 capture/compare value
+sabit TIMER_CH1CV: u32 = 0x38   // Channel 1 capture/compare value
+sabit TIMER_CH2CV: u32 = 0x3C   // Channel 2 capture/compare value
+sabit TIMER_CH3CV: u32 = 0x40   // Channel 3 capture/compare value
+
+// CTL0 bits
+sabit TIMER_CTL0_CEN: u32 = 1 << 0      // Counter enable
+sabit TIMER_CTL0_UPDIS: u32 = 1 << 1    // Update disable
+sabit TIMER_CTL0_UPS: u32 = 1 << 2      // Update source
+sabit TIMER_CTL0_SPM: u32 = 1 << 3      // Single pulse mode
+sabit TIMER_CTL0_DIR: u32 = 1 << 4      // Direction (0=up, 1=down)
+sabit TIMER_CTL0_CAM: u32 = 0x3 << 5    // Center-aligned mode
+sabit TIMER_CTL0_ARSE: u32 = 1 << 7     // Auto-reload shadow enable
+
+// CHCTL0/1 bits for PWM mode
+sabit TIMER_CHCTL_CH0MS: u32 = 0x3 << 0     // CH0 mode selection
+sabit TIMER_CHCTL_CH0COMFEN: u32 = 1 << 2   // CH0 output compare fast enable
+sabit TIMER_CHCTL_CH0COMSEN: u32 = 1 << 3   // CH0 output compare shadow enable
+sabit TIMER_CHCTL_CH0COMCTL: u32 = 0x7 << 4 // CH0 compare control (PWM mode)
+
+// CHCTL2 bits
+sabit TIMER_CHCTL2_CH0EN: u32 = 1 << 0      // CH0 enable
+sabit TIMER_CHCTL2_CH0P: u32 = 1 << 1       // CH0 polarity
+sabit TIMER_CHCTL2_CH1EN: u32 = 1 << 4      // CH1 enable
+sabit TIMER_CHCTL2_CH1P: u32 = 1 << 5       // CH1 polarity
+sabit TIMER_CHCTL2_CH2EN: u32 = 1 << 8      // CH2 enable
+sabit TIMER_CHCTL2_CH2P: u32 = 1 << 9       // CH2 polarity
+sabit TIMER_CHCTL2_CH3EN: u32 = 1 << 12     // CH3 enable
+sabit TIMER_CHCTL2_CH3P: u32 = 1 << 13      // CH3 polarity
+
+// PWM modes
+sabit TIMER_PWM_MODE0: u32 = 0x6 << 4  // PWM mode 0
+sabit TIMER_PWM_MODE1: u32 = 0x7 << 4  // PWM mode 1
+
+// Default PWM frequency (Hz)
+açık sabit DEFAULT_PWM_FREQ: u32 = 1000  // 1 kHz
+
+harici "C" yap
+    // GD32VF103 Timer firmware library
+    fonksiyon timer_clock_enable(timer_periph: u32)
+    fonksiyon timer_deinit(timer_periph: u32)
+    fonksiyon timer_enable(timer_periph: u32)
+    fonksiyon timer_disable(timer_periph: u32)
+    fonksiyon timer_prescaler_config(timer_periph: u32, prescaler: u16, reload: u32)
+    fonksiyon timer_autoreload_value_config(timer_periph: u32, autoreload: u32)
+    fonksiyon timer_channel_output_mode_config(timer_periph: u32, channel: u16, mode: u16)
+    fonksiyon timer_channel_output_pulse_value_config(timer_periph: u32, channel: u16, pulse: u32)
+    fonksiyon timer_channel_output_shadow_config(timer_periph: u32, channel: u16, shadow: u32)
+    fonksiyon timer_primary_output_config(timer_periph: u32, enable: u32)
+    fonksiyon timer_channel_output_state_config(timer_periph: u32, channel: u16, state: u32)
+    
+    fonksiyon volatile_read_u32(addr: *sabit u32) -> u32
+    fonksiyon volatile_write_u32(addr: *değiştir u32, value: u32)
+son
+
+// Timer channel constants
+sabit TIMER_CH_0: u16 = 0
+sabit TIMER_CH_1: u16 = 1
+sabit TIMER_CH_2: u16 = 2
+sabit TIMER_CH_3: u16 = 3
+
+// Output compare modes
+sabit TIMER_OC_MODE_PWM0: u16 = 0x0060
+sabit TIMER_OC_MODE_PWM1: u16 = 0x0070
+
+// Channel output states
+sabit TIMER_CCX_ENABLE: u32 = 1
+sabit TIMER_CCX_DISABLE: u32 = 0
+
+// Shadow enable
+sabit TIMER_OC_SHADOW_ENABLE: u32 = 1
+sabit TIMER_OC_SHADOW_DISABLE: u32 = 0
+
+fonksiyon timer_base_address(timer: PwmTimer) -> u32 yap
+    seç timer yap
+        durum PwmTimer::TIMER0 => dön TIMER0_BASE,
+        durum PwmTimer::TIMER1 => dön TIMER1_BASE,
+        durum PwmTimer::TIMER2 => dön TIMER2_BASE,
+        durum PwmTimer::TIMER3 => dön TIMER3_BASE,
+        durum PwmTimer::TIMER4 => dön TIMER4_BASE,
+    son
+son
+
+fonksiyon channel_to_hw(channel: PwmChannel) -> u16 yap
+    seç channel yap
+        durum PwmChannel::CHANNEL_0 => dön TIMER_CH_0,
+        durum PwmChannel::CHANNEL_1 => dön TIMER_CH_1,
+        durum PwmChannel::CHANNEL_2 => dön TIMER_CH_2,
+        durum PwmChannel::CHANNEL_3 => dön TIMER_CH_3,
+    son
+son
+
+yapı GD32VF103_PWM_HAL yap
+    timer: PwmTimer,
+    base_addr: u32,
+    frequency: u32,
+    period: u32,
+    prescaler: u16,
+    initialized: bool,
+son
+
+uygula GD32VF103_PWM_HAL yap
+    açık fonksiyon yeni(timer: PwmTimer, frequency: u32) -> GD32VF103_PWM_HAL yap
+        değişken base_addr = timer_base_address(timer)
+        
+        // Enable timer clock
+        timer_clock_enable(base_addr)
+        
+        // Reset timer
+        timer_deinit(base_addr)
+        
+        // Calculate prescaler and period for desired frequency
+        // Timer clock = 108 MHz (APB1 clock)
+        // PWM frequency = Timer clock / ((prescaler + 1) * (period + 1))
+        değişken timer_clock: u32 = 108000000  // 108 MHz
+        
+        // Try to find good prescaler and period values
+        değişken mut prescaler: u16 = 0
+        değişken mut period: u32 = 0
+        
+        // Start with prescaler = 107 (gives 1 MHz timer frequency)
+        prescaler = 107
+        değişken timer_freq = timer_clock / (prescaler olarak u32 + 1)
+        period = (timer_freq / frequency) - 1
+        
+        // Ensure period fits in 16 bits for most timers
+        eğer period > 65535 yap
+            period = 65535
+        son
+        
+        // Configure timer base
+        timer_prescaler_config(base_addr, prescaler, 0)
+        timer_autoreload_value_config(base_addr, period)
+        
+        // Enable auto-reload shadow
+        değişken ctl0_addr = (base_addr + TIMER_CTL0) olarak *değiştir u32
+        değişken ctl0 = volatile_read_u32(ctl0_addr olarak *sabit u32)
+        volatile_write_u32(ctl0_addr, ctl0 | TIMER_CTL0_ARSE)
+        
+        // Enable timer counter
+        timer_enable(base_addr)
+        
+        // Enable primary output (for TIMER0)
+        eğer timer olarak u32 == PwmTimer::TIMER0 olarak u32 yap
+            timer_primary_output_config(base_addr, TIMER_CCX_ENABLE)
+        son
+        
+        dön GD32VF103_PWM_HAL yap
+            timer: timer,
+            base_addr: base_addr,
+            frequency: frequency,
+            period: period,
+            prescaler: prescaler,
+            initialized: doğru,
+        son
+    son
+    
+    açık fonksiyon set_duty_cycle(&kendim, channel: PwmChannel, duty_percent: u8) yap
+        eğer duty_percent > 100 yap
+            dön  // Invalid duty cycle
+        son
+        
+        // Calculate pulse value
+        değişken pulse = (kendim.period * duty_percent olarak u32) / 100
+        
+        // Set pulse value
+        değişken hw_channel = channel_to_hw(channel)
+        timer_channel_output_pulse_value_config(kendim.base_addr, hw_channel, pulse)
+    son
+    
+    açık fonksiyon set_duty_raw(&kendim, channel: PwmChannel, pulse: u32) yap
+        değişken hw_channel = channel_to_hw(channel)
+        timer_channel_output_pulse_value_config(kendim.base_addr, hw_channel, pulse)
+    son
+    
+    açık fonksiyon enable_channel(&kendim, channel: PwmChannel) yap
+        değişken hw_channel = channel_to_hw(channel)
+        
+        // Configure PWM mode 0
+        timer_channel_output_mode_config(kendim.base_addr, hw_channel, TIMER_OC_MODE_PWM0)
+        
+        // Enable shadow register
+        timer_channel_output_shadow_config(kendim.base_addr, hw_channel, TIMER_OC_SHADOW_ENABLE)
+        
+        // Enable channel output
+        timer_channel_output_state_config(kendim.base_addr, hw_channel, TIMER_CCX_ENABLE)
+    son
+    
+    açık fonksiyon disable_channel(&kendim, channel: PwmChannel) yap
+        değişken hw_channel = channel_to_hw(channel)
+        timer_channel_output_state_config(kendim.base_addr, hw_channel, TIMER_CCX_DISABLE)
+    son
+    
+    açık fonksiyon get_period(&kendim) -> u32 yap
+        dön kendim.period
+    son
+    
+    açık fonksiyon get_frequency(&kendim) -> u32 yap
+        dön kendim.frequency
+    son
+    
+    // Set frequency dynamically
+    açık fonksiyon set_frequency(&değiştir kendim, frequency: u32) yap
+        değişken timer_clock: u32 = 108000000
+        değişken timer_freq = timer_clock / (kendim.prescaler olarak u32 + 1)
+        değişken period = (timer_freq / frequency) - 1
+        
+        eğer period > 65535 yap
+            period = 65535
+        son
+        
+        kendim.period = period
+        kendim.frequency = frequency
+        
+        timer_autoreload_value_config(kendim.base_addr, period)
+    son
+son
+
+uygula PWM_BAL::PwmHAL için GD32VF103_PWM_HAL yap
+    fonksiyon set_duty_cycle(&kendim, channel: u8, duty_percent: u8) yap
+        eğer channel > 3 yap
+            dön  // Invalid channel
+        son
+        
+        değişken pwm_channel = seç channel yap
+            durum 0 => PwmChannel::CHANNEL_0,
+            durum 1 => PwmChannel::CHANNEL_1,
+            durum 2 => PwmChannel::CHANNEL_2,
+            durum 3 => PwmChannel::CHANNEL_3,
+            durum _ => dön,
+        son
+        
+        kendim.set_duty_cycle(pwm_channel, duty_percent)
+    son
+    
+    fonksiyon enable_channel(&kendim, channel: u8) yap
+        eğer channel > 3 yap
+            dön
+        son
+        
+        değişken pwm_channel = seç channel yap
+            durum 0 => PwmChannel::CHANNEL_0,
+            durum 1 => PwmChannel::CHANNEL_1,
+            durum 2 => PwmChannel::CHANNEL_2,
+            durum 3 => PwmChannel::CHANNEL_3,
+            durum _ => dön,
+        son
+        
+        kendim.enable_channel(pwm_channel)
+    son
+    
+    fonksiyon disable_channel(&kendim, channel: u8) yap
+        eğer channel > 3 yap
+            dön
+        son
+        
+        değişken pwm_channel = seç channel yap
+            durum 0 => PwmChannel::CHANNEL_0,
+            durum 1 => PwmChannel::CHANNEL_1,
+            durum 2 => PwmChannel::CHANNEL_2,
+            durum 3 => PwmChannel::CHANNEL_3,
+            durum _ => dön,
+        son
+        
+        kendim.disable_channel(pwm_channel)
+    son
+son
+
+açık tip PWM_HAL = GD32VF103_PWM_HAL
+
+// Helper: RGB LED control using PWM
+açık fonksiyon rgb_led_init(timer: PwmTimer, freq: u32) -> PWM_HAL yap
+    dön PWM_HAL::yeni(timer, freq)
+son
+
+açık fonksiyon rgb_led_set_color(pwm: &PWM_HAL, r: u8, g: u8, b: u8) yap
+    // Assuming RGB LED connected to channels 0, 1, 2
+    pwm.set_duty_cycle(PwmChannel::CHANNEL_0, (r * 100) / 255)
+    pwm.set_duty_cycle(PwmChannel::CHANNEL_1, (g * 100) / 255)
+    pwm.set_duty_cycle(PwmChannel::CHANNEL_2, (b * 100) / 255)
+son

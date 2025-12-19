@@ -1,0 +1,246 @@
+// =============================================================================
+// BERK Standard Library - Graphics Module Demo
+// 2D Grafik ve görselleştirme
+// =============================================================================
+
+kullan std::graphics
+kullan std::color
+
+yazdır("=== BERK Graphics Demo ===\n")
+
+// -----------------------------------------------------------------------------
+// Canvas Oluşturma
+// -----------------------------------------------------------------------------
+
+yazdır("🖼️  Canvas Oluşturma:")
+yazdır("-" * 40)
+
+yazdır("""
+kullan std::graphics
+
+// Pencere oluştur
+olsun canvas = graphics::create_window(800, 600, "BERK Graphics")
+
+// Arka plan rengi
+graphics::clear(canvas, "#1a1a2e")
+""")
+
+// -----------------------------------------------------------------------------
+// Temel Şekiller
+// -----------------------------------------------------------------------------
+
+yazdır("\n📐 Temel Şekiller:")
+yazdır("-" * 40)
+
+yazdır("""
+// Renk tanımları
+olsun kirmizi = color::from_hex("#e74c3c")
+olsun yesil = color::from_hex("#2ecc71")
+olsun mavi = color::from_hex("#3498db")
+
+// Nokta
+graphics::draw_point(canvas, 100, 100, kirmizi)
+
+// Çizgi
+graphics::draw_line(canvas, 50, 50, 200, 150, mavi, 2)
+
+// Dikdörtgen (dolu)
+graphics::fill_rect(canvas, 250, 50, 100, 80, yesil)
+
+// Dikdörtgen (çerçeve)
+graphics::draw_rect(canvas, 250, 50, 100, 80, mavi, 2)
+
+// Yuvarlak köşeli dikdörtgen
+graphics::fill_rounded_rect(canvas, 400, 50, 100, 80, 10, kirmizi)
+
+// Daire (dolu)
+graphics::fill_circle(canvas, 150, 250, 50, mavi)
+
+// Daire (çerçeve)
+graphics::draw_circle(canvas, 150, 250, 50, yesil, 3)
+
+// Elips
+graphics::fill_ellipse(canvas, 300, 250, 80, 40, kirmizi)
+
+// Üçgen
+graphics::fill_triangle(canvas, 450, 200, 500, 300, 400, 300, yesil)
+
+// Çokgen
+olsun noktalar = [[550, 200], [620, 220], [600, 290], [520, 280], [510, 230]]
+graphics::fill_polygon(canvas, noktalar, mavi)
+""")
+
+// -----------------------------------------------------------------------------
+// Yaylar ve Eğriler
+// -----------------------------------------------------------------------------
+
+yazdır("\n🌙 Yaylar ve Eğriler:")
+yazdır("-" * 40)
+
+yazdır("""
+// Yay
+graphics::draw_arc(canvas, 150, 400, 60, 0, 3.14, kirmizi, 3)
+
+// Pasta dilimi
+graphics::fill_pie(canvas, 300, 400, 60, 0, 2.0, yesil)
+
+// Bezier eğrisi
+graphics::draw_bezier(canvas, 
+    400, 400,    // başlangıç
+    450, 350,    // kontrol 1
+    550, 450,    // kontrol 2
+    600, 400,    // bitiş
+    mavi, 2
+)
+""")
+
+// -----------------------------------------------------------------------------
+// Metin
+// -----------------------------------------------------------------------------
+
+yazdır("\n📝 Metin Çizimi:")
+yazdır("-" * 40)
+
+yazdır("""
+// Basit metin
+graphics::draw_text(canvas, "Merhaba BERK!", 50, 500, 24, "#ffffff")
+
+// Font ile metin
+graphics::set_font(canvas, "Arial", 32, "bold")
+graphics::draw_text(canvas, "Türkçe Destekli!", 250, 500, 32, "#f39c12")
+
+// Çok satırlı metin
+olsun metin = "Bu çok\\nsatırlı\\nbir metin"
+graphics::draw_text_multiline(canvas, metin, 500, 480, 18, "#ecf0f1", 1.5)
+
+// Metin boyutu ölç
+olsun [w, h] = graphics::measure_text(canvas, "Test", 24)
+yazdır("Metin boyutu: {}x{}", w, h)
+""")
+
+// -----------------------------------------------------------------------------
+// Görüntü İşleme
+// -----------------------------------------------------------------------------
+
+yazdır("\n🖼️  Görüntü İşleme:")
+yazdır("-" * 40)
+
+yazdır("""
+// Görüntü yükle
+olsun img = graphics::load_image("photo.png")
+
+// Canvas'a çiz
+graphics::draw_image(canvas, img, 50, 100)
+
+// Ölçekli çiz
+graphics::draw_image_scaled(canvas, img, 200, 100, 150, 100)
+
+// Döndürerek çiz
+graphics::draw_image_rotated(canvas, img, 400, 100, 45.0)  // 45 derece
+
+// Şeffaflık ile çiz
+graphics::draw_image_alpha(canvas, img, 600, 100, 0.5)
+
+// Görüntü kaydet
+graphics::save(canvas, "output.png")
+""")
+
+// -----------------------------------------------------------------------------
+// Gradyan ve Desenler
+// -----------------------------------------------------------------------------
+
+yazdır("\n🌈 Gradyan ve Desenler:")
+yazdır("-" * 40)
+
+yazdır("""
+// Lineer gradyan
+olsun gradyan = graphics::create_linear_gradient(
+    0, 0, 200, 0,  // başlangıç -> bitiş
+    [
+        [0.0, "#e74c3c"],
+        [0.5, "#f39c12"],
+        [1.0, "#2ecc71"]
+    ]
+)
+graphics::fill_rect_gradient(canvas, 50, 50, 200, 100, gradyan)
+
+// Radyal gradyan
+olsun radyal = graphics::create_radial_gradient(
+    150, 200, 0,    // merkez, iç yarıçap
+    150, 200, 80,   // merkez, dış yarıçap
+    [
+        [0.0, "#ffffff"],
+        [1.0, "#3498db"]
+    ]
+)
+graphics::fill_circle_gradient(canvas, 150, 200, 80, radyal)
+
+// Desen dolgu
+olsun desen = graphics::create_pattern("pattern.png", "repeat")
+graphics::fill_rect_pattern(canvas, 300, 50, 200, 100, desen)
+""")
+
+// -----------------------------------------------------------------------------
+// Dönüşümler
+// -----------------------------------------------------------------------------
+
+yazdır("\n🔄 Dönüşümler:")
+yazdır("-" * 40)
+
+yazdır("""
+// State kaydet
+graphics::save_state(canvas)
+
+// Taşı
+graphics::translate(canvas, 400, 300)
+
+// Döndür
+graphics::rotate(canvas, 0.5)  // radyan
+
+// Ölçekle
+graphics::scale(canvas, 1.5, 1.5)
+
+// Şekil çiz (dönüşüm uygulanmış)
+graphics::fill_rect(canvas, -25, -25, 50, 50, "#e74c3c")
+
+// State geri yükle
+graphics::restore_state(canvas)
+""")
+
+// -----------------------------------------------------------------------------
+// Animasyon
+// -----------------------------------------------------------------------------
+
+yazdır("\n🎬 Animasyon:")
+yazdır("-" * 40)
+
+yazdır("""
+olsun x = 0.0
+olsun y = 300.0
+olsun hiz = 5.0
+
+// Ana döngü
+döngü graphics::is_open(canvas) iken yap
+    // Temizle
+    graphics::clear(canvas, "#1a1a2e")
+    
+    // Top çiz
+    graphics::fill_circle(canvas, x, y, 20, "#e74c3c")
+    
+    // Güncelle
+    x = x + hiz
+    eğer x > 800 veya x < 0 ise
+        hiz = -hiz
+    son
+    
+    // Göster
+    graphics::present(canvas)
+    
+    // FPS sınırla
+    graphics::wait(16)  // ~60 FPS
+son
+
+graphics::close(canvas)
+""")
+
+yazdır("\n✅ Graphics demo tamamlandı!")

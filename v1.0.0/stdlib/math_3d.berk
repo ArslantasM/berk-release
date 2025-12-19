@@ -1,0 +1,602 @@
+//! # Math3D Module
+//!
+//! 3D mathematics (vectors, matrices, quaternions).
+//!
+//! 3D matematik (vektörler, matrisler, quaternionlar).
+//!
+//! ## Features / Özellikler
+//!
+//! - **Vectors**: Vec2, Vec3, Vec4 operations / Vektör işlemleri
+//! - **Matrices**: 4x4 transformations / Matris dönüştürmeler
+//! - **Quaternions**: Rotation representation / Rotasyon gösterimi
+//! - **Camera**: View, projection matrices / Kamera matrisleri
+//! - **Primitives**: Ray, Plane, Sphere, AABB / Geometrik temel şekiller
+//! - **Interpolation**: Lerp, slerp, smoothstep / İnterpolasyon
+//! - **Angles**: Degrees ↔ radians / Açı dönüştürmeler
+//!
+//! ## Example / Örnek
+//!
+//! ```berk
+//! kullan math_3d
+//!
+//! değişken v1 = math_3d.vec3(1.0, 2.0, 3.0)
+//! değişken v2 = math_3d.vec3(4.0, 5.0, 6.0)
+//! değişken dot = math_3d.dot(v1, v2)
+//! değişken cross = math_3d.cross(v1, v2)
+//! ```
+//!
+//! Pure BERK - Zero dependencies
+
+modül math_3d
+
+kullan math
+
+// ============================================================================
+// SABITLER (Constants)
+// ============================================================================
+
+sabit PI = 3.14159265358979323846
+sabit TAU = 6.28318530717958647692  // 2 * PI
+sabit DEG_TO_RAD = 0.01745329251994329577  // PI / 180
+sabit RAD_TO_DEG = 57.2957795130823208768  // 180 / PI
+sabit EPSILON = 0.000001
+
+// ============================================================================
+// VECTOR2 - 2D Vector
+// ============================================================================
+
+tip Vec2 = yapı yap
+    x: ondalık,
+    y: ondalık
+son
+
+// Constructors
+fonksiyon vec2(x: ondalık, y: ondalık) -> Vec2
+yap
+    dön Vec2 yap x: x, y: y son
+son
+
+fonksiyon vec2_zero() -> Vec2 yap dön vec2(0.0, 0.0) son
+fonksiyon vec2_one() -> Vec2 yap dön vec2(1.0, 1.0) son
+fonksiyon vec2_up() -> Vec2 yap dön vec2(0.0, 1.0) son
+fonksiyon vec2_right() -> Vec2 yap dön vec2(1.0, 0.0) son
+
+// Operations
+fonksiyon vec2_add(a: Vec2, b: Vec2) -> Vec2
+yap
+    dön vec2(a.x + b.x, a.y + b.y)
+son
+
+fonksiyon vec2_sub(a: Vec2, b: Vec2) -> Vec2
+yap
+    dön vec2(a.x - b.x, a.y - b.y)
+son
+
+fonksiyon vec2_mul(v: Vec2, s: ondalık) -> Vec2
+yap
+    dön vec2(v.x * s, v.y * s)
+son
+
+fonksiyon vec2_dot(a: Vec2, b: Vec2) -> ondalık
+yap
+    dön a.x * b.x + a.y * b.y
+son
+
+fonksiyon vec2_length(v: Vec2) -> ondalık
+yap
+    dön math::sqrt(v.x * v.x + v.y * v.y)
+son
+
+fonksiyon vec2_normalize(v: Vec2) -> Vec2
+yap
+    değişken len = vec2_length(v)
+    eğer len < EPSILON ise dön vec2_zero()
+    dön vec2(v.x / len, v.y / len)
+son
+
+fonksiyon vec2_distance(a: Vec2, b: Vec2) -> ondalık
+yap
+    dön vec2_length(vec2_sub(b, a))
+son
+
+fonksiyon vec2_lerp(a: Vec2, b: Vec2, t: ondalık) -> Vec2
+yap
+    dön vec2(
+        a.x + (b.x - a.x) * t,
+        a.y + (b.y - a.y) * t
+    )
+son
+
+// ============================================================================
+// VECTOR3 - 3D Vector
+// ============================================================================
+
+tip Vec3 = yapı yap
+    x: ondalık,
+    y: ondalık,
+    z: ondalık
+son
+
+// Constructors
+fonksiyon vec3(x: ondalık, y: ondalık, z: ondalık) -> Vec3
+yap
+    dön Vec3 yap x: x, y: y, z: z son
+son
+
+fonksiyon vec3_zero() -> Vec3 yap dön vec3(0.0, 0.0, 0.0) son
+fonksiyon vec3_one() -> Vec3 yap dön vec3(1.0, 1.0, 1.0) son
+fonksiyon vec3_up() -> Vec3 yap dön vec3(0.0, 1.0, 0.0) son
+fonksiyon vec3_down() -> Vec3 yap dön vec3(0.0, -1.0, 0.0) son
+fonksiyon vec3_left() -> Vec3 yap dön vec3(-1.0, 0.0, 0.0) son
+fonksiyon vec3_right() -> Vec3 yap dön vec3(1.0, 0.0, 0.0) son
+fonksiyon vec3_forward() -> Vec3 yap dön vec3(0.0, 0.0, 1.0) son
+fonksiyon vec3_back() -> Vec3 yap dön vec3(0.0, 0.0, -1.0) son
+
+// Operations
+fonksiyon vec3_add(a: Vec3, b: Vec3) -> Vec3
+yap
+    dön vec3(a.x + b.x, a.y + b.y, a.z + b.z)
+son
+
+fonksiyon vec3_sub(a: Vec3, b: Vec3) -> Vec3
+yap
+    dön vec3(a.x - b.x, a.y - b.y, a.z - b.z)
+son
+
+fonksiyon vec3_mul(v: Vec3, s: ondalık) -> Vec3
+yap
+    dön vec3(v.x * s, v.y * s, v.z * s)
+son
+
+fonksiyon vec3_dot(a: Vec3, b: Vec3) -> ondalık
+yap
+    dön a.x * b.x + a.y * b.y + a.z * b.z
+son
+
+fonksiyon vec3_cross(a: Vec3, b: Vec3) -> Vec3
+yap
+    dön vec3(
+        a.y * b.z - a.z * b.y,
+        a.z * b.x - a.x * b.z,
+        a.x * b.y - a.y * b.x
+    )
+son
+
+fonksiyon vec3_length(v: Vec3) -> ondalık
+yap
+    dön math::sqrt(v.x * v.x + v.y * v.y + v.z * v.z)
+son
+
+fonksiyon vec3_length_squared(v: Vec3) -> ondalık
+yap
+    dön v.x * v.x + v.y * v.y + v.z * v.z
+son
+
+fonksiyon vec3_normalize(v: Vec3) -> Vec3
+yap
+    değişken len = vec3_length(v)
+    eğer len < EPSILON ise dön vec3_zero()
+    dön vec3(v.x / len, v.y / len, v.z / len)
+son
+
+fonksiyon vec3_distance(a: Vec3, b: Vec3) -> ondalık
+yap
+    dön vec3_length(vec3_sub(b, a))
+son
+
+fonksiyon vec3_lerp(a: Vec3, b: Vec3, t: ondalık) -> Vec3
+yap
+    dön vec3(
+        a.x + (b.x - a.x) * t,
+        a.y + (b.y - a.y) * t,
+        a.z + (b.z - a.z) * t
+    )
+son
+
+fonksiyon vec3_reflect(v: Vec3, normal: Vec3) -> Vec3
+yap
+    // v - 2 * dot(v, n) * n
+    değişken dot = vec3_dot(v, normal)
+    dön vec3_sub(v, vec3_mul(normal, 2.0 * dot))
+son
+
+// ============================================================================
+// VECTOR4 - 4D Vector (homogeneous coordinates)
+// ============================================================================
+
+tip Vec4 = yapı yap
+    x: ondalık,
+    y: ondalık,
+    z: ondalık,
+    w: ondalık
+son
+
+fonksiyon vec4(x: ondalık, y: ondalık, z: ondalık, w: ondalık) -> Vec4
+yap
+    dön Vec4 yap x: x, y: y, z: z, w: w son
+son
+
+fonksiyon vec4_from_vec3(v: Vec3, w: ondalık) -> Vec4
+yap
+    dön vec4(v.x, v.y, v.z, w)
+son
+
+fonksiyon vec4_to_vec3(v: Vec4) -> Vec3
+yap
+    dön vec3(v.x, v.y, v.z)
+son
+
+// ============================================================================
+// MATRIX4 - 4x4 Transformation Matrix (Column-major order)
+// ============================================================================
+
+tip Mat4 = yapı yap
+    m: liste[ondalık]  // 16 elements [m00, m01, m02, m03, m10, ...]
+son
+
+// Create identity matrix
+fonksiyon mat4_identity() -> Mat4
+yap
+    dön Mat4 yap
+        m: [
+            1.0, 0.0, 0.0, 0.0,
+            0.0, 1.0, 0.0, 0.0,
+            0.0, 0.0, 1.0, 0.0,
+            0.0, 0.0, 0.0, 1.0
+        ]
+    son
+son
+
+// Matrix multiply (a * b)
+fonksiyon mat4_mul(a: Mat4, b: Mat4) -> Mat4
+yap
+    değişken result = mat4_identity()
+    
+    için row = 0 .. 4 yap
+        için col = 0 .. 4 yap
+            değişken sum = 0.0
+            için i = 0 .. 4 yap
+                sum = sum + a.m[row * 4 + i] * b.m[i * 4 + col]
+            son
+            result.m[row * 4 + col] = sum
+        son
+    son
+    
+    dön result
+son
+
+// Transform vector by matrix
+fonksiyon mat4_mul_vec4(m: Mat4, v: Vec4) -> Vec4
+yap
+    dön vec4(
+        m.m[0] * v.x + m.m[4] * v.y + m.m[8] * v.z + m.m[12] * v.w,
+        m.m[1] * v.x + m.m[5] * v.y + m.m[9] * v.z + m.m[13] * v.w,
+        m.m[2] * v.x + m.m[6] * v.y + m.m[10] * v.z + m.m[14] * v.w,
+        m.m[3] * v.x + m.m[7] * v.y + m.m[11] * v.z + m.m[15] * v.w
+    )
+son
+
+fonksiyon mat4_mul_vec3(m: Mat4, v: Vec3, w: ondalık) -> Vec3
+yap
+    değişken v4 = mat4_mul_vec4(m, vec4_from_vec3(v, w))
+    dön vec3(v4.x, v4.y, v4.z)
+son
+
+// Translation matrix
+fonksiyon mat4_translate(x: ondalık, y: ondalık, z: ondalık) -> Mat4
+yap
+    dön Mat4 yap
+        m: [
+            1.0, 0.0, 0.0, 0.0,
+            0.0, 1.0, 0.0, 0.0,
+            0.0, 0.0, 1.0, 0.0,
+            x,   y,   z,   1.0
+        ]
+    son
+son
+
+fonksiyon mat4_translate_vec(v: Vec3) -> Mat4
+yap
+    dön mat4_translate(v.x, v.y, v.z)
+son
+
+// Scale matrix
+fonksiyon mat4_scale(x: ondalık, y: ondalık, z: ondalık) -> Mat4
+yap
+    dön Mat4 yap
+        m: [
+            x,   0.0, 0.0, 0.0,
+            0.0, y,   0.0, 0.0,
+            0.0, 0.0, z,   0.0,
+            0.0, 0.0, 0.0, 1.0
+        ]
+    son
+son
+
+fonksiyon mat4_scale_uniform(s: ondalık) -> Mat4
+yap
+    dön mat4_scale(s, s, s)
+son
+
+// Rotation matrices
+fonksiyon mat4_rotate_x(angle_rad: ondalık) -> Mat4
+yap
+    değişken c = math::cos(angle_rad)
+    değişken s = math::sin(angle_rad)
+    
+    dön Mat4 yap
+        m: [
+            1.0, 0.0, 0.0, 0.0,
+            0.0, c,   s,   0.0,
+            0.0, -s,  c,   0.0,
+            0.0, 0.0, 0.0, 1.0
+        ]
+    son
+son
+
+fonksiyon mat4_rotate_y(angle_rad: ondalık) -> Mat4
+yap
+    değişken c = math::cos(angle_rad)
+    değişken s = math::sin(angle_rad)
+    
+    dön Mat4 yap
+        m: [
+            c,   0.0, -s,  0.0,
+            0.0, 1.0, 0.0, 0.0,
+            s,   0.0, c,   0.0,
+            0.0, 0.0, 0.0, 1.0
+        ]
+    son
+son
+
+fonksiyon mat4_rotate_z(angle_rad: ondalık) -> Mat4
+yap
+    değişken c = math::cos(angle_rad)
+    değişken s = math::sin(angle_rad)
+    
+    dön Mat4 yap
+        m: [
+            c,   s,   0.0, 0.0,
+            -s,  c,   0.0, 0.0,
+            0.0, 0.0, 1.0, 0.0,
+            0.0, 0.0, 0.0, 1.0
+        ]
+    son
+son
+
+// Rotate around arbitrary axis
+fonksiyon mat4_rotate_axis(axis: Vec3, angle_rad: ondalık) -> Mat4
+yap
+    değişken n = vec3_normalize(axis)
+    değişken c = math::cos(angle_rad)
+    değişken s = math::sin(angle_rad)
+    değişken t = 1.0 - c
+    
+    dön Mat4 yap
+        m: [
+            t*n.x*n.x + c,     t*n.x*n.y + s*n.z, t*n.x*n.z - s*n.y, 0.0,
+            t*n.x*n.y - s*n.z, t*n.y*n.y + c,     t*n.y*n.z + s*n.x, 0.0,
+            t*n.x*n.z + s*n.y, t*n.y*n.z - s*n.x, t*n.z*n.z + c,     0.0,
+            0.0,               0.0,               0.0,               1.0
+        ]
+    son
+son
+
+// ============================================================================
+// CAMERA MATRICES
+// ============================================================================
+
+// Look-at view matrix (right-handed)
+fonksiyon mat4_look_at(eye: Vec3, target: Vec3, up: Vec3) -> Mat4
+yap
+    değişken f = vec3_normalize(vec3_sub(target, eye))  // forward
+    değişken s = vec3_normalize(vec3_cross(f, up))      // right
+    değişken u = vec3_cross(s, f)                        // up
+    
+    dön Mat4 yap
+        m: [
+            s.x, u.x, -f.x, 0.0,
+            s.y, u.y, -f.y, 0.0,
+            s.z, u.z, -f.z, 0.0,
+            -vec3_dot(s, eye), -vec3_dot(u, eye), vec3_dot(f, eye), 1.0
+        ]
+    son
+son
+
+// Perspective projection matrix (OpenGL style, right-handed)
+fonksiyon mat4_perspective(fov_y_rad: ondalık, aspect: ondalık, near: ondalık, far: ondalık) -> Mat4
+yap
+    değişken tan_half_fov = math::tan(fov_y_rad / 2.0)
+    değişken f = 1.0 / tan_half_fov
+    değişken nf = 1.0 / (near - far)
+    
+    dön Mat4 yap
+        m: [
+            f / aspect, 0.0, 0.0,                    0.0,
+            0.0,        f,   0.0,                    0.0,
+            0.0,        0.0, (far + near) * nf,      -1.0,
+            0.0,        0.0, (2.0 * far * near) * nf, 0.0
+        ]
+    son
+son
+
+// Orthographic projection matrix
+fonksiyon mat4_ortho(left: ondalık, right: ondalık, bottom: ondalık, top: ondalık, near: ondalık, far: ondalık) -> Mat4
+yap
+    değişken rl = 1.0 / (right - left)
+    değişken tb = 1.0 / (top - bottom)
+    değişken fn = 1.0 / (far - near)
+    
+    dön Mat4 yap
+        m: [
+            2.0 * rl, 0.0,       0.0,       0.0,
+            0.0,      2.0 * tb,  0.0,       0.0,
+            0.0,      0.0,       -2.0 * fn, 0.0,
+            -(right + left) * rl, -(top + bottom) * tb, -(far + near) * fn, 1.0
+        ]
+    son
+son
+
+// ============================================================================
+// QUATERNION - Rotation Representation
+// ============================================================================
+
+tip Quat = yapı yap
+    x: ondalık,
+    y: ondalık,
+    z: ondalık,
+    w: ondalık
+son
+
+// Identity quaternion (no rotation)
+fonksiyon quat_identity() -> Quat
+yap
+    dön Quat yap x: 0.0, y: 0.0, z: 0.0, w: 1.0 son
+son
+
+// Create quaternion from axis-angle
+fonksiyon quat_from_axis_angle(axis: Vec3, angle_rad: ondalık) -> Quat
+yap
+    değişken n = vec3_normalize(axis)
+    değişken half_angle = angle_rad / 2.0
+    değişken s = math::sin(half_angle)
+    
+    dön Quat yap
+        x: n.x * s,
+        y: n.y * s,
+        z: n.z * s,
+        w: math::cos(half_angle)
+    son
+son
+
+// Quaternion multiply (q1 * q2)
+fonksiyon quat_mul(q1: Quat, q2: Quat) -> Quat
+yap
+    dön Quat yap
+        x: q1.w * q2.x + q1.x * q2.w + q1.y * q2.z - q1.z * q2.y,
+        y: q1.w * q2.y - q1.x * q2.z + q1.y * q2.w + q1.z * q2.x,
+        z: q1.w * q2.z + q1.x * q2.y - q1.y * q2.x + q1.z * q2.w,
+        w: q1.w * q2.w - q1.x * q2.x - q1.y * q2.y - q1.z * q2.z
+    son
+son
+
+// Normalize quaternion
+fonksiyon quat_normalize(q: Quat) -> Quat
+yap
+    değişken len = math::sqrt(q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w)
+    eğer len < EPSILON ise dön quat_identity()
+    
+    dön Quat yap
+        x: q.x / len,
+        y: q.y / len,
+        z: q.z / len,
+        w: q.w / len
+    son
+son
+
+// Rotate vector by quaternion
+fonksiyon quat_rotate_vec3(q: Quat, v: Vec3) -> Vec3
+yap
+    // v' = q * v * q^-1
+    değişken qv = Quat yap x: v.x, y: v.y, z: v.z, w: 0.0 son
+    değişken q_conj = Quat yap x: -q.x, y: -q.y, z: -q.z, w: q.w son
+    
+    değişken result = quat_mul(quat_mul(q, qv), q_conj)
+    dön vec3(result.x, result.y, result.z)
+son
+
+// Spherical linear interpolation (SLERP)
+fonksiyon quat_slerp(q1: Quat, q2: Quat, t: ondalık) -> Quat
+yap
+    değişken dot = q1.x * q2.x + q1.y * q2.y + q1.z * q2.z + q1.w * q2.w
+    
+    // Shortest path
+    değişken q2_adjusted = q2
+    eğer dot < 0.0 ise yap
+        q2_adjusted = Quat yap x: -q2.x, y: -q2.y, z: -q2.z, w: -q2.w son
+        dot = -dot
+    son
+    
+    // Linear interpolation for close quaternions
+    eğer dot > 0.9995 ise yap
+        dön quat_normalize(Quat yap
+            x: q1.x + t * (q2_adjusted.x - q1.x),
+            y: q1.y + t * (q2_adjusted.y - q1.y),
+            z: q1.z + t * (q2_adjusted.z - q1.z),
+            w: q1.w + t * (q2_adjusted.w - q1.w)
+        son)
+    son
+    
+    // Spherical interpolation
+    değişken theta = math::acos(dot)
+    değişken sin_theta = math::sin(theta)
+    değişken a = math::sin((1.0 - t) * theta) / sin_theta
+    değişken b = math::sin(t * theta) / sin_theta
+    
+    dön Quat yap
+        x: a * q1.x + b * q2_adjusted.x,
+        y: a * q1.y + b * q2_adjusted.y,
+        z: a * q1.z + b * q2_adjusted.z,
+        w: a * q1.w + b * q2_adjusted.w
+    son
+son
+
+// Convert quaternion to rotation matrix
+fonksiyon quat_to_mat4(q: Quat) -> Mat4
+yap
+    değişken xx = q.x * q.x
+    değişken yy = q.y * q.y
+    değişken zz = q.z * q.z
+    değişken xy = q.x * q.y
+    değişken xz = q.x * q.z
+    değişken yz = q.y * q.z
+    değişken wx = q.w * q.x
+    değişken wy = q.w * q.y
+    değişken wz = q.w * q.z
+    
+    dön Mat4 yap
+        m: [
+            1.0 - 2.0 * (yy + zz), 2.0 * (xy + wz),       2.0 * (xz - wy),       0.0,
+            2.0 * (xy - wz),       1.0 - 2.0 * (xx + zz), 2.0 * (yz + wx),       0.0,
+            2.0 * (xz + wy),       2.0 * (yz - wx),       1.0 - 2.0 * (xx + yy), 0.0,
+            0.0,                   0.0,                   0.0,                   1.0
+        ]
+    son
+son
+
+// ============================================================================
+// UTILITY FUNCTIONS
+// ============================================================================
+
+// Angle conversions
+fonksiyon degrees_to_radians(degrees: ondalık) -> ondalık
+yap
+    dön degrees * DEG_TO_RAD
+son
+
+fonksiyon radians_to_degrees(radians: ondalık) -> ondalık
+yap
+    dön radians * RAD_TO_DEG
+son
+
+// Interpolation
+fonksiyon lerp(a: ondalık, b: ondalık, t: ondalık) -> ondalık
+yap
+    dön a + (b - a) * t
+son
+
+fonksiyon smoothstep(edge0: ondalık, edge1: ondalık, x: ondalık) -> ondalık
+yap
+    değişken t = math::clamp((x - edge0) / (edge1 - edge0), 0.0, 1.0)
+    dön t * t * (3.0 - 2.0 * t)
+son
+
+// Clamp value
+fonksiyon clamp(value: ondalık, min: ondalık, max: ondalık) -> ondalık
+yap
+    eğer value < min ise dön min
+    eğer value > max ise dön max
+    dön value
+son
+
+son  // modül math_3d

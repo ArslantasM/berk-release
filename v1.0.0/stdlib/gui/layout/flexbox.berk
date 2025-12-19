@@ -1,0 +1,694 @@
+// ============================================================================
+// BERK GUI Framework - Layout System
+// ============================================================================
+// Flexbox ve Grid tabanlı layout sistemi
+// Responsive tasarım ve constraint-based layout
+// ============================================================================
+
+modül gui::layout::flexbox
+
+kullan gui::widgets::core::widget::{Widget, WidgetBase, Rect}
+kullan gui::layout::constraints::{Size, Constraints, EdgeInsets}
+
+// ============================================================================
+// FLEX DIRECTION & ALIGNMENT
+// ============================================================================
+
+/// Flex yönü
+pub tip FlexDirection = enum yap
+    /// Yatay (soldan sağa)
+    Row,
+    
+    /// Yatay ters (sağdan sola)
+    RowReverse,
+    
+    /// Dikey (yukarıdan aşağı)
+    Column,
+    
+    /// Dikey ters (aşağıdan yukarı)
+    ColumnReverse
+son
+
+/// Ana eksen hizalaması
+pub tip JustifyContent = enum yap
+    /// Başlangıçta
+    Start,
+    
+    /// Ortada
+    Center,
+    
+    /// Sonda
+    End,
+    
+    /// Eşit aralık (ilk ve son kenarda)
+    SpaceBetween,
+    
+    /// Eşit aralık (elemanlar etrafında)
+    SpaceAround,
+    
+    /// Eşit aralık (her yerde)
+    SpaceEvenly
+son
+
+/// Çapraz eksen hizalaması
+pub tip AlignItems = enum yap
+    /// Başlangıç
+    Start,
+    
+    /// Orta
+    Center,
+    
+    /// Son
+    End,
+    
+    /// Uzat (stretch)
+    Stretch,
+    
+    /// Baseline
+    Baseline
+son
+
+/// Tekil eleman çapraz eksen hizalaması
+pub tip AlignSelf = enum yap
+    /// Parent'tan al
+    Auto,
+    Start,
+    Center,
+    End,
+    Stretch,
+    Baseline
+son
+
+/// Flex wrap
+pub tip FlexWrap = enum yap
+    /// Wrap yok
+    NoWrap,
+    
+    /// Wrap
+    Wrap,
+    
+    /// Ters wrap
+    WrapReverse
+son
+
+// ============================================================================
+// FLEX ITEM
+// ============================================================================
+
+/// Flex item özellikleri
+pub tip FlexItem = yapı yap
+    /// Widget
+    widget: kutu[dyn Widget],
+    
+    /// Flex grow (büyüme oranı)
+    flex_grow: ondalık,
+    
+    /// Flex shrink (küçülme oranı)
+    flex_shrink: ondalık,
+    
+    /// Flex basis (başlangıç boyutu)
+    flex_basis: FlexBasis,
+    
+    /// Align self
+    align_self: AlignSelf,
+    
+    /// Minimum boyut
+    min_size: Seçenek[Size],
+    
+    /// Maximum boyut
+    max_size: Seçenek[Size],
+    
+    /// Margin
+    margin: EdgeInsets
+son
+
+/// Flex basis değeri
+pub tip FlexBasis = enum yap
+    /// Otomatik (içeriğe göre)
+    Auto,
+    
+    /// Sabit pixel değeri
+    Pixels(value: ondalık),
+    
+    /// Yüzde
+    Percent(value: ondalık)
+son
+
+impl FlexItem:
+    /// Widget'tan flex item oluştur
+    pub fn from_widget(widget: kutu[dyn Widget]) döndür FlexItem:
+        döndür FlexItem yap
+            widget: widget,
+            flex_grow: 0.0,
+            flex_shrink: 1.0,
+            flex_basis: FlexBasis::Auto,
+            align_self: AlignSelf::Auto,
+            min_size: boş,
+            max_size: boş,
+            margin: EdgeInsets::zero()
+        son
+    son
+    
+    /// Flex grow ayarla
+    pub fn grow(mut self, value: ondalık) döndür FlexItem:
+        self.flex_grow = value
+        döndür self
+    son
+    
+    /// Flex shrink ayarla
+    pub fn shrink(mut self, value: ondalık) döndür FlexItem:
+        self.flex_shrink = value
+        döndür self
+    son
+    
+    /// Flex basis ayarla
+    pub fn basis(mut self, basis: FlexBasis) döndür FlexItem:
+        self.flex_basis = basis
+        döndür self
+    son
+    
+    /// Align self ayarla
+    pub fn align(mut self, align: AlignSelf) döndür FlexItem:
+        self.align_self = align
+        döndür self
+    son
+    
+    /// Margin ayarla
+    pub fn margin(mut self, margin: EdgeInsets) döndür FlexItem:
+        self.margin = margin
+        döndür self
+    son
+    
+    /// Eşit margin
+    pub fn margin_all(mut self, value: ondalık) döndür FlexItem:
+        self.margin = EdgeInsets::all(value)
+        döndür self
+    son
+son
+
+// ============================================================================
+// FLEX CONTAINER
+// ============================================================================
+
+/// Flexbox container
+pub tip FlexBox = yapı yap
+    /// Temel widget
+    base: WidgetBase,
+    
+    /// Çocuk elemanlar
+    children: liste[FlexItem],
+    
+    /// Flex yönü
+    direction: FlexDirection,
+    
+    /// Ana eksen hizalaması
+    justify_content: JustifyContent,
+    
+    /// Çapraz eksen hizalaması
+    align_items: AlignItems,
+    
+    /// Wrap
+    wrap: FlexWrap,
+    
+    /// Çoklu satır/sütun hizalaması
+    align_content: AlignItems,
+    
+    /// Gap (elemanlar arası boşluk)
+    gap: ondalık,
+    
+    /// Row gap
+    row_gap: ondalık,
+    
+    /// Column gap
+    column_gap: ondalık,
+    
+    /// Padding
+    padding: EdgeInsets,
+    
+    /// Hesaplanmış layout sonuçları
+    layout_cache: liste[Rect]
+son
+
+impl FlexBox:
+    /// Yatay flexbox oluştur
+    pub fn row() döndür FlexBox:
+        döndür FlexBox::new(FlexDirection::Row)
+    son
+    
+    /// Dikey flexbox oluştur
+    pub fn column() döndür FlexBox:
+        döndür FlexBox::new(FlexDirection::Column)
+    son
+    
+    /// Flexbox oluştur
+    pub fn new(direction: FlexDirection) döndür FlexBox:
+        döndür FlexBox yap
+            base: WidgetBase::new(WidgetBase::generate_id()),
+            children: [],
+            direction: direction,
+            justify_content: JustifyContent::Start,
+            align_items: AlignItems::Stretch,
+            wrap: FlexWrap::NoWrap,
+            align_content: AlignItems::Stretch,
+            gap: 0.0,
+            row_gap: 0.0,
+            column_gap: 0.0,
+            padding: EdgeInsets::zero(),
+            layout_cache: []
+        son
+    son
+    
+    // === BUILDER METHODS ===
+    
+    /// Çocuk ekle
+    pub fn add(mut self, item: FlexItem) döndür FlexBox:
+        self.children.push(item)
+        döndür self
+    son
+    
+    /// Widget ekle (otomatik FlexItem)
+    pub fn add_widget(mut self, widget: kutu[dyn Widget]) döndür FlexBox:
+        self.children.push(FlexItem::from_widget(widget))
+        döndür self
+    son
+    
+    /// Birden fazla widget ekle
+    pub fn add_widgets(mut self, widgets: liste[kutu[dyn Widget]]) döndür FlexBox:
+        için widget içinde widgets:
+            self.children.push(FlexItem::from_widget(widget))
+        son
+        döndür self
+    son
+    
+    /// Justify content
+    pub fn justify(mut self, justify: JustifyContent) döndür FlexBox:
+        self.justify_content = justify
+        döndür self
+    son
+    
+    /// Align items
+    pub fn align(mut self, align: AlignItems) döndür FlexBox:
+        self.align_items = align
+        döndür self
+    son
+    
+    /// Gap ayarla
+    pub fn gap(mut self, gap: ondalık) döndür FlexBox:
+        self.gap = gap
+        self.row_gap = gap
+        self.column_gap = gap
+        döndür self
+    son
+    
+    /// Row gap ayarla
+    pub fn row_gap(mut self, gap: ondalık) döndür FlexBox:
+        self.row_gap = gap
+        döndür self
+    son
+    
+    /// Column gap ayarla
+    pub fn column_gap(mut self, gap: ondalık) döndür FlexBox:
+        self.column_gap = gap
+        döndür self
+    son
+    
+    /// Padding ayarla
+    pub fn padding(mut self, padding: EdgeInsets) döndür FlexBox:
+        self.padding = padding
+        döndür self
+    son
+    
+    /// Eşit padding
+    pub fn padding_all(mut self, value: ondalık) döndür FlexBox:
+        self.padding = EdgeInsets::all(value)
+        döndür self
+    son
+    
+    /// Wrap ayarla
+    pub fn wrap(mut self, wrap: FlexWrap) döndür FlexBox:
+        self.wrap = wrap
+        döndür self
+    son
+    
+    /// Ortala (kısayol)
+    pub fn center(mut self) döndür FlexBox:
+        self.justify_content = JustifyContent::Center
+        self.align_items = AlignItems::Center
+        döndür self
+    son
+    
+    /// Space between (kısayol)
+    pub fn space_between(mut self) döndür FlexBox:
+        self.justify_content = JustifyContent::SpaceBetween
+        döndür self
+    son
+    
+    /// Space around (kısayol)
+    pub fn space_around(mut self) döndür FlexBox:
+        self.justify_content = JustifyContent::SpaceAround
+        döndür self
+    son
+    
+    // === LAYOUT CALCULATION ===
+    
+    /// Layout hesapla
+    fn calculate_layout(mut self, available_width: ondalık, available_height: ondalık) döndür void:
+        değişken content_width = available_width - self.padding.left - self.padding.right
+        değişken content_height = available_height - self.padding.top - self.padding.bottom
+        
+        değişken is_row = self.direction == FlexDirection::Row veya self.direction == FlexDirection::RowReverse
+        değişken is_reversed = self.direction == FlexDirection::RowReverse veya self.direction == FlexDirection::ColumnReverse
+        
+        // Ana eksen boyutu
+        değişken main_size = eğer is_row: content_width değilse: content_height son
+        değişken cross_size = eğer is_row: content_height değilse: content_width son
+        
+        // Her çocuğun tercih ettiği boyutunu hesapla
+        değişken item_sizes: liste[(ondalık, ondalık)] = []
+        değişken total_basis = 0.0
+        değişken total_grow = 0.0
+        değişken total_shrink = 0.0
+        
+        için item içinde &self.children:
+            değişken (item_main, item_cross) = self.calculate_item_basis(item, main_size, cross_size, is_row)
+            item_sizes.push((item_main, item_cross))
+            total_basis = total_basis + item_main + item.margin.horizontal()
+            total_grow = total_grow + item.flex_grow
+            total_shrink = total_shrink + item.flex_shrink
+        son
+        
+        // Gap hesapla
+        değişken total_gap = eğer self.children.len() > 1:
+            (self.children.len() - 1) * (eğer is_row: self.column_gap değilse: self.row_gap son)
+        değilse:
+            0.0
+        son
+        
+        total_basis = total_basis + total_gap
+        
+        // Kalan boşluk
+        değişken free_space = main_size - total_basis
+        
+        // Grow/shrink hesapla
+        değişken final_sizes: liste[ondalık] = []
+        
+        için i içinde 0..self.children.len():
+            değişken item = &self.children[i]
+            değişken (basis, _) = item_sizes[i]
+            değişken final_size = basis
+            
+            eğer free_space > 0.0 ve total_grow > 0.0:
+                // Grow
+                final_size = basis + (free_space * item.flex_grow / total_grow)
+            değilse eğer free_space < 0.0 ve total_shrink > 0.0:
+                // Shrink
+                final_size = basis + (free_space * item.flex_shrink / total_shrink)
+            son
+            
+            final_sizes.push(max(0.0, final_size))
+        son
+        
+        // Pozisyonları hesapla
+        değişken start_offset = self.calculate_justify_offset(main_size, final_sizes, total_gap)
+        değişken current_pos = start_offset
+        değişken spacing = self.calculate_justify_spacing(main_size, final_sizes, total_gap)
+        
+        self.layout_cache = []
+        
+        için i içinde 0..self.children.len():
+            değişken item = &self.children[i]
+            değişken main_item_size = final_sizes[i]
+            değişken (_, cross_item_size) = item_sizes[i]
+            
+            // Çapraz eksen boyutu ve pozisyonu
+            değişken (cross_pos, cross_final_size) = self.calculate_cross_position(
+                item, cross_item_size, cross_size
+            )
+            
+            // Rect oluştur
+            değişken rect = eğer is_row:
+                Rect yap
+                    x: self.base.x + self.padding.left + current_pos + item.margin.left,
+                    y: self.base.y + self.padding.top + cross_pos + item.margin.top,
+                    width: main_item_size,
+                    height: cross_final_size
+                son
+            değilse:
+                Rect yap
+                    x: self.base.x + self.padding.left + cross_pos + item.margin.left,
+                    y: self.base.y + self.padding.top + current_pos + item.margin.top,
+                    width: cross_final_size,
+                    height: main_item_size
+                son
+            son
+            
+            self.layout_cache.push(rect)
+            
+            current_pos = current_pos + main_item_size + item.margin.horizontal() + spacing
+            eğer i < self.children.len() - 1:
+                current_pos = current_pos + (eğer is_row: self.column_gap değilse: self.row_gap son)
+            son
+        son
+        
+        // Ters yön için reverse
+        eğer is_reversed:
+            self.layout_cache.reverse()
+        son
+    son
+    
+    /// Item basis hesapla
+    fn calculate_item_basis(self, item: &FlexItem, main_size: ondalık, cross_size: ondalık, is_row: mantıksal) döndür (ondalık, ondalık):
+        değişken constraints = Constraints yap
+            min_width: 0.0,
+            min_height: 0.0,
+            max_width: eğer is_row: main_size değilse: cross_size son,
+            max_height: eğer is_row: cross_size değilse: main_size son
+        son
+        
+        değişken measured = item.widget.measure(constraints)
+        
+        değişken main_basis = eşle item.flex_basis:
+            FlexBasis::Auto => eğer is_row: measured.width değilse: measured.height son,
+            FlexBasis::Pixels(v) => v,
+            FlexBasis::Percent(p) => main_size * p / 100.0
+        son
+        
+        değişken cross_basis = eğer is_row: measured.height değilse: measured.width son
+        
+        döndür (main_basis, cross_basis)
+    son
+    
+    /// Justify offset hesapla
+    fn calculate_justify_offset(self, main_size: ondalık, sizes: liste[ondalık], total_gap: ondalık) döndür ondalık:
+        değişken total_content = 0.0
+        için size içinde &sizes:
+            total_content = total_content + size
+        son
+        total_content = total_content + total_gap
+        
+        eşle self.justify_content:
+            JustifyContent::Start => döndür 0.0,
+            JustifyContent::Center => döndür (main_size - total_content) / 2.0,
+            JustifyContent::End => döndür main_size - total_content,
+            JustifyContent::SpaceBetween | JustifyContent::SpaceAround | JustifyContent::SpaceEvenly => döndür 0.0
+        son
+    son
+    
+    /// Justify spacing hesapla
+    fn calculate_justify_spacing(self, main_size: ondalık, sizes: liste[ondalık], total_gap: ondalık) döndür ondalık:
+        değişken total_content = 0.0
+        için size içinde &sizes:
+            total_content = total_content + size
+        son
+        
+        değişken free_space = main_size - total_content - total_gap
+        değişken item_count = sizes.len()
+        
+        eğer item_count <= 1:
+            döndür 0.0
+        son
+        
+        eşle self.justify_content:
+            JustifyContent::SpaceBetween => döndür free_space / (item_count - 1),
+            JustifyContent::SpaceAround => döndür free_space / item_count,
+            JustifyContent::SpaceEvenly => döndür free_space / (item_count + 1),
+            _ => döndür 0.0
+        son
+    son
+    
+    /// Cross position hesapla
+    fn calculate_cross_position(self, item: &FlexItem, item_cross: ondalık, cross_size: ondalık) döndür (ondalık, ondalık):
+        değişken align = eğer item.align_self != AlignSelf::Auto:
+            eşle item.align_self:
+                AlignSelf::Start => AlignItems::Start,
+                AlignSelf::Center => AlignItems::Center,
+                AlignSelf::End => AlignItems::End,
+                AlignSelf::Stretch => AlignItems::Stretch,
+                AlignSelf::Baseline => AlignItems::Baseline,
+                _ => self.align_items
+            son
+        değilse:
+            self.align_items
+        son
+        
+        eşle align:
+            AlignItems::Start => döndür (0.0, item_cross),
+            AlignItems::Center => döndür ((cross_size - item_cross) / 2.0, item_cross),
+            AlignItems::End => döndür (cross_size - item_cross, item_cross),
+            AlignItems::Stretch => döndür (0.0, cross_size - item.margin.vertical()),
+            AlignItems::Baseline => döndür (0.0, item_cross)  // Basitleştirilmiş
+        son
+    son
+son
+
+// ============================================================================
+// WIDGET IMPLEMENTATION
+// ============================================================================
+
+impl Widget için FlexBox:
+    fn id(self) döndür yazı:
+        döndür self.base.id
+    son
+    
+    fn measure(self, constraints: Constraints) döndür Size:
+        // Basit hesaplama - tüm çocukları topla
+        değişken total_main = 0.0
+        değişken max_cross = 0.0
+        
+        değişken is_row = self.direction == FlexDirection::Row veya self.direction == FlexDirection::RowReverse
+        
+        için item içinde &self.children:
+            değişken child_size = item.widget.measure(constraints)
+            
+            eğer is_row:
+                total_main = total_main + child_size.width + item.margin.horizontal()
+                max_cross = max(max_cross, child_size.height + item.margin.vertical())
+            değilse:
+                total_main = total_main + child_size.height + item.margin.vertical()
+                max_cross = max(max_cross, child_size.width + item.margin.horizontal())
+            son
+        son
+        
+        // Gap ekle
+        eğer self.children.len() > 1:
+            total_main = total_main + (self.children.len() - 1) * self.gap
+        son
+        
+        // Padding ekle
+        total_main = total_main + (eğer is_row: self.padding.horizontal() değilse: self.padding.vertical() son)
+        max_cross = max_cross + (eğer is_row: self.padding.vertical() değilse: self.padding.horizontal() son)
+        
+        eğer is_row:
+            döndür Size yap width: total_main, height: max_cross son
+        değilse:
+            döndür Size yap width: max_cross, height: total_main son
+        son
+    son
+    
+    fn layout(mut self, x: ondalık, y: ondalık, width: ondalık, height: ondalık) döndür void:
+        self.base.x = x
+        self.base.y = y
+        self.base.width = width
+        self.base.height = height
+        
+        // Layout hesapla
+        self.calculate_layout(width, height)
+        
+        // Çocuklara uygula
+        için i içinde 0..self.children.len():
+            eğer i < self.layout_cache.len():
+                değişken rect = &self.layout_cache[i]
+                self.children[i].widget.layout(rect.x, rect.y, rect.width, rect.height)
+            son
+        son
+    son
+    
+    fn bounds(self) döndür Rect:
+        döndür self.base.bounds()
+    son
+    
+    fn update(mut self) döndür void:
+        için item içinde &mut self.children:
+            item.widget.update()
+        son
+    son
+    
+    fn render(self, canvas: Canvas) döndür void:
+        için item içinde &self.children:
+            item.widget.render(canvas)
+        son
+    son
+son
+
+// ============================================================================
+// SPACER
+// ============================================================================
+
+/// Boşluk widget'ı (flexbox için)
+pub tip Spacer = yapı yap
+    base: WidgetBase,
+    flex: ondalık
+son
+
+impl Spacer:
+    /// Esnek spacer
+    pub fn flex(value: ondalık) döndür Spacer:
+        döndür Spacer yap
+            base: WidgetBase::new(WidgetBase::generate_id()),
+            flex: value
+        son
+    son
+    
+    /// Sabit boyutlu spacer
+    pub fn fixed(size: ondalık) döndür Spacer:
+        değişken spacer = Spacer::flex(0.0)
+        spacer.base.width = size
+        spacer.base.height = size
+        döndür spacer
+    son
+    
+    /// Varsayılan (flex: 1)
+    pub fn new() döndür Spacer:
+        döndür Spacer::flex(1.0)
+    son
+son
+
+impl Widget için Spacer:
+    fn id(self) döndür yazı:
+        döndür self.base.id
+    son
+    
+    fn measure(self, constraints: Constraints) döndür Size:
+        döndür Size yap 
+            width: eğer self.flex > 0.0: 0.0 değilse: self.base.width son,
+            height: eğer self.flex > 0.0: 0.0 değilse: self.base.height son
+        son
+    son
+    
+    fn layout(mut self, x: ondalık, y: ondalık, width: ondalık, height: ondalık) döndür void:
+        self.base.x = x
+        self.base.y = y
+        self.base.width = width
+        self.base.height = height
+    son
+    
+    fn bounds(self) döndür Rect:
+        döndür self.base.bounds()
+    son
+    
+    fn update(mut self) döndür void:
+        // Boş
+    son
+    
+    fn render(self, canvas: Canvas) döndür void:
+        // Boş - spacer görünmez
+    son
+son
+
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+fn max(a: ondalık, b: ondalık) döndür ondalık:
+    eğer a > b: döndür a değilse: döndür b son
+son

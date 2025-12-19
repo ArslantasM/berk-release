@@ -1,0 +1,306 @@
+// =============================================================================
+// BERK Standard Library - Testing Module Demo
+// Unit test ve assertion framework
+// =============================================================================
+
+kullan std::testing
+
+yazdır("=== BERK Testing Demo ===\n")
+
+// -----------------------------------------------------------------------------
+// Test Modülü Yapısı
+// -----------------------------------------------------------------------------
+
+yazdır("🧪 Test Yapısı:")
+yazdır("-" * 40)
+
+yazdır("""
+kullan std::testing
+
+// Test modülü tanımla
+test_modul "Math Testleri" yap
+    
+    test "toplama doğru çalışmalı" yap
+        testing::assert_eq(2 + 2, 4)
+        testing::assert_eq(0 + 0, 0)
+        testing::assert_eq(-1 + 1, 0)
+    son
+    
+    test "çarpma doğru çalışmalı" yap
+        testing::assert_eq(3 * 4, 12)
+        testing::assert_eq(0 * 100, 0)
+    son
+    
+    test "bölme doğru çalışmalı" yap
+        testing::assert_eq(10 / 2, 5)
+        testing::assert_float_eq(7.0 / 2.0, 3.5, 0.001)
+    son
+    
+son
+""")
+
+// -----------------------------------------------------------------------------
+// Assertion Türleri
+// -----------------------------------------------------------------------------
+
+yazdır("\n✅ Assertion Türleri:")
+yazdır("-" * 40)
+
+yazdır("""
+// Eşitlik
+testing::assert_eq(gerçek, beklenen)
+testing::assert_ne(a, b)  // eşit değil
+
+// Boolean
+testing::assert_true(koşul)
+testing::assert_false(koşul)
+
+// Null kontrolü
+testing::assert_null(değer)
+testing::assert_not_null(değer)
+
+// Float karşılaştırma (tolerans ile)
+testing::assert_float_eq(3.14159, 3.14, 0.01)
+
+// String içerir
+testing::assert_contains("Merhaba Dünya", "Dünya")
+testing::assert_starts_with("BERK", "BE")
+testing::assert_ends_with("test.berk", ".berk")
+
+// Array/List
+testing::assert_len([1, 2, 3], 3)
+testing::assert_empty([])
+testing::assert_not_empty([1, 2])
+testing::assert_contains_item([1, 2, 3], 2)
+
+// Sıralama
+testing::assert_gt(5, 3)    // 5 > 3
+testing::assert_gte(5, 5)   // 5 >= 5
+testing::assert_lt(3, 5)    // 3 < 5
+testing::assert_lte(3, 3)   // 3 <= 3
+
+// Range
+testing::assert_in_range(5, 1, 10)
+
+// Type kontrolü
+testing::assert_type(değer, "string")
+""")
+
+// -----------------------------------------------------------------------------
+// Exception Testleri
+// -----------------------------------------------------------------------------
+
+yazdır("\n💥 Exception Testleri:")
+yazdır("-" * 40)
+
+yazdır("""
+test "sıfıra bölme hata vermeli" yap
+    testing::assert_throws(fonksiyon() yap
+        olsun x = 10 / 0
+    son)
+son
+
+test "geçersiz index hata vermeli" yap
+    testing::assert_throws_type(fonksiyon() yap
+        olsun arr = [1, 2, 3]
+        olsun x = arr[10]
+    son, "IndexOutOfBounds")
+son
+
+test "hata mesajını kontrol et" yap
+    testing::assert_throws_message(fonksiyon() yap
+        panic("Özel hata mesajı")
+    son, "Özel hata")
+son
+""")
+
+// -----------------------------------------------------------------------------
+// Test Fixture (Setup/Teardown)
+// -----------------------------------------------------------------------------
+
+yazdır("\n🔧 Test Fixture:")
+yazdır("-" * 40)
+
+yazdır("""
+test_modul "Database Testleri" yap
+    
+    olsun db = boş
+    
+    setup yap
+        // Her testten önce çalışır
+        db = database::connect("test.db")
+        database::execute(db, "CREATE TABLE users (id INT, name TEXT)")
+    son
+    
+    teardown yap
+        // Her testten sonra çalışır
+        database::execute(db, "DROP TABLE users")
+        database::close(db)
+    son
+    
+    test "kullanıcı ekle" yap
+        database::execute(db, "INSERT INTO users VALUES (1, 'Test')")
+        olsun sayı = database::query_one(db, "SELECT COUNT(*) FROM users")
+        testing::assert_eq(sayı, 1)
+    son
+    
+    test "kullanıcı sil" yap
+        database::execute(db, "INSERT INTO users VALUES (1, 'Test')")
+        database::execute(db, "DELETE FROM users WHERE id = 1")
+        olsun sayı = database::query_one(db, "SELECT COUNT(*) FROM users")
+        testing::assert_eq(sayı, 0)
+    son
+    
+son
+""")
+
+// -----------------------------------------------------------------------------
+// Parametreli Testler
+// -----------------------------------------------------------------------------
+
+yazdır("\n📋 Parametreli Testler:")
+yazdır("-" * 40)
+
+yazdır("""
+test_parametreli "fibonacci hesaplama" [
+    [0, 0],
+    [1, 1],
+    [2, 1],
+    [5, 5],
+    [10, 55]
+] yap |n, beklenen|
+    olsun sonuc = fibonacci(n)
+    testing::assert_eq(sonuc, beklenen)
+son
+
+test_parametreli "string uzunluk" [
+    ["", 0],
+    ["a", 1],
+    ["merhaba", 7],
+    ["BERK dili", 9]
+] yap |metin, beklenen|
+    testing::assert_eq(metin.uzunluk(), beklenen)
+son
+""")
+
+// -----------------------------------------------------------------------------
+// Mock ve Stub
+// -----------------------------------------------------------------------------
+
+yazdır("\n🎭 Mock ve Stub:")
+yazdır("-" * 40)
+
+yazdır("""
+test "API çağrısı mock ile" yap
+    // Mock oluştur
+    olsun mock_api = testing::mock("http::get")
+    
+    // Beklenen davranışı tanımla
+    testing::when(mock_api)
+        .called_with("https://api.example.com/data")
+        .returns({"status": 200, "data": "test"})
+    
+    // Test et
+    olsun sonuc = fetch_data()
+    testing::assert_eq(sonuc.data, "test")
+    
+    // Doğrula
+    testing::verify(mock_api).was_called_once()
+son
+
+test "spy ile çağrı izleme" yap
+    olsun spy = testing::spy(logger::log)
+    
+    // Fonksiyonu çağır
+    do_something()
+    
+    // Kontrol et
+    testing::assert_true(spy.was_called())
+    testing::assert_eq(spy.call_count(), 3)
+    testing::assert_eq(spy.last_call_args()[0], "İşlem tamamlandı")
+son
+""")
+
+// -----------------------------------------------------------------------------
+// Benchmark Testleri
+// -----------------------------------------------------------------------------
+
+yazdır("\n⏱️  Benchmark Testleri:")
+yazdır("-" * 40)
+
+yazdır("""
+benchmark "sıralama performansı" yap
+    olsun arr = testing::random_array(10000)
+    
+    testing::measure(fonksiyon() yap
+        quick_sort(arr.clone())
+    son)
+son
+
+benchmark "string birleştirme" iterations: 1000 yap
+    olsun s = ""
+    döngü _ için 0..100 yap
+        s = s + "x"
+    son
+son
+
+// Benchmark sonuçları
+// ┌─────────────────────────────┬──────────┬──────────┐
+// │ Benchmark                   │ Ortalama │ Std Dev  │
+// ├─────────────────────────────┼──────────┼──────────┤
+// │ sıralama performansı        │ 12.5 ms  │ 0.8 ms   │
+// │ string birleştirme          │ 0.15 ms  │ 0.02 ms  │
+// └─────────────────────────────┴──────────┴──────────┘
+""")
+
+// -----------------------------------------------------------------------------
+// Test Çalıştırma
+// -----------------------------------------------------------------------------
+
+yazdır("\n🚀 Test Çalıştırma:")
+yazdır("-" * 40)
+
+yazdır("""
+# Tüm testleri çalıştır
+berk test
+
+# Belirli modülü test et
+berk test math_tests
+
+# Belirli testi çalıştır
+berk test --filter "toplama"
+
+# Verbose çıktı
+berk test --verbose
+
+# Coverage raporu
+berk test --coverage
+
+# Paralel çalıştırma
+berk test --parallel 4
+
+# JUnit XML çıktısı
+berk test --output junit.xml
+""")
+
+yazdır("""
+Test Sonuç Çıktısı:
+────────────────────────────────────────
+🧪 Math Testleri
+  ✅ toplama doğru çalışmalı (0.2 ms)
+  ✅ çarpma doğru çalışmalı (0.1 ms)
+  ✅ bölme doğru çalışmalı (0.3 ms)
+
+🧪 String Testleri
+  ✅ uzunluk kontrolü (0.1 ms)
+  ❌ boş string kontrolü (0.1 ms)
+     Expected: 0, Got: 1
+     at tests/string_test.berk:15
+
+────────────────────────────────────────
+Sonuç: 4 passed, 1 failed, 0 skipped
+Süre: 0.8 ms
+Coverage: 85%
+""")
+
+yazdır("\n✅ Testing demo tamamlandı!")

@@ -1,0 +1,373 @@
+// stdlib/ai/rl.berk
+// Reinforcement Learning Library
+// DQN, PPO, A3C, SAC implementations
+// 
+// Özellikler:
+// - Deep Q-Network (DQN, Double DQN, Dueling DQN)
+// - Policy Gradient (REINFORCE, A2C, A3C, PPO)
+// - Actor-Critic algorithms (SAC, TD3, DDPG)
+// - Experience replay buffers
+// - Gym-compatible environment interface
+
+import "ai/tensor" as tensor
+import "ai/nn" as nn
+import "collections" as collections
+import "random" as random
+
+/// Environment interface (OpenAI Gym compatible)
+pub trait Environment {
+    /// Reset environment to initial state
+    fn reset(self) -> tensor.Tensor
+    
+    /// Take action and return (next_state, reward, done, info)
+    fn step(self, action: tensor.Tensor) -> (tensor.Tensor, f32, bool, collections.Map<str, Any>)
+    
+    /// Get action space size
+    fn action_space_size(self) -> u32
+    
+    /// Get observation space shape
+    fn observation_space_shape(self) -> [u32]
+    
+    /// Render environment (optional)
+    fn render(self) {}
+}
+
+/// Experience replay buffer
+pub struct ReplayBuffer {
+    capacity: u32,
+    position: u32,
+    size: u32,
+    states: [tensor.Tensor],
+    actions: [tensor.Tensor],
+    rewards: [f32],
+    next_states: [tensor.Tensor],
+    dones: [bool],
+}
+
+impl ReplayBuffer {
+    /// Create replay buffer
+    pub fn new(capacity: u32) -> ReplayBuffer {
+        ReplayBuffer {
+            capacity: capacity,
+            position: 0,
+            size: 0,
+            states: [],
+            actions: [],
+            rewards: [],
+            next_states: [],
+            dones: [],
+        }
+    }
+    
+    /// Add experience
+    pub fn push(mut self, state: tensor.Tensor, action: tensor.Tensor, 
+                reward: f32, next_state: tensor.Tensor, done: bool) {
+        if self.size < self.capacity {
+            self.states.push(state)
+            self.actions.push(action)
+            self.rewards.push(reward)
+            self.next_states.push(next_state)
+            self.dones.push(done)
+            self.size += 1
+        } else {
+            self.states[self.position] = state
+            self.actions[self.position] = action
+            self.rewards[self.position] = reward
+            self.next_states[self.position] = next_state
+            self.dones[self.position] = done
+        }
+        self.position = (self.position + 1) % self.capacity
+    }
+    
+    /// Sample batch
+    @native("rl::replay_buffer_sample")
+    pub fn sample(self, batch_size: u32) -> (tensor.Tensor, tensor.Tensor, tensor.Tensor, 
+                                               tensor.Tensor, tensor.Tensor) {
+        // Returns (states, actions, rewards, next_states, dones)
+    }
+    
+    /// Get buffer size
+    pub fn len(self) -> u32 { self.size }
+}
+
+/// Deep Q-Network (DQN)
+pub mod dqn {
+    use tensor.Tensor
+    use nn.Module
+    
+    /// DQN configuration
+    pub struct DQNConfig {
+        pub state_dim: u32,
+        pub action_dim: u32,
+        pub hidden_dims: [u32],
+        pub learning_rate: f32,
+        pub gamma: f32,              // Discount factor
+        pub epsilon_start: f32,      // Exploration rate
+        pub epsilon_end: f32,
+        pub epsilon_decay: f32,
+        pub target_update_freq: u32,
+        pub batch_size: u32,
+        pub buffer_size: u32,
+    }
+    
+    /// DQN agent
+    pub struct DQNAgent {
+        config: DQNConfig,
+        q_network: Module,
+        target_network: Module,
+        replay_buffer: super.ReplayBuffer,
+        epsilon: f32,
+        steps: u32,
+    }
+    
+    impl DQNAgent {
+        /// Create DQN agent
+        @native("rl::dqn_new")
+        pub fn new(config: DQNConfig) -> DQNAgent {
+            // Initialize Q-network and target network
+        }
+        
+        /// Select action (epsilon-greedy)
+        @native("rl::dqn_select_action")
+        pub fn select_action(self, state: Tensor, eval_mode: bool = false) -> u32 {
+            // Returns action index
+        }
+        
+        /// Update agent
+        @native("rl::dqn_update")
+        pub fn update(mut self) -> f32 {
+            // Returns loss
+            // Sample batch from replay buffer
+            // Compute TD error
+            // Update Q-network
+        }
+        
+        /// Train for N episodes
+        @native("rl::dqn_train")
+        pub fn train(mut self, env: &dyn super.Environment, num_episodes: u32) -> [f32] {
+            // Returns list of episode rewards
+        }
+    }
+}
+
+/// Proximal Policy Optimization (PPO)
+pub mod ppo {
+    use tensor.Tensor
+    use nn.Module
+    
+    /// PPO configuration
+    pub struct PPOConfig {
+        pub state_dim: u32,
+        pub action_dim: u32,
+        pub hidden_dims: [u32],
+        pub learning_rate: f32,
+        pub gamma: f32,
+        pub gae_lambda: f32,         // GAE parameter
+        pub clip_epsilon: f32,       // PPO clip parameter
+        pub value_coef: f32,         // Value loss coefficient
+        pub entropy_coef: f32,       // Entropy bonus coefficient
+        pub max_grad_norm: f32,      // Gradient clipping
+        pub num_epochs: u32,         // Update epochs per batch
+        pub batch_size: u32,
+        pub num_steps: u32,          // Steps per update
+    }
+    
+    /// PPO agent
+    pub struct PPOAgent {
+        config: PPOConfig,
+        actor: Module,               // Policy network
+        critic: Module,              // Value network
+        rollout_buffer: RolloutBuffer,
+    }
+    
+    /// Rollout buffer for PPO
+    struct RolloutBuffer {
+        states: [Tensor],
+        actions: [Tensor],
+        rewards: [f32],
+        values: [f32],
+        log_probs: [f32],
+        dones: [bool],
+    }
+    
+    impl PPOAgent {
+        /// Create PPO agent
+        @native("rl::ppo_new")
+        pub fn new(config: PPOConfig) -> PPOAgent {}
+        
+        /// Select action
+        @native("rl::ppo_select_action")
+        pub fn select_action(self, state: Tensor) -> (u32, f32, f32) {
+            // Returns (action, log_prob, value)
+        }
+        
+        /// Compute advantages using GAE
+        @native("rl::ppo_compute_advantages")
+        fn compute_advantages(self) -> (Tensor, Tensor) {
+            // Returns (advantages, returns)
+        }
+        
+        /// Update agent
+        @native("rl::ppo_update")
+        pub fn update(mut self) -> (f32, f32, f32) {
+            // Returns (policy_loss, value_loss, entropy)
+        }
+        
+        /// Train for N episodes
+        @native("rl::ppo_train")
+        pub fn train(mut self, env: &dyn super.Environment, num_episodes: u32) -> [f32] {
+            // Returns list of episode rewards
+        }
+    }
+}
+
+/// Soft Actor-Critic (SAC) for continuous control
+pub mod sac {
+    use tensor.Tensor
+    use nn.Module
+    
+    /// SAC configuration
+    pub struct SACConfig {
+        pub state_dim: u32,
+        pub action_dim: u32,
+        pub hidden_dims: [u32],
+        pub learning_rate: f32,
+        pub gamma: f32,
+        pub tau: f32,                // Soft update parameter
+        pub alpha: f32,              // Temperature parameter
+        pub automatic_entropy_tuning: bool,
+        pub batch_size: u32,
+        pub buffer_size: u32,
+    }
+    
+    /// SAC agent
+    pub struct SACAgent {
+        config: SACConfig,
+        actor: Module,               // Policy network
+        critic1: Module,             // Q-network 1
+        critic2: Module,             // Q-network 2
+        target_critic1: Module,
+        target_critic2: Module,
+        replay_buffer: super.ReplayBuffer,
+    }
+    
+    impl SACAgent {
+        /// Create SAC agent
+        @native("rl::sac_new")
+        pub fn new(config: SACConfig) -> SACAgent {}
+        
+        /// Select action
+        @native("rl::sac_select_action")
+        pub fn select_action(self, state: Tensor, eval_mode: bool = false) -> Tensor {
+            // Returns continuous action
+        }
+        
+        /// Update agent
+        @native("rl::sac_update")
+        pub fn update(mut self) -> (f32, f32, f32) {
+            // Returns (policy_loss, q1_loss, q2_loss)
+        }
+        
+        /// Train for N episodes
+        @native("rl::sac_train")
+        pub fn train(mut self, env: &dyn super.Environment, num_episodes: u32) -> [f32] {
+            // Returns list of episode rewards
+        }
+    }
+}
+
+/// Built-in environments
+pub mod envs {
+    use tensor.Tensor
+    
+    /// CartPole environment
+    pub struct CartPole {
+        state: Tensor,
+        steps: u32,
+        max_steps: u32,
+    }
+    
+    impl CartPole {
+        @native("rl::cartpole_new")
+        pub fn new() -> CartPole {}
+    }
+    
+    impl super.Environment for CartPole {
+        @native("rl::cartpole_reset")
+        fn reset(mut self) -> Tensor {}
+        
+        @native("rl::cartpole_step")
+        fn step(mut self, action: Tensor) -> (Tensor, f32, bool, collections.Map<str, Any>) {}
+        
+        fn action_space_size(self) -> u32 { 2 }  // Left, Right
+        fn observation_space_shape(self) -> [u32] { [4] }  // [x, x_dot, theta, theta_dot]
+    }
+    
+    /// Mountain Car environment
+    pub struct MountainCar {
+        state: Tensor,
+        steps: u32,
+    }
+    
+    impl MountainCar {
+        @native("rl::mountaincar_new")
+        pub fn new() -> MountainCar {}
+    }
+    
+    impl super.Environment for MountainCar {
+        @native("rl::mountaincar_reset")
+        fn reset(mut self) -> Tensor {}
+        
+        @native("rl::mountaincar_step")
+        fn step(mut self, action: Tensor) -> (Tensor, f32, bool, collections.Map<str, Any>) {}
+        
+        fn action_space_size(self) -> u32 { 3 }  // Left, None, Right
+        fn observation_space_shape(self) -> [u32] { [2] }  // [position, velocity]
+    }
+}
+
+/// Example usage:
+/// ```berk
+/// import "ai/rl" as rl
+/// 
+/// // DQN for CartPole
+/// let config = rl.dqn.DQNConfig {
+///     state_dim: 4,
+///     action_dim: 2,
+///     hidden_dims: [128, 128],
+///     learning_rate: 0.001,
+///     gamma: 0.99,
+///     epsilon_start: 1.0,
+///     epsilon_end: 0.01,
+///     epsilon_decay: 0.995,
+///     target_update_freq: 10,
+///     batch_size: 64,
+///     buffer_size: 10000,
+/// }
+/// 
+/// let mut agent = rl.dqn.DQNAgent.new(config)
+/// let env = rl.envs.CartPole.new()
+/// 
+/// let rewards = agent.train(&env, 500)
+/// yaz("Average reward: {:.2f}", rewards.iter().sum() / rewards.len() as f32)
+/// 
+/// // PPO for continuous control
+/// let ppo_config = rl.ppo.PPOConfig {
+///     state_dim: 4,
+///     action_dim: 2,
+///     hidden_dims: [256, 256],
+///     learning_rate: 0.0003,
+///     gamma: 0.99,
+///     gae_lambda: 0.95,
+///     clip_epsilon: 0.2,
+///     value_coef: 0.5,
+///     entropy_coef: 0.01,
+///     max_grad_norm: 0.5,
+///     num_epochs: 10,
+///     batch_size: 64,
+///     num_steps: 2048,
+/// }
+/// 
+/// let mut ppo_agent = rl.ppo.PPOAgent.new(ppo_config)
+/// let ppo_rewards = ppo_agent.train(&env, 1000)
+/// ```

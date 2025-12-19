@@ -1,0 +1,249 @@
+// ============================================
+// BERK Standart Kütüphanesi - Math Modülü
+// ============================================
+// Matematiksel işlemler için temel fonksiyonlar
+//
+// Kullanım:
+//   kullan math
+//   değişken sonuç = math::abs(-5)
+// ============================================
+
+// Mutlak değer (tam sayı)
+fonksiyon abs(sayı: tamsayı) -> tamsayı
+yap
+    eğer sayı < 0 ise yap
+        dön -sayı
+    değilse yap
+        dön sayı
+    son
+son
+
+// Maksimum değer (tam sayı)
+fonksiyon max(a: tamsayı, b: tamsayı) -> tamsayı
+yap
+    eğer a > b ise yap
+        dön a
+    değilse yap
+        dön b
+    son
+son
+
+// Minimum değer (tam sayı)
+fonksiyon min(a: tamsayı, b: tamsayı) -> tamsayı
+yap
+    eğer a < b ise yap
+        dön a
+    değilse yap
+        dön b
+    son
+son
+
+// Üs alma (pozitif üs için)
+fonksiyon üs(taban: tamsayı, üs: tamsayı) -> tamsayı
+yap
+    eğer üs == 0 ise yap
+        dön 1
+    son
+    
+    değişken sonuç = taban
+    değişken i = 1
+    iken i < üs
+    yap
+        sonuç = sonuç * taban
+        i = i + 1
+    son
+    
+    dön sonuç
+son
+
+// Faktöriyel hesaplama
+fonksiyon faktöriyel(n: tamsayı) -> tamsayı
+yap
+    eğer n <= 1 ise yap
+        dön 1
+    değilse yap
+        dön n * faktöriyel(n - 1)
+    son
+son
+
+// Karekök (Newton yöntemi ile yaklaşık)
+fonksiyon karekök(sayı: tamsayı) -> tamsayı
+yap
+    eğer sayı <= 0 ise yap
+        dön 0
+    son
+    
+    değişken tahmin = sayı / 2
+    değişken önceki = 0
+    değişken sayaç = 0
+    
+    iken (tahmin != önceki) ve (sayaç < 20)
+    yap
+        önceki = tahmin
+        tahmin = (tahmin + (sayı / tahmin)) / 2
+        sayaç = sayaç + 1
+    son
+    
+    dön tahmin
+son
+
+// Fibonacci (n. terim)
+fonksiyon fibonacci(n: tamsayı) -> tamsayı
+yap
+    eğer n <= 1 ise yap
+        dön n
+    son
+    
+    değişken a = 0
+    değişken b = 1
+    değişken i = 2
+    
+    iken i <= n
+    yap
+        değişken temp = a + b
+        a = b
+        b = temp
+        i = i + 1
+    son
+    
+    dön b
+son
+
+// Asal sayı kontrolü
+fonksiyon asal_mi(n: tamsayı) -> mantıksal
+yap
+    eğer n <= 1 ise yap
+        dön yanlış
+    son
+    eğer n == 2 ise yap
+        dön doğru
+    son
+    eğer n % 2 == 0 ise yap
+        dön yanlış
+    son
+    
+    değişken i = 3
+    iken i * i <= n
+    yap
+        eğer n % i == 0 ise yap
+            dön yanlış
+        son
+        i = i + 2
+    son
+    
+    dön doğru
+son
+
+// EBOB (En Büyük Ortak Bölen)
+fonksiyon ebob(a: tamsayı, b: tamsayı) -> tamsayı
+yap
+    iken b != 0
+    yap
+        değişken temp = b
+        b = a % b
+        a = temp
+    son
+    dön a
+son
+
+// EKOK (En Küçük Ortak Kat)
+fonksiyon ekok(a: tamsayı, b: tamsayı) -> tamsayı
+yap
+    dön (a * b) / ebob(a, b)
+son
+
+// ============================================
+// Float işlemleri
+// ============================================
+
+// Mutlak değer (ondalık)
+fonksiyon abs_float(sayı: ondalık) -> ondalık
+yap
+    eğer sayı < 0.0 ise yap
+        dön -sayı
+    değilse yap
+        dön sayı
+    son
+son
+
+// Maksimum değer (ondalık)
+fonksiyon max_float(a: ondalık, b: ondalık) -> ondalık
+yap
+    eğer a > b ise yap
+        dön a
+    değilse yap
+        dön b
+    son
+son
+
+// Minimum değer (ondalık)
+fonksiyon min_float(a: ondalık, b: ondalık) -> ondalık
+yap
+    eğer a < b ise yap
+        dön a
+    değilse yap
+        dön b
+    son
+son
+
+// ============================================
+// English Version
+// ============================================
+
+// Absolute value (integer)
+function absolute(num: integer) -> integer
+do
+    if num < 0 then do
+        return -num
+    else do
+        return num
+    end
+end
+
+// Maximum value (integer)
+function maximum(a: integer, b: integer) -> integer
+do
+    if a > b then do
+        return a
+    else do
+        return b
+    end
+end
+
+// Minimum value (integer)
+function minimum(a: integer, b: integer) -> integer
+do
+    if a < b then do
+        return a
+    else do
+        return b
+    end
+end
+
+// Power (positive exponent)
+function power(base: integer, exp: integer) -> integer
+do
+    if exp == 0 then do
+        return 1
+    end
+    
+    let result = base
+    let i = 1
+    while i < exp
+    do
+        result = result * base
+        i = i + 1
+    end
+    
+    return result
+end
+
+// Factorial calculation
+function factorial(n: integer) -> integer
+do
+    if n <= 1 then do
+        return 1
+    else do
+        return n * factorial(n - 1)
+    end
+end

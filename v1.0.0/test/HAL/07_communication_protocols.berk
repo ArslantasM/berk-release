@@ -1,0 +1,350 @@
+/// ═══════════════════════════════════════════════════════════════════════════
+/// BERK HAL - Communication Protocols Demo
+/// I2C, SPI, UART Protokolleri
+/// ═══════════════════════════════════════════════════════════════════════════
+
+kullan std::io
+kullan std::stm32
+kullan std::hal
+
+yaz("============================================================")
+yaz("         HAL Demo: Communication Protocols                  ")
+yaz("         I2C, SPI, UART Arayuzleri                          ")
+yaz("============================================================")
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BOLUM 1: I2C (Inter-Integrated Circuit) Protokolu
+// ═══════════════════════════════════════════════════════════════════════════
+
+yaz("\n--- BOLUM 1: I2C Protokolu ---")
+
+değişken I2C_SDA = 20   // SDA pin (PB9 vb.)
+değişken I2C_SCL = 21   // SCL pin (PB8 vb.)
+değişken I2C_FREQ = 400000  // 400 kHz Fast Mode
+
+yaz("\n   I2C Konfigurasyonu:")
+yaz("   - SDA: Pin ", I2C_SDA)
+yaz("   - SCL: Pin ", I2C_SCL)
+yaz("   - Hiz: ", I2C_FREQ / 1000, " kHz")
+
+yaz("\n   I2C Modlari:")
+yaz("   ┌────────────────┬──────────────┐")
+yaz("   │ Mod            │ Hiz          │")
+yaz("   ├────────────────┼──────────────┤")
+yaz("   │ Standard       │ 100 kHz      │")
+yaz("   │ Fast Mode      │ 400 kHz      │")
+yaz("   │ Fast Mode Plus │ 1 MHz        │")
+yaz("   │ High Speed     │ 3.4 MHz      │")
+yaz("   └────────────────┴──────────────┘")
+
+// Yaygin I2C cihaz adresleri
+yaz("\n   Yaygin I2C Cihaz Adresleri:")
+yaz("   ┌────────────────┬───────────┬────────────────────┐")
+yaz("   │ Cihaz          │ Adres     │ Aciklama           │")
+yaz("   ├────────────────┼───────────┼────────────────────┤")
+yaz("   │ OLED SSD1306   │ 0x3C/0x3D │ 128x64 OLED Ekran  │")
+yaz("   │ BMP280/BME280  │ 0x76/0x77 │ Basinc/Nem Sensoru │")
+yaz("   │ MPU6050        │ 0x68/0x69 │ 6-Eksen IMU        │")
+yaz("   │ DS3231         │ 0x68      │ RTC Saat           │")
+yaz("   │ EEPROM 24C32   │ 0x50-0x57 │ 4KB EEPROM         │")
+yaz("   │ PCA9685        │ 0x40-0x7F │ 16-CH PWM          │")
+yaz("   │ ADS1115        │ 0x48-0x4B │ 16-bit ADC         │")
+yaz("   └────────────────┴───────────┴────────────────────┘")
+
+// I2C fonksiyonlari
+fonksiyon i2c_baslat(sda: tamsayı, scl: tamsayı, frekans: tamsayı) -> doğruyanlış yap
+    yaz("   I2C Baslatildi: SDA=", sda, " SCL=", scl, " @ ", frekans/1000, " kHz")
+    dön doğru
+son
+
+fonksiyon i2c_yaz(adres: tamsayı, kayit: tamsayı, veri: tamsayı) -> doğruyanlış yap
+    yaz("   I2C Yazma: [0x", adres, "] Kayit 0x", kayit, " <- 0x", veri)
+    dön doğru
+son
+
+fonksiyon i2c_oku(adres: tamsayı, kayit: tamsayı) -> tamsayı yap
+    yaz("   I2C Okuma: [0x", adres, "] Kayit 0x", kayit)
+    dön 0x55  // Ornek veri
+son
+
+fonksiyon i2c_toplu_oku(adres: tamsayı, baslangic_kayit: tamsayı, uzunluk: tamsayı) yap
+    yaz("   I2C Toplu Okuma: [0x", adres, "] Kayit 0x", baslangic_kayit, " uzunluk=", uzunluk)
+son
+
+fonksiyon i2c_tara() yap
+    yaz("\n   I2C Bus Tarama:")
+    yaz("      0  1  2  3  4  5  6  7  8  9  A  B  C  D  E  F")
+    // Tum 7-bit adresleri tara (0x08-0x77)
+    yaz("   0x50: -- -- -- -- -- -- -- 57 -- -- -- -- -- -- -- --")
+    yaz("   0x60: -- -- -- -- -- -- -- -- 68 -- -- -- -- -- -- --")
+    yaz("   0x70: -- -- -- -- -- -- 76 -- -- -- -- -- -- -- -- --")
+    yaz("   3 cihaz bulundu: 0x57, 0x68, 0x76")
+son
+
+// I2C Test
+yaz("\n   I2C Test:")
+i2c_baslat(I2C_SDA, I2C_SCL, I2C_FREQ)
+i2c_tara()
+
+// BMP280 Basinc Sensoru ornegi
+yaz("\n   Ornek: BMP280 Okuma")
+değişken BMP280_ADDR = 0x76
+olsun chip_id = i2c_oku(BMP280_ADDR, 0xD0)
+yaz("   BMP280 Chip ID: ", chip_id)
+i2c_toplu_oku(BMP280_ADDR, 0xF7, 6)  // Basinc + Sicaklik verileri
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BOLUM 2: SPI (Serial Peripheral Interface) Protokolu
+// ═══════════════════════════════════════════════════════════════════════════
+
+yaz("\n--- BOLUM 2: SPI Protokolu ---")
+
+değişken SPI_SCK = 13    // Clock
+değişken SPI_MOSI = 11   // Master Out Slave In
+değişken SPI_MISO = 12   // Master In Slave Out
+değişken SPI_CS = 10     // Chip Select
+
+yaz("\n   SPI Pinleri:")
+yaz("   - SCK:  Pin ", SPI_SCK)
+yaz("   - MOSI: Pin ", SPI_MOSI)
+yaz("   - MISO: Pin ", SPI_MISO)
+yaz("   - CS:   Pin ", SPI_CS)
+
+yaz("\n   SPI Modlari (CPOL/CPHA):")
+yaz("   ┌──────┬──────┬──────┬────────────────────────────┐")
+yaz("   │ Mod  │ CPOL │ CPHA │ Aciklama                   │")
+yaz("   ├──────┼──────┼──────┼────────────────────────────┤")
+yaz("   │  0   │  0   │  0   │ Idle LOW, Sample Rising    │")
+yaz("   │  1   │  0   │  1   │ Idle LOW, Sample Falling   │")
+yaz("   │  2   │  1   │  0   │ Idle HIGH, Sample Falling  │")
+yaz("   │  3   │  1   │  1   │ Idle HIGH, Sample Rising   │")
+yaz("   └──────┴──────┴──────┴────────────────────────────┘")
+
+// SPI fonksiyonlari
+fonksiyon spi_baslat(frekans: tamsayı, mod: tamsayı) yap
+    yaz("   SPI Baslatildi: ", frekans/1000000, " MHz, Mod ", mod)
+son
+
+fonksiyon spi_transfer(veri: tamsayı) -> tamsayı yap
+    // Ayni anda yaz ve oku
+    dön 0xAA  // Ornek yanit
+son
+
+fonksiyon spi_yaz_oku(gonder: tamsayı) -> tamsayı yap
+    yaz("   SPI Transfer: TX=0x", gonder)
+    olsun rx = spi_transfer(gonder)
+    yaz("              RX=0x", rx)
+    dön rx
+son
+
+fonksiyon cs_low() yap
+    yaz("   CS -> LOW (Cihaz secildi)")
+son
+
+fonksiyon cs_high() yap
+    yaz("   CS -> HIGH (Cihaz serbest)")
+son
+
+// SPI Test - SD Kart okuma ornegi
+yaz("\n   Ornek: SD Kart SPI Iletisimi")
+spi_baslat(4000000, 0)  // 4 MHz, Mode 0
+
+yaz("\n   SD Kart CMD0 (Reset):")
+cs_low()
+spi_yaz_oku(0x40)  // CMD0
+spi_yaz_oku(0x00)
+spi_yaz_oku(0x00)
+spi_yaz_oku(0x00)
+spi_yaz_oku(0x00)
+spi_yaz_oku(0x95)  // CRC
+cs_high()
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BOLUM 3: UART (Universal Asynchronous Receiver/Transmitter)
+// ═══════════════════════════════════════════════════════════════════════════
+
+yaz("\n--- BOLUM 3: UART Protokolu ---")
+
+değişken UART_TX = 1
+değişken UART_RX = 0
+değişken BAUD_RATE = 115200
+
+yaz("\n   UART Konfigurasyonu:")
+yaz("   - TX: Pin ", UART_TX)
+yaz("   - RX: Pin ", UART_RX)
+yaz("   - Baud Rate: ", BAUD_RATE)
+yaz("   - Data Bits: 8")
+yaz("   - Parity: None")
+yaz("   - Stop Bits: 1")
+
+yaz("\n   Yaygin Baud Rate'ler:")
+yaz("   ┌────────────┬────────────────────────┐")
+yaz("   │ Baud Rate  │ Kullanim               │")
+yaz("   ├────────────┼────────────────────────┤")
+yaz("   │ 9600       │ GPS, Bluetooth Classic │")
+yaz("   │ 115200     │ Debug, Genel amacli    │")
+yaz("   │ 921600     │ Yuksek hiz debug       │")
+yaz("   │ 1000000    │ 1 Mbps (ozel cihazlar) │")
+yaz("   └────────────┴────────────────────────┘")
+
+// UART fonksiyonlari
+fonksiyon uart_baslat(baud: tamsayı) yap
+    yaz("   UART Baslatildi: ", baud, " baud")
+son
+
+fonksiyon uart_yaz_byte(veri: tamsayı) yap
+    yaz("   UART TX: 0x", veri)
+son
+
+fonksiyon uart_oku_byte() -> tamsayı yap
+    dön 0x48  // 'H' karakteri
+son
+
+fonksiyon uart_yaz_metin(metin: metin) yap
+    yaz("   UART TX: '", metin, "'")
+son
+
+fonksiyon uart_oku_satir() -> metin yap
+    dön "OK"
+son
+
+fonksiyon uart_musait() -> doğruyanlış yap
+    dön doğru
+son
+
+// UART Test - AT Komutlari
+yaz("\n   Ornek: ESP8266 AT Komutlari")
+uart_baslat(115200)
+
+yaz("\n   WiFi Modulu Test:")
+uart_yaz_metin("AT")
+yaz("   <- ", uart_oku_satir())
+
+uart_yaz_metin("AT+GMR")
+yaz("   <- AT version:1.7.4")
+
+uart_yaz_metin("AT+CWMODE=1")
+yaz("   <- OK (Station Mode)")
+
+uart_yaz_metin("AT+CWLAP")
+yaz("   <- +CWLAP:(4,\"MyWiFi\",-65)")
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BOLUM 4: OneWire Protokolu (DS18B20)
+// ═══════════════════════════════════════════════════════════════════════════
+
+yaz("\n--- BOLUM 4: OneWire Protokolu ---")
+
+değişken ONEWIRE_PIN = 4
+
+yaz("\n   OneWire Ozellikleri:")
+yaz("   - Tek pin iletisim")
+yaz("   - Parasitic power destegi")
+yaz("   - 64-bit benzersiz adres")
+
+fonksiyon onewire_reset() -> doğruyanlış yap
+    yaz("   OneWire Reset Pulse gonderildi")
+    yaz("   <- Presence pulse alindi")
+    dön doğru
+son
+
+fonksiyon onewire_yaz_byte(veri: tamsayı) yap
+    yaz("   1-Wire TX: 0x", veri)
+son
+
+fonksiyon onewire_oku_byte() -> tamsayı yap
+    dön 0x55
+son
+
+// DS18B20 okuma
+yaz("\n   DS18B20 Sicaklik Okuma:")
+onewire_reset()
+onewire_yaz_byte(0xCC)  // Skip ROM
+onewire_yaz_byte(0x44)  // Convert T
+yaz("   Donusum bekleniyor (750ms)...")
+onewire_reset()
+onewire_yaz_byte(0xCC)  // Skip ROM
+onewire_yaz_byte(0xBE)  // Read Scratchpad
+olsun lsb = 0x90
+olsun msb = 0x01
+olsun raw = msb * 256 + lsb
+olsun sicaklik = raw * 0.0625
+yaz("   Ham Veri: 0x", raw)
+yaz("   Sicaklik: ", sicaklik, " C")
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BOLUM 5: CAN Bus Protokolu
+// ═══════════════════════════════════════════════════════════════════════════
+
+yaz("\n--- BOLUM 5: CAN Bus Protokolu ---")
+
+değişken CAN_TX = 17
+değişken CAN_RX = 16
+
+yaz("\n   CAN Bus Ozellikleri:")
+yaz("   - Diferansiyel sinyal (CAN_H, CAN_L)")
+yaz("   - Hiz: 125 kbps - 1 Mbps")
+yaz("   - Mesaj onceligi tabanli arbitrasyon")
+yaz("   - 11-bit veya 29-bit ID")
+
+yaz("\n   CAN Frame Yapisi:")
+yaz("   ┌─────┬─────┬───────┬──────────┬─────┐")
+yaz("   │ SOF │ ID  │ RTR   │ DATA     │ CRC │")
+yaz("   │ 1b  │ 11b │ 1b    │ 0-64 bit │ 15b │")
+yaz("   └─────┴─────┴───────┴──────────┴─────┘")
+
+// CAN mesaj yapisi
+yaz("\n   Ornek OBD-II CAN Mesajlari:")
+yaz("   ┌────────┬──────────────────────────┐")
+yaz("   │ PID    │ Aciklama                 │")
+yaz("   ├────────┼──────────────────────────┤")
+yaz("   │ 0x0C   │ Motor RPM                │")
+yaz("   │ 0x0D   │ Arac Hizi                │")
+yaz("   │ 0x05   │ Motor Sicakligi          │")
+yaz("   │ 0x2F   │ Yakit Seviyesi           │")
+yaz("   └────────┴──────────────────────────┘")
+
+fonksiyon can_gonder(id: tamsayı, veri: metin, uzunluk: tamsayı) yap
+    yaz("   CAN TX: ID=0x", id, " Data='", veri, "' Len=", uzunluk)
+son
+
+fonksiyon can_filtre_ayarla(id: tamsayı, maske: tamsayı) yap
+    yaz("   CAN Filtre: ID=0x", id, " Maske=0x", maske)
+son
+
+yaz("\n   OBD-II Motor RPM Sorgusu:")
+can_gonder(0x7DF, "02 01 0C", 3)  // Request engine RPM
+yaz("   <- ID=0x7E8 Data: 04 41 0C 1A F8")
+olsun rpm = (0x1A * 256 + 0xF8) / 4
+yaz("   Motor RPM: ", rpm)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BOLUM 6: Protokol Karsilastirmasi
+// ═══════════════════════════════════════════════════════════════════════════
+
+yaz("\n============================================================")
+yaz("              PROTOKOL KARSILASTIRMASI                       ")
+yaz("============================================================")
+
+yaz("\n   ┌────────────┬──────────┬─────────┬──────────┬──────────┐")
+yaz("   │ Protokol   │ Hiz      │ Mesafe  │ Pin      │ Topoloji │")
+yaz("   ├────────────┼──────────┼─────────┼──────────┼──────────┤")
+yaz("   │ I2C        │ 400kHz+  │ Kisa    │ 2 (SDA,  │ Bus      │")
+yaz("   │            │          │         │    SCL)  │          │")
+yaz("   │ SPI        │ 50MHz+   │ Kisa    │ 4+CS     │ Point    │")
+yaz("   │ UART       │ 1Mbps    │ Uzun    │ 2 (TX,   │ P2P      │")
+yaz("   │            │          │         │    RX)   │          │")
+yaz("   │ 1-Wire     │ 16kbps   │ Uzun    │ 1        │ Bus      │")
+yaz("   │ CAN        │ 1Mbps    │ 1km     │ 2 (diff) │ Bus      │")
+yaz("   └────────────┴──────────┴─────────┴──────────┴──────────┘")
+
+yaz("\n   Kullanim Senaryolari:")
+yaz("   - I2C: Sensorler, EEPROM, RTC")
+yaz("   - SPI: SD kart, TFT ekran, flash bellek")
+yaz("   - UART: GPS, Bluetooth, WiFi modulleri")
+yaz("   - 1-Wire: DS18B20 sicaklik sensorleri")
+yaz("   - CAN: Otomotiv, endustriyel otomasyon")
+
+yaz("\n============================================================")
+yaz("      HAL Communication Protocols Demo Tamamlandi            ")
+yaz("============================================================")

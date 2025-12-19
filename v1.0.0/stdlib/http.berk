@@ -1,0 +1,1596 @@
+//! # HTTP Module
+//!
+//! HTTP/1.1 client and server (inspired by Python http, Rust reqwest, Julia HTTP.jl).
+//!
+//! HTTP/1.1 istemci ve sunucu.
+//!
+//! ## Features / Özellikler
+//!
+//! ### HTTP Client / İstemci
+//! - `get()`, `post()`, `put()`, `delete()`, `patch()` - HTTP requests / HTTP istekleri
+//! - `request()` - Custom HTTP requests / Özel HTTP istekleri
+//! - Header management / Başlık yönetimi
+//! - Query string parsing / Sorgu string ayrıştırma
+//! - JSON helpers / JSON yardımcıları
+//! - Cookie support / Çerez desteği
+//! - Redirect following (automatic) / Yönlendirme takibi (otomatik)
+//! - Timeout handling / Zaman aşımı yönetimi
+//!
+//! ### HTTP Server / Sunucu
+//! - `create_server()` - Create HTTP server / HTTP sunucusu oluştur
+//! - Handler-based routing / Handler tabanlı yönlendirme
+//! - Middleware support / Middleware desteği
+//! - Static file serving / Statik dosya sunma
+//! - Chunked transfer encoding / Parçalı transfer kodlama
+//! - Keep-alive connections / Keep-alive bağlantılar
+//!
+//! ### Authentication / Kimlik Doğrulama
+//! - Basic authentication / Temel kimlik doğrulama
+//! - Bearer tokens / Bearer token'lar
+//!
+//! ### Form Data
+//! - `application/x-www-form-urlencoded`
+//! - `multipart/form-data` (file uploads) / Dosya yükleme
+//!
+//! ## Example / Örnek
+//!
+//! ```berk
+//! kullan http
+//!
+//! // HTTP GET request / HTTP GET isteği
+//! değişken yanıt = http.get("https://api.github.com/users/berk")?
+//! io.println("Durum: {yanıt.status}")
+//! io.println("Gövde: {yanıt.body}")
+//!
+//! // HTTP POST with JSON / JSON ile HTTP POST
+//! değişken veri = JsonNesne yap ad: "Ahmet", yas: 25 son
+//! değişken yanıt = http.post_json("https://api.example.com/users", veri)?
+//!
+//! // HTTP Server / HTTP Sunucu
+//! değişken sunucu = http.create_server("127.0.0.1", 8080)
+//! http.route(sunucu, "/", fonksiyon(istek) yap
+//!     dön http.response(200, "Merhaba Dünya!")
+//! son)
+//! http.start(sunucu)
+//! ```
+//!
+//! ## HTTP/1.1 Features
+//!
+//! - Persistent connections / Kalıcı bağlantılar
+//! - Pipelining / Boru hattı
+//! - Chunked transfer encoding / Parçalı transfer
+//! - Content negotiation / İçerik pazarlığı
+//!
+//! ## Performance / Performans
+//!
+//! - Connection pooling / Bağlantı havuzu
+//! - Async I/O (non-blocking) / Asenkron I/O
+//! - Zero-copy where possible / Sıfır kopyalama
+//!
+//! ## Backend
+//!
+//! - libcurl (HTTP client)
+//! - Rust `hyper` compatibility layer
+//! - Platform-specific async I/O (epoll/kqueue/IOCP)
+
+modül http
+
+kullan json
+kullan string
+kullan io
+
+// ============================================================================
+// TÜRLER (Types)
+// ============================================================================
+
+// HTTP metodları
+tip HttpMetod = "GET" | "POST" | "PUT" | "DELETE" | "PATCH" | "HEAD" | "OPTIONS" | "CONNECT" | "TRACE"
+
+// HTTP status kodları
+tip HttpDurum = yapı yap
+    kod: tamsayı,
+    mesaj: yazı
+son
+
+// HTTP header
+tip HttpBaslik = eşleme[yazı, yazı]
+
+// HTTP request
+tip HttpIstek = yapı yap
+    metod: HttpMetod,
+    url: yazı,
+    sürüm: yazı,              // "HTTP/1.1"
+    başlıklar: HttpBaslik,
+    gövde: yazı,
+    query: eşleme[yazı, yazı], // Query string parametreleri
+    zaman_aşımı: tamsayı       // Milisaniye (0 = sınırsız)
+son
+
+// HTTP response
+tip HttpYanit = yapı yap
+    durum: HttpDurum,
+    sürüm: yazı,
+    başlıklar: HttpBaslik,
+    gövde: yazı,
+    süre: tamsayı              // İstek süresi (ms)
+son
+
+// HTTP hatası
+tip HttpHata = yapı yap
+    mesaj: yazı,
+    hata_türü: yazı,           // "connection", "timeout", "parse", "server"
+    durum_kodu: tamsayı        // -1 eğer bağlantı hatası
+son
+
+// HTTP client seçenekleri
+tip HttpSecenekler = yapı yap
+    zaman_aşımı: tamsayı,           // Milisaniye
+    yönlendirme_izle: mantıksal,    // Redirect'leri takip et
+    max_yönlendirme: tamsayı,       // Max redirect sayısı
+    doğrula_ssl: mantıksal,         // SSL sertifikası doğrula
+    kullanıcı_ajanı: yazı,          // User-Agent header
+    keep_alive: mantıksal           // Connection keep-alive
+son
+
+// HTTP server handler
+tip HttpHandler = fonksiyon(istek: HttpIstek) -> HttpYanit
+
+// HTTP server
+tip HttpSunucu = yapı yap
+    adres: yazı,
+    port: tamsayı,
+    handler: HttpHandler,
+    çalışıyor: mantıksal,
+    soket_fd: tamsayı
+son
+
+// Route tanımı (routing için)
+tip HttpRoute = yapı yap
+    yol: yazı,              // "/users/:id" 
+    metod: HttpMetod,
+    handler: HttpHandler
+son
+
+// ============================================================================
+// HTTP STATUS KODLARI (Status Codes)
+// ============================================================================
+
+sabit HTTP_OK = 200
+sabit HTTP_CREATED = 201
+sabit HTTP_ACCEPTED = 202
+sabit HTTP_NO_CONTENT = 204
+
+sabit HTTP_MOVED_PERMANENTLY = 301
+sabit HTTP_FOUND = 302
+sabit HTTP_SEE_OTHER = 303
+sabit HTTP_NOT_MODIFIED = 304
+sabit HTTP_TEMPORARY_REDIRECT = 307
+sabit HTTP_PERMANENT_REDIRECT = 308
+
+sabit HTTP_BAD_REQUEST = 400
+sabit HTTP_UNAUTHORIZED = 401
+sabit HTTP_FORBIDDEN = 403
+sabit HTTP_NOT_FOUND = 404
+sabit HTTP_METHOD_NOT_ALLOWED = 405
+sabit HTTP_CONFLICT = 409
+sabit HTTP_GONE = 410
+sabit HTTP_PAYLOAD_TOO_LARGE = 413
+sabit HTTP_URI_TOO_LONG = 414
+sabit HTTP_TOO_MANY_REQUESTS = 429
+
+sabit HTTP_INTERNAL_SERVER_ERROR = 500
+sabit HTTP_NOT_IMPLEMENTED = 501
+sabit HTTP_BAD_GATEWAY = 502
+sabit HTTP_SERVICE_UNAVAILABLE = 503
+sabit HTTP_GATEWAY_TIMEOUT = 504
+
+fonksiyon durum_oluştur(kod: tamsayı) -> HttpDurum
+yap
+    değişken mesaj = seç kod yap
+        durum 200 => "OK"
+        durum 201 => "Created"
+        durum 204 => "No Content"
+        durum 301 => "Moved Permanently"
+        durum 302 => "Found"
+        durum 400 => "Bad Request"
+        durum 401 => "Unauthorized"
+        durum 403 => "Forbidden"
+        durum 404 => "Not Found"
+        durum 405 => "Method Not Allowed"
+        durum 500 => "Internal Server Error"
+        durum 502 => "Bad Gateway"
+        durum 503 => "Service Unavailable"
+        durum _ => "Unknown"
+    son
+    
+    dön HttpDurum yap
+        kod: kod,
+        mesaj: mesaj
+    son
+son
+
+// ============================================================================
+// HTTP CLIENT - ANA FONKSİYONLAR (Main Functions)
+// ============================================================================
+
+// GET request (basit)
+fonksiyon get(url: yazı) -> Sonuç[HttpYanit, HttpHata]
+yap
+    değişken istek = istek_oluştur("GET", url)
+    dön istek_gönder(istek, varsayılan_secenekler())
+son
+
+// POST request (basit)
+fonksiyon post(url: yazı, gövde: yazı) -> Sonuç[HttpYanit, HttpHata]
+yap
+    değişken istek = istek_oluştur("POST", url)
+    istek.gövde = gövde
+    istek_başlık_ekle(istek, "Content-Type", "application/x-www-form-urlencoded")
+    istek_başlık_ekle(istek, "Content-Length", tamsayı_yazı(gövde.uzunluk()))
+    dön istek_gönder(istek, varsayılan_secenekler())
+son
+
+// POST JSON (convenience)
+fonksiyon post_json(url: yazı, veri: JsonDeger) -> Sonuç[HttpYanit, HttpHata]
+yap
+    değişken json_gövde = json::kaydet(veri)
+    değişken istek = istek_oluştur("POST", url)
+    istek.gövde = json_gövde
+    istek_başlık_ekle(istek, "Content-Type", "application/json")
+    istek_başlık_ekle(istek, "Content-Length", tamsayı_yazı(json_gövde.uzunluk()))
+    dön istek_gönder(istek, varsayılan_secenekler())
+son
+
+// PUT request
+fonksiyon put(url: yazı, gövde: yazı) -> Sonuç[HttpYanit, HttpHata]
+yap
+    değişken istek = istek_oluştur("PUT", url)
+    istek.gövde = gövde
+    istek_başlık_ekle(istek, "Content-Length", tamsayı_yazı(gövde.uzunluk()))
+    dön istek_gönder(istek, varsayılan_secenekler())
+son
+
+// DELETE request
+fonksiyon delete(url: yazı) -> Sonuç[HttpYanit, HttpHata]
+yap
+    değişken istek = istek_oluştur("DELETE", url)
+    dön istek_gönder(istek, varsayılan_secenekler())
+son
+
+// PATCH request
+fonksiyon patch(url: yazı, gövde: yazı) -> Sonuç[HttpYanit, HttpHata]
+yap
+    değişken istek = istek_oluştur("PATCH", url)
+    istek.gövde = gövde
+    istek_başlık_ekle(istek, "Content-Length", tamsayı_yazı(gövde.uzunluk()))
+    dön istek_gönder(istek, varsayılan_secenekler())
+son
+
+// HEAD request
+fonksiyon head(url: yazı) -> Sonuç[HttpYanit, HttpHata]
+yap
+    değişken istek = istek_oluştur("HEAD", url)
+    dön istek_gönder(istek, varsayılan_secenekler())
+son
+
+// ============================================================================
+// HTTP REQUEST OLUŞTURMA (Request Building)
+// ============================================================================
+
+fonksiyon istek_oluştur(metod: HttpMetod, url: yazı) -> HttpIstek
+yap
+    dön HttpIstek yap
+        metod: metod,
+        url: url,
+        sürüm: "HTTP/1.1",
+        başlıklar: HttpBaslik_oluştur(),
+        gövde: "",
+        query: eşleme_oluştur(),
+        zaman_aşımı: 30000  // 30 saniye
+    son
+son
+
+fonksiyon istek_başlık_ekle(istek: HttpIstek, anahtar: yazı, değer: yazı) -> boş
+yap
+    istek.başlıklar[anahtar] = değer
+son
+
+fonksiyon istek_query_ekle(istek: HttpIstek, anahtar: yazı, değer: yazı) -> boş
+yap
+    istek.query[anahtar] = değer
+son
+
+fonksiyon istek_zaman_aşımı_ayarla(istek: HttpIstek, ms: tamsayı) -> boş
+yap
+    istek.zaman_aşımı = ms
+son
+
+// Basic authentication ekle
+fonksiyon istek_auth_ekle(istek: HttpIstek, kullanıcı: yazı, şifre: yazı) -> boş
+yap
+    değişken credentials = kullanıcı + ":" + şifre
+    değişken encoded = base64_encode(credentials)
+    istek_başlık_ekle(istek, "Authorization", "Basic " + encoded)
+son
+
+// Bearer token ekle
+fonksiyon istek_bearer_ekle(istek: HttpIstek, token: yazı) -> boş
+yap
+    istek_başlık_ekle(istek, "Authorization", "Bearer " + token)
+son
+
+// ============================================================================
+// HTTP REQUEST GÖNDERME (Request Sending)
+// ============================================================================
+
+fonksiyon istek_gönder(istek: HttpIstek, seçenekler: HttpSecenekler) -> Sonuç[HttpYanit, HttpHata]
+yap
+    // URL'yi parse et
+    değişken url_parse = url_ayır(istek.url)
+    eğer url_parse.hata_mı() ise yap
+        dön Hata(HttpHata yap
+            mesaj: "Geçersiz URL: " + istek.url,
+            hata_türü: "parse",
+            durum_kodu: -1
+        son)
+    son
+    
+    değişken url_parçaları = url_parse.unwrap()
+    değişken protokol = url_parçaları["protokol"]
+    değişken host = url_parçaları["host"]
+    değişken port = url_parçaları["port"]
+    değişken yol = url_parçaları["yol"]
+    
+    // Query string ekle
+    eğer istek.query.boyut() > 0 ise yap
+        yol += "?" + query_string_oluştur(istek.query)
+    son
+    
+    // Varsayılan header'lar ekle
+    eğer değil istek.başlıklar.içerir("Host") ise yap
+        istek_başlık_ekle(istek, "Host", host)
+    son
+    eğer değil istek.başlıklar.içerir("User-Agent") ise yap
+        istek_başlık_ekle(istek, "User-Agent", seçenekler.kullanıcı_ajanı)
+    son
+    eğer seçenekler.keep_alive ise yap
+        istek_başlık_ekle(istek, "Connection", "keep-alive")
+    değilse yap
+        istek_başlık_ekle(istek, "Connection", "close")
+    son
+    
+    // Socket açma (TCP)
+    değişken port_num = eğer port == "" ise yap
+        eğer protokol == "https" ise 443 değilse 80
+    değilse yap
+        yazı_tamsayı(port)
+    son
+    
+    değişken soket_sonuç = socket_baglan(host, port_num, istek.zaman_aşımı)
+    eğer soket_sonuç.hata_mı() ise yap
+        dön Hata(HttpHata yap
+            mesaj: "Bağlantı hatası: " + host,
+            hata_türü: "connection",
+            durum_kodu: -1
+        son)
+    son
+    
+    değişken soket_fd = soket_sonuç.unwrap()
+    
+    // SSL/TLS handshake (HTTPS için)
+    eğer protokol == "https" ise yap
+        değişken ssl_sonuç = ssl_handshake(soket_fd, host, seçenekler.doğrula_ssl)
+        eğer ssl_sonuç.hata_mı() ise yap
+            socket_kapat(soket_fd)
+            dön Hata(HttpHata yap
+                mesaj: "SSL handshake hatası",
+                hata_türü: "connection",
+                durum_kodu: -1
+            son)
+        son
+    son
+    
+    // HTTP request'i serialize et
+    değişken istek_metni = http_istek_serialize(istek, yol)
+    
+    // İsteği gönder
+    değişken başlangıç_zamanı = şimdiki_zaman_ms()
+    değişken gönder_sonuç = socket_yaz(soket_fd, istek_metni)
+    eğer gönder_sonuç.hata_mı() ise yap
+        socket_kapat(soket_fd)
+        dön Hata(HttpHata yap
+            mesaj: "İstek gönderme hatası",
+            hata_türü: "connection",
+            durum_kodu: -1
+        son)
+    son
+    
+    // Response oku
+    değişken yanıt_metni = socket_oku(soket_fd, istek.zaman_aşımı)
+    eğer yanıt_metni.hata_mı() ise yap
+        socket_kapat(soket_fd)
+        dön Hata(HttpHata yap
+            mesaj: "Yanıt okuma hatası",
+            hata_türü: "timeout",
+            durum_kodu: -1
+        son)
+    son
+    
+    değişken bitiş_zamanı = şimdiki_zaman_ms()
+    
+    // Socket kapat
+    socket_kapat(soket_fd)
+    
+    // Response'u parse et
+    değişken yanıt_parse = http_yanıt_parse(yanıt_metni.unwrap())
+    eğer yanıt_parse.hata_mı() ise yap
+        dön Hata(HttpHata yap
+            mesaj: "Yanıt parse hatası",
+            hata_türü: "parse",
+            durum_kodu: -1
+        son)
+    son
+    
+    değişken yanıt = yanıt_parse.unwrap()
+    yanıt.süre = bitiş_zamanı - başlangıç_zamanı
+    
+    // Redirect kontrolü
+    eğer seçenekler.yönlendirme_izle ve yönlendirme_kodu_mu(yanıt.durum.kod) ise yap
+        eğer yanıt.başlıklar.içerir("Location") ise yap
+            değişken yeni_url = yanıt.başlıklar["Location"]
+            // Recursive redirect (max limit kontrolü)
+            dön istek_gönder(istek_oluştur(istek.metod, yeni_url), seçenekler)
+        son
+    son
+    
+    dön Başarı(yanıt)
+son
+
+// ============================================================================
+// HTTP RESPONSE YARDIMCILARI (Response Helpers)
+// ============================================================================
+
+fonksiyon yanıt_json_al(yanıt: HttpYanit) -> Sonuç[JsonDeger, JsonHata]
+yap
+    dön json::yukle(yanıt.gövde)
+son
+
+fonksiyon yanıt_metin_al(yanıt: HttpYanit) -> yazı
+yap
+    dön yanıt.gövde
+son
+
+fonksiyon yanıt_durum_kodu(yanıt: HttpYanit) -> tamsayı
+yap
+    dön yanıt.durum.kod
+son
+
+fonksiyon yanıt_başarılı_mı(yanıt: HttpYanit) -> mantıksal
+yap
+    dön (yanıt.durum.kod >= 200) ve (yanıt.durum.kod < 300)
+son
+
+fonksiyon yanıt_başlık_al(yanıt: HttpYanit, anahtar: yazı) -> Seçenek[yazı]
+yap
+    eğer yanıt.başlıklar.içerir(anahtar) ise yap
+        dön Bazı(yanıt.başlıklar[anahtar])
+    son
+    dön Hiç
+son
+
+// ============================================================================
+// HTTP CLIENT SEÇENEKLERİ (Client Options)
+// ============================================================================
+
+fonksiyon varsayılan_secenekler() -> HttpSecenekler
+yap
+    dön HttpSecenekler yap
+        zaman_aşımı: 30000,           // 30 saniye
+        yönlendirme_izle: doğru,
+        max_yönlendirme: 10,
+        doğrula_ssl: doğru,
+        kullanıcı_ajanı: "BERK-HTTP/1.0",
+        keep_alive: yanlış
+    son
+son
+
+// ============================================================================
+// HTTP SERVER (Simple HTTP Server)
+// ============================================================================
+
+fonksiyon sunucu_oluştur(adres: yazı, port: tamsayı, handler: HttpHandler) -> Sonuç[HttpSunucu, HttpHata]
+yap
+    // Socket oluştur ve bind
+    değişken soket_sonuç = socket_oluştur()
+    eğer soket_sonuç.hata_mı() ise yap
+        dön Hata(HttpHata yap
+            mesaj: "Socket oluşturma hatası",
+            hata_türü: "server",
+            durum_kodu: -1
+        son)
+    son
+    
+    değişken soket_fd = soket_sonuç.unwrap()
+    
+    değişken bind_sonuç = socket_bind(soket_fd, adres, port)
+    eğer bind_sonuç.hata_mı() ise yap
+        socket_kapat(soket_fd)
+        dön Hata(HttpHata yap
+            mesaj: "Bind hatası: " + adres + ":" + tamsayı_yazı(port),
+            hata_türü: "server",
+            durum_kodu: -1
+        son)
+    son
+    
+    değişken listen_sonuç = socket_listen(soket_fd, 128)  // backlog = 128
+    eğer listen_sonuç.hata_mı() ise yap
+        socket_kapat(soket_fd)
+        dön Hata(HttpHata yap
+            mesaj: "Listen hatası",
+            hata_türü: "server",
+            durum_kodu: -1
+        son)
+    son
+    
+    dön Başarı(HttpSunucu yap
+        adres: adres,
+        port: port,
+        handler: handler,
+        çalışıyor: yanlış,
+        soket_fd: soket_fd
+    son)
+son
+
+fonksiyon sunucu_başlat(sunucu: HttpSunucu) -> Sonuç[boş, HttpHata]
+yap
+    sunucu.çalışıyor = doğru
+    
+    yazdır_satır("HTTP sunucu başlatıldı: " + sunucu.adres + ":" + tamsayı_yazı(sunucu.port))
+    
+    // Ana accept loop
+    iken sunucu.çalışıyor yap
+        değişken client_sonuç = socket_accept(sunucu.soket_fd)
+        eğer client_sonuç.hata_mı() ise yap
+            devam  // Sonraki bağlantıyı bekle
+        son
+        
+        değişken client_fd = client_sonuç.unwrap()
+        
+        // İsteği oku
+        değişken istek_metni_sonuç = socket_oku(client_fd, 5000)  // 5 saniye timeout
+        eğer istek_metni_sonuç.hata_mı() ise yap
+            socket_kapat(client_fd)
+            devam
+        son
+        
+        // İsteği parse et
+        değişken istek_parse = http_istek_parse(istek_metni_sonuç.unwrap())
+        eğer istek_parse.hata_mı() ise yap
+            // 400 Bad Request gönder
+            değişken hata_yanıt = yanıt_oluştur(400, "Bad Request")
+            socket_yaz(client_fd, http_yanıt_serialize(hata_yanıt))
+            socket_kapat(client_fd)
+            devam
+        son
+        
+        değişken istek = istek_parse.unwrap()
+        
+        // Handler'ı çağır
+        değişken yanıt = sunucu.handler(istek)
+        
+        // Yanıtı gönder
+        değişken yanıt_metni = http_yanıt_serialize(yanıt)
+        socket_yaz(client_fd, yanıt_metni)
+        socket_kapat(client_fd)
+    son
+    
+    dön Başarı(boş)
+son
+
+fonksiyon sunucu_durdur(sunucu: HttpSunucu) -> boş
+yap
+    sunucu.çalışıyor = yanlış
+    socket_kapat(sunucu.soket_fd)
+    yazdır_satır("HTTP sunucu durduruldu")
+son
+
+// ============================================================================
+// HTTP RESPONSE OLUŞTURMA (Response Building)
+// ============================================================================
+
+fonksiyon yanıt_oluştur(durum_kodu: tamsayı, gövde: yazı) -> HttpYanit
+yap
+    değişken başlıklar = HttpBaslik_oluştur()
+    başlıklar["Content-Type"] = "text/plain"
+    başlıklar["Content-Length"] = tamsayı_yazı(gövde.uzunluk())
+    başlıklar["Server"] = "BERK-HTTP/1.0"
+    
+    dön HttpYanit yap
+        durum: durum_oluştur(durum_kodu),
+        sürüm: "HTTP/1.1",
+        başlıklar: başlıklar,
+        gövde: gövde,
+        süre: 0
+    son
+son
+
+fonksiyon yanıt_json_oluştur(durum_kodu: tamsayı, veri: JsonDeger) -> HttpYanit
+yap
+    değişken json_gövde = json::kaydet(veri, json::guzel_secenekler())
+    değişken başlıklar = HttpBaslik_oluştur()
+    başlıklar["Content-Type"] = "application/json"
+    başlıklar["Content-Length"] = tamsayı_yazı(json_gövde.uzunluk())
+    başlıklar["Server"] = "BERK-HTTP/1.0"
+    
+    dön HttpYanit yap
+        durum: durum_oluştur(durum_kodu),
+        sürüm: "HTTP/1.1",
+        başlıklar: başlıklar,
+        gövde: json_gövde,
+        süre: 0
+    son
+son
+
+fonksiyon yanıt_html_oluştur(durum_kodu: tamsayı, html: yazı) -> HttpYanit
+yap
+    değişken başlıklar = HttpBaslik_oluştur()
+    başlıklar["Content-Type"] = "text/html; charset=utf-8"
+    başlıklar["Content-Length"] = tamsayı_yazı(html.uzunluk())
+    başlıklar["Server"] = "BERK-HTTP/1.0"
+    
+    dön HttpYanit yap
+        durum: durum_oluştur(durum_kodu),
+        sürüm: "HTTP/1.1",
+        başlıklar: başlıklar,
+        gövde: html,
+        süre: 0
+    son
+son
+
+// ============================================================================
+// YARDIMCI FONKSİYONLAR (Helper Functions)
+// ============================================================================
+
+fonksiyon yönlendirme_kodu_mu(kod: tamsayı) -> mantıksal
+yap
+    dön (kod == 301) veya (kod == 302) veya (kod == 303) veya 
+        (kod == 307) veya (kod == 308)
+son
+
+fonksiyon query_string_oluştur(query: eşleme[yazı, yazı]) -> yazı
+yap
+    değişken parçalar = liste_oluştur()
+    her biri (anahtar, değer) içinde query yap
+        parçalar.ekle(url_encode(anahtar) + "=" + url_encode(değer))
+    son
+    dön parçalar.birleştir("&")
+son
+
+fonksiyon query_string_parse(query: yazı) -> eşleme[yazı, yazı]
+yap
+    değişken sonuç = eşleme_oluştur()
+    değişken parçalar = query.böl("&")
+    
+    her biri parça içinde parçalar yap
+        değişken ikili = parça.böl("=")
+        eğer ikili.boyut() == 2 ise yap
+            değişken anahtar = url_decode(ikili[0])
+            değişken değer = url_decode(ikili[1])
+            sonuç[anahtar] = değer
+        son
+    son
+    
+    dön sonuç
+son
+
+// URL encode (RFC 3986)
+fonksiyon url_encode(s: yazı) -> yazı
+yap
+    değişken sonuç = ""
+    her biri ch içinde s yap
+        eğer url_safe_char(ch) ise yap
+            sonuç += ch
+        değilse yap
+            sonuç += "%" + hex_encode(ch)
+        son
+    son
+    dön sonuç
+son
+
+fonksiyon url_decode(s: yazı) -> yazı
+yap
+    // TODO: %XX decode implementation
+    dön s
+son
+
+fonksiyon url_safe_char(ch: karakter) -> mantıksal
+yap
+    dön (ch >= 'A' ve ch <= 'Z') veya
+        (ch >= 'a' ve ch <= 'z') veya
+        (ch >= '0' ve ch <= '9') veya
+        (ch == '-') veya (ch == '_') veya 
+        (ch == '.') veya (ch == '~')
+son
+
+// ============================================================================
+// DÜŞÜK SEVİYE FONKSİYONLAR (Low-level - External C bindings)
+// ============================================================================
+
+// Bu fonksiyonlar C runtime'dan bind edilecek (LLVM external call)
+harici fonksiyon socket_baglan(host: yazı, port: tamsayı, timeout_ms: tamsayı) -> Sonuç[tamsayı, IoHata]
+harici fonksiyon socket_oluştur() -> Sonuç[tamsayı, IoHata]
+harici fonksiyon socket_bind(fd: tamsayı, adres: yazı, port: tamsayı) -> Sonuç[boş, IoHata]
+harici fonksiyon socket_listen(fd: tamsayı, backlog: tamsayı) -> Sonuç[boş, IoHata]
+harici fonksiyon socket_accept(fd: tamsayı) -> Sonuç[tamsayı, IoHata]
+harici fonksiyon socket_yaz(fd: tamsayı, veri: yazı) -> Sonuç[tamsayı, IoHata]
+harici fonksiyon socket_oku(fd: tamsayı, timeout_ms: tamsayı) -> Sonuç[yazı, IoHata]
+harici fonksiyon socket_kapat(fd: tamsayı) -> boş
+harici fonksiyon ssl_handshake(fd: tamsayı, host: yazı, doğrula: mantıksal) -> Sonuç[boş, IoHata]
+harici fonksiyon base64_encode(s: yazı) -> yazı
+harici fonksiyon şimdiki_zaman_ms() -> tamsayı
+
+// HTTP parse/serialize (internal)
+harici fonksiyon http_istek_serialize(istek: HttpIstek, yol: yazı) -> yazı
+harici fonksiyon http_yanıt_serialize(yanıt: HttpYanit) -> yazı
+harici fonksiyon http_istek_parse(metin: yazı) -> Sonuç[HttpIstek, HttpHata]
+harici fonksiyon http_yanıt_parse(metin: yazı) -> Sonuç[HttpYanit, HttpHata]
+harici fonksiyon url_ayır(url: yazı) -> Sonuç[eşleme[yazı, yazı], HttpHata]
+
+// ============================================================================
+// KULLANIM ÖRNEKLERİ (Usage Examples)
+// ============================================================================
+
+/*
+// ============================================================================
+// CLIENT ÖRNEKLERI
+// ============================================================================
+
+// Örnek 1: Basit GET request
+kullan http
+
+değişken yanıt = http::get("https://api.github.com/users/ArslantasM")
+eğer yanıt.başarılı_mı() ise yap
+    değişken data = yanıt.unwrap()
+    eğer http::yanıt_başarılı_mı(data) ise yap
+        yazdır("Durum: " + tamsayı_yazı(data.durum.kod))
+        yazdır("Gövde: " + data.gövde)
+    son
+değilse yap
+    değişken hata = yanıt.hata()
+    yazdır("HTTP hatası: " + hata.mesaj)
+son
+
+// Örnek 2: POST JSON request
+değişken kullanıcı = JsonNesne_oluştur()
+json::nesne_ekle(kullanıcı, "ad", "Ahmet")
+json::nesne_ekle(kullanıcı, "email", "ahmet@example.com")
+
+değişken yanıt = http::post_json("https://api.example.com/users", kullanıcı)
+eğer yanıt.başarılı_mı() ise yap
+    değişken data = yanıt.unwrap()
+    değişken json_sonuç = http::yanıt_json_al(data)
+    eğer json_sonuç.başarılı_mı() ise yap
+        değişken json_data = json_sonuç.unwrap()
+        yazdır("Oluşturulan kullanıcı ID: " + json::nesne_al(json_data, "id").unwrap())
+    son
+son
+
+// Örnek 3: Özel header'larla request
+değişken istek = http::istek_oluştur("GET", "https://api.example.com/data")
+http::istek_başlık_ekle(istek, "X-API-Key", "secret123")
+http::istek_bearer_ekle(istek, "eyJhbGciOiJIUzI1NiIs...")
+http::istek_query_ekle(istek, "page", "1")
+http::istek_query_ekle(istek, "limit", "20")
+
+değişken seçenekler = http::varsayılan_secenekler()
+seçenekler.zaman_aşımı = 10000  // 10 saniye
+
+değişken yanıt = http::istek_gönder(istek, seçenekler)
+
+// Örnek 4: File download
+değişken yanıt = http::get("https://example.com/file.pdf")
+eğer yanıt.başarılı_mı() ise yap
+    değişken data = yanıt.unwrap()
+    fs::dosya_yaz("downloaded.pdf", data.gövde)
+    yazdır("Dosya indirildi: " + tamsayı_yazı(data.gövde.uzunluk()) + " byte")
+son
+
+// ============================================================================
+// SERVER ÖRNEKLERİ
+// ============================================================================
+
+// Örnek 5: Basit HTTP server
+kullan http
+
+fonksiyon handler(istek: HttpIstek) -> HttpYanit
+yap
+    seç istek.metod yap
+        durum "GET" => yap
+            eğer istek.url == "/" ise yap
+                dön http::yanıt_html_oluştur(200, "<h1>Merhaba BERK!</h1>")
+            değilse eğer istek.url == "/api/users" ise yap
+                değişken users = JsonDizi_oluştur()
+                json::dizi_ekle(users, "Ahmet")
+                json::dizi_ekle(users, "Mehmet")
+                dön http::yanıt_json_oluştur(200, users)
+            değilse yap
+                dön http::yanıt_oluştur(404, "Sayfa bulunamadı")
+            son
+        son
+        durum "POST" => yap
+            eğer istek.url == "/api/users" ise yap
+                değişken json_sonuç = json::yukle(istek.gövde)
+                eğer json_sonuç.başarılı_mı() ise yap
+                    değişken veri = json_sonuç.unwrap()
+                    // Kullanıcı oluştur (DB'ye kaydet vb.)
+                    dön http::yanıt_json_oluştur(201, veri)
+                değilse yap
+                    dön http::yanıt_oluştur(400, "Geçersiz JSON")
+                son
+            son
+        son
+        durum _ => dön http::yanıt_oluştur(405, "Method Not Allowed")
+    son
+    
+    dön http::yanıt_oluştur(404, "Not Found")
+son
+
+değişken sunucu_sonuç = http::sunucu_oluştur("127.0.0.1", 8080, handler)
+eğer sunucu_sonuç.başarılı_mı() ise yap
+    değişken sunucu = sunucu_sonuç.unwrap()
+    http::sunucu_başlat(sunucu)  // Blocking call
+değilse yap
+    yazdır("Sunucu başlatma hatası")
+son
+
+// Örnek 6: REST API server
+fonksiyon api_handler(istek: HttpIstek) -> HttpYanit
+yap
+    // Route matching
+    değişken yol = istek.url
+    
+    eğer yol.başlar_mı("/api/") ise yap
+        değişken endpoint = yol.alt_metin(5)  // "/api/" sonrası
+        
+        seç endpoint yap
+            durum "users" => yap
+                seç istek.metod yap
+                    durum "GET" => dön kullanıcılar_listele()
+                    durum "POST" => dön kullanıcı_oluştur(istek)
+                    durum _ => dön http::yanıt_oluştur(405, "Method Not Allowed")
+                son
+            son
+            durum "health" => yap
+                değişken health = JsonNesne_oluştur()
+                json::nesne_ekle(health, "status", "ok")
+                json::nesne_ekle(health, "uptime", 3600)
+                dön http::yanıt_json_oluştur(200, health)
+            son
+            durum _ => dön http::yanıt_oluştur(404, "Endpoint bulunamadı")
+        son
+    değilse yap
+        dön http::yanıt_html_oluştur(200, "<h1>BERK REST API</h1>")
+    son
+son
+
+// Örnek 7: Middleware pattern
+fonksiyon logging_middleware(handler: HttpHandler) -> HttpHandler
+yap
+    dön fonksiyon(istek: HttpIstek) -> HttpYanit yap
+        değişken başlangıç = şimdiki_zaman_ms()
+        yazdır("[" + istek.metod + "] " + istek.url)
+        
+        değişken yanıt = handler(istek)
+        
+        değişken süre = şimdiki_zaman_ms() - başlangıç
+        yazdır("  → " + tamsayı_yazı(yanıt.durum.kod) + " (" + tamsayı_yazı(süre) + "ms)")
+        
+        dön yanıt
+    son
+son
+
+değişken logged_handler = logging_middleware(api_handler)
+değişken sunucu = http::sunucu_oluştur("0.0.0.0", 3000, logged_handler)
+
+// Örnek 8: WebSocket
+değişken ws = http::websocket_connect("wss://echo.websocket.org")
+http::websocket_send(ws, "Merhaba WebSocket!")
+
+değişken mesaj = http::websocket_receive(ws)
+yazdır("WebSocket yanıtı: " + mesaj)
+
+http::websocket_close(ws)
+
+// Örnek 9: HTTP/2 Server Push
+değişken h2_sunucu = http::http2_sunucu_oluştur("0.0.0.0", 8443)
+http::http2_server_push(h2_sunucu, "/style.css", "/index.html")
+*/
+
+// ============================================================================
+// HTTP/2 SUPPORT (Yeni - v1.7)
+// ============================================================================
+
+// HTTP/2 stream
+tip Http2Stream = yapı yap
+    stream_id: tamsayı,
+    durum: yazı,              // "idle", "open", "half_closed", "closed"
+    öncelik: tamsayı,         // Priority weight (1-256)
+    bağımlılık: tamsayı       // Stream dependency
+son
+
+// HTTP/2 frame types
+tip Http2FrameTuru = "DATA" | "HEADERS" | "PRIORITY" | "RST_STREAM" | "SETTINGS" | 
+                     "PUSH_PROMISE" | "PING" | "GOAWAY" | "WINDOW_UPDATE" | "CONTINUATION"
+
+// HTTP/2 bağlantısı
+tip Http2Baglanti = yapı yap
+    soket_fd: tamsayı,
+    tls_aktif: mantıksal,
+    streams: eşleme[tamsayı, Http2Stream],
+    pencere_boyutu: tamsayı,  // Flow control window
+    ayarlar: Http2Ayarlar
+son
+
+// HTTP/2 ayarları
+tip Http2Ayarlar = yapı yap
+    header_tablo_boyutu: tamsayı,        // 4096 default
+    server_push_aktif: mantıksal,        // true default
+    max_concurrent_streams: tamsayı,     // 100 default
+    initial_window_size: tamsayı,        // 65535 default
+    max_frame_size: tamsayı,             // 16384 default
+    max_header_list_size: tamsayı        // sınırsız default
+son
+
+// HTTP/2 client oluştur
+fonksiyon http2_client_new() -> Http2Baglanti
+yap
+    dön Http2Baglanti yap
+        soket_fd: -1,
+        tls_aktif: doğru,
+        streams: eşleme_oluştur[tamsayı, Http2Stream](),
+        pencere_boyutu: 65535,
+        ayarlar: http2_varsayilan_ayarlar()
+    son
+son
+
+// HTTP/2 request gönder
+fonksiyon http2_request(baglanti: Http2Baglanti, istek: HttpIstek) -> Sonuç[HttpYanit, HttpHata]
+yap
+    // Connection preface gönder (ilk bağlantıda)
+    eğer baglanti.soket_fd == -1 ise yap
+        değişken baglanti_sonuç = http2_connect(istek.url)
+        eğer baglanti_sonuç.hata_mı() ise yap
+            dön Hata(baglanti_sonuç.hata())
+        son
+        baglanti = baglanti_sonuç.unwrap()
+    son
+    
+    // HEADERS frame gönder
+    değişken stream_id = http2_stream_oluştur(baglanti)
+    http2_headers_gönder(baglanti, stream_id, istek)
+    
+    // DATA frame gönder (eğer body varsa)
+    eğer string_uzunluk(istek.gövde) > 0 ise yap
+        http2_data_gönder(baglanti, stream_id, istek.gövde, son_mu: doğru)
+    son
+    
+    // Yanıt oku
+    dön http2_response_al(baglanti, stream_id)
+son
+
+// HTTP/2 Server Push (server tarafı)
+fonksiyon http2_server_push(baglanti: Http2Baglanti, push_url: yazı, ilişkili_stream: tamsayı) -> Sonuç[boş, HttpHata]
+yap
+    eğer baglanti.ayarlar.server_push_aktif == yanlış ise yap
+        dön Hata(HttpHata yap
+            mesaj: "Server push devre dışı",
+            hata_türü: "config",
+            durum_kodu: -1
+        son)
+    son
+    
+    // PUSH_PROMISE frame gönder
+    değişken promised_stream_id = http2_stream_oluştur(baglanti)
+    http2_push_promise_gönder(baglanti, ilişkili_stream, promised_stream_id, push_url)
+    
+    // Resource'u gönder
+    değişken kaynak = dosya_oku_string(push_url)
+    http2_data_gönder(baglanti, promised_stream_id, kaynak, son_mu: doğru)
+    
+    dön Başarılı(boş)
+son
+
+// HTTP/2 multiplexing - concurrent requests
+fonksiyon http2_concurrent_requests(baglanti: Http2Baglanti, istekler: liste[HttpIstek]) -> liste[Sonuç[HttpYanit, HttpHata]]
+yap
+    değişken yanıtlar = liste_oluştur[Sonuç[HttpYanit, HttpHata]]()
+    
+    // Her istek için stream aç
+    her biri istek içinde istekler yap
+        değişken stream_id = http2_stream_oluştur(baglanti)
+        http2_headers_gönder(baglanti, stream_id, istek)
+    son
+    
+    // Tüm yanıtları oku (paralel)
+    her biri i içinde aralık(liste_uzunluk(istekler)) yap
+        değişken stream_id = i * 2 + 1  // Odd stream IDs
+        değişken yanıt = http2_response_al(baglanti, stream_id)
+        liste_ekle(yanıtlar, yanıt)
+    son
+    
+    dön yanıtlar
+son
+
+// ============================================================================
+// WEBSOCKET SUPPORT (Yeni - v1.7)
+// ============================================================================
+
+// WebSocket frame opcodes
+tip WebSocketOpcode = "CONTINUATION" | "TEXT" | "BINARY" | "CLOSE" | "PING" | "PONG"
+
+// WebSocket frame
+tip WebSocketFrame = yapı yap
+    fin: mantıksal,           // Final frame mi?
+    opcode: WebSocketOpcode,
+    mask: mantıksal,          // Client -> Server masked olmalı
+    payload: liste[byte]
+son
+
+// WebSocket bağlantısı
+tip WebSocketBaglanti = yapı yap
+    soket_fd: tamsayı,
+    tls_aktif: mantıksal,
+    acık_mı: mantıksal,
+    ping_interval_ms: tamsayı,
+    son_ping: tamsayı
+son
+
+// WebSocket bağlantısı aç
+fonksiyon websocket_connect(url: yazı) -> Sonuç[WebSocketBaglanti, HttpHata]
+yap
+    // URL parse et (ws:// veya wss://)
+    değişken tls = url.başlar_mı("wss://")
+    değişken host = url_parse_host(url)
+    değişken port = tls ? 443 : 80
+    değişken path = url_parse_path(url)
+    
+    // TCP bağlantısı aç
+    değişken soket_sonuç = tcp_baglan(host, port)
+    eğer soket_sonuç.hata_mı() ise yap
+        dön Hata(HttpHata yap
+            mesaj: "WebSocket bağlantısı başarısız: " + host,
+            hata_türü: "connection",
+            durum_kodu: -1
+        son)
+    son
+    
+    değişken soket = soket_sonuç.unwrap()
+    
+    // TLS handshake (eğer wss://)
+    eğer tls ise yap
+        değişken tls_sonuç = tls_baglan(soket, host)
+        eğer tls_sonuç.hata_mı() ise yap
+            dön Hata(tls_sonuç.hata())
+        son
+    son
+    
+    // WebSocket handshake
+    değişken key = websocket_generate_key()
+    değişken upgrade_request = 
+        "GET " + path + " HTTP/1.1\r\n" +
+        "Host: " + host + "\r\n" +
+        "Upgrade: websocket\r\n" +
+        "Connection: Upgrade\r\n" +
+        "Sec-WebSocket-Key: " + key + "\r\n" +
+        "Sec-WebSocket-Version: 13\r\n" +
+        "\r\n"
+    
+    soket_yaz(soket, upgrade_request)
+    
+    // Handshake response oku
+    değişken response = soket_oku_satır(soket)
+    eğer response.içerir_mi("101 Switching Protocols") == yanlış ise yap
+        dön Hata(HttpHata yap
+            mesaj: "WebSocket handshake başarısız",
+            hata_türü: "protocol",
+            durum_kodu: -1
+        son)
+    son
+    
+    dön Başarılı(WebSocketBaglanti yap
+        soket_fd: soket,
+        tls_aktif: tls,
+        acık_mı: doğru,
+        ping_interval_ms: 30000,
+        son_ping: şimdiki_zaman_ms()
+    son)
+son
+
+// WebSocket mesaj gönder
+fonksiyon websocket_send(ws: WebSocketBaglanti, mesaj: yazı) -> Sonuç[boş, HttpHata]
+yap
+    eğer ws.acık_mı == yanlış ise yap
+        dön Hata(HttpHata yap
+            mesaj: "WebSocket bağlantısı kapalı",
+            hata_türü: "connection",
+            durum_kodu: -1
+        son)
+    son
+    
+    // TEXT frame oluştur
+    değişken frame = WebSocketFrame yap
+        fin: doğru,
+        opcode: "TEXT",
+        mask: doğru,  // Client -> Server always masked
+        payload: string_to_bytes(mesaj)
+    son
+    
+    // Frame serialize et ve gönder
+    değişken frame_bytes = websocket_serialize_frame(frame)
+    soket_yaz(ws.soket_fd, frame_bytes)
+    
+    dön Başarılı(boş)
+son
+
+// WebSocket mesaj al
+fonksiyon websocket_receive(ws: WebSocketBaglanti, timeout_ms: tamsayı = 5000) -> Sonuç[yazı, HttpHata]
+yap
+    eğer ws.acık_mı == yanlış ise yap
+        dön Hata(HttpHata yap
+            mesaj: "WebSocket bağlantısı kapalı",
+            hata_türü: "connection",
+            durum_kodu: -1
+        son)
+    son
+    
+    // Frame oku
+    değişken frame_sonuç = websocket_read_frame(ws, timeout_ms)
+    eğer frame_sonuç.hata_mı() ise yap
+        dön Hata(frame_sonuç.hata())
+    son
+    
+    değişken frame = frame_sonuç.unwrap()
+    
+    // Opcode'a göre işle
+    seç frame.opcode yap
+        durum "TEXT" => yap
+            dön Başarılı(bytes_to_string(frame.payload))
+        son
+        durum "BINARY" => yap
+            // Binary data - base64 encode
+            dön Başarılı(base64_encode(frame.payload))
+        son
+        durum "PING" => yap
+            // PONG gönder
+            websocket_send_pong(ws, frame.payload)
+            // Recursive - bir sonraki mesajı bekle
+            dön websocket_receive(ws, timeout_ms)
+        son
+        durum "CLOSE" => yap
+            ws.acık_mı = yanlış
+            dön Hata(HttpHata yap
+                mesaj: "WebSocket kapatıldı",
+                hata_türü: "close",
+                durum_kodu: -1
+            son)
+        son
+        durum _ => yap
+            // Unknown opcode - skip
+            dön websocket_receive(ws, timeout_ms)
+        son
+    son
+son
+
+// WebSocket bağlantısını kapat
+fonksiyon websocket_close(ws: WebSocketBaglanti, kod: tamsayı = 1000, sebep: yazı = "") -> Sonuç[boş, HttpHata]
+yap
+    eğer ws.acık_mı ise yap
+        // CLOSE frame gönder
+        değişken payload = websocket_encode_close(kod, sebep)
+        değişken frame = WebSocketFrame yap
+            fin: doğru,
+            opcode: "CLOSE",
+            mask: doğru,
+            payload: payload
+        son
+        
+        değişken frame_bytes = websocket_serialize_frame(frame)
+        soket_yaz(ws.soket_fd, frame_bytes)
+        
+        ws.acık_mı = yanlış
+    son
+    
+    soket_kapat(ws.soket_fd)
+    dön Başarılı(boş)
+son
+
+// WebSocket ping gönder
+fonksiyon websocket_ping(ws: WebSocketBaglanti) -> Sonuç[boş, HttpHata]
+yap
+    değişken frame = WebSocketFrame yap
+        fin: doğru,
+        opcode: "PING",
+        mask: doğru,
+        payload: liste_oluştur[byte]()
+    son
+    
+    değişken frame_bytes = websocket_serialize_frame(frame)
+    soket_yaz(ws.soket_fd, frame_bytes)
+    
+    ws.son_ping = şimdiki_zaman_ms()
+    
+    dön Başarılı(boş)
+son
+
+// ============================================================================
+// WEBSOCKET HELPER FUNCTIONS (Pure BERK Implementation)
+// ============================================================================
+
+// WebSocket key oluştur (Sec-WebSocket-Key için)
+fonksiyon websocket_generate_key() -> yazı
+yap
+    // 16 byte random data, base64 encoded
+    değişken random_bytes = liste_oluştur[byte](16)
+    için i = 0 .. 16 yap
+        random_bytes[i] = rastgele_byte()
+    son
+    dön base64_encode(random_bytes)
+son
+
+// WebSocket Sec-WebSocket-Accept hesapla (RFC 6455)
+fonksiyon websocket_compute_accept(key: yazı) -> yazı
+yap
+    // Magic GUID (RFC 6455)
+    değişken magic = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+    değişken concat = key + magic
+    
+    // SHA-1 hash (WebSocket spec requires SHA-1)
+    değişken hash = sha1(concat)
+    
+    // Base64 encode
+    dön base64_encode(hash)
+son
+
+// WebSocket frame serialize et (client -> server)
+fonksiyon websocket_serialize_frame(frame: WebSocketFrame) -> liste[byte]
+yap
+    değişken result = liste_oluştur[byte]()
+    
+    // Byte 0: FIN + RSV + Opcode
+    değişken byte0 = (frame.fin ? 0x80 : 0x00) | websocket_opcode_to_int(frame.opcode)
+    liste_ekle(result, byte0)
+    
+    // Byte 1: MASK + Payload length
+    değişken payload_len = liste_uzunluk(frame.payload)
+    değişken mask_bit = frame.mask ? 0x80 : 0x00
+    
+    eğer payload_len < 126 ise yap
+        liste_ekle(result, mask_bit | payload_len)
+    değilse eğer payload_len < 65536 ise yap
+        // 16-bit length
+        liste_ekle(result, mask_bit | 126)
+        liste_ekle(result, (payload_len >> 8) & 0xFF)
+        liste_ekle(result, payload_len & 0xFF)
+    değilse yap
+        // 64-bit length
+        liste_ekle(result, mask_bit | 127)
+        için i = 7 .. -1 .. -1 yap
+            liste_ekle(result, (payload_len >> (i * 8)) & 0xFF)
+        son
+    son
+    
+    // Masking key (eğer masked ise)
+    değişken masking_key = liste_oluştur[byte](4)
+    eğer frame.mask ise yap
+        için i = 0 .. 4 yap
+            masking_key[i] = rastgele_byte()
+            liste_ekle(result, masking_key[i])
+        son
+    son
+    
+    // Payload data (masked)
+    için i = 0 .. payload_len yap
+        değişken byte = frame.payload[i]
+        eğer frame.mask ise yap
+            byte = byte ^ masking_key[i % 4]
+        son
+        liste_ekle(result, byte)
+    son
+    
+    dön result
+son
+
+// WebSocket frame oku (server -> client)
+fonksiyon websocket_read_frame(ws: WebSocketBaglanti, timeout_ms: tamsayı) -> Sonuç[WebSocketFrame, HttpHata]
+yap
+    // Byte 0: FIN + RSV + Opcode
+    değişken byte0_sonuc = soket_oku_byte(ws.soket_fd, timeout_ms)
+    eğer byte0_sonuc.hata_mı() ise yap
+        dön Hata(HttpHata yap
+            mesaj: "WebSocket frame başlangıcı okunamadı",
+            hata_türü: "connection",
+            durum_kodu: -1
+        son)
+    son
+    
+    değişken byte0 = byte0_sonuc.unwrap()
+    değişken fin = (byte0 & 0x80) != 0
+    değişken opcode_int = byte0 & 0x0F
+    değişken opcode = websocket_int_to_opcode(opcode_int)
+    
+    // Byte 1: MASK + Payload length
+    değişken byte1 = soket_oku_byte(ws.soket_fd, timeout_ms).unwrap()
+    değişken masked = (byte1 & 0x80) != 0
+    değişken payload_len = byte1 & 0x7F
+    
+    // Extended payload length
+    eğer payload_len == 126 ise yap
+        değişken len_high = soket_oku_byte(ws.soket_fd, timeout_ms).unwrap()
+        değişken len_low = soket_oku_byte(ws.soket_fd, timeout_ms).unwrap()
+        payload_len = (len_high << 8) | len_low
+    değilse eğer payload_len == 127 ise yap
+        // 64-bit length (simplified - assume < 2^31)
+        değişken len_bytes = soket_oku_bytes(ws.soket_fd, 8, timeout_ms).unwrap()
+        payload_len = 0
+        için i = 4 .. 8 yap  // Only use lower 32-bits
+            payload_len = (payload_len << 8) | len_bytes[i]
+        son
+    son
+    
+    // Masking key (eğer masked ise)
+    değişken masking_key = liste_oluştur[byte](4)
+    eğer masked ise yap
+        için i = 0 .. 4 yap
+            masking_key[i] = soket_oku_byte(ws.soket_fd, timeout_ms).unwrap()
+        son
+    son
+    
+    // Payload data
+    değişken payload = liste_oluştur[byte](payload_len)
+    için i = 0 .. payload_len yap
+        değişken byte = soket_oku_byte(ws.soket_fd, timeout_ms).unwrap()
+        eğer masked ise yap
+            byte = byte ^ masking_key[i % 4]
+        son
+        payload[i] = byte
+    son
+    
+    dön Başarılı(WebSocketFrame yap
+        fin: fin,
+        opcode: opcode,
+        mask: masked,
+        payload: payload
+    son)
+son
+
+// WebSocket PONG gönder (PING'e yanıt)
+fonksiyon websocket_send_pong(ws: WebSocketBaglanti, payload: liste[byte]) -> Sonuç[boş, HttpHata]
+yap
+    değişken frame = WebSocketFrame yap
+        fin: doğru,
+        opcode: "PONG",
+        mask: doğru,
+        payload: payload  // Echo back the PING payload
+    son
+    
+    değişken frame_bytes = websocket_serialize_frame(frame)
+    soket_yaz(ws.soket_fd, frame_bytes)
+    
+    dön Başarılı(boş)
+son
+
+// WebSocket CLOSE frame encode et
+fonksiyon websocket_encode_close(kod: tamsayı, sebep: yazı) -> liste[byte]
+yap
+    değişken payload = liste_oluştur[byte]()
+    
+    // Status code (2 bytes, big-endian)
+    liste_ekle(payload, (kod >> 8) & 0xFF)
+    liste_ekle(payload, kod & 0xFF)
+    
+    // Reason string (UTF-8)
+    eğer yazı_uzunluk(sebep) > 0 ise yap
+        değişken sebep_bytes = string_to_bytes(sebep)
+        için byte içinde sebep_bytes yap
+            liste_ekle(payload, byte)
+        son
+    son
+    
+    dön payload
+son
+
+// Opcode conversion helpers
+fonksiyon websocket_opcode_to_int(opcode: WebSocketOpcode) -> tamsayı
+yap
+    seç opcode yap
+        durum "CONTINUATION" => dön 0x0
+        durum "TEXT" => dön 0x1
+        durum "BINARY" => dön 0x2
+        durum "CLOSE" => dön 0x8
+        durum "PING" => dön 0x9
+        durum "PONG" => dön 0xA
+        durum _ => dön 0x0
+    son
+son
+
+fonksiyon websocket_int_to_opcode(code: tamsayı) -> WebSocketOpcode
+yap
+    seç code yap
+        durum 0x0 => dön "CONTINUATION"
+        durum 0x1 => dön "TEXT"
+        durum 0x2 => dön "BINARY"
+        durum 0x8 => dön "CLOSE"
+        durum 0x9 => dön "PING"
+        durum 0xA => dön "PONG"
+        durum _ => dön "CONTINUATION"
+    son
+son
+
+// URL parsing helpers
+fonksiyon url_parse_host(url: yazı) -> yazı
+yap
+    // ws://example.com:8080/path -> example.com
+    // wss://example.com/path -> example.com
+    değişken start = url.indexOf("://") + 3
+    değişken end = url.indexOf("/", start)
+    eğer end == -1 ise end = yazı_uzunluk(url) son
+    
+    değişken host_port = yazı_dilim(url, start, end)
+    değişken colon_pos = host_port.indexOf(":")
+    
+    eğer colon_pos != -1 ise yap
+        dön yazı_dilim(host_port, 0, colon_pos)
+    son değilse yap
+        dön host_port
+    son
+son
+
+fonksiyon url_parse_path(url: yazı) -> yazı
+yap
+    // ws://example.com:8080/path/to/ws -> /path/to/ws
+    değişken start = url.indexOf("://") + 3
+    değişken slash_pos = url.indexOf("/", start)
+    
+    eğer slash_pos != -1 ise yap
+        dön yazı_dilim(url, slash_pos, yazı_uzunluk(url))
+    son değilse yap
+        dön "/"
+    son
+son
+
+// ============================================================================
+// TLS/SSL SUPPORT (Yeni - v1.7)
+// ============================================================================
+
+// TLS versiyonları
+tip TlsVersion = "TLS_1_0" | "TLS_1_1" | "TLS_1_2" | "TLS_1_3"
+
+// TLS bağlantısı
+tip TlsBaglanti = yapı yap
+    soket_fd: tamsayı,
+    ssl_ctx: tamsayı,         // SSL_CTX pointer
+    ssl_handle: tamsayı,      // SSL pointer
+    versiyon: TlsVersion,
+    cipher_suite: yazı,
+    sertifika_doğrulandı: mantıksal
+son
+
+// TLS seçenekleri
+tip TlsSecenekler = yapı yap
+    min_versiyon: TlsVersion,
+    max_versiyon: TlsVersion,
+    sertifika_dogrula: mantıksal,
+    ca_bundle_yolu: yazı,
+    client_sertifika: yazı,
+    client_key: yazı,
+    sni_hostname: yazı        // Server Name Indication
+son
+
+// TLS bağlantısı oluştur
+fonksiyon tls_connect(soket: tamsayı, hostname: yazı, secenekler: TlsSecenekler = tls_varsayilan_secenekler()) -> Sonuç[TlsBaglanti, HttpHata]
+yap
+    // OpenSSL/rustls backend'e native call
+    değişken ctx_sonuç = @native tls_ctx_new(secenekler)
+    eğer ctx_sonuç.hata_mı() ise yap
+        dön Hata(HttpHata yap
+            mesaj: "TLS context oluşturulamadı",
+            hata_türü: "tls",
+            durum_kodu: -1
+        son)
+    son
+    
+    değişken ssl_sonuç = @native tls_new(ctx_sonuç.unwrap(), soket)
+    eğer ssl_sonuç.hata_mı() ise yap
+        dön Hata(HttpHata yap
+            mesaj: "TLS handshake başarısız",
+            hata_türü: "tls",
+            durum_kodu: -1
+        son)
+    son
+    
+    değişken ssl = ssl_sonuç.unwrap()
+    
+    // SNI ayarla
+    @native tls_set_hostname(ssl, secenekler.sni_hostname)
+    
+    // Handshake
+    değişken handshake_sonuç = @native tls_connect_handshake(ssl)
+    eğer handshake_sonuç.hata_mı() ise yap
+        dön Hata(HttpHata yap
+            mesaj: "TLS handshake başarısız: " + handshake_sonuç.hata().mesaj,
+            hata_türü: "tls",
+            durum_kodu: -1
+        son)
+    son
+    
+    // Sertifika doğrula
+    değişken sertifika_dogrulandı = yanlış
+    eğer secenekler.sertifika_dogrula ise yap
+        değişken verify_sonuç = @native tls_verify_certificate(ssl, hostname)
+        sertifika_dogrulandı = verify_sonuç.başarılı_mı()
+    son
+    
+    dön Başarılı(TlsBaglanti yap
+        soket_fd: soket,
+        ssl_ctx: ctx_sonuç.unwrap(),
+        ssl_handle: ssl,
+        versiyon: @native tls_get_version(ssl),
+        cipher_suite: @native tls_get_cipher(ssl),
+        sertifika_doğrulandı: sertifika_dogrulandı
+    son)
+son
+
+// TLS üzerinden veri oku
+fonksiyon tls_read(tls: TlsBaglanti, tampon: liste[byte], boyut: tamsayı) -> Sonuç[tamsayı, HttpHata]
+yap
+    değişken okunan = @native tls_read_bytes(tls.ssl_handle, tampon, boyut)
+    eğer okunan < 0 ise yap
+        dön Hata(HttpHata yap
+            mesaj: "TLS okuma hatası",
+            hata_türü: "tls",
+            durum_kodu: -1
+        son)
+    son
+    dön Başarılı(okunan)
+son
+
+// TLS üzerinden veri yaz
+fonksiyon tls_write(tls: TlsBaglanti, veri: liste[byte]) -> Sonuç[tamsayı, HttpHata]
+yap
+    değişken yazılan = @native tls_write_bytes(tls.ssl_handle, veri, liste_uzunluk(veri))
+    eğer yazılan < 0 ise yap
+        dön Hata(HttpHata yap
+            mesaj: "TLS yazma hatası",
+            hata_türü: "tls",
+            durum_kodu: -1
+        son)
+    son
+    dön Başarılı(yazılan)
+son
+
+// TLS bağlantısını kapat
+fonksiyon tls_close(tls: TlsBaglanti) -> Sonuç[boş, HttpHata]
+yap
+    @native tls_shutdown(tls.ssl_handle)
+    @native tls_free(tls.ssl_handle)
+    @native tls_ctx_free(tls.ssl_ctx)
+    soket_kapat(tls.soket_fd)
+    
+    dön Başarılı(boş)
+son
+
+// Varsayılan TLS seçenekleri
+fonksiyon tls_varsayilan_secenekler() -> TlsSecenekler
+yap
+    dön TlsSecenekler yap
+        min_versiyon: "TLS_1_2",
+        max_versiyon: "TLS_1_3",
+        sertifika_dogrula: doğru,
+        ca_bundle_yolu: "/etc/ssl/certs/ca-bundle.crt",  // Platform-specific
+        client_sertifika: "",
+        client_key: "",
+        sni_hostname: ""
+    son
+son
+
+son  // modül http

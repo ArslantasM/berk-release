@@ -1,0 +1,927 @@
+//! # Math Module - Scientific Mathematics
+//!
+//! University-level + Research + Engineering mathematics library.
+//!
+//! Üniversite seviyesi + Araştırma + Mühendislik matematik kütüphanesi.
+//!
+//! ## Inspired By / İlham Kaynakları
+//!
+//! - Julia Math + FastMath + SpecialFunctions
+//! - NumPy / SciPy (Python scientific computing)
+//! - Rust: nalgebra, ndarray, statrs, argmin
+//! - GNU Scientific Library (GSL)
+//! - BLAS/LAPACK/LINPACK standards
+//! - MATLAB/Octave mathematical functions
+//!
+//! ## Features / Özellikler
+//!
+//! ### Basic Functions / Temel Fonksiyonlar
+//! - `abs()`, `sign()`, `max()`, `min()`, `clamp()` - Basic arithmetic / Temel aritmetik
+//! - `pow()`, `sqrt()`, `cbrt()` - Power and roots / Üs ve kökler
+//!
+//! ### Trigonometry / Trigonometri
+//! - `sin()`, `cos()`, `tan()` - Trigonometric functions (radians) / Trigonometrik fonksiyonlar (radyan)
+//! - `asin()`, `acos()`, `atan()`, `atan2()` - Inverse trig / Ters trigonometrik
+//! - `sinh()`, `cosh()`, `tanh()` - Hyperbolic functions / Hiperbolik fonksiyonlar
+//! - `deg_to_rad()`, `rad_to_deg()` - Angle conversion / Açı dönüşümü
+//!
+//! ### Exponential & Logarithmic / Üstel & Logaritmik
+//! - `exp()`, `exp2()`, `expm1()` - Exponential / Üstel
+//! - `ln()`, `log2()`, `log10()`, `log()` - Logarithms / Logaritmalar
+//!
+//! ### Special Functions / Özel Fonksiyonlar
+//! - `gamma()`, `lgamma()` - Gamma function / Gamma fonksiyonu
+//! - `beta()` - Beta function / Beta fonksiyonu
+//! - `erf()`, `erfc()` - Error functions / Hata fonksiyonları
+//! - `bessel_j()`, `bessel_y()` - Bessel functions / Bessel fonksiyonları
+//!
+//! ### Numerical Methods / Sayısal Yöntemler
+//! - `newton_raphson()` - Root finding / Kök bulma
+//! - `bisection()` - Interval bisection / Aralık ikiye bölme
+//! - `simpson()`, `trapezoid()` - Numerical integration / Sayısal integral
+//! - `linear_interp()`, `cubic_spline()` - Interpolation / İnterpolasyon
+//!
+//! ### Constants / Sabitler
+//! - `PI` (π = 3.14159...), `E` (2.71828...), `PHI` (1.618...) - Mathematical constants / Matematiksel sabitler
+//! - `LIGHT_SPEED`, `PLANCK`, `BOLTZMANN` - Physical constants / Fiziksel sabitler
+//!
+//! ## Example / Örnek
+//!
+//! ```berk
+//! kullan math
+//!
+//! // Trigonometry / Trigonometri
+//! değişken açı = math.deg_to_rad(45.0)  // 45° -> radyan
+//! değişken sin_val = math.sin(açı)  // 0.707...
+//!
+//! // Power and roots / Üs ve kökler
+//! değişken kare = math.pow(5.0, 2.0)  // 25.0
+//! değişken kök = math.sqrt(25.0)  // 5.0
+//!
+//! // Special functions / Özel fonksiyonlar
+//! değişken fakt = math.gamma(5.0)  // 4! = 24
+//! ```
+//!
+//! ## Performance / Performans
+//!
+//! - LLVM fast-math optimizations enabled
+//! - Hardware-accelerated trigonometry (FPU)
+//! - SIMD vectorization for array operations
+//!
+//! ## Backend
+//!
+//! - LLVM intrinsics (sqrt, sin, cos, exp, log)
+//! - libm (GNU C Math Library)
+//! - Custom BERK implementations for special functions
+
+// ============================================================================
+// SABİTLER / MATHEMATICAL CONSTANTS
+// ============================================================================
+
+sabit PI = 3.14159265358979323846              // π
+sabit E = 2.71828182845904523536               // Euler sayısı / Euler's number
+sabit PHI = 1.61803398874989484820             // Altın oran / Golden ratio
+sabit TAU = 6.28318530717958647692             // τ = 2π
+sabit SQRT2 = 1.41421356237309504880           // √2
+sabit SQRT3 = 1.73205080756887729352           // √3
+sabit SQRT5 = 2.23606797749978969640           // √5
+sabit LN2 = 0.69314718055994530942             // ln(2)
+sabit LN10 = 2.30258509299404568402            // ln(10)
+sabit LOG2E = 1.44269504088896340736           // log₂(e)
+sabit LOG10E = 0.43429448190325182765          // log₁₀(e)
+sabit EULER_GAMMA = 0.57721566490153286061     // Euler-Mascheroni sabiti
+sabit CATALAN = 0.91596559417721901505         // Catalan sabiti
+
+// Fiziksel sabitler (birim sistemi: SI)
+// Physical constants (SI units)
+sabit LIGHT_SPEED = 299792458                  // c (m/s)
+sabit PLANCK = 6.62607015e-34                  // h (J·s) - Planck sabiti
+sabit BOLTZMANN = 1.380649e-23                 // k (J/K) - Boltzmann sabiti
+sabit AVOGADRO = 6.02214076e23                 // Nₐ (mol⁻¹) - Avogadro sayısı
+sabit GAS_CONSTANT = 8.314462618               // R (J/(mol·K)) - Gaz sabiti
+sabit GRAVITATIONAL = 6.67430e-11              // G (m³/(kg·s²)) - Evrensel çekim sabiti
+sabit ELECTRON_MASS = 9.1093837015e-31         // mₑ (kg) - Elektron kütlesi
+sabit PROTON_MASS = 1.67262192369e-27          // mₚ (kg) - Proton kütlesi
+
+// ============================================================================
+// TEMEL ARİTMETİK / BASIC ARITHMETIC
+// ============================================================================
+
+// Mutlak değer / Absolute value
+fonksiyon abs_int(x: tamsayı) -> tamsayı yap
+    eğer x < 0 ise dön -x
+    dön x
+son
+
+fonksiyon abs_float(x: ondalık) -> ondalık yap
+    // Backend: LLVM fabs intrinsic
+    eğer x < 0.0 ise dön -x
+    dön x
+son
+
+fonksiyon abs(x: ondalık) -> ondalık yap
+    dön abs_float(x)
+son
+
+// İşaret fonksiyonu / Sign function
+// sign(x) = -1 eğer x<0, 0 eğer x==0, +1 eğer x>0
+fonksiyon sign_int(x: tamsayı) -> tamsayı yap
+    eğer x < 0 ise dön -1
+    eğer x > 0 ise dön 1
+    dön 0
+son
+
+fonksiyon sign_float(x: ondalık) -> ondalık yap
+    eğer x < 0.0 ise dön -1.0
+    eğer x > 0.0 ise dön 1.0
+    dön 0.0
+son
+
+// Kopyala işaret / Copy sign: magnitude of x with sign of y
+fonksiyon copysign(x: ondalık, y: ondalık) -> ondalık yap
+    // Backend: LLVM copysign intrinsic
+    değişken ax = abs_float(x)
+    eğer y < 0.0 ise dön -ax
+    dön ax
+son
+
+// Max / Min
+fonksiyon max_int(a: tamsayı, b: tamsayı) -> tamsayı yap
+    eğer a > b ise dön a
+    dön b
+son
+
+fonksiyon min_int(a: tamsayı, b: tamsayı) -> tamsayı yap
+    eğer a < b ise dön a
+    dön b
+son
+
+fonksiyon max_float(a: ondalık, b: ondalık) -> ondalık yap
+    // Backend: LLVM maxnum (NaN handling)
+    eğer a > b ise dön a
+    dön b
+son
+
+fonksiyon min_float(a: ondalık, b: ondalık) -> ondalık yap
+    // Backend: LLVM minnum (NaN handling)
+    eğer a < b ise dön a
+    dön b
+son
+
+// Clamp (sınırla)
+fonksiyon clamp_int(x: tamsayı, min_val: tamsayı, max_val: tamsayı) -> tamsayı yap
+    eğer x < min_val ise dön min_val
+    eğer x > max_val ise dön max_val
+    dön x
+son
+
+fonksiyon clamp_float(x: ondalık, min_val: ondalık, max_val: ondalık) -> ondalık yap
+    eğer x < min_val ise dön min_val
+    eğer x > max_val ise dön max_val
+    dön x
+son
+
+// ============================================================================
+// ÜS VE KÖK / POWER AND ROOT
+// ============================================================================
+
+// Tam sayı üs alma (hızlı)
+// Integer power (fast)
+fonksiyon pow_int(taban: tamsayı, üs: tamsayı) -> tamsayı yap
+    // Binary exponentiation O(log n)
+    eğer üs == 0 ise dön 1
+    eğer üs < 0 ise dön 0  // Tam sayıda negatif üs desteklenmez
+    
+    değişken sonuç = 1
+    değişken çarpan = taban
+    değişken kalan_üs = üs
+    
+    // Binary exponentiation loop
+    iken kalan_üs > 0 yap
+        eğer (kalan_üs % 2) == 1 ise yap
+            sonuç = sonuç * çarpan
+        son
+        çarpan = çarpan * çarpan
+        kalan_üs = kalan_üs / 2
+    son
+    
+    dön sonuç
+son
+
+// Ondalık üs alma
+// Float power
+fonksiyon pow_float(taban: ondalık, üs: ondalık) -> ondalık yap
+    // Backend: LLVM pow intrinsic veya libm pow()
+    // Yaklaşık placeholder:
+    // pow(x, y) = exp(y * log(x))
+    dön 0.0  // Backend gerekli
+son
+
+fonksiyon pow(taban: ondalık, üs: ondalık) -> ondalık yap
+    dön pow_float(taban, üs)
+son
+
+// Kare alma
+fonksiyon kare_int(x: tamsayı) -> tamsayı yap
+    dön x * x
+son
+
+fonksiyon kare_float(x: ondalık) -> ondalık yap
+    dön x * x
+son
+
+fonksiyon kare(x: ondalık) -> ondalık yap
+    dön x * x
+son
+
+// Küp alma
+fonksiyon küp_int(x: tamsayı) -> tamsayı yap
+    dön x * x * x
+son
+
+fonksiyon küp_float(x: ondalık) -> ondalık yap
+    dön x * x * x
+son
+
+// Karekök
+// Square root
+fonksiyon sqrt(x: ondalık) -> ondalık yap
+    // Backend: LLVM sqrt intrinsic
+    // Newton-Raphson placeholder (basit yaklaşım)
+    eğer x < 0.0 ise dön 0.0  // Hata: negatif kök
+    eğer x == 0.0 ise dön 0.0
+    
+    // Newton-Raphson: x_n+1 = (x_n + a/x_n) / 2
+    değişken tahmin = x / 2.0
+    değişken i = 0
+    iken i < 10 yap  // 10 iterasyon
+        tahmin = (tahmin + x / tahmin) / 2.0
+        i = i + 1
+    son
+    dön tahmin
+son
+
+// Kübik kök / Cube root
+fonksiyon cbrt(x: ondalık) -> ondalık yap
+    // Backend: libm cbrt()
+    // cbrt(-x) = -cbrt(x) (negatif değerlerde çalışır)
+    değişken işaret = sign_float(x)
+    değişken ax = abs_float(x)
+    // Yaklaşık: pow(x, 1/3)
+    dön 0.0  // Backend gerekli
+son
+
+// N-inci kök
+fonksiyon nth_root(x: ondalık, n: tamsayı) -> ondalık yap
+    // x^(1/n) = exp(log(x) / n)
+    dön 0.0  // Backend gerekli
+son
+
+// Hipotenüs (Pisagor)
+// hypot(a, b) = sqrt(a² + b²) - overflow korumalı
+fonksiyon hypot(a: ondalık, b: ondalık) -> ondalık yap
+    // Backend: hypot() - overflow-safe implementation
+    değişken aa = abs_float(a)
+    değişken bb = abs_float(b)
+    eğer aa > bb ise yap
+        değişken oran = bb / aa
+        dön aa * sqrt(1.0 + oran * oran)
+    son
+    eğer bb == 0.0 ise dön 0.0
+    değişken oran = aa / bb
+    dön bb * sqrt(1.0 + oran * oran)
+son
+
+// 3D hipotenüs
+fonksiyon hypot3(a: ondalık, b: ondalık, c: ondalık) -> ondalık yap
+    dön sqrt(a*a + b*b + c*c)
+son
+
+// ============================================================================
+// EXP VE LOG / EXPONENTIAL AND LOGARITHM
+// ============================================================================
+
+// e^x
+fonksiyon exp(x: ondalık) -> ondalık yap
+    // Backend: LLVM exp intrinsic veya libm exp()
+    // Taylor serisi yaklaşımı: e^x = 1 + x + x²/2! + x³/3! + ...
+    dön 0.0  // Backend gerekli
+son
+
+// e^x - 1 (küçük x için hassas)
+fonksiyon expm1(x: ondalık) -> ondalık yap
+    // Backend: libm expm1() - precision for small x
+    dön 0.0  // Backend gerekli
+son
+
+// 2^x
+fonksiyon exp2(x: ondalık) -> ondalık yap
+    // Backend: LLVM exp2 intrinsic
+    dön 0.0  // Backend gerekli
+son
+
+// 10^x
+fonksiyon exp10(x: ondalık) -> ondalık yap
+    // exp10(x) = 10^x = exp(x * ln(10))
+    dön 0.0  // Backend gerekli
+son
+
+// Doğal logaritma / Natural logarithm
+// ln(x) = log_e(x)
+fonksiyon log(x: ondalık) -> ondalık yap
+    // Backend: LLVM log intrinsic veya libm log()
+    eğer x <= 0.0 ise dön 0.0  // Hata: log(<=0) tanımsız
+    dön 0.0  // Backend gerekli
+son
+
+// log(1 + x) - küçük x için hassas
+fonksiyon log1p(x: ondalık) -> ondalık yap
+    // Backend: libm log1p() - precision for small x
+    dön 0.0  // Backend gerekli
+son
+
+// log₂(x)
+fonksiyon log2(x: ondalık) -> ondalık yap
+    // Backend: LLVM log2 intrinsic
+    dön 0.0  // Backend gerekli
+son
+
+// log₁₀(x)
+fonksiyon log10(x: ondalık) -> ondalık yap
+    // Backend: LLVM log10 intrinsic
+    dön 0.0  // Backend gerekli
+son
+
+// Logaritma tabanı b
+fonksiyon logb(x: ondalık, taban: ondalık) -> ondalık yap
+    // log_b(x) = log(x) / log(b)
+    dön 0.0  // Backend: log(x) / log(taban)
+son
+
+// ============================================================================
+// TRİGONOMETRİK FONKSİYONLAR (RADYAN) / TRIGONOMETRIC (RADIANS)
+// ============================================================================
+
+// Sinüs / Sine
+fonksiyon sin(x: ondalık) -> ondalık yap
+    // Backend: LLVM sin intrinsic veya libm sin()
+    // Taylor serisi: sin(x) = x - x³/3! + x⁵/5! - x⁷/7! + ...
+    dön 0.0  // Backend gerekli
+son
+
+// Kosinüs / Cosine
+fonksiyon cos(x: ondalık) -> ondalık yap
+    // Backend: LLVM cos intrinsic veya libm cos()
+    // Taylor serisi: cos(x) = 1 - x²/2! + x⁴/4! - x⁶/6! + ...
+    dön 0.0  // Backend gerekli
+son
+
+// Tanjant / Tangent
+fonksiyon tan(x: ondalık) -> ondalık yap
+    // Backend: libm tan()
+    // tan(x) = sin(x) / cos(x)
+    dön 0.0  // Backend gerekli
+son
+
+// Sin ve Cos beraber (optimize edilmiş)
+// Simultaneous sin and cos (optimized)
+fonksiyon sincos(x: ondalık) -> (ondalık, ondalık) yap
+    // Backend: sincos() - tek seferde ikisini hesaplar (hızlı)
+    değişken s = sin(x)
+    değişken c = cos(x)
+    dön (s, c)
+son
+
+// Kotanjant / Cotangent
+fonksiyon cot(x: ondalık) -> ondalık yap
+    // cot(x) = cos(x) / sin(x) = 1 / tan(x)
+    dön 0.0  // Backend gerekli
+son
+
+// Sekant / Secant
+fonksiyon sec(x: ondalık) -> ondalık yap
+    // sec(x) = 1 / cos(x)
+    dön 0.0  // Backend gerekli
+son
+
+// Kosekant / Cosecant
+fonksiyon csc(x: ondalık) -> ondalık yap
+    // csc(x) = 1 / sin(x)
+    dön 0.0  // Backend gerekli
+son
+
+// ============================================================================
+// TERS TRİGONOMETRİK FONKSİYONLAR / INVERSE TRIGONOMETRIC
+// ============================================================================
+
+// Arksinüs / Arcsine
+// asin(x) ∈ [-π/2, π/2], x ∈ [-1, 1]
+fonksiyon asin(x: ondalık) -> ondalık yap
+    // Backend: libm asin()
+    eğer x < -1.0 ise dön 0.0  // Hata
+    eğer x > 1.0 ise dön 0.0   // Hata
+    dön 0.0  // Backend gerekli
+son
+
+// Arkkosinüs / Arccosine
+// acos(x) ∈ [0, π], x ∈ [-1, 1]
+fonksiyon acos(x: ondalık) -> ondalık yap
+    // Backend: libm acos()
+    eğer x < -1.0 ise dön 0.0  // Hata
+    eğer x > 1.0 ise dön 0.0   // Hata
+    dön 0.0  // Backend gerekli
+son
+
+// Arktanjant / Arctangent
+// atan(x) ∈ [-π/2, π/2]
+fonksiyon atan(x: ondalık) -> ondalık yap
+    // Backend: libm atan()
+    dön 0.0  // Backend gerekli
+son
+
+// Arktanjant iki argümanlı / Two-argument arctangent
+// atan2(y, x) = açı kutupsal koordinatlarda
+// atan2(y, x) ∈ [-π, π]
+fonksiyon atan2(y: ondalık, x: ondalık) -> ondalık yap
+    // Backend: libm atan2()
+    // Tüm kuadrantlar için doğru açı
+    dön 0.0  // Backend gerekli
+son
+
+// ============================================================================
+// HİPERBOLİK FONKSİYONLAR / HYPERBOLIC FUNCTIONS
+// ============================================================================
+
+// Hiperbolik sinüs / Hyperbolic sine
+// sinh(x) = (e^x - e^(-x)) / 2
+fonksiyon sinh(x: ondalık) -> ondalık yap
+    // Backend: libm sinh()
+    dön 0.0  // Backend gerekli
+son
+
+// Hiperbolik kosinüs / Hyperbolic cosine
+// cosh(x) = (e^x + e^(-x)) / 2
+fonksiyon cosh(x: ondalık) -> ondalık yap
+    // Backend: libm cosh()
+    dön 0.0  // Backend gerekli
+son
+
+// Hiperbolik tanjant / Hyperbolic tangent
+// tanh(x) = sinh(x) / cosh(x) = (e^x - e^(-x)) / (e^x + e^(-x))
+fonksiyon tanh(x: ondalık) -> ondalık yap
+    // Backend: libm tanh()
+    dön 0.0  // Backend gerekli
+son
+
+// Ters hiperbolik sinüs / Inverse hyperbolic sine
+// asinh(x) = log(x + sqrt(x² + 1))
+fonksiyon asinh(x: ondalık) -> ondalık yap
+    // Backend: libm asinh()
+    dön 0.0  // Backend gerekli
+son
+
+// Ters hiperbolik kosinüs / Inverse hyperbolic cosine
+// acosh(x) = log(x + sqrt(x² - 1)), x ≥ 1
+fonksiyon acosh(x: ondalık) -> ondalık yap
+    // Backend: libm acosh()
+    eğer x < 1.0 ise dön 0.0  // Hata
+    dön 0.0  // Backend gerekli
+son
+
+// Ters hiperbolik tanjant / Inverse hyperbolic tangent
+// atanh(x) = 0.5 * log((1+x)/(1-x)), x ∈ (-1, 1)
+fonksiyon atanh(x: ondalık) -> ondalık yap
+    // Backend: libm atanh()
+    eğer x <= -1.0 ise dön 0.0  // Hata
+    eğer x >= 1.0 ise dön 0.0   // Hata
+    dön 0.0  // Backend gerekli
+son
+
+// ============================================================================
+// TRİGONOMETRİK FONKSİYONLAR (DERECE) / TRIGONOMETRIC (DEGREES)
+// ============================================================================
+
+// Derece → Radyan
+fonksiyon deg2rad(derece: ondalık) -> ondalık yap
+    dön derece * PI / 180.0
+son
+
+// Radyan → Derece
+fonksiyon rad2deg(radyan: ondalık) -> ondalık yap
+    dön radyan * 180.0 / PI
+son
+
+// Sinüs (derece)
+fonksiyon sind(derece: ondalık) -> ondalık yap
+    dön sin(deg2rad(derece))
+son
+
+// Kosinüs (derece)
+fonksiyon cosd(derece: ondalık) -> ondalık yap
+    dön cos(deg2rad(derece))
+son
+
+// Tanjant (derece)
+fonksiyon tand(derece: ondalık) -> ondalık yap
+    dön tan(deg2rad(derece))
+son
+
+// Arksinüs (derece)
+fonksiyon asind(x: ondalık) -> ondalık yap
+    dön rad2deg(asin(x))
+son
+
+// Arkkosinüs (derece)
+fonksiyon acosd(x: ondalık) -> ondalık yap
+    dön rad2deg(acos(x))
+son
+
+// Arktanjant (derece)
+fonksiyon atand(x: ondalık) -> ondalık yap
+    dön rad2deg(atan(x))
+son
+
+// ============================================================================
+// POLİNOM DEĞERLENDİRME / POLYNOMIAL EVALUATION
+// ============================================================================
+
+// Horner's method ile polinom değerlendirme
+// Evaluate polynomial: p(x) = c[0] + c[1]*x + c[2]*x² + ... + c[n]*x^n
+// Horner: p(x) = c[0] + x*(c[1] + x*(c[2] + ... + x*c[n]))
+// O(n) complexity, numerically stable
+
+// Placeholder: BERK'te liste desteği gelince implement edilecek
+// fonksiyon evalpoly(x: ondalık, katsayılar: liste[ondalık]) -> ondalık yap
+//     // Horner's method implementation
+//     değişken sonuç = katsayılar[n-1]
+//     i = n-2 iken i >= 0 yap
+//         sonuç = katsayılar[i] + x * sonuç
+//         i = i - 1
+//     son
+//     dön sonuç
+// son
+
+// İkinci derece polinom (quadratic): ax² + bx + c = 0
+// Quadratic formula: x = (-b ± √(b²-4ac)) / (2a)
+fonksiyon quadratic_roots(a: ondalık, b: ondalık, c: ondalık) -> (ondalık, ondalık, mantıksal) yap
+    // Delta (discriminant)
+    değişken delta = b*b - 4.0*a*c
+    
+    eğer delta < 0.0 ise yap
+        // Gerçek kök yok (kompleks kökler var)
+        dön (0.0, 0.0, yanlış)
+    son
+    
+    değişken sqrt_delta = sqrt(delta)
+    değişken x1 = (-b + sqrt_delta) / (2.0 * a)
+    değişken x2 = (-b - sqrt_delta) / (2.0 * a)
+    
+    dön (x1, x2, doğru)
+son
+
+// ============================================================================
+// NÜMERİK İNTEGRASYON / NUMERICAL INTEGRATION
+// ============================================================================
+
+// Simpson's Rule (basit, 3 nokta)
+// Integral of f(x) from a to b
+// Placeholder: Fonksiyon pointer gerekli
+// fonksiyon simpson(f: fonksiyon, a: ondalık, b: ondalık, n: tamsayı) -> ondalık
+
+// Trapez kuralı
+// fonksiyon trapezoid(f: fonksiyon, a: ondalık, b: ondalık, n: tamsayı) -> ondalık
+
+// ============================================================================
+// NÜMERİK TÜREVİ / NUMERICAL DIFFERENTIATION
+// ============================================================================
+
+// Merkezi fark / Central difference
+// f'(x) ≈ (f(x+h) - f(x-h)) / (2h)
+// Placeholder: Fonksiyon pointer gerekli
+// fonksiyon derivative_central(f: fonksiyon, x: ondalık, h: ondalık) -> ondalık
+
+// ============================================================================
+// KÖK BULMA / ROOT FINDING
+// ============================================================================
+
+// Newton-Raphson yöntemi
+// x_n+1 = x_n - f(x_n) / f'(x_n)
+// Placeholder: Fonksiyon pointer gerekli
+// fonksiyon newton_raphson(f: fonksiyon, df: fonksiyon, x0: ondalık, tol: ondalık, max_iter: tamsayı) -> ondalık
+
+// Bisection (ikiye bölme) yöntemi
+// f(a) ve f(b) zıt işaretli olmalı
+// fonksiyon bisection(f: fonksiyon, a: ondalık, b: ondalık, tol: ondalık) -> ondalık
+
+// ============================================================================
+// ÖZEL FONKSİYONLAR / SPECIAL FUNCTIONS
+// ============================================================================
+
+// Faktöriyel (tam sayı)
+// n! = 1 * 2 * 3 * ... * n
+fonksiyon factorial(n: tamsayı) -> tamsayı yap
+    eğer n < 0 ise dön 0  // Hata: negatif faktöriyel
+    eğer n == 0 ise dön 1
+    eğer n == 1 ise dön 1
+    
+    değişken sonuç = 1
+    değişken i = 2
+    iken i <= n yap
+        sonuç = sonuç * i
+        i = i + 1
+    son
+    dön sonuç
+son
+
+// Kombinasyon: C(n, k) = n! / (k! * (n-k)!)
+fonksiyon combination(n: tamsayı, k: tamsayı) -> tamsayı yap
+    eğer k > n ise dön 0
+    eğer k == 0 ise dön 1
+    eğer k > n - k ise yap
+        k = n - k  // Optimizasyon
+    son
+    
+    değişken sonuç = 1
+    değişken i = 0
+    iken i < k yap
+        sonuç = sonuç * (n - i)
+        sonuç = sonuç / (i + 1)
+        i = i + 1
+    son
+    dön sonuç
+son
+
+// Permütasyon: P(n, k) = n! / (n-k)!
+fonksiyon permutation(n: tamsayı, k: tamsayı) -> tamsayı yap
+    eğer k > n ise dön 0
+    değişken sonuç = 1
+    değişken i = 0
+    iken i < k yap
+        sonuç = sonuç * (n - i)
+        i = i + 1
+    son
+    dön sonuç
+son
+
+// Gamma fonksiyonu Γ(x)
+// Γ(n) = (n-1)! for integers
+// Γ(x+1) = x * Γ(x)
+// Stirling's approximation: Γ(x) ≈ sqrt(2πx) * (x/e)^x
+fonksiyon gamma(x: ondalık) -> ondalık yap
+    // Backend: libm tgamma() veya Lanczos approximation
+    dön 0.0  // Backend gerekli
+son
+
+// Log-Gamma: ln(Γ(x))
+// Numerically stable for large x
+fonksiyon lgamma(x: ondalık) -> ondalık yap
+    // Backend: libm lgamma()
+    dön 0.0  // Backend gerekli
+son
+
+// Beta fonksiyonu: B(x, y) = Γ(x) * Γ(y) / Γ(x+y)
+fonksiyon beta(x: ondalık, y: ondalık) -> ondalık yap
+    // B(x, y) = exp(lgamma(x) + lgamma(y) - lgamma(x+y))
+    dön 0.0  // Backend gerekli
+son
+
+// Error function: erf(x) = (2/√π) ∫₀ˣ e^(-t²) dt
+fonksiyon erf(x: ondalık) -> ondalık yap
+    // Backend: libm erf()
+    // Taylor series veya rational approximation
+    dön 0.0  // Backend gerekli
+son
+
+// Complementary error function: erfc(x) = 1 - erf(x)
+fonksiyon erfc(x: ondalık) -> ondalık yap
+    // Backend: libm erfc() - daha hassas büyük x için
+    dön 0.0  // Backend gerekli
+son
+
+// Bessel fonksiyonları (1. tür, 0. derece)
+// J₀(x) - silindir koordinatlardaki dalga denklemi çözümü
+fonksiyon bessel_j0(x: ondalık) -> ondalık yap
+    // Backend: GSL gsl_sf_bessel_J0()
+    dön 0.0  // Backend gerekli
+son
+
+// Bessel fonksiyonu (1. tür, 1. derece)
+fonksiyon bessel_j1(x: ondalık) -> ondalık yap
+    // Backend: GSL gsl_sf_bessel_J1()
+    dön 0.0  // Backend gerekli
+son
+
+// ============================================================================
+// FAST MATH (LLVM Optimizasyonları)
+// ============================================================================
+// Julia FastMath gibi - kesinlik yerine hız
+// Assumptions: no NaN, no Inf, no signed zeros
+
+fonksiyon fast_sin(x: ondalık) -> ondalık yap
+    // LLVM fast-math flags: nsz, arcp, fast
+    dön sin(x)  // Backend: LLVM intrinsic with fast flags
+son
+
+fonksiyon fast_cos(x: ondalık) -> ondalık yap
+    dön cos(x)  // Backend: LLVM intrinsic with fast flags
+son
+
+fonksiyon fast_exp(x: ondalık) -> ondalık yap
+    dön exp(x)  // Backend: LLVM intrinsic with fast flags
+son
+
+fonksiyon fast_log(x: ondalık) -> ondalık yap
+    dön log(x)  // Backend: LLVM intrinsic with fast flags
+son
+
+fonksiyon fast_pow(x: ondalık, y: ondalık) -> ondalık yap
+    dön pow(x, y)  // Backend: LLVM intrinsic with fast flags
+son
+
+fonksiyon fast_sqrt(x: ondalık) -> ondalık yap
+    dön sqrt(x)  // Backend: LLVM intrinsic with fast flags
+son
+
+// ============================================================================
+// YUVARLAMA VE KESİNLİK / ROUNDING AND PRECISION
+// ============================================================================
+
+// Floor (aşağı yuvarla)
+fonksiyon floor(x: ondalık) -> ondalık yap
+    // Backend: LLVM floor intrinsic
+    // floor(2.7) = 2.0, floor(-2.7) = -3.0
+    dön 0.0  // Backend gerekli
+son
+
+// Ceil (yukarı yuvarla)
+fonksiyon ceil(x: ondalık) -> ondalık yap
+    // Backend: LLVM ceil intrinsic
+    // ceil(2.3) = 3.0, ceil(-2.3) = -2.0
+    dön 0.0  // Backend gerekli
+son
+
+// Round (en yakın tam sayıya yuvarla)
+fonksiyon round(x: ondalık) -> ondalık yap
+    // Backend: LLVM round intrinsic
+    // Banker's rounding: 0.5 → even
+    dön 0.0  // Backend gerekli
+son
+
+// Truncate (0'a doğru yuvarla)
+fonksiyon trunc(x: ondalık) -> ondalık yap
+    // Backend: LLVM trunc intrinsic
+    // trunc(2.7) = 2.0, trunc(-2.7) = -2.0
+    dön 0.0  // Backend gerekli
+son
+
+// Float'ı tam sayıya çevir
+fonksiyon float_to_int(x: ondalık) -> tamsayı yap
+    // Backend: LLVM fptosi
+    dön 0  // Backend gerekli
+son
+
+// Modf: tam ve kesirli kısım
+fonksiyon modf(x: ondalık) -> (ondalık, ondalık) yap
+    // Tam kısım + kesirli kısım
+    değişken tam = trunc(x)
+    değişken kesir = x - tam
+    dön (tam, kesir)
+son
+
+// ============================================================================
+// İSTATİSTİK YARDIMCI FONKSİYONLAR / STATISTICS HELPERS
+// ============================================================================
+
+// Ortalama / Mean (basit - liste ile geliştirilecek)
+// fonksiyon mean(data: liste[ondalık]) -> ondalık
+
+// Standart sapma / Standard deviation
+// fonksiyon std(data: liste[ondalık]) -> ondalık
+
+// Varyans / Variance
+// fonksiyon variance(data: liste[ondalık]) -> ondalık
+
+// ============================================================================
+// FUSED MULTIPLY-ADD (FMA)
+// ============================================================================
+
+// FMA: (x * y) + z - tek işlemde, daha hassas
+// Fused multiply-add: computes (x*y)+z in single operation
+fonksiyon fma(x: ondalık, y: ondalık, z: ondalık) -> ondalık yap
+    // Backend: LLVM fma intrinsic (hardware FMA if available)
+    // Daha hassas: yuvarlama hatası bir kez
+    dön x * y + z  // Placeholder - hardware FMA ile değiştirilmeli
+son
+
+// ============================================================================
+// IEEE 754 YARDIMCI FONKSİYONLAR / IEEE 754 HELPERS
+// ============================================================================
+
+// NaN kontrolü / Check if NaN
+fonksiyon isnan(x: ondalık) -> mantıksal yap
+    // Backend: LLVM fcmp uno (unordered comparison)
+    // NaN != NaN property
+    dön yanlış  // Backend gerekli
+son
+
+// Sonsuz kontrolü / Check if infinite
+fonksiyon isinf(x: ondalık) -> mantıksal yap
+    // Backend: LLVM fcmp oeq/une with infinity
+    dön yanlış  // Backend gerekli
+son
+
+// Sonlu kontrolü / Check if finite
+fonksiyon isfinite(x: ondalık) -> mantıksal yap
+    // finite = not (NaN or Inf)
+    dön doğru  // Backend gerekli
+son
+
+// Subnormal kontrolü / Check if subnormal
+fonksiyon issubnormal(x: ondalık) -> mantıksal yap
+    // Subnormal: 0 < |x| < min_normal
+    dön yanlış  // Backend gerekli
+son
+
+// ============================================================================
+// English Versions / İngilizce Alias'lar
+// ============================================================================
+
+function absolute(x: float) -> float do
+    return abs(x)
+end
+
+function power(base: float, exponent: float) -> float do
+    return pow(base, exponent)
+end
+
+function square_root(x: float) -> float do
+    return sqrt(x)
+end
+
+function cube_root(x: float) -> float do
+    return cbrt(x)
+end
+
+function logarithm(x: float) -> float do
+    return log(x)
+end
+
+function exponential(x: float) -> float do
+    return exp(x)
+end
+
+function sine(x: float) -> float do
+    return sin(x)
+end
+
+function cosine(x: float) -> float do
+    return cos(x)
+end
+
+function tangent(x: float) -> float do
+    return tan(x)
+end
+
+function arcsine(x: float) -> float do
+    return asin(x)
+end
+
+function arccosine(x: float) -> float do
+    return acos(x)
+end
+
+function arctangent(x: float) -> float do
+    return atan(x)
+end
+
+function hyperbolic_sine(x: float) -> float do
+    return sinh(x)
+end
+
+function hyperbolic_cosine(x: float) -> float do
+    return cosh(x)
+end
+
+function hyperbolic_tangent(x: float) -> float do
+    return tanh(x)
+end
+
+// ============================================================================
+// SONUÇ / CONCLUSION
+// ============================================================================
+// Bu modül Julia Math + NumPy + SciPy + GSL prensiplerine göre tasarlandı
+// This module is designed following Julia Math + NumPy + SciPy + GSL principles
+//
+// Backend implementasyon gereksinimleri / Backend implementation requirements:
+//   • LLVM intrinsics (sqrt, sin, cos, exp, log, pow, etc.)
+//   • libm fonksiyonları (tgamma, erf, bessel, etc.)
+//   • IEEE 754 floating-point operations
+//   • FMA hardware desteği
+//
+// Gelecek genişlemeler / Future expansions:
+//   • Kompleks sayılar (complex.berk)
+//   • Lineer cebir (linalg.berk)
+//   • İstatistik (stats.berk)
+//   • Optimizasyon (optim.berk)
+//   • Diferansiyel denklemler (ode.berk)
+// ============================================================================

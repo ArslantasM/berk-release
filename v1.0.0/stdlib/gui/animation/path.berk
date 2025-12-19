@@ -1,0 +1,900 @@
+// ============================================================================
+// BERK GUI Framework - Path Animation System
+// ============================================================================
+// SVG yolları ve bezier eğrileri üzerinde hareket
+// Motion path, path morphing, drawing animations
+// ============================================================================
+
+modül gui::animation::path
+
+kullan gui::animation::time::Time
+kullan gui::animation::easing::{EasingType, ease}
+kullan gui::animation::curve::{Vec2, BezierCurve}
+
+// ============================================================================
+// PATH SEGMENT - Yol Segmenti
+// ============================================================================
+
+/// SVG tarzı yol komutları
+pub tip PathCommand = özyinelemeli yap
+    | MoveTo(Vec2)                              // M x,y
+    | LineTo(Vec2)                              // L x,y
+    | HorizontalTo(ondalık)                     // H x
+    | VerticalTo(ondalık)                       // V y
+    | CubicBezier(Vec2, Vec2, Vec2)            // C x1,y1 x2,y2 x,y
+    | SmoothCubic(Vec2, Vec2)                  // S x2,y2 x,y
+    | QuadraticBezier(Vec2, Vec2)              // Q x1,y1 x,y
+    | SmoothQuadratic(Vec2)                    // T x,y
+    | Arc(ArcParams)                           // A rx,ry angle large-arc sweep x,y
+    | ClosePath                                // Z
+son
+
+/// Arc parametreleri
+pub tip ArcParams = yapı yap
+    rx: ondalık,
+    ry: ondalık,
+    x_rotation: ondalık,
+    large_arc: mantıksal,
+    sweep: mantıksal,
+    end: Vec2,
+son
+
+// ============================================================================
+// PATH - Yol
+// ============================================================================
+
+/// SVG tarzı yol
+pub tip Path = yapı yap
+    /// Yol komutları
+    commands: Liste[PathCommand],
+    /// Hesaplanmış noktalar (cache)
+    cached_points: Liste[Vec2],
+    /// Toplam uzunluk
+    total_length: ondalık,
+    /// Segment uzunlukları
+    segment_lengths: Liste[ondalık],
+    /// Cache geçerli mi?
+    cache_valid: mantıksal,
+son
+
+impl Path:
+    /// Boş yol
+    pub fn new() döndür Path:
+        döndür Path {
+            commands: [],
+            cached_points: [],
+            total_length: 0.0,
+            segment_lengths: [],
+            cache_valid: yanlış,
+        }
+    son
+    
+    /// SVG path string'den oluştur
+    pub fn from_svg(svg_path: yazı) döndür Path:
+        değişken path = Path::new()
+        path.parse_svg(svg_path)
+        path.update_cache()
+        döndür path
+    son
+    
+    /// SVG path parse (basitleştirilmiş)
+    fn parse_svg(mut self, svg: yazı) döndür void:
+        // Not: Gerçek implementasyonda tam SVG parser gerekir
+        // Bu basitleştirilmiş versiyon
+        
+        // Örnek: "M 0 0 L 100 100 L 200 50 Z"
+        değişken tokens = svg.split(" ")
+        değişken i = 0
+        değişken current_cmd = ""
+        
+        süre i < tokens.len():
+            değişken token = tokens[i].trim()
+            
+            eğer token == "M" veya token == "m":
+                current_cmd = "M"
+                i = i + 1
+                eğer i + 1 < tokens.len():
+                    değişken x = tokens[i].parse_float().unwrap_or(0.0)
+                    değişken y = tokens[i + 1].parse_float().unwrap_or(0.0)
+                    self.commands.push(PathCommand::MoveTo(Vec2::new(x, y)))
+                    i = i + 2
+                son
+            
+            yoksa eğer token == "L" veya token == "l":
+                current_cmd = "L"
+                i = i + 1
+                eğer i + 1 < tokens.len():
+                    değişken x = tokens[i].parse_float().unwrap_or(0.0)
+                    değişken y = tokens[i + 1].parse_float().unwrap_or(0.0)
+                    self.commands.push(PathCommand::LineTo(Vec2::new(x, y)))
+                    i = i + 2
+                son
+            
+            yoksa eğer token == "C" veya token == "c":
+                current_cmd = "C"
+                i = i + 1
+                eğer i + 5 < tokens.len():
+                    değişken x1 = tokens[i].parse_float().unwrap_or(0.0)
+                    değişken y1 = tokens[i + 1].parse_float().unwrap_or(0.0)
+                    değişken x2 = tokens[i + 2].parse_float().unwrap_or(0.0)
+                    değişken y2 = tokens[i + 3].parse_float().unwrap_or(0.0)
+                    değişken x = tokens[i + 4].parse_float().unwrap_or(0.0)
+                    değişken y = tokens[i + 5].parse_float().unwrap_or(0.0)
+                    self.commands.push(PathCommand::CubicBezier(
+                        Vec2::new(x1, y1),
+                        Vec2::new(x2, y2),
+                        Vec2::new(x, y)
+                    ))
+                    i = i + 6
+                son
+            
+            yoksa eğer token == "Q" veya token == "q":
+                current_cmd = "Q"
+                i = i + 1
+                eğer i + 3 < tokens.len():
+                    değişken x1 = tokens[i].parse_float().unwrap_or(0.0)
+                    değişken y1 = tokens[i + 1].parse_float().unwrap_or(0.0)
+                    değişken x = tokens[i + 2].parse_float().unwrap_or(0.0)
+                    değişken y = tokens[i + 3].parse_float().unwrap_or(0.0)
+                    self.commands.push(PathCommand::QuadraticBezier(
+                        Vec2::new(x1, y1),
+                        Vec2::new(x, y)
+                    ))
+                    i = i + 4
+                son
+            
+            yoksa eğer token == "Z" veya token == "z":
+                self.commands.push(PathCommand::ClosePath)
+                i = i + 1
+            
+            yoksa:
+                i = i + 1
+            son
+        son
+    son
+    
+    // ========================================================================
+    // BUILDER METHODS
+    // ========================================================================
+    
+    /// Move to
+    pub fn move_to(mut self, x: ondalık, y: ondalık) döndür Path:
+        self.commands.push(PathCommand::MoveTo(Vec2::new(x, y)))
+        self.cache_valid = yanlış
+        döndür self
+    son
+    
+    /// Line to
+    pub fn line_to(mut self, x: ondalık, y: ondalık) döndür Path:
+        self.commands.push(PathCommand::LineTo(Vec2::new(x, y)))
+        self.cache_valid = yanlış
+        döndür self
+    son
+    
+    /// Cubic bezier
+    pub fn cubic_to(mut self, x1: ondalık, y1: ondalık, x2: ondalık, y2: ondalık, x: ondalık, y: ondalık) döndür Path:
+        self.commands.push(PathCommand::CubicBezier(
+            Vec2::new(x1, y1),
+            Vec2::new(x2, y2),
+            Vec2::new(x, y)
+        ))
+        self.cache_valid = yanlış
+        döndür self
+    son
+    
+    /// Quadratic bezier
+    pub fn quad_to(mut self, x1: ondalık, y1: ondalık, x: ondalık, y: ondalık) döndür Path:
+        self.commands.push(PathCommand::QuadraticBezier(
+            Vec2::new(x1, y1),
+            Vec2::new(x, y)
+        ))
+        self.cache_valid = yanlış
+        döndür self
+    son
+    
+    /// Close path
+    pub fn close(mut self) döndür Path:
+        self.commands.push(PathCommand::ClosePath)
+        self.cache_valid = yanlış
+        döndür self
+    son
+    
+    // ========================================================================
+    // GEOMETRIC SHAPES
+    // ========================================================================
+    
+    /// Dikdörtgen
+    pub fn rect(x: ondalık, y: ondalık, width: ondalık, height: ondalık) döndür Path:
+        döndür Path::new()
+            .move_to(x, y)
+            .line_to(x + width, y)
+            .line_to(x + width, y + height)
+            .line_to(x, y + height)
+            .close()
+    son
+    
+    /// Yuvarlatılmış dikdörtgen
+    pub fn rounded_rect(x: ondalık, y: ondalık, width: ondalık, height: ondalık, radius: ondalık) döndür Path:
+        değişken r = radius.min(width / 2.0).min(height / 2.0)
+        değişken k = 0.5522847498  // Bezier circle approximation constant
+        
+        döndür Path::new()
+            .move_to(x + r, y)
+            .line_to(x + width - r, y)
+            .cubic_to(x + width - r + r * k, y, x + width, y + r - r * k, x + width, y + r)
+            .line_to(x + width, y + height - r)
+            .cubic_to(x + width, y + height - r + r * k, x + width - r + r * k, y + height, x + width - r, y + height)
+            .line_to(x + r, y + height)
+            .cubic_to(x + r - r * k, y + height, x, y + height - r + r * k, x, y + height - r)
+            .line_to(x, y + r)
+            .cubic_to(x, y + r - r * k, x + r - r * k, y, x + r, y)
+            .close()
+    son
+    
+    /// Daire
+    pub fn circle(cx: ondalık, cy: ondalık, radius: ondalık) döndür Path:
+        değişken k = 0.5522847498 * radius
+        döndür Path::new()
+            .move_to(cx + radius, cy)
+            .cubic_to(cx + radius, cy + k, cx + k, cy + radius, cx, cy + radius)
+            .cubic_to(cx - k, cy + radius, cx - radius, cy + k, cx - radius, cy)
+            .cubic_to(cx - radius, cy - k, cx - k, cy - radius, cx, cy - radius)
+            .cubic_to(cx + k, cy - radius, cx + radius, cy - k, cx + radius, cy)
+            .close()
+    son
+    
+    /// Elips
+    pub fn ellipse(cx: ondalık, cy: ondalık, rx: ondalık, ry: ondalık) döndür Path:
+        değişken kx = 0.5522847498 * rx
+        değişken ky = 0.5522847498 * ry
+        döndür Path::new()
+            .move_to(cx + rx, cy)
+            .cubic_to(cx + rx, cy + ky, cx + kx, cy + ry, cx, cy + ry)
+            .cubic_to(cx - kx, cy + ry, cx - rx, cy + ky, cx - rx, cy)
+            .cubic_to(cx - rx, cy - ky, cx - kx, cy - ry, cx, cy - ry)
+            .cubic_to(cx + kx, cy - ry, cx + rx, cy - ky, cx + rx, cy)
+            .close()
+    son
+    
+    /// Çokgen
+    pub fn polygon(cx: ondalık, cy: ondalık, radius: ondalık, sides: sayı) döndür Path:
+        değişken path = Path::new()
+        değişken angle_step = 2.0 * 3.14159265 / sides
+        
+        döngü i in 0..sides:
+            değişken angle = -3.14159265 / 2.0 + i * angle_step
+            değişken x = cx + radius * angle.cos()
+            değişken y = cy + radius * angle.sin()
+            
+            eğer i == 0:
+                path = path.move_to(x, y)
+            yoksa:
+                path = path.line_to(x, y)
+            son
+        son
+        
+        döndür path.close()
+    son
+    
+    /// Yıldız
+    pub fn star(cx: ondalık, cy: ondalık, outer_radius: ondalık, inner_radius: ondalık, points: sayı) döndür Path:
+        değişken path = Path::new()
+        değişken angle_step = 3.14159265 / points
+        
+        döngü i in 0..(points * 2):
+            değişken angle = -3.14159265 / 2.0 + i * angle_step
+            değişken r = eğer i % 2 == 0: outer_radius yoksa: inner_radius son
+            değişken x = cx + r * angle.cos()
+            değişken y = cy + r * angle.sin()
+            
+            eğer i == 0:
+                path = path.move_to(x, y)
+            yoksa:
+                path = path.line_to(x, y)
+            son
+        son
+        
+        döndür path.close()
+    son
+    
+    // ========================================================================
+    // PATH CALCULATIONS
+    // ========================================================================
+    
+    /// Cache'i güncelle
+    pub fn update_cache(mut self) döndür void:
+        eğer self.cache_valid:
+            döndür
+        son
+        
+        self.cached_points.clear()
+        self.segment_lengths.clear()
+        self.total_length = 0.0
+        
+        değişken current_pos = Vec2::zero()
+        değişken path_start = Vec2::zero()
+        
+        döngü cmd in self.commands:
+            eşleştir cmd:
+                PathCommand::MoveTo(p):
+                    current_pos = p
+                    path_start = p
+                    self.cached_points.push(p)
+                
+                PathCommand::LineTo(p):
+                    değişken length = current_pos.distance(p)
+                    self.segment_lengths.push(length)
+                    self.total_length = self.total_length + length
+                    self.cached_points.push(p)
+                    current_pos = p
+                
+                PathCommand::CubicBezier(c1, c2, p):
+                    değişken length = self.estimate_cubic_length(current_pos, c1, c2, p)
+                    self.segment_lengths.push(length)
+                    self.total_length = self.total_length + length
+                    self.cached_points.push(p)
+                    current_pos = p
+                
+                PathCommand::QuadraticBezier(c1, p):
+                    değişken length = self.estimate_quad_length(current_pos, c1, p)
+                    self.segment_lengths.push(length)
+                    self.total_length = self.total_length + length
+                    self.cached_points.push(p)
+                    current_pos = p
+                
+                PathCommand::ClosePath:
+                    değişken length = current_pos.distance(path_start)
+                    eğer length > 0.001:
+                        self.segment_lengths.push(length)
+                        self.total_length = self.total_length + length
+                    son
+                    current_pos = path_start
+                
+                _:
+                    // Diğer komutlar
+            son
+        son
+        
+        self.cache_valid = doğru
+    son
+    
+    /// Cubic bezier uzunluk tahmini
+    fn estimate_cubic_length(self, p0: Vec2, c1: Vec2, c2: Vec2, p1: Vec2) döndür ondalık:
+        // Subdivision ile yaklaşık uzunluk
+        değişken steps = 20
+        değişken length = 0.0
+        değişken prev = p0
+        
+        döngü i in 1..=steps:
+            değişken t = i / steps
+            değişken pt = self.cubic_point(p0, c1, c2, p1, t)
+            length = length + prev.distance(pt)
+            prev = pt
+        son
+        
+        döndür length
+    son
+    
+    /// Quadratic bezier uzunluk tahmini
+    fn estimate_quad_length(self, p0: Vec2, c1: Vec2, p1: Vec2) döndür ondalık:
+        değişken steps = 20
+        değişken length = 0.0
+        değişken prev = p0
+        
+        döngü i in 1..=steps:
+            değişken t = i / steps
+            değişken pt = self.quad_point(p0, c1, p1, t)
+            length = length + prev.distance(pt)
+            prev = pt
+        son
+        
+        döndür length
+    son
+    
+    /// Cubic bezier nokta
+    fn cubic_point(self, p0: Vec2, c1: Vec2, c2: Vec2, p1: Vec2, t: ondalık) döndür Vec2:
+        değişken mt = 1.0 - t
+        değişken mt2 = mt * mt
+        değişken mt3 = mt2 * mt
+        değişken t2 = t * t
+        değişken t3 = t2 * t
+        
+        döndür Vec2::new(
+            mt3 * p0.x + 3.0 * mt2 * t * c1.x + 3.0 * mt * t2 * c2.x + t3 * p1.x,
+            mt3 * p0.y + 3.0 * mt2 * t * c1.y + 3.0 * mt * t2 * c2.y + t3 * p1.y
+        )
+    son
+    
+    /// Quadratic bezier nokta
+    fn quad_point(self, p0: Vec2, c1: Vec2, p1: Vec2, t: ondalık) döndür Vec2:
+        değişken mt = 1.0 - t
+        değişken mt2 = mt * mt
+        değişken t2 = t * t
+        
+        döndür Vec2::new(
+            mt2 * p0.x + 2.0 * mt * t * c1.x + t2 * p1.x,
+            mt2 * p0.y + 2.0 * mt * t * c1.y + t2 * p1.y
+        )
+    son
+    
+    /// Belirli t'de nokta al (0-1)
+    pub fn point_at(mut self, t: ondalık) döndür Vec2:
+        eğer !self.cache_valid:
+            self.update_cache()
+        son
+        
+        eğer self.commands.len() == 0:
+            döndür Vec2::zero()
+        son
+        
+        değişken target_length = t * self.total_length
+        değişken current_length = 0.0
+        değişken current_pos = Vec2::zero()
+        değişken path_start = Vec2::zero()
+        değişken segment_idx = 0
+        
+        döngü cmd in self.commands:
+            eşleştir cmd:
+                PathCommand::MoveTo(p):
+                    current_pos = p
+                    path_start = p
+                
+                PathCommand::LineTo(p):
+                    değişken seg_length = self.segment_lengths[segment_idx]
+                    
+                    eğer current_length + seg_length >= target_length:
+                        değişken local_t = (target_length - current_length) / seg_length
+                        döndür current_pos.lerp(p, local_t)
+                    son
+                    
+                    current_length = current_length + seg_length
+                    current_pos = p
+                    segment_idx = segment_idx + 1
+                
+                PathCommand::CubicBezier(c1, c2, p):
+                    değişken seg_length = self.segment_lengths[segment_idx]
+                    
+                    eğer current_length + seg_length >= target_length:
+                        değişken local_t = (target_length - current_length) / seg_length
+                        döndür self.cubic_point(current_pos, c1, c2, p, local_t)
+                    son
+                    
+                    current_length = current_length + seg_length
+                    current_pos = p
+                    segment_idx = segment_idx + 1
+                
+                PathCommand::QuadraticBezier(c1, p):
+                    değişken seg_length = self.segment_lengths[segment_idx]
+                    
+                    eğer current_length + seg_length >= target_length:
+                        değişken local_t = (target_length - current_length) / seg_length
+                        döndür self.quad_point(current_pos, c1, p, local_t)
+                    son
+                    
+                    current_length = current_length + seg_length
+                    current_pos = p
+                    segment_idx = segment_idx + 1
+                
+                PathCommand::ClosePath:
+                    eğer segment_idx < self.segment_lengths.len():
+                        değişken seg_length = self.segment_lengths[segment_idx]
+                        
+                        eğer current_length + seg_length >= target_length:
+                            değişken local_t = (target_length - current_length) / seg_length
+                            döndür current_pos.lerp(path_start, local_t)
+                        son
+                        
+                        current_length = current_length + seg_length
+                        segment_idx = segment_idx + 1
+                    son
+                    current_pos = path_start
+                
+                _:
+            son
+        son
+        
+        döndür current_pos
+    son
+    
+    /// Belirli t'de tanjant al
+    pub fn tangent_at(mut self, t: ondalık) döndür Vec2:
+        değişken epsilon = 0.001
+        değişken t1 = (t - epsilon).max(0.0)
+        değişken t2 = (t + epsilon).min(1.0)
+        
+        değişken p1 = self.point_at(t1)
+        değişken p2 = self.point_at(t2)
+        
+        döndür p2.sub(p1).normalize()
+    son
+    
+    /// Belirli t'de açı (derece)
+    pub fn angle_at(mut self, t: ondalık) döndür ondalık:
+        değişken tangent = self.tangent_at(t)
+        döndür tangent.y.atan2(tangent.x) * 180.0 / 3.14159265
+    son
+    
+    /// Toplam uzunluk
+    pub fn length(mut self) döndür ondalık:
+        eğer !self.cache_valid:
+            self.update_cache()
+        son
+        döndür self.total_length
+    son
+son
+
+// ============================================================================
+// PATH ANIMATION - Yol Animasyonu
+// ============================================================================
+
+/// Yol üzerinde hareket animasyonu
+pub tip PathAnimation = yapı yap
+    /// Yol
+    path: Path,
+    /// Süre (ms)
+    duration: ondalık,
+    /// Easing
+    easing: EasingType,
+    /// Mevcut ilerleme
+    progress: ondalık,
+    /// Geçen süre
+    elapsed: ondalık,
+    /// Çalışıyor mu?
+    running: mantıksal,
+    /// Tamamlandı mı?
+    completed: mantıksal,
+    /// Döngü
+    loop_count: sayı,
+    /// Kalan döngü
+    remaining_loops: sayı,
+    /// Yoyo
+    yoyo: mantıksal,
+    /// Ters yönde mi?
+    reversed: mantıksal,
+    /// Otomatik rotasyon
+    auto_rotate: mantıksal,
+    /// Rotasyon offset (derece)
+    rotation_offset: ondalık,
+son
+
+impl PathAnimation:
+    /// Yeni animasyon
+    pub fn new(path: Path, duration: ondalık) döndür PathAnimation:
+        döndür PathAnimation {
+            path: path,
+            duration: duration,
+            easing: EasingType::EaseInOut,
+            progress: 0.0,
+            elapsed: 0.0,
+            running: yanlış,
+            completed: yanlış,
+            loop_count: 0,
+            remaining_loops: 0,
+            yoyo: yanlış,
+            reversed: yanlış,
+            auto_rotate: yanlış,
+            rotation_offset: 0.0,
+        }
+    son
+    
+    /// Easing ayarla
+    pub fn with_easing(mut self, easing: EasingType) döndür PathAnimation:
+        self.easing = easing
+        döndür self
+    son
+    
+    /// Döngü ayarla
+    pub fn with_loop(mut self, count: sayı) döndür PathAnimation:
+        self.loop_count = count
+        self.remaining_loops = count
+        döndür self
+    son
+    
+    /// Sonsuz döngü
+    pub fn infinite(mut self) döndür PathAnimation:
+        self.loop_count = -1
+        self.remaining_loops = -1
+        döndür self
+    son
+    
+    /// Yoyo
+    pub fn with_yoyo(mut self) döndür PathAnimation:
+        self.yoyo = doğru
+        döndür self
+    son
+    
+    /// Otomatik rotasyon
+    pub fn with_auto_rotate(mut self, offset_degrees: ondalık) döndür PathAnimation:
+        self.auto_rotate = doğru
+        self.rotation_offset = offset_degrees
+        döndür self
+    son
+    
+    /// Başlat
+    pub fn start(mut self) döndür void:
+        self.running = doğru
+        self.completed = yanlış
+        self.elapsed = 0.0
+        self.progress = 0.0
+    son
+    
+    /// Duraklat
+    pub fn pause(mut self) döndür void:
+        self.running = yanlış
+    son
+    
+    /// Devam et
+    pub fn resume(mut self) döndür void:
+        eğer !self.completed:
+            self.running = doğru
+        son
+    son
+    
+    /// Sıfırla
+    pub fn reset(mut self) döndür void:
+        self.elapsed = 0.0
+        self.progress = 0.0
+        self.running = yanlış
+        self.completed = yanlış
+        self.remaining_loops = self.loop_count
+        self.reversed = yanlış
+    son
+    
+    /// Güncelle
+    pub fn update(mut self, delta_ms: ondalık) döndür void:
+        eğer !self.running veya self.completed:
+            döndür
+        son
+        
+        self.elapsed = self.elapsed + delta_ms
+        
+        değişken linear_t = (self.elapsed / self.duration).min(1.0).max(0.0)
+        
+        eğer self.reversed:
+            linear_t = 1.0 - linear_t
+        son
+        
+        self.progress = ease(linear_t, self.easing)
+        
+        // Bitiş kontrolü
+        eğer self.elapsed >= self.duration:
+            eğer self.remaining_loops > 0 veya self.remaining_loops == -1:
+                eğer self.remaining_loops > 0:
+                    self.remaining_loops = self.remaining_loops - 1
+                son
+                
+                eğer self.yoyo:
+                    self.reversed = !self.reversed
+                son
+                
+                self.elapsed = 0.0
+            yoksa:
+                self.completed = doğru
+                self.running = yanlış
+            son
+        son
+    son
+    
+    /// Mevcut pozisyon
+    pub fn position(mut self) döndür Vec2:
+        döndür self.path.point_at(self.progress)
+    son
+    
+    /// Mevcut rotasyon (derece)
+    pub fn rotation(mut self) döndür ondalık:
+        eğer self.auto_rotate:
+            döndür self.path.angle_at(self.progress) + self.rotation_offset
+        son
+        döndür 0.0
+    son
+    
+    /// İlerleme
+    pub fn get_progress(self) döndür ondalık:
+        döndür self.progress
+    son
+    
+    /// Tamamlandı mı?
+    pub fn is_complete(self) döndür mantıksal:
+        döndür self.completed
+    son
+    
+    /// Çalışıyor mu?
+    pub fn is_running(self) döndür mantıksal:
+        döndür self.running
+    son
+son
+
+// ============================================================================
+// PATH DRAWING ANIMATION - Yol Çizim Animasyonu
+// ============================================================================
+
+/// Yolun çizilme animasyonu (stroke-dashoffset tarzı)
+pub tip PathDrawAnimation = yapı yap
+    /// Yol
+    path: Path,
+    /// Süre (ms)
+    duration: ondalık,
+    /// Easing
+    easing: EasingType,
+    /// Çizilen uzunluk oranı (0-1)
+    drawn: ondalık,
+    /// Başlangıç noktası (0-1)
+    start_offset: ondalık,
+    /// Geçen süre
+    elapsed: ondalık,
+    /// Çalışıyor mu?
+    running: mantıksal,
+    /// Ters çizim (silme)
+    erasing: mantıksal,
+son
+
+impl PathDrawAnimation:
+    pub fn new(path: Path, duration: ondalık) döndür PathDrawAnimation:
+        döndür PathDrawAnimation {
+            path: path,
+            duration: duration,
+            easing: EasingType::EaseInOut,
+            drawn: 0.0,
+            start_offset: 0.0,
+            elapsed: 0.0,
+            running: yanlış,
+            erasing: yanlış,
+        }
+    son
+    
+    pub fn with_easing(mut self, easing: EasingType) döndür PathDrawAnimation:
+        self.easing = easing
+        döndür self
+    son
+    
+    pub fn with_start_offset(mut self, offset: ondalık) döndür PathDrawAnimation:
+        self.start_offset = offset.min(1.0).max(0.0)
+        döndür self
+    son
+    
+    /// Çizme animasyonu başlat
+    pub fn draw(mut self) döndür void:
+        self.erasing = yanlış
+        self.running = doğru
+        self.elapsed = 0.0
+        self.drawn = 0.0
+    son
+    
+    /// Silme animasyonu başlat
+    pub fn erase(mut self) döndür void:
+        self.erasing = doğru
+        self.running = doğru
+        self.elapsed = 0.0
+        self.drawn = 1.0
+    son
+    
+    pub fn update(mut self, delta_ms: ondalık) döndür void:
+        eğer !self.running:
+            döndür
+        son
+        
+        self.elapsed = self.elapsed + delta_ms
+        değişken t = (self.elapsed / self.duration).min(1.0).max(0.0)
+        t = ease(t, self.easing)
+        
+        eğer self.erasing:
+            self.drawn = 1.0 - t
+        yoksa:
+            self.drawn = t
+        son
+        
+        eğer self.elapsed >= self.duration:
+            self.running = yanlış
+        son
+    son
+    
+    /// Dash array için değerler (stroke-dasharray, stroke-dashoffset)
+    pub fn get_dash_values(mut self) döndür (ondalık, ondalık):
+        değişken total = self.path.length()
+        değişken drawn_length = total * self.drawn
+        değişken offset = total * self.start_offset
+        
+        // dasharray: toplam uzunluk (çizilen kısmı göster)
+        // dashoffset: başlangıç offset'i
+        döndür (total, total - drawn_length + offset)
+    son
+    
+    /// Çizilen oran
+    pub fn get_drawn(self) döndür ondalık:
+        döndür self.drawn
+    son
+son
+
+// ============================================================================
+// PATH MORPH - Yol Dönüşümü
+// ============================================================================
+
+/// İki yol arasında morph animasyonu
+pub tip PathMorph = yapı yap
+    /// Kaynak yol
+    from: Path,
+    /// Hedef yol
+    to: Path,
+    /// Süre (ms)
+    duration: ondalık,
+    /// Easing
+    easing: EasingType,
+    /// İlerleme
+    progress: ondalık,
+    /// Geçen süre
+    elapsed: ondalık,
+    /// Çalışıyor mu?
+    running: mantıksal,
+son
+
+impl PathMorph:
+    pub fn new(from: Path, to: Path, duration: ondalık) döndür PathMorph:
+        döndür PathMorph {
+            from: from,
+            to: to,
+            duration: duration,
+            easing: EasingType::EaseInOut,
+            progress: 0.0,
+            elapsed: 0.0,
+            running: yanlış,
+        }
+    son
+    
+    pub fn start(mut self) döndür void:
+        self.running = doğru
+        self.elapsed = 0.0
+        self.progress = 0.0
+    son
+    
+    pub fn update(mut self, delta_ms: ondalık) döndür void:
+        eğer !self.running:
+            döndür
+        son
+        
+        self.elapsed = self.elapsed + delta_ms
+        değişken t = (self.elapsed / self.duration).min(1.0).max(0.0)
+        self.progress = ease(t, self.easing)
+        
+        eğer self.elapsed >= self.duration:
+            self.running = yanlış
+        son
+    son
+    
+    /// Belirli t'de interpolated nokta
+    pub fn point_at(mut self, path_t: ondalık) döndür Vec2:
+        değişken from_pt = self.from.point_at(path_t)
+        değişken to_pt = self.to.point_at(path_t)
+        döndür from_pt.lerp(to_pt, self.progress)
+    son
+    
+    /// Interpolated yol noktaları (çizim için)
+    pub fn get_points(mut self, resolution: sayı) döndür Liste[Vec2]:
+        değişken points: Liste[Vec2] = []
+        
+        döngü i in 0..=resolution:
+            değişken t = i / resolution
+            points.push(self.point_at(t))
+        son
+        
+        döndür points
+    son
+son
+
+// ============================================================================
+// CONVENIENCE FUNCTIONS
+// ============================================================================
+
+/// Daire yolu
+pub fn circle_path(cx: ondalık, cy: ondalık, radius: ondalık) döndür Path:
+    döndür Path::circle(cx, cy, radius)
+son
+
+/// Dikdörtgen yolu
+pub fn rect_path(x: ondalık, y: ondalık, width: ondalık, height: ondalık) döndür Path:
+    döndür Path::rect(x, y, width, height)
+son
+
+/// Yıldız yolu
+pub fn star_path(cx: ondalık, cy: ondalık, outer_r: ondalık, inner_r: ondalık, points: sayı) döndür Path:
+    döndür Path::star(cx, cy, outer_r, inner_r, points)
+son

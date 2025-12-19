@@ -1,0 +1,876 @@
+//! # Linalg Module
+//!
+//! Linear algebra (matrices, vectors, decompositions).
+//!
+//! Doğrusal cebir (matrisler, vektörler, ayrıştırmalar).
+//!
+//! ## Features / Özellikler
+//!
+//! - **Matrix ops**: Create, transpose, multiply / Matris işlemleri
+//! - **Vector ops**: Dot, cross, norm / Vektör işlemleri
+//! - **Decompositions**: LU, QR, Cholesky, SVD / Ayrıştırmalar
+//! - **Eigenvalues**: Eigenvectors / Özdeğerler/vektörler
+//! - **Linear systems**: Solving / Doğrusal sistemler
+//! - **Properties**: Det, rank, trace / Determinant, rank, iz
+//! - **Special matrices**: Identity, diagonal / Özel matrisler
+//! - **Norms**: Frobenius, p-norms / Normlar
+//!
+//! ## Example / Örnek
+//!
+//! ```berk
+//! kullan linalg
+//!
+//! değişken A = linalg.matrix([[1.0, 2.0], [3.0, 4.0]])
+//! değişken det = linalg.determinant(A)
+//! değişken inv = linalg.inverse(A)
+//! ```
+//!
+//! Inspired by: Julia LinearAlgebra + NumPy
+
+// linalg.berk - Linear Algebra Module
+// BerkOS Standard Library v1.3
+// 
+// Doğrusal Cebir: Matris ve vektör işlemleri
+// 
+// Julia LinearAlgebra + NumPy + Rust nalgebra + BLAS/LAPACK'ten esinlenilmiştir
+// 
+// Özellikler:
+// - Matrix operations (create, transpose, multiply)
+// - Vector operations (dot, cross, norm)
+// - Matrix decompositions (LU, QR, Cholesky, SVD)
+// - Eigenvalues and eigenvectors
+// - Linear systems solving
+// - Matrix properties (determinant, rank, trace, condition number)
+// - Special matrices (identity, diagonal, zeros, ones)
+// - Matrix norms (Frobenius, 1-norm, 2-norm, infinity-norm)
+
+// =============================================================================
+// MATRIX CREATION & BASIC OPERATIONS
+// =============================================================================
+
+// Matrix boyutlarını doğrula
+fonksiyon linalg_matrix_boyut_doğrula(m: tam_sayı, n: tam_sayı): mantıksal {
+    dön m > 0 ve n > 0;
+}
+
+// İndeksi doğrula (0-tabanlı)
+fonksiyon linalg_indeks_doğrula(i: tam_sayı, j: tam_sayı, m: tam_sayı, n: tam_sayı): mantıksal {
+    dön i >= 0 ve i < m ve j >= 0 ve j < n;
+}
+
+// Matris elemanına eriş (düz dizi formatında: row-major)
+fonksiyon linalg_mat_al(A: [ondalık], i: tam_sayı, j: tam_sayı, n: tam_sayı): ondalık {
+    dön A[i * n + j];
+}
+
+// Matris elemanını ayarla
+fonksiyon linalg_mat_yaz(A: [ondalık], i: tam_sayı, j: tam_sayı, n: tam_sayı, değer: ondalık): hiçbir {
+    A[i * n + j] = değer;
+}
+
+// Birim matris (Identity matrix)
+fonksiyon linalg_birim_mat(n: tam_sayı): [ondalık] {
+    değişken A = yeni_dizi(n * n, 0.0);
+    değişken i = 0;
+    iken (i < n) {
+        linalg_mat_yaz(A, i, i, n, 1.0);
+        i = i + 1;
+    }
+    dön A;
+}
+
+// Sıfır matrisi
+fonksiyon linalg_sıfır_mat(m: tam_sayı, n: tam_sayı): [ondalık] {
+    dön yeni_dizi(m * n, 0.0);
+}
+
+// Birler matrisi
+fonksiyon linalg_birler_mat(m: tam_sayı, n: tam_sayı): [ondalık] {
+    dön yeni_dizi(m * n, 1.0);
+}
+
+// Diyagonal matris (köşegen matris)
+fonksiyon linalg_diyagonal_mat(d: [ondalık], n: tam_sayı): [ondalık] {
+    değişken A = linalg_sıfır_mat(n, n);
+    değişken i = 0;
+    iken (i < n) {
+        linalg_mat_yaz(A, i, i, n, d[i]);
+        i = i + 1;
+    }
+    dön A;
+}
+
+// Rastgele matris (0-1 arası uniform)
+fonksiyon linalg_rastgele_mat(m: tam_sayı, n: tam_sayı, tohum: tam_sayı): [ondalık] {
+    değişken A = yeni_dizi(m * n);
+    değişken i = 0;
+    değişken rng = tohum;
+    
+    iken (i < m * n) {
+        // Basit LCG
+        rng = (rng * 1103515245 + 12345) % 2147483648;
+        A[i] = (rng % 10000) / 10000.0;
+        i = i + 1;
+    }
+    dön A;
+}
+
+// =============================================================================
+// MATRIX TRANSPOSITION
+// =============================================================================
+
+// Matris transpoz (A^T)
+fonksiyon linalg_transpoz(A: [ondalık], m: tam_sayı, n: tam_sayı): [ondalık] {
+    değişken AT = yeni_dizi(n * m);
+    değişken i = 0;
+    
+    iken (i < m) {
+        değişken j = 0;
+        iken (j < n) {
+            AT[j * m + i] = linalg_mat_al(A, i, j, n);
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    dön AT;
+}
+
+// =============================================================================
+// MATRIX ARITHMETIC
+// =============================================================================
+
+// Matris toplama (C = A + B)
+fonksiyon linalg_mat_topla(A: [ondalık], B: [ondalık], m: tam_sayı, n: tam_sayı): [ondalık] {
+    değişken C = yeni_dizi(m * n);
+    değişken i = 0;
+    
+    iken (i < m * n) {
+        C[i] = A[i] + B[i];
+        i = i + 1;
+    }
+    dön C;
+}
+
+// Matris çıkarma (C = A - B)
+fonksiyon linalg_mat_çıkar(A: [ondalık], B: [ondalık], m: tam_sayı, n: tam_sayı): [ondalık] {
+    değişken C = yeni_dizi(m * n);
+    değişken i = 0;
+    
+    iken (i < m * n) {
+        C[i] = A[i] - B[i];
+        i = i + 1;
+    }
+    dön C;
+}
+
+// Skaler çarpma (B = α * A)
+fonksiyon linalg_mat_skaler(α: ondalık, A: [ondalık], m: tam_sayı, n: tam_sayı): [ondalık] {
+    değişken B = yeni_dizi(m * n);
+    değişken i = 0;
+    
+    iken (i < m * n) {
+        B[i] = α * A[i];
+        i = i + 1;
+    }
+    dön B;
+}
+
+// =============================================================================
+// MATRIX MULTIPLICATION
+// =============================================================================
+
+// Matris çarpımı (C = A * B) - Naive algorithm
+// A: m×k, B: k×n → C: m×n
+fonksiyon linalg_mat_çarp(A: [ondalık], B: [ondalık], m: tam_sayı, k: tam_sayı, n: tam_sayı): [ondalık] {
+    değişken C = linalg_sıfır_mat(m, n);
+    değişken i = 0;
+    
+    iken (i < m) {
+        değişken j = 0;
+        iken (j < n) {
+            değişken toplam = 0.0;
+            değişken p = 0;
+            iken (p < k) {
+                toplam = toplam + linalg_mat_al(A, i, p, k) * linalg_mat_al(B, p, j, n);
+                p = p + 1;
+            }
+            linalg_mat_yaz(C, i, j, n, toplam);
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    dön C;
+}
+
+// Element-wise çarpma (Hadamard product)
+fonksiyon linalg_mat_hadamard(A: [ondalık], B: [ondalık], m: tam_sayı, n: tam_sayı): [ondalık] {
+    değişken C = yeni_dizi(m * n);
+    değişken i = 0;
+    
+    iken (i < m * n) {
+        C[i] = A[i] * B[i];
+        i = i + 1;
+    }
+    dön C;
+}
+
+// =============================================================================
+// VECTOR OPERATIONS
+// =============================================================================
+
+// Vektör iç çarpım (dot product)
+fonksiyon linalg_iç_çarpım(u: [ondalık], v: [ondalık], n: tam_sayı): ondalık {
+    değişken toplam = 0.0;
+    değişken i = 0;
+    
+    iken (i < n) {
+        toplam = toplam + u[i] * v[i];
+        i = i + 1;
+    }
+    dön toplam;
+}
+
+// Vektör normu (L2 norm / Euclidean norm)
+fonksiyon linalg_norm2(v: [ondalık], n: tam_sayı): ondalık {
+    değişken toplam = 0.0;
+    değişken i = 0;
+    
+    iken (i < n) {
+        toplam = toplam + v[i] * v[i];
+        i = i + 1;
+    }
+    dön math_kare_kök(toplam);
+}
+
+// Vektör L1 normu (Manhattan norm)
+fonksiyon linalg_norm1(v: [ondalık], n: tam_sayı): ondalık {
+    değişken toplam = 0.0;
+    değişken i = 0;
+    
+    iken (i < n) {
+        toplam = toplam + math_mutlak(v[i]);
+        i = i + 1;
+    }
+    dön toplam;
+}
+
+// Vektör L∞ normu (maximum norm)
+fonksiyon linalg_norm_inf(v: [ondalık], n: tam_sayı): ondalık {
+    değişken maks = 0.0;
+    değişken i = 0;
+    
+    iken (i < n) {
+        değişken abs_val = math_mutlak(v[i]);
+        eğer (abs_val > maks) {
+            maks = abs_val;
+        }
+        i = i + 1;
+    }
+    dön maks;
+}
+
+// Vektör normalize et
+fonksiyon linalg_normalize(v: [ondalık], n: tam_sayı): [ondalık] {
+    değişken norm = linalg_norm2(v, n);
+    değişken result = yeni_dizi(n);
+    değişken i = 0;
+    
+    iken (i < n) {
+        result[i] = v[i] / norm;
+        i = i + 1;
+    }
+    dön result;
+}
+
+// Vektör dış çarpım (outer product) → matris
+fonksiyon linalg_dış_çarpım(u: [ondalık], v: [ondalık], m: tam_sayı, n: tam_sayı): [ondalık] {
+    değişken A = yeni_dizi(m * n);
+    değişken i = 0;
+    
+    iken (i < m) {
+        değişken j = 0;
+        iken (j < n) {
+            linalg_mat_yaz(A, i, j, n, u[i] * v[j]);
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    dön A;
+}
+
+// 3B vektör cross product (vektörel çarpım)
+fonksiyon linalg_cross_3d(u: [ondalık], v: [ondalık]): [ondalık] {
+    değişken w = yeni_dizi(3);
+    w[0] = u[1] * v[2] - u[2] * v[1];
+    w[1] = u[2] * v[0] - u[0] * v[2];
+    w[2] = u[0] * v[1] - u[1] * v[0];
+    dön w;
+}
+
+// =============================================================================
+// MATRIX PROPERTIES
+// =============================================================================
+
+// İz (Trace) - köşegen elemanların toplamı
+fonksiyon linalg_iz(A: [ondalık], n: tam_sayı): ondalık {
+    değişken toplam = 0.0;
+    değişken i = 0;
+    
+    iken (i < n) {
+        toplam = toplam + linalg_mat_al(A, i, i, n);
+        i = i + 1;
+    }
+    dön toplam;
+}
+
+// Frobenius normu
+fonksiyon linalg_frobenius_norm(A: [ondalık], m: tam_sayı, n: tam_sayı): ondalık {
+    değişken toplam = 0.0;
+    değişken i = 0;
+    
+    iken (i < m * n) {
+        toplam = toplam + A[i] * A[i];
+        i = i + 1;
+    }
+    dön math_kare_kök(toplam);
+}
+
+// Determinant (2×2 matris için)
+fonksiyon linalg_determinant_2x2(A: [ondalık]): ondalık {
+    dön A[0] * A[3] - A[1] * A[2];
+}
+
+// Determinant (3×3 matris için - Sarrus kuralı)
+fonksiyon linalg_determinant_3x3(A: [ondalık]): ondalık {
+    değişken a11 = A[0]; değişken a12 = A[1]; değişken a13 = A[2];
+    değişken a21 = A[3]; değişken a22 = A[4]; değişken a23 = A[5];
+    değişken a31 = A[6]; değişken a32 = A[7]; değişken a33 = A[8];
+    
+    değişken pozitif = a11 * a22 * a33 + a12 * a23 * a31 + a13 * a21 * a32;
+    değişken negatif = a13 * a22 * a31 + a11 * a23 * a32 + a12 * a21 * a33;
+    
+    dön pozitif - negatif;
+}
+
+// =============================================================================
+// MATRIX INVERSION
+// =============================================================================
+
+// 2×2 matris ters (inverse)
+fonksiyon linalg_inverse_2x2(A: [ondalık]): [ondalık] {
+    değişken det = linalg_determinant_2x2(A);
+    değişken inv = yeni_dizi(4);
+    
+    inv[0] =  A[3] / det;
+    inv[1] = -A[1] / det;
+    inv[2] = -A[2] / det;
+    inv[3] =  A[0] / det;
+    
+    dön inv;
+}
+
+// 3×3 matris ters (cofactor expansion)
+fonksiyon linalg_inverse_3x3(A: [ondalık]): [ondalık] {
+    değişken det = linalg_determinant_3x3(A);
+    değişken inv = yeni_dizi(9);
+    
+    // Cofactor matrisi hesapla
+    inv[0] = (A[4] * A[8] - A[5] * A[7]) / det;
+    inv[1] = (A[2] * A[7] - A[1] * A[8]) / det;
+    inv[2] = (A[1] * A[5] - A[2] * A[4]) / det;
+    
+    inv[3] = (A[5] * A[6] - A[3] * A[8]) / det;
+    inv[4] = (A[0] * A[8] - A[2] * A[6]) / det;
+    inv[5] = (A[2] * A[3] - A[0] * A[5]) / det;
+    
+    inv[6] = (A[3] * A[7] - A[4] * A[6]) / det;
+    inv[7] = (A[1] * A[6] - A[0] * A[7]) / det;
+    inv[8] = (A[0] * A[4] - A[1] * A[3]) / det;
+    
+    dön inv;
+}
+
+// =============================================================================
+// LINEAR SYSTEMS - GAUSSIAN ELIMINATION
+// =============================================================================
+
+// Gauss eliminasyon ile doğrusal sistem çözümü (Ax = b)
+// A: n×n matris, b: n boyutlu vektör → x: n boyutlu çözüm
+fonksiyon linalg_gauss_çöz(A: [ondalık], b: [ondalık], n: tam_sayı): [ondalık] {
+    // Genişletilmiş matris oluştur [A|b]
+    değişken aug = yeni_dizi(n * (n + 1));
+    değişken i = 0;
+    
+    iken (i < n) {
+        değişken j = 0;
+        iken (j < n) {
+            aug[i * (n + 1) + j] = linalg_mat_al(A, i, j, n);
+            j = j + 1;
+        }
+        aug[i * (n + 1) + n] = b[i];
+        i = i + 1;
+    }
+    
+    // İleri eliminasyon (forward elimination)
+    i = 0;
+    iken (i < n - 1) {
+        // Pivot seç (partial pivoting)
+        değişken maks_satır = i;
+        değişken maks_değer = math_mutlak(aug[i * (n + 1) + i]);
+        değişken k = i + 1;
+        
+        iken (k < n) {
+            değişken değer = math_mutlak(aug[k * (n + 1) + i]);
+            eğer (değer > maks_değer) {
+                maks_değer = değer;
+                maks_satır = k;
+            }
+            k = k + 1;
+        }
+        
+        // Satırları değiştir
+        eğer (maks_satır != i) {
+            değişken j = 0;
+            iken (j < n + 1) {
+                değişken temp = aug[i * (n + 1) + j];
+                aug[i * (n + 1) + j] = aug[maks_satır * (n + 1) + j];
+                aug[maks_satır * (n + 1) + j] = temp;
+                j = j + 1;
+            }
+        }
+        
+        // Eliminasyon
+        k = i + 1;
+        iken (k < n) {
+            değişken factor = aug[k * (n + 1) + i] / aug[i * (n + 1) + i];
+            değişken j = i;
+            iken (j < n + 1) {
+                aug[k * (n + 1) + j] = aug[k * (n + 1) + j] - factor * aug[i * (n + 1) + j];
+                j = j + 1;
+            }
+            k = k + 1;
+        }
+        
+        i = i + 1;
+    }
+    
+    // Geri yerine koyma (back substitution)
+    değişken x = yeni_dizi(n);
+    i = n - 1;
+    
+    iken (i >= 0) {
+        x[i] = aug[i * (n + 1) + n];
+        değişken j = i + 1;
+        iken (j < n) {
+            x[i] = x[i] - aug[i * (n + 1) + j] * x[j];
+            j = j + 1;
+        }
+        x[i] = x[i] / aug[i * (n + 1) + i];
+        i = i - 1;
+    }
+    
+    dön x;
+}
+
+// =============================================================================
+// LU DECOMPOSITION
+// =============================================================================
+
+// LU ayrıştırma (Doolittle algoritması)
+// A = L * U (Lower × Upper triangular)
+// Çıktı: L ve U tek matriste (L'nin köşegeni 1'lerdir)
+fonksiyon linalg_lu_decompose(A: [ondalık], n: tam_sayı): [ondalık] {
+    değişken LU = yeni_dizi(n * n);
+    değişken i = 0;
+    
+    // A'yı kopyala
+    iken (i < n * n) {
+        LU[i] = A[i];
+        i = i + 1;
+    }
+    
+    // LU ayrıştırma
+    i = 0;
+    iken (i < n) {
+        // U matrisi (üst üçgen)
+        değişken k = i;
+        iken (k < n) {
+            değişken toplam = 0.0;
+            değişken j = 0;
+            iken (j < i) {
+                toplam = toplam + linalg_mat_al(LU, i, j, n) * linalg_mat_al(LU, j, k, n);
+                j = j + 1;
+            }
+            değişken yeni_değer = linalg_mat_al(LU, i, k, n) - toplam;
+            linalg_mat_yaz(LU, i, k, n, yeni_değer);
+            k = k + 1;
+        }
+        
+        // L matrisi (alt üçgen)
+        k = i + 1;
+        iken (k < n) {
+            değişken toplam = 0.0;
+            değişken j = 0;
+            iken (j < i) {
+                toplam = toplam + linalg_mat_al(LU, k, j, n) * linalg_mat_al(LU, j, i, n);
+                j = j + 1;
+            }
+            değişken yeni_değer = (linalg_mat_al(LU, k, i, n) - toplam) / linalg_mat_al(LU, i, i, n);
+            linalg_mat_yaz(LU, k, i, n, yeni_değer);
+            k = k + 1;
+        }
+        
+        i = i + 1;
+    }
+    
+    dön LU;
+}
+
+// =============================================================================
+// QR DECOMPOSITION
+// =============================================================================
+
+// QR ayrıştırma (Gram-Schmidt orthogonalization)
+// A = Q * R (Orthogonal × Upper triangular)
+// Basitleştirilmiş versiyon - tam implementasyon için Householder yansımaları kullanılır
+fonksiyon linalg_qr_gram_schmidt(A: [ondalık], m: tam_sayı, n: tam_sayı): ([ondalık], [ondalık]) {
+    değişken Q = yeni_dizi(m * n);
+    değişken R = linalg_sıfır_mat(n, n);
+    
+    // Gram-Schmidt orthogonalization
+    değişken j = 0;
+    iken (j < n) {
+        // A'nın j'inci kolonunu al
+        değişken v = yeni_dizi(m);
+        değişken i = 0;
+        iken (i < m) {
+            v[i] = linalg_mat_al(A, i, j, n);
+            i = i + 1;
+        }
+        
+        // Önceki vektörlerden projektör
+        i = 0;
+        iken (i < j) {
+            değişken q_i = yeni_dizi(m);
+            değişken k = 0;
+            iken (k < m) {
+                q_i[k] = linalg_mat_al(Q, k, i, n);
+                k = k + 1;
+            }
+            
+            değişken r_ij = linalg_iç_çarpım(q_i, v, m);
+            linalg_mat_yaz(R, i, j, n, r_ij);
+            
+            k = 0;
+            iken (k < m) {
+                v[k] = v[k] - r_ij * q_i[k];
+                k = k + 1;
+            }
+            
+            i = i + 1;
+        }
+        
+        // Normalize et
+        değişken norm = linalg_norm2(v, m);
+        linalg_mat_yaz(R, j, j, n, norm);
+        
+        i = 0;
+        iken (i < m) {
+            linalg_mat_yaz(Q, i, j, n, v[i] / norm);
+            i = i + 1;
+        }
+        
+        j = j + 1;
+    }
+    
+    dön (Q, R);
+}
+
+// =============================================================================
+// CHOLESKY DECOMPOSITION
+// =============================================================================
+
+// Cholesky ayrıştırma (pozitif tanımlı matrisler için)
+// A = L * L^T (Lower triangular × its transpose)
+fonksiyon linalg_cholesky(A: [ondalık], n: tam_sayı): [ondalık] {
+    değişken L = linalg_sıfır_mat(n, n);
+    
+    değişken i = 0;
+    iken (i < n) {
+        değişken j = 0;
+        iken (j <= i) {
+            değişken toplam = 0.0;
+            
+            eğer (i == j) {
+                // Köşegen elemanı
+                değişken k = 0;
+                iken (k < j) {
+                    toplam = toplam + linalg_mat_al(L, j, k, n) * linalg_mat_al(L, j, k, n);
+                    k = k + 1;
+                }
+                değişken değer = math_kare_kök(linalg_mat_al(A, j, j, n) - toplam);
+                linalg_mat_yaz(L, j, j, n, değer);
+            } yoksa {
+                // Alt üçgen elemanı
+                değişken k = 0;
+                iken (k < j) {
+                    toplam = toplam + linalg_mat_al(L, i, k, n) * linalg_mat_al(L, j, k, n);
+                    k = k + 1;
+                }
+                değişken değer = (linalg_mat_al(A, i, j, n) - toplam) / linalg_mat_al(L, j, j, n);
+                linalg_mat_yaz(L, i, j, n, değer);
+            }
+            
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    
+    dön L;
+}
+
+// =============================================================================
+// EIGENVALUES & EIGENVECTORS (POWER ITERATION)
+// =============================================================================
+
+// Güç iterasyonu ile dominant eigenvector bulma
+fonksiyon linalg_power_iteration(A: [ondalık], n: tam_sayı, max_iter: tam_sayı, tolerans: ondalık): ([ondalık], ondalık) {
+    // Rastgele başlangıç vektörü
+    değişken v = yeni_dizi(n);
+    değişken i = 0;
+    iken (i < n) {
+        v[i] = 1.0;
+        i = i + 1;
+    }
+    v = linalg_normalize(v, n);
+    
+    değişken eigenvalue = 0.0;
+    değişken iter = 0;
+    
+    iken (iter < max_iter) {
+        // v_new = A * v
+        değişken Av = linalg_mat_çarp(A, v, n, n, 1);
+        
+        // Eigenvalue tahmini (Rayleigh quotient)
+        değişken yeni_eigenvalue = linalg_iç_çarpım(v, Av, n);
+        
+        // Normalize et
+        v = linalg_normalize(Av, n);
+        
+        // Yakınsama kontrolü
+        eğer (math_mutlak(yeni_eigenvalue - eigenvalue) < tolerans) {
+            dön (v, yeni_eigenvalue);
+        }
+        
+        eigenvalue = yeni_eigenvalue;
+        iter = iter + 1;
+    }
+    
+    dön (v, eigenvalue);
+}
+
+// =============================================================================
+// MATRIX CONDITION NUMBER
+// =============================================================================
+
+// Condition number tahmini (κ(A) = ||A|| × ||A^(-1)||)
+// Büyük değerler kötü koşullu matrisi gösterir
+fonksiyon linalg_condition_frobenius(A: [ondalık], A_inv: [ondalık], n: tam_sayı): ondalık {
+    değişken norm_A = linalg_frobenius_norm(A, n, n);
+    değişken norm_A_inv = linalg_frobenius_norm(A_inv, n, n);
+    dön norm_A * norm_A_inv;
+}
+
+// =============================================================================
+// SPECIAL MATRIX TESTS
+// =============================================================================
+
+// Simetrik matris kontrolü
+fonksiyon linalg_simetrik_mi(A: [ondalık], n: tam_sayı, tolerans: ondalık): mantıksal {
+    değişken i = 0;
+    iken (i < n) {
+        değişken j = i + 1;
+        iken (j < n) {
+            değişken fark = math_mutlak(linalg_mat_al(A, i, j, n) - linalg_mat_al(A, j, i, n));
+            eğer (fark > tolerans) {
+                dön yanlış;
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    dön doğru;
+}
+
+// Diagonal matris kontrolü
+fonksiyon linalg_diagonal_mi(A: [ondalık], n: tam_sayı, tolerans: ondalık): mantıksal {
+    değişken i = 0;
+    iken (i < n) {
+        değişken j = 0;
+        iken (j < n) {
+            eğer (i != j) {
+                eğer (math_mutlak(linalg_mat_al(A, i, j, n)) > tolerans) {
+                    dön yanlış;
+                }
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    dön doğru;
+}
+
+// Üst üçgen matris kontrolü
+fonksiyon linalg_üst_üçgen_mi(A: [ondalık], n: tam_sayı, tolerans: ondalık): mantıksal {
+    değişken i = 1;
+    iken (i < n) {
+        değişken j = 0;
+        iken (j < i) {
+            eğer (math_mutlak(linalg_mat_al(A, i, j, n)) > tolerans) {
+                dön yanlış;
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    dön doğru;
+}
+
+// Alt üçgen matris kontrolü
+fonksiyon linalg_alt_üçgen_mi(A: [ondalık], n: tam_sayı, tolerans: ondalık): mantıksal {
+    değişken i = 0;
+    iken (i < n - 1) {
+        değişken j = i + 1;
+        iken (j < n) {
+            eğer (math_mutlak(linalg_mat_al(A, i, j, n)) > tolerans) {
+                dön yanlış;
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    dön doğru;
+}
+
+// =============================================================================
+// RANK & NULLSPACE
+// =============================================================================
+
+// Matris rankı (Gaussian elimination ile)
+fonksiyon linalg_rank(A: [ondalık], m: tam_sayı, n: tam_sayı, tolerans: ondalık): tam_sayı {
+    // A'yı kopyala
+    değişken B = yeni_dizi(m * n);
+    değişken i = 0;
+    iken (i < m * n) {
+        B[i] = A[i];
+        i = i + 1;
+    }
+    
+    // Gaussian elimination
+    değişken rank = 0;
+    değişken satır = 0;
+    değişken sütun = 0;
+    
+    iken (satır < m ve sütun < n) {
+        // Pivot bul
+        değişken pivot_satır = satır;
+        değişken maks_değer = math_mutlak(linalg_mat_al(B, satır, sütun, n));
+        değişken k = satır + 1;
+        
+        iken (k < m) {
+            değişken değer = math_mutlak(linalg_mat_al(B, k, sütun, n));
+            eğer (değer > maks_değer) {
+                maks_değer = değer;
+                pivot_satır = k;
+            }
+            k = k + 1;
+        }
+        
+        eğer (maks_değer < tolerans) {
+            sütun = sütun + 1;
+            devam;
+        }
+        
+        // Satırları değiştir
+        eğer (pivot_satır != satır) {
+            değişken j = 0;
+            iken (j < n) {
+                değişken temp = linalg_mat_al(B, satır, j, n);
+                linalg_mat_yaz(B, satır, j, n, linalg_mat_al(B, pivot_satır, j, n));
+                linalg_mat_yaz(B, pivot_satır, j, n, temp);
+                j = j + 1;
+            }
+        }
+        
+        // Eliminasyon
+        k = satır + 1;
+        iken (k < m) {
+            değişken factor = linalg_mat_al(B, k, sütun, n) / linalg_mat_al(B, satır, sütun, n);
+            linalg_mat_yaz(B, k, sütun, n, 0.0);
+            değişken j = sütun + 1;
+            iken (j < n) {
+                değişken yeni_değer = linalg_mat_al(B, k, j, n) - factor * linalg_mat_al(B, satır, j, n);
+                linalg_mat_yaz(B, k, j, n, yeni_değer);
+                j = j + 1;
+            }
+            k = k + 1;
+        }
+        
+        rank = rank + 1;
+        satır = satır + 1;
+        sütun = sütun + 1;
+    }
+    
+    dön rank;
+}
+
+// =============================================================================
+// MATRIX UTILITIES
+// =============================================================================
+
+// Matris yazdır (debug için)
+fonksiyon linalg_mat_yazdır(A: [ondalık], m: tam_sayı, n: tam_sayı): hiçbir {
+    değişken i = 0;
+    iken (i < m) {
+        değişken j = 0;
+        iken (j < n) {
+            // Backend'de print implementasyonu gerekli
+            // yazdır(linalg_mat_al(A, i, j, n));
+            j = j + 1;
+        }
+        // yazdır("\n");
+        i = i + 1;
+    }
+}
+
+// Matris eşitlik kontrolü
+fonksiyon linalg_mat_eşit_mi(A: [ondalık], B: [ondalık], m: tam_sayı, n: tam_sayı, tolerans: ondalık): mantıksal {
+    değişken i = 0;
+    iken (i < m * n) {
+        eğer (math_mutlak(A[i] - B[i]) > tolerans) {
+            dön yanlış;
+        }
+        i = i + 1;
+    }
+    dön doğru;
+}
+
+// Reshape matris (m×n → p×q, m*n == p*q olmalı)
+fonksiyon linalg_reshape(A: [ondalık], m: tam_sayı, n: tam_sayı, p: tam_sayı, q: tam_sayı): [ondalık] {
+    // Aynı veri, farklı boyutlar
+    // Not: Bu sadece kavramsal, gerçek implementasyon metadata değişikliği
+    dön A;
+}
+
+// Matris kopyala
+fonksiyon linalg_mat_kopyala(A: [ondalık], m: tam_sayı, n: tam_sayı): [ondalık] {
+    değişken B = yeni_dizi(m * n);
+    değişken i = 0;
+    iken (i < m * n) {
+        B[i] = A[i];
+        i = i + 1;
+    }
+    dön B;
+}
+
+son

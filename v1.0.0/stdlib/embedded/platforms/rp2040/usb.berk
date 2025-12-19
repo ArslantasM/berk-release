@@ -1,0 +1,543 @@
+// RP2040 USB Module
+// Hardware Abstraction Layer for RP2040's USB peripheral
+// 
+// RP2040 USB Features:
+// - Full-speed USB 1.1 Device controller
+// - 12 Mbps data transfer
+// - Up to 16 endpoints (8 IN, 8 OUT)
+// - 4 KB USB DPRAM for buffers
+// - USB CDC (Virtual COM Port) support
+// - USB HID (Human Interface Device) support
+// - USB MSC (Mass Storage Class) support
+// - TinyUSB stack integration
+//
+// Pico SDK: pico_stdlib (USB stdio), tusb (TinyUSB)
+
+extern "C" {
+    // USB stdio Functions (Pico SDK)
+    fn stdio_usb_init() -> bool;
+    fn stdio_usb_connected() -> bool;
+    
+    // TinyUSB Device Functions
+    fn tud_init(rhport: u8) -> bool;
+    fn tud_task();
+    fn tud_mounted() -> bool;
+    fn tud_suspended() -> bool;
+    fn tud_ready() -> bool;
+    fn tud_disconnect();
+    fn tud_connect();
+    
+    // USB CDC (Serial) Functions
+    fn tud_cdc_connected() -> bool;
+    fn tud_cdc_available() -> u32;
+    fn tud_cdc_read(buffer: *u8, bufsize: u32) -> u32;
+    fn tud_cdc_read_char() -> i32;
+    fn tud_cdc_read_flush();
+    fn tud_cdc_peek(offset: u32) -> i32;
+    
+    fn tud_cdc_write(buffer: *const u8, bufsize: u32) -> u32;
+    fn tud_cdc_write_char(ch: u8) -> u32;
+    fn tud_cdc_write_str(str: *const u8) -> u32;
+    fn tud_cdc_write_flush() -> u32;
+    fn tud_cdc_write_available() -> u32;
+    fn tud_cdc_write_clear();
+    
+    // USB HID Functions
+    fn tud_hid_ready() -> bool;
+    fn tud_hid_report(report_id: u8, report: *const u8, len: u8) -> bool;
+    fn tud_hid_keyboard_report(report_id: u8, modifier: u8, keycode: *const u8) -> bool;
+    fn tud_hid_mouse_report(report_id: u8, buttons: u8, x: i8, y: i8, vertical: i8, horizontal: i8) -> bool;
+    fn tud_hid_gamepad_report(report_id: u8, x: i8, y: i8, z: i8, rz: i8, rx: i8, ry: i8, hat: u8, buttons: u32) -> bool;
+    
+    // USB MSC (Mass Storage) Functions
+    fn tud_msc_ready() -> bool;
+    fn tud_msc_set_sense(lun: u8, sense_key: u8, add_sense_code: u8, add_sense_qualifier: u8);
+    
+    // Time functions
+    fn sleep_ms(ms: u32);
+}
+
+// USB Device states
+const USB_STATE_DETACHED: u8 = 0;
+const USB_STATE_ATTACHED: u8 = 1;
+const USB_STATE_POWERED: u8 = 2;
+const USB_STATE_SUSPENDED: u8 = 3;
+const USB_STATE_ADDRESSED: u8 = 4;
+const USB_STATE_CONFIGURED: u8 = 5;
+
+// HID Keyboard modifiers
+const HID_KEY_NONE: u8 = 0x00;
+const HID_KEY_CTRL_LEFT: u8 = 0x01;
+const HID_KEY_SHIFT_LEFT: u8 = 0x02;
+const HID_KEY_ALT_LEFT: u8 = 0x04;
+const HID_KEY_GUI_LEFT: u8 = 0x08;
+const HID_KEY_CTRL_RIGHT: u8 = 0x10;
+const HID_KEY_SHIFT_RIGHT: u8 = 0x20;
+const HID_KEY_ALT_RIGHT: u8 = 0x40;
+const HID_KEY_GUI_RIGHT: u8 = 0x80;
+
+// HID Keyboard keycodes
+const HID_KEY_A: u8 = 0x04;
+const HID_KEY_B: u8 = 0x05;
+const HID_KEY_C: u8 = 0x06;
+const HID_KEY_ENTER: u8 = 0x28;
+const HID_KEY_ESCAPE: u8 = 0x29;
+const HID_KEY_SPACE: u8 = 0x2C;
+
+// HID Mouse buttons
+const HID_MOUSE_BUTTON_LEFT: u8 = 0x01;
+const HID_MOUSE_BUTTON_RIGHT: u8 = 0x02;
+const HID_MOUSE_BUTTON_MIDDLE: u8 = 0x04;
+
+pub struct USB {
+    initialized: bool,
+}
+
+impl USB {
+    // Initialize USB device
+    pub fn new() -> USB {
+        unsafe {
+            let success = tud_init(0);
+            USB { initialized: success }
+        }
+    }
+    
+    // Process USB events (must be called regularly)
+    pub fn task(&self) {
+        unsafe {
+            tud_task();
+        }
+    }
+    
+    // Check if USB is mounted (configured)
+    pub fn is_mounted(&self) -> bool {
+        unsafe {
+            tud_mounted()
+        }
+    }
+    
+    // Check if USB is suspended
+    pub fn is_suspended(&self) -> bool {
+        unsafe {
+            tud_suspended()
+        }
+    }
+    
+    // Check if USB is ready for communication
+    pub fn is_ready(&self) -> bool {
+        unsafe {
+            tud_ready()
+        }
+    }
+    
+    // Connect USB device
+    pub fn connect(&self) {
+        unsafe {
+            tud_connect();
+        }
+    }
+    
+    // Disconnect USB device
+    pub fn disconnect(&self) {
+        unsafe {
+            tud_disconnect();
+        }
+    }
+}
+
+// USB CDC (Virtual COM Port)
+pub struct USBSerial {
+    usb: USB,
+}
+
+impl USBSerial {
+    // Initialize USB CDC serial
+    pub fn new() -> USBSerial {
+        unsafe {
+            stdio_usb_init();
+        }
+        
+        USBSerial {
+            usb: USB::new(),
+        }
+    }
+    
+    // Wait for USB connection
+    pub fn wait_for_connection(&self) {
+        unsafe {
+            while !stdio_usb_connected() {
+                self.usb.task();
+                sleep_ms(10);
+            }
+        }
+    }
+    
+    // Check if CDC is connected
+    pub fn is_connected(&self) -> bool {
+        unsafe {
+            tud_cdc_connected()
+        }
+    }
+    
+    // Get number of available bytes to read
+    pub fn available(&self) -> u32 {
+        unsafe {
+            tud_cdc_available()
+        }
+    }
+    
+    // Read single character
+    pub fn read_char(&self) -> Option<u8> {
+        unsafe {
+            let ch = tud_cdc_read_char();
+            if ch >= 0 {
+                Some(ch as u8)
+            } else {
+                None
+            }
+        }
+    }
+    
+    // Read into buffer
+    pub fn read(&self, buffer: &mut [u8]) -> u32 {
+        unsafe {
+            tud_cdc_read(buffer.as_mut_ptr() as *u8, buffer.len() as u32)
+        }
+    }
+    
+    // Write single character
+    pub fn write_char(&self, ch: u8) -> bool {
+        unsafe {
+            tud_cdc_write_char(ch) > 0
+        }
+    }
+    
+    // Write buffer
+    pub fn write(&self, data: &[u8]) -> u32 {
+        unsafe {
+            tud_cdc_write(data.as_ptr() as *const u8, data.len() as u32)
+        }
+    }
+    
+    // Write string
+    pub fn write_str(&self, s: &str) -> u32 {
+        self.write(s.as_bytes())
+    }
+    
+    // Print with newline
+    pub fn println(&self, s: &str) {
+        self.write_str(s);
+        self.write_str("\r\n");
+    }
+    
+    // Flush write buffer
+    pub fn flush(&self) {
+        unsafe {
+            tud_cdc_write_flush();
+        }
+    }
+    
+    // Clear write buffer
+    pub fn clear(&self) {
+        unsafe {
+            tud_cdc_write_clear();
+        }
+    }
+    
+    // Get available space in write buffer
+    pub fn write_available(&self) -> u32 {
+        unsafe {
+            tud_cdc_write_available()
+        }
+    }
+    
+    // Read line until newline
+    pub fn read_line(&self, buffer: &mut [u8]) -> u32 {
+        let mut count: u32 = 0;
+        
+        while count < buffer.len() as u32 {
+            if let Some(ch) = self.read_char() {
+                buffer[count as usize] = ch;
+                count += 1;
+                
+                if ch == b'\n' || ch == b'\r' {
+                    break;
+                }
+            } else {
+                self.usb.task();
+            }
+        }
+        
+        count
+    }
+}
+
+// USB HID Keyboard
+pub struct USBKeyboard {
+    usb: USB,
+}
+
+impl USBKeyboard {
+    // Initialize USB HID keyboard
+    pub fn new() -> USBKeyboard {
+        USBKeyboard {
+            usb: USB::new(),
+        }
+    }
+    
+    // Check if HID is ready
+    pub fn is_ready(&self) -> bool {
+        unsafe {
+            tud_hid_ready()
+        }
+    }
+    
+    // Press key with modifier
+    pub fn press(&self, keycode: u8, modifier: u8) -> bool {
+        let keys: [u8; 6] = [keycode, 0, 0, 0, 0, 0];
+        
+        unsafe {
+            tud_hid_keyboard_report(0, modifier, keys.as_ptr() as *const u8)
+        }
+    }
+    
+    // Release all keys
+    pub fn release(&self) -> bool {
+        let keys: [u8; 6] = [0, 0, 0, 0, 0, 0];
+        
+        unsafe {
+            tud_hid_keyboard_report(0, 0, keys.as_ptr() as *const u8)
+        }
+    }
+    
+    // Type single character
+    pub fn type_char(&self, ch: u8) -> bool {
+        if !self.is_ready() {
+            return false;
+        }
+        
+        let (keycode, modifier) = Self::char_to_keycode(ch);
+        
+        self.press(keycode, modifier);
+        self.usb.task();
+        unsafe { sleep_ms(10); }
+        self.release();
+        self.usb.task();
+        
+        true
+    }
+    
+    // Type string
+    pub fn type_str(&self, s: &str) {
+        for byte in s.bytes() {
+            self.type_char(byte);
+            unsafe { sleep_ms(50); }
+        }
+    }
+    
+    // Convert ASCII character to HID keycode
+    fn char_to_keycode(ch: u8) -> (u8, u8) {
+        match ch {
+            b'a'..=b'z' => (HID_KEY_A + (ch - b'a'), HID_KEY_NONE),
+            b'A'..=b'Z' => (HID_KEY_A + (ch - b'A'), HID_KEY_SHIFT_LEFT),
+            b' ' => (HID_KEY_SPACE, HID_KEY_NONE),
+            b'\n' => (HID_KEY_ENTER, HID_KEY_NONE),
+            _ => (HID_KEY_NONE, HID_KEY_NONE),
+        }
+    }
+}
+
+// USB HID Mouse
+pub struct USBMouse {
+    usb: USB,
+}
+
+impl USBMouse {
+    // Initialize USB HID mouse
+    pub fn new() -> USBMouse {
+        USBMouse {
+            usb: USB::new(),
+        }
+    }
+    
+    // Check if HID is ready
+    pub fn is_ready(&self) -> bool {
+        unsafe {
+            tud_hid_ready()
+        }
+    }
+    
+    // Move mouse
+    pub fn move_cursor(&self, x: i8, y: i8) -> bool {
+        unsafe {
+            tud_hid_mouse_report(0, 0, x, y, 0, 0)
+        }
+    }
+    
+    // Click mouse button
+    pub fn click(&self, button: u8) -> bool {
+        // Press
+        unsafe {
+            tud_hid_mouse_report(0, button, 0, 0, 0, 0);
+            sleep_ms(10);
+            // Release
+            tud_hid_mouse_report(0, 0, 0, 0, 0, 0)
+        }
+    }
+    
+    // Left click
+    pub fn click_left(&self) -> bool {
+        self.click(HID_MOUSE_BUTTON_LEFT)
+    }
+    
+    // Right click
+    pub fn click_right(&self) -> bool {
+        self.click(HID_MOUSE_BUTTON_RIGHT)
+    }
+    
+    // Scroll wheel
+    pub fn scroll(&self, amount: i8) -> bool {
+        unsafe {
+            tud_hid_mouse_report(0, 0, 0, 0, amount, 0)
+        }
+    }
+}
+
+// Example: USB serial echo
+pub fn example_usb_serial_echo() {
+    let serial = USBSerial::new();
+    
+    serial.println("USB Serial Echo Ready");
+    serial.wait_for_connection();
+    serial.println("Connected!");
+    
+    let mut buffer: [u8; 64] = [0; 64];
+    
+    loop {
+        if serial.available() > 0 {
+            let bytes = serial.read(&mut buffer);
+            
+            if bytes > 0 {
+                // Echo back
+                serial.write(&buffer[0..bytes as usize]);
+            }
+        }
+        
+        serial.usb.task();
+    }
+}
+
+// Example: USB keyboard automation
+pub fn example_usb_keyboard() {
+    let keyboard = USBKeyboard::new();
+    
+    // Wait for USB mount
+    while !keyboard.usb.is_mounted() {
+        keyboard.usb.task();
+        unsafe { sleep_ms(10); }
+    }
+    
+    unsafe { sleep_ms(1000); }
+    
+    // Type message
+    keyboard.type_str("Hello from RP2040!");
+    keyboard.press(HID_KEY_ENTER, HID_KEY_NONE);
+    keyboard.release();
+}
+
+// Example: USB mouse automation
+pub fn example_usb_mouse() {
+    let mouse = USBMouse::new();
+    
+    // Wait for USB mount
+    while !mouse.usb.is_mounted() {
+        mouse.usb.task();
+        unsafe { sleep_ms(10); }
+    }
+    
+    unsafe { sleep_ms(1000); }
+    
+    // Draw square
+    for _ in 0..4 {
+        for _ in 0..50 {
+            mouse.move_cursor(2, 0);
+            mouse.usb.task();
+            unsafe { sleep_ms(10); }
+        }
+        
+        for _ in 0..50 {
+            mouse.move_cursor(0, 2);
+            mouse.usb.task();
+            unsafe { sleep_ms(10); }
+        }
+    }
+    
+    mouse.click_left();
+}
+
+// Example: USB command interface
+pub fn example_usb_command_interface() {
+    let serial = USBSerial::new();
+    
+    serial.println("Command Interface v1.0");
+    serial.println("Type 'help' for commands");
+    serial.wait_for_connection();
+    
+    let mut buffer: [u8; 128] = [0; 128];
+    
+    loop {
+        serial.write_str("> ");
+        serial.flush();
+        
+        let bytes = serial.read_line(&mut buffer);
+        
+        if bytes > 0 {
+            let cmd = String::from_utf8_lossy(&buffer[0..bytes as usize]);
+            let cmd = cmd.trim();
+            
+            match cmd {
+                "help" => {
+                    serial.println("Commands:");
+                    serial.println("  help - Show this help");
+                    serial.println("  status - Show device status");
+                    serial.println("  led on/off - Control LED");
+                }
+                "status" => {
+                    serial.println("Device: RP2040");
+                    serial.println("Status: OK");
+                }
+                "led on" => {
+                    serial.println("LED turned ON");
+                }
+                "led off" => {
+                    serial.println("LED turned OFF");
+                }
+                _ => {
+                    serial.println("Unknown command");
+                }
+            }
+        }
+        
+        serial.usb.task();
+    }
+}
+
+// Example: USB data logger
+pub fn example_usb_data_logger() {
+    let serial = USBSerial::new();
+    
+    serial.println("Data Logger Started");
+    serial.wait_for_connection();
+    
+    let mut counter: u32 = 0;
+    
+    loop {
+        let data = format!("{},{},{}\n", counter, counter * 2, counter * 3);
+        serial.write_str(&data);
+        
+        counter += 1;
+        
+        unsafe { sleep_ms(1000); }
+        serial.usb.task();
+    }
+}

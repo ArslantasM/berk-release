@@ -1,0 +1,144 @@
+/// ═══════════════════════════════════════════════════════════════════════════
+/// BERK Kutuphane Demo - Matematik Modulu
+/// std::math fonksiyonlari
+/// ═══════════════════════════════════════════════════════════════════════════
+
+kullan std::io
+kullan std::math
+
+yaz("============================================================")
+yaz("         Kutuphane Demo: Matematik Modulu                   ")
+yaz("============================================================")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 1: Temel Aritmetik
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 1: Temel Aritmetik ---")
+
+değişken a = 15
+değişken b = 4
+
+yaz("   a = ", a, ", b = ", b)
+yaz("   Toplama: ", a, " + ", b, " = ", a + b)
+yaz("   Cikarma: ", a, " - ", b, " = ", a - b)
+yaz("   Carpma:  ", a, " * ", b, " = ", a * b)
+yaz("   Bolme:   ", a, " / ", b, " = ", a / b)
+
+değişken kalan = a % b
+yaz("   Mod:     ", a, " % ", b, " = ", kalan)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 2: Us Alma
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 2: Us Alma ---")
+
+fonksiyon us_al(taban: tamsayı, us: tamsayı) -> tamsayı yap
+    eğer us == 0 ise
+        dön 1
+    son
+    
+    değişken sonuc = 1
+    değişken i = 0
+    iken i < us yap
+        sonuc = sonuc * taban
+        i = i + 1
+    son
+    dön sonuc
+son
+
+yaz("   2^0 = ", us_al(2, 0))
+yaz("   2^1 = ", us_al(2, 1))
+yaz("   2^8 = ", us_al(2, 8))
+yaz("   2^10 = ", us_al(2, 10))
+yaz("   3^4 = ", us_al(3, 4))
+yaz("   5^3 = ", us_al(5, 3))
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 3: Mutlak Deger
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 3: Mutlak Deger ---")
+
+fonksiyon mutlak_deger(x: tamsayı) -> tamsayı yap
+    eğer x < 0 ise
+        dön 0 - x
+    son
+    dön x
+son
+
+yaz("   |5| = ", mutlak_deger(5))
+yaz("   |-7| = ", mutlak_deger(-7))
+yaz("   |0| = ", mutlak_deger(0))
+yaz("   |-100| = ", mutlak_deger(-100))
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 4: Min ve Max
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 4: Min ve Max ---")
+
+fonksiyon minimum(x: tamsayı, y: tamsayı) -> tamsayı yap
+    eğer x < y ise
+        dön x
+    son
+    dön y
+son
+
+fonksiyon maksimum(x: tamsayı, y: tamsayı) -> tamsayı yap
+    eğer x > y ise
+        dön x
+    son
+    dön y
+son
+
+yaz("   min(10, 20) = ", minimum(10, 20))
+yaz("   max(10, 20) = ", maksimum(10, 20))
+yaz("   min(-5, 3) = ", minimum(-5, 3))
+yaz("   max(-5, 3) = ", maksimum(-5, 3))
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 5: EBOB ve EKOK
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 5: EBOB ve EKOK ---")
+
+fonksiyon ebob_hesapla(x: tamsayı, y: tamsayı) -> tamsayı yap
+    iken y != 0 yap
+        değişken gecici = y
+        değişken kalan = x % y
+        y = kalan
+        x = gecici
+    son
+    dön x
+son
+
+fonksiyon ekok_hesapla(x: tamsayı, y: tamsayı) -> tamsayı yap
+    dön (x * y) / ebob_hesapla(x, y)
+son
+
+yaz("   EBOB(12, 18) = ", ebob_hesapla(12, 18))
+yaz("   EBOB(48, 36) = ", ebob_hesapla(48, 36))
+yaz("   EKOK(4, 6) = ", ekok_hesapla(4, 6))
+yaz("   EKOK(12, 15) = ", ekok_hesapla(12, 15))
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 6: Faktoriyel
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 6: Faktoriyel ---")
+
+fonksiyon faktoriyel(n: tamsayı) -> tamsayı yap
+    eğer n <= 1 ise
+        dön 1
+    son
+    dön n * faktoriyel(n - 1)
+son
+
+yaz("   0! = ", faktoriyel(0))
+yaz("   1! = ", faktoriyel(1))
+yaz("   5! = ", faktoriyel(5))
+yaz("   7! = ", faktoriyel(7))
+
+yaz("\n[OK] Matematik kutuphane demosu tamamlandi!")

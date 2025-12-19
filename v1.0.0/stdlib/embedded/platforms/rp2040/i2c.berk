@@ -1,0 +1,412 @@
+// RP2040 I2C Module
+// Hardware Abstraction Layer for RP2040's I2C peripheral
+// 
+// RP2040 Features:
+// - 2x I2C interfaces (I2C0, I2C1)
+// - Standard mode (100 kHz) and Fast mode (400 kHz, 1 MHz)
+// - Master and Slave modes
+// - 7-bit and 10-bit addressing
+// - Clock stretching support
+// - DMA support for efficient transfers
+// - Multi-master capability
+//
+// Pico SDK: hardware_i2c
+
+extern "C" {
+    // Pico SDK I2C Functions
+    fn i2c_init(i2c: *void, baudrate: u32) -> u32;
+    fn i2c_deinit(i2c: *void);
+    fn i2c_set_baudrate(i2c: *void, baudrate: u32) -> u32;
+    fn i2c_set_slave_mode(i2c: *void, slave: bool, addr: u8);
+    
+    fn i2c_write_blocking(i2c: *void, addr: u8, src: *u8, len: u32, nostop: bool) -> i32;
+    fn i2c_read_blocking(i2c: *void, addr: u8, dst: *u8, len: u32, nostop: bool) -> i32;
+    fn i2c_write_timeout_us(i2c: *void, addr: u8, src: *u8, len: u32, nostop: bool, timeout_us: u32) -> i32;
+    fn i2c_read_timeout_us(i2c: *void, addr: u8, dst: *u8, len: u32, nostop: bool, timeout_us: u32) -> i32;
+    
+    fn i2c_write_byte_raw(i2c: *void, value: u8);
+    fn i2c_read_byte_raw(i2c: *void, nostop: bool) -> u8;
+    
+    fn i2c_get_write_available(i2c: *void) -> u32;
+    fn i2c_get_read_available(i2c: *void) -> u32;
+    
+    // GPIO Functions for I2C pins
+    fn gpio_set_function(gpio: u32, fn_code: u32);
+    fn gpio_pull_up(gpio: u32);
+    
+    // Hardware addresses
+    const I2C0_BASE: *void = 0x40044000 as *void;
+    const I2C1_BASE: *void = 0x40048000 as *void;
+}
+
+// GPIO Function codes for I2C
+const GPIO_FUNC_I2C: u32 = 3;
+
+// Default I2C pins for Pico board
+const PICO_DEFAULT_I2C_SDA_PIN: u32 = 4;  // GP4 (I2C0)
+const PICO_DEFAULT_I2C_SCL_PIN: u32 = 5;  // GP5 (I2C0)
+
+// I2C1 alternative pins
+const I2C1_SDA_PIN: u32 = 6;  // GP6
+const I2C1_SCL_PIN: u32 = 7;  // GP7
+
+// Standard I2C speeds
+const I2C_SPEED_STANDARD: u32 = 100000;   // 100 kHz
+const I2C_SPEED_FAST: u32 = 400000;       // 400 kHz
+const I2C_SPEED_FAST_PLUS: u32 = 1000000; // 1 MHz
+
+// I2C error codes
+const I2C_ERROR_TIMEOUT: i32 = -1;
+const I2C_ERROR_GENERIC: i32 = -2;
+const I2C_ERROR_ADDR_NACK: i32 = -3;
+const I2C_ERROR_DATA_NACK: i32 = -4;
+
+pub struct I2C {
+    port: *void,
+    sda_pin: u32,
+    scl_pin: u32,
+    baudrate: u32,
+}
+
+impl I2C {
+    // Initialize I2C master with default pins
+    pub fn new_default(port: u8, baudrate: u32) -> I2C {
+        let i2c_base = if port == 0 { I2C0_BASE } else { I2C1_BASE };
+        let (sda, scl) = if port == 0 {
+            (PICO_DEFAULT_I2C_SDA_PIN, PICO_DEFAULT_I2C_SCL_PIN)
+        } else {
+            (I2C1_SDA_PIN, I2C1_SCL_PIN)
+        };
+        
+        Self::new(port, sda, scl, baudrate)
+    }
+    
+    // Initialize I2C master with custom pins
+    pub fn new(port: u8, sda_pin: u32, scl_pin: u32, baudrate: u32) -> I2C {
+        let i2c_base = if port == 0 { I2C0_BASE } else { I2C1_BASE };
+        
+        // Initialize I2C peripheral
+        unsafe {
+            let actual_rate = i2c_init(i2c_base, baudrate);
+            
+            // Configure GPIO pins for I2C function
+            gpio_set_function(sda_pin, GPIO_FUNC_I2C);
+            gpio_set_function(scl_pin, GPIO_FUNC_I2C);
+            
+            // Enable pull-ups (I2C requires external or internal pull-ups)
+            gpio_pull_up(sda_pin);
+            gpio_pull_up(scl_pin);
+        }
+        
+        I2C {
+            port: i2c_base,
+            sda_pin,
+            scl_pin,
+            baudrate,
+        }
+    }
+    
+    // Change I2C baudrate
+    pub fn set_baudrate(&mut self, baudrate: u32) -> u32 {
+        unsafe {
+            let actual = i2c_set_baudrate(self.port, baudrate);
+            self.baudrate = actual;
+            actual
+        }
+    }
+    
+    // Enable slave mode with address
+    pub fn set_slave_mode(&mut self, addr: u8) {
+        unsafe {
+            i2c_set_slave_mode(self.port, true, addr);
+        }
+    }
+    
+    // Write data to I2C device (blocking)
+    pub fn write(&self, addr: u8, data: &[u8]) -> i32 {
+        unsafe {
+            i2c_write_blocking(
+                self.port,
+                addr,
+                data.as_ptr() as *u8,
+                data.len() as u32,
+                false
+            )
+        }
+    }
+    
+    // Read data from I2C device (blocking)
+    pub fn read(&self, addr: u8, buffer: &mut [u8]) -> i32 {
+        unsafe {
+            i2c_read_blocking(
+                self.port,
+                addr,
+                buffer.as_mut_ptr() as *u8,
+                buffer.len() as u32,
+                false
+            )
+        }
+    }
+    
+    // Write with timeout (microseconds)
+    pub fn write_timeout(&self, addr: u8, data: &[u8], timeout_us: u32) -> i32 {
+        unsafe {
+            i2c_write_timeout_us(
+                self.port,
+                addr,
+                data.as_ptr() as *u8,
+                data.len() as u32,
+                false,
+                timeout_us
+            )
+        }
+    }
+    
+    // Read with timeout (microseconds)
+    pub fn read_timeout(&self, addr: u8, buffer: &mut [u8], timeout_us: u32) -> i32 {
+        unsafe {
+            i2c_read_timeout_us(
+                self.port,
+                addr,
+                buffer.as_mut_ptr() as *u8,
+                buffer.len() as u32,
+                false,
+                timeout_us
+            )
+        }
+    }
+    
+    // Write register value (common I2C pattern)
+    pub fn write_register(&self, addr: u8, reg: u8, value: u8) -> i32 {
+        let data: [u8; 2] = [reg, value];
+        self.write(addr, &data)
+    }
+    
+    // Read register value (common I2C pattern)
+    pub fn read_register(&self, addr: u8, reg: u8) -> Result<u8, i32> {
+        // Write register address
+        let result = unsafe {
+            i2c_write_blocking(
+                self.port,
+                addr,
+                &reg as *const u8 as *u8,
+                1,
+                true  // nostop = true for repeated start
+            )
+        };
+        
+        if result < 0 {
+            return Err(result);
+        }
+        
+        // Read register value
+        let mut value: u8 = 0;
+        let result = unsafe {
+            i2c_read_blocking(
+                self.port,
+                addr,
+                &mut value as *mut u8,
+                1,
+                false
+            )
+        };
+        
+        if result < 0 {
+            Err(result)
+        } else {
+            Ok(value)
+        }
+    }
+    
+    // Read multiple registers (burst read)
+    pub fn read_registers(&self, addr: u8, reg: u8, buffer: &mut [u8]) -> i32 {
+        // Write register address
+        let result = unsafe {
+            i2c_write_blocking(
+                self.port,
+                addr,
+                &reg as *const u8 as *u8,
+                1,
+                true  // nostop = true for repeated start
+            )
+        };
+        
+        if result < 0 {
+            return result;
+        }
+        
+        // Read register values
+        unsafe {
+            i2c_read_blocking(
+                self.port,
+                addr,
+                buffer.as_mut_ptr() as *u8,
+                buffer.len() as u32,
+                false
+            )
+        }
+    }
+    
+    // Scan I2C bus for devices (returns list of addresses found)
+    pub fn scan(&self) -> Vec<u8> {
+        let mut devices: Vec<u8> = Vec::new();
+        
+        for addr in 0x08..0x78 {  // Valid 7-bit address range
+            let dummy: u8 = 0;
+            let result = unsafe {
+                i2c_write_timeout_us(
+                    self.port,
+                    addr,
+                    &dummy as *const u8 as *u8,
+                    0,
+                    false,
+                    1000  // 1ms timeout
+                )
+            };
+            
+            if result >= 0 {
+                devices.push(addr);
+            }
+        }
+        
+        devices
+    }
+    
+    // Check if device is present on bus
+    pub fn device_present(&self, addr: u8) -> bool {
+        let dummy: u8 = 0;
+        let result = unsafe {
+            i2c_write_timeout_us(
+                self.port,
+                addr,
+                &dummy as *const u8 as *u8,
+                0,
+                false,
+                1000  // 1ms timeout
+            )
+        };
+        
+        result >= 0
+    }
+    
+    // Write raw byte (low-level access)
+    pub fn write_byte_raw(&self, value: u8) {
+        unsafe {
+            i2c_write_byte_raw(self.port, value);
+        }
+    }
+    
+    // Read raw byte (low-level access)
+    pub fn read_byte_raw(&self, nostop: bool) -> u8 {
+        unsafe {
+            i2c_read_byte_raw(self.port, nostop)
+        }
+    }
+    
+    // Get available space in TX FIFO
+    pub fn write_available(&self) -> u32 {
+        unsafe {
+            i2c_get_write_available(self.port)
+        }
+    }
+    
+    // Get available data in RX FIFO
+    pub fn read_available(&self) -> u32 {
+        unsafe {
+            i2c_get_read_available(self.port)
+        }
+    }
+    
+    // Deinitialize I2C
+    pub fn deinit(&self) {
+        unsafe {
+            i2c_deinit(self.port);
+        }
+    }
+}
+
+// Helper function: Initialize I2C0 with standard speed
+pub fn init_i2c0_standard() -> I2C {
+    I2C::new_default(0, I2C_SPEED_STANDARD)
+}
+
+// Helper function: Initialize I2C1 with standard speed
+pub fn init_i2c1_standard() -> I2C {
+    I2C::new_default(1, I2C_SPEED_STANDARD)
+}
+
+// Helper function: Initialize I2C0 with fast mode
+pub fn init_i2c0_fast() -> I2C {
+    I2C::new_default(0, I2C_SPEED_FAST)
+}
+
+// Helper function: Initialize I2C1 with fast mode
+pub fn init_i2c1_fast() -> I2C {
+    I2C::new_default(1, I2C_SPEED_FAST)
+}
+
+// Example: Read from BMP280 sensor (I2C address 0x76)
+pub fn example_bmp280() {
+    let mut i2c = init_i2c0_standard();
+    
+    // Read chip ID register (0xD0)
+    match i2c.read_register(0x76, 0xD0) {
+        Ok(chip_id) => {
+            if chip_id == 0x58 {
+                println!("BMP280 sensor detected!");
+                
+                // Read temperature and pressure calibration data
+                let mut calib_data: [u8; 24] = [0; 24];
+                i2c.read_registers(0x76, 0x88, &mut calib_data);
+                
+                // Configure sensor (normal mode, oversampling)
+                i2c.write_register(0x76, 0xF4, 0x27);
+                i2c.write_register(0x76, 0xF5, 0xA0);
+            }
+        }
+        Err(e) => {
+            println!("BMP280 not found, error: {}", e);
+        }
+    }
+}
+
+// Example: OLED Display (SSD1306, I2C address 0x3C)
+pub fn example_oled_display() {
+    let mut i2c = init_i2c0_fast();
+    
+    const OLED_ADDR: u8 = 0x3C;
+    
+    // Check if OLED is present
+    if i2c.device_present(OLED_ADDR) {
+        println!("OLED display found!");
+        
+        // Initialize OLED (simplified)
+        let init_cmds: [u8; 4] = [
+            0x00,  // Command mode
+            0xAE,  // Display OFF
+            0xA8,  // Set multiplex ratio
+            0x3F,  // 64 rows
+        ];
+        
+        i2c.write(OLED_ADDR, &init_cmds);
+        
+        // Turn display ON
+        let on_cmd: [u8; 2] = [0x00, 0xAF];
+        i2c.write(OLED_ADDR, &on_cmd);
+    } else {
+        println!("OLED display not found");
+    }
+}
+
+// Example: I2C bus scan
+pub fn example_bus_scan() {
+    let i2c = init_i2c0_standard();
+    
+    println!("Scanning I2C bus...");
+    let devices = i2c.scan();
+    
+    println!("Found {} device(s):", devices.len());
+    for addr in devices {
+        println!("  0x{:02X}", addr);
+    }
+}

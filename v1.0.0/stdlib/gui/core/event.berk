@@ -1,0 +1,505 @@
+// ============================================================================
+// BERK GUI Framework - Event System
+// ============================================================================
+// Platform-bağımsız olay (event) sistemi
+// ============================================================================
+
+modül gui::core::event
+
+kullan gui::core::window::Point
+
+// ============================================================================
+// EVENT TYPES
+// ============================================================================
+
+/// Olay türleri
+pub tip EventType = enum yap
+    // Uygulama olayları
+    Quit,                           // Uygulamadan çıkış
+    ThemeChanged,                   // Sistem teması değişti
+    
+    // Pencere olayları
+    WindowClose(window_id: tamsayı),
+    WindowResize(width: tamsayı, height: tamsayı),
+    WindowMove(x: tamsayı, y: tamsayı),
+    WindowFocus,
+    WindowBlur,
+    WindowMinimize,
+    WindowMaximize,
+    WindowRestore,
+    
+    // Fare olayları
+    MouseMove(x: tamsayı, y: tamsayı),
+    MouseEnter,
+    MouseLeave,
+    MouseDown(button: MouseButton, x: tamsayı, y: tamsayı),
+    MouseUp(button: MouseButton, x: tamsayı, y: tamsayı),
+    MouseClick(button: MouseButton, x: tamsayı, y: tamsayı),
+    MouseDoubleClick(button: MouseButton, x: tamsayı, y: tamsayı),
+    MouseWheel(delta_x: ondalık, delta_y: ondalık),
+    
+    // Sürükle-bırak olayları
+    DragStart(x: tamsayı, y: tamsayı),
+    DragMove(x: tamsayı, y: tamsayı),
+    DragEnd(x: tamsayı, y: tamsayı),
+    DragEnter,
+    DragLeave,
+    Drop(files: liste[yazı]),
+    
+    // Klavye olayları
+    KeyDown(key: Key, modifiers: Modifiers),
+    KeyUp(key: Key, modifiers: Modifiers),
+    KeyPress(character: yazı),
+    
+    // Dokunmatik olaylar
+    TouchStart(touches: liste[Touch]),
+    TouchMove(touches: liste[Touch]),
+    TouchEnd(touches: liste[Touch]),
+    TouchCancel,
+    
+    // Gesture olayları
+    Pinch(scale: ondalık, center: Point),
+    Rotate(angle: ondalık, center: Point),
+    Swipe(direction: SwipeDirection, velocity: ondalık),
+    LongPress(x: tamsayı, y: tamsayı),
+    
+    // Özel olaylar
+    Custom(name: yazı, data: herhangi)
+son
+
+/// Fare düğmeleri
+pub tip MouseButton = enum yap
+    Left,
+    Right,
+    Middle,
+    Back,
+    Forward
+son
+
+/// Klavye tuşları
+pub tip Key = enum yap
+    // Harfler
+    A, B, C, D, E, F, G, H, I, J, K, L, M,
+    N, O, P, Q, R, S, T, U, V, W, X, Y, Z,
+    
+    // Rakamlar
+    Key0, Key1, Key2, Key3, Key4,
+    Key5, Key6, Key7, Key8, Key9,
+    
+    // Numpad
+    Numpad0, Numpad1, Numpad2, Numpad3, Numpad4,
+    Numpad5, Numpad6, Numpad7, Numpad8, Numpad9,
+    NumpadAdd, NumpadSubtract, NumpadMultiply, NumpadDivide,
+    NumpadEnter, NumpadDecimal,
+    
+    // Fonksiyon tuşları
+    F1, F2, F3, F4, F5, F6, F7, F8, F9, F10, F11, F12,
+    
+    // Kontrol tuşları
+    Escape, Tab, CapsLock, Shift, Control, Alt, Meta,
+    Space, Enter, Backspace, Delete, Insert,
+    Home, End, PageUp, PageDown,
+    ArrowUp, ArrowDown, ArrowLeft, ArrowRight,
+    
+    // Noktalama
+    Comma, Period, Slash, Backslash, Semicolon, Quote,
+    BracketLeft, BracketRight, Minus, Equal, Backtick,
+    
+    // Özel
+    PrintScreen, ScrollLock, Pause, NumLock,
+    ContextMenu,
+    
+    // Bilinmeyen
+    Unknown(code: tamsayı)
+son
+
+/// Modifier tuşları
+pub tip Modifiers = yapı yap
+    shift: mantıksal,
+    control: mantıksal,
+    alt: mantıksal,
+    meta: mantıksal,      // Windows/Command tuşu
+    caps_lock: mantıksal,
+    num_lock: mantıksal
+son
+
+/// Dokunmatik nokta
+pub tip Touch = yapı yap
+    id: tamsayı,
+    x: tamsayı,
+    y: tamsayı,
+    pressure: ondalık,    // 0.0 - 1.0
+    radius: ondalık       // Dokunuş yarıçapı
+son
+
+/// Kaydırma yönü
+pub tip SwipeDirection = enum yap
+    Up,
+    Down,
+    Left,
+    Right
+son
+
+// ============================================================================
+// EVENT STRUCT
+// ============================================================================
+
+/// Ana olay yapısı
+pub tip Event = yapı yap
+    /// Olay türü
+    tür: EventType,
+    
+    /// Hedef pencere ID (-1 = global)
+    window_id: tamsayı,
+    
+    /// Olay zamanı (milisaniye)
+    timestamp: tamsayı,
+    
+    /// Olay işlendi mi?
+    handled: mantıksal,
+    
+    /// Propagation durduruldu mu?
+    propagation_stopped: mantıksal
+son
+
+impl Event:
+    /// Yeni olay oluştur
+    pub fn new(tür: EventType) döndür Event:
+        döndür Event yap
+            tür: tür,
+            window_id: -1,
+            timestamp: __native_get_timestamp(),
+            handled: yanlış,
+            propagation_stopped: yanlış
+        son
+    son
+    
+    /// Pencere ID'si ile olay oluştur
+    pub fn for_window(tür: EventType, window_id: tamsayı) döndür Event:
+        döndür Event yap
+            tür: tür,
+            window_id: window_id,
+            timestamp: __native_get_timestamp(),
+            handled: yanlış,
+            propagation_stopped: yanlış
+        son
+    son
+    
+    /// Olayı işlenmiş olarak işaretle
+    pub fn mark_handled(mut self) döndür void:
+        self.handled = doğru
+    son
+    
+    /// Propagation'ı durdur
+    pub fn stop_propagation(mut self) döndür void:
+        self.propagation_stopped = doğru
+    son
+    
+    /// Fare olayı mı?
+    pub fn is_mouse_event(self) döndür mantıksal:
+        eşle self.tür:
+            EventType::MouseMove(_,_) => döndür doğru,
+            EventType::MouseDown(_,_,_) => döndür doğru,
+            EventType::MouseUp(_,_,_) => döndür doğru,
+            EventType::MouseClick(_,_,_) => döndür doğru,
+            EventType::MouseDoubleClick(_,_,_) => döndür doğru,
+            EventType::MouseWheel(_,_) => döndür doğru,
+            EventType::MouseEnter => döndür doğru,
+            EventType::MouseLeave => döndür doğru,
+            _ => döndür yanlış
+        son
+    son
+    
+    /// Klavye olayı mı?
+    pub fn is_keyboard_event(self) döndür mantıksal:
+        eşle self.tür:
+            EventType::KeyDown(_,_) => döndür doğru,
+            EventType::KeyUp(_,_) => döndür doğru,
+            EventType::KeyPress(_) => döndür doğru,
+            _ => döndür yanlış
+        son
+    son
+    
+    /// Dokunmatik olay mı?
+    pub fn is_touch_event(self) döndür mantıksal:
+        eşle self.tür:
+            EventType::TouchStart(_) => döndür doğru,
+            EventType::TouchMove(_) => döndür doğru,
+            EventType::TouchEnd(_) => döndür doğru,
+            EventType::TouchCancel => döndür doğru,
+            _ => döndür yanlış
+        son
+    son
+son
+
+// ============================================================================
+// MODIFIERS IMPLEMENTATION
+// ============================================================================
+
+impl Modifiers:
+    /// Boş modifiers
+    pub fn none() döndür Modifiers:
+        döndür Modifiers yap
+            shift: yanlış,
+            control: yanlış,
+            alt: yanlış,
+            meta: yanlış,
+            caps_lock: yanlış,
+            num_lock: yanlış
+        son
+    son
+    
+    /// Herhangi bir modifier aktif mi?
+    pub fn any(self) döndür mantıksal:
+        döndür self.shift || self.control || self.alt || self.meta
+    son
+    
+    /// Ctrl+Shift kombinasyonu?
+    pub fn ctrl_shift(self) döndür mantıksal:
+        döndür self.control && self.shift
+    son
+    
+    /// Ctrl+Alt kombinasyonu?
+    pub fn ctrl_alt(self) döndür mantıksal:
+        döndür self.control && self.alt
+    son
+son
+
+// ============================================================================
+// EVENT HANDLER
+// ============================================================================
+
+/// Olay işleyici trait
+pub özellik EventHandler:
+    /// Olay işle
+    fn handle(self, event: Event) döndür void
+    
+    /// Bu olay türünü işleyebilir mi?
+    fn can_handle(self, event_type: EventType) döndür mantıksal:
+        döndür doğru  // Varsayılan: tümünü işle
+    son
+son
+
+/// Fonksiyon tabanlı olay işleyici
+pub tip FnEventHandler = yapı yap
+    handler: fn(event: Event) döndür void,
+    filter: Seçenek[fn(event_type: EventType) döndür mantıksal]
+son
+
+impl EventHandler için FnEventHandler:
+    fn handle(self, event: Event) döndür void:
+        self.handler(event)
+    son
+    
+    fn can_handle(self, event_type: EventType) döndür mantıksal:
+        eğer değişken filter = self.filter:
+            döndür filter(event_type)
+        son
+        döndür doğru
+    son
+son
+
+/// Kolay event handler oluşturma
+pub fn on_event(handler: fn(event: Event) döndür void) döndür FnEventHandler:
+    döndür FnEventHandler yap
+        handler: handler,
+        filter: boş
+    son
+son
+
+/// Filtrelenmiş event handler
+pub fn on_event_filtered(
+    handler: fn(event: Event) döndür void,
+    filter: fn(event_type: EventType) döndür mantıksal
+) döndür FnEventHandler:
+    döndür FnEventHandler yap
+        handler: handler,
+        filter: Bazı(filter)
+    son
+son
+
+// ============================================================================
+// EVENT LOOP
+// ============================================================================
+
+/// Olay döngüsü
+pub tip EventLoop = yapı yap
+    /// Bekleyen olaylar
+    pending_events: liste[Event],
+    
+    /// Çalışıyor mu?
+    running: mantıksal,
+    
+    /// Son frame zamanı
+    last_frame_time: tamsayı
+son
+
+impl EventLoop:
+    /// Yeni olay döngüsü oluştur
+    pub fn new() döndür EventLoop:
+        döndür EventLoop yap
+            pending_events: [],
+            running: yanlış,
+            last_frame_time: 0
+        son
+    son
+    
+    /// Olayları al (non-blocking)
+    pub fn poll(mut self) döndür liste[Event]:
+        // Native'den olayları al
+        değişken native_events = __native_poll_events()
+        
+        // Bekleyen olayları ekle
+        değişken all_events = self.pending_events + native_events
+        self.pending_events.clear()
+        
+        döndür all_events
+    son
+    
+    /// Olayları bekle (blocking)
+    pub fn wait(mut self) döndür liste[Event]:
+        // Native'den olayları bekle
+        değişken native_events = __native_wait_events()
+        
+        // Bekleyen olayları ekle
+        değişken all_events = self.pending_events + native_events
+        self.pending_events.clear()
+        
+        döndür all_events
+    son
+    
+    /// Timeout ile bekle
+    pub fn wait_timeout(mut self, timeout_ms: tamsayı) döndür liste[Event]:
+        değişken native_events = __native_wait_events_timeout(timeout_ms)
+        
+        değişken all_events = self.pending_events + native_events
+        self.pending_events.clear()
+        
+        döndür all_events
+    son
+    
+    /// Olay gönder
+    pub fn post(mut self, event: Event) döndür void:
+        self.pending_events.push(event)
+    son
+    
+    /// Frame bekle (FPS kontrolü)
+    pub fn wait_for_frame(mut self, target_fps: tamsayı) döndür void:
+        değişken now = __native_get_timestamp()
+        değişken frame_time = 1000 / target_fps  // ms per frame
+        değişken elapsed = now - self.last_frame_time
+        
+        eğer elapsed < frame_time:
+            __native_sleep(frame_time - elapsed)
+        son
+        
+        self.last_frame_time = __native_get_timestamp()
+    son
+    
+    /// Kapat
+    pub fn shutdown(mut self) döndür void:
+        self.running = yanlış
+        self.pending_events.clear()
+    son
+son
+
+// ============================================================================
+// EVENT DISPATCHER
+// ============================================================================
+
+/// Olay dağıtıcı - Observer pattern
+pub tip EventDispatcher = yapı yap
+    listeners: liste[(EventType, fn(event: Event) döndür void)]
+son
+
+impl EventDispatcher:
+    pub fn new() döndür EventDispatcher:
+        döndür EventDispatcher yap
+            listeners: []
+        son
+    son
+    
+    /// Dinleyici ekle
+    pub fn add_listener(mut self, event_type: EventType, handler: fn(event: Event) döndür void) döndür void:
+        self.listeners.push((event_type, handler))
+    son
+    
+    /// Dinleyici kaldır
+    pub fn remove_listener(mut self, event_type: EventType) döndür void:
+        self.listeners = self.listeners.filter(fn(item):
+            item.0 != event_type
+        )
+    son
+    
+    /// Olay gönder
+    pub fn dispatch(self, event: Event) döndür void:
+        için (et, handler) içinde self.listeners:
+            eğer et == event.tür:
+                handler(event)
+            son
+        son
+    son
+    
+    /// Tümünü temizle
+    pub fn clear(mut self) döndür void:
+        self.listeners.clear()
+    son
+son
+
+// ============================================================================
+// KEYBOARD SHORTCUTS
+// ============================================================================
+
+/// Klavye kısayolu
+pub tip Shortcut = yapı yap
+    key: Key,
+    modifiers: Modifiers
+son
+
+impl Shortcut:
+    /// Basit kısayol (sadece tuş)
+    pub fn key(key: Key) döndür Shortcut:
+        döndür Shortcut yap key: key, modifiers: Modifiers::none() son
+    son
+    
+    /// Ctrl + tuş
+    pub fn ctrl(key: Key) döndür Shortcut:
+        değişken mods = Modifiers::none()
+        mods.control = doğru
+        döndür Shortcut yap key: key, modifiers: mods son
+    son
+    
+    /// Ctrl + Shift + tuş
+    pub fn ctrl_shift(key: Key) döndür Shortcut:
+        değişken mods = Modifiers::none()
+        mods.control = doğru
+        mods.shift = doğru
+        döndür Shortcut yap key: key, modifiers: mods son
+    son
+    
+    /// Alt + tuş
+    pub fn alt(key: Key) döndür Shortcut:
+        değişken mods = Modifiers::none()
+        mods.alt = doğru
+        döndür Shortcut yap key: key, modifiers: mods son
+    son
+    
+    /// Kısayol eşleşiyor mu?
+    pub fn matches(self, key: Key, modifiers: Modifiers) döndür mantıksal:
+        döndür self.key == key &&
+               self.modifiers.shift == modifiers.shift &&
+               self.modifiers.control == modifiers.control &&
+               self.modifiers.alt == modifiers.alt &&
+               self.modifiers.meta == modifiers.meta
+    son
+son
+
+// ============================================================================
+// NATIVE BINDINGS
+// ============================================================================
+
+dış fn __native_get_timestamp() döndür tamsayı
+dış fn __native_poll_events() döndür liste[Event]
+dış fn __native_wait_events() döndür liste[Event]
+dış fn __native_wait_events_timeout(timeout_ms: tamsayı) döndür liste[Event]
+dış fn __native_sleep(ms: tamsayı) döndür void

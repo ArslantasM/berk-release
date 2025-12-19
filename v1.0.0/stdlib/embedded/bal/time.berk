@@ -1,0 +1,71 @@
+// stdlib/embedded/bal/time.berk
+// Backend Abstraction Layer - Time Interface
+// Platform-independent timing API for embedded systems
+
+/// Time HAL interface that platforms must implement
+pub interface TIME_HAL {
+    /// Get current time in milliseconds since boot
+    fn millis() -> u32
+    
+    /// Get current time in microseconds since boot
+    fn micros() -> u32
+    
+    /// Delay for specified milliseconds (blocking)
+    fn delay_ms(ms: u32)
+    
+    /// Delay for specified microseconds (blocking)
+    fn delay_us(us: u32)
+}
+
+/// Platform-specific TIME_HAL instance (provided by platform implementation)
+pub extern TIME_HAL: TIME_HAL
+
+/// Get current time in milliseconds since boot
+pub fn millis() -> u32 {
+    TIME_HAL.millis()
+}
+
+/// Get current time in microseconds since boot
+pub fn micros() -> u32 {
+    TIME_HAL.micros()
+}
+
+/// Delay (sleep) for specified milliseconds (blocking)
+pub fn delay_ms(ms: u32) {
+    TIME_HAL.delay_ms(ms)
+}
+
+/// Delay (sleep) for specified microseconds (blocking)
+pub fn delay_us(us: u32) {
+    TIME_HAL.delay_us(us)
+}
+
+/// Sleep for milliseconds (alias for delay_ms)
+pub fn sleep_ms(ms: u32) {
+    TIME_HAL.delay_ms(ms)
+}
+
+/// Sleep for seconds (blocking)
+pub fn sleep_secs(secs: u32) {
+    TIME_HAL.delay_ms(secs * 1000)
+}
+
+/// Check if timeout has occurred
+pub fn has_timeout(start_ms: u32, timeout_ms: u32) -> bool {
+    let elapsed = millis() - start_ms
+    elapsed >= timeout_ms
+}
+
+/// Wait for condition with timeout (returns true if condition met)
+pub fn wait_for<F: Fn() -> bool>(condition: F, timeout_ms: u32) -> bool {
+    let start = millis()
+    loop {
+        if condition() {
+            return true
+        }
+        if has_timeout(start, timeout_ms) {
+            return false
+        }
+        delay_us(10)
+    }
+}

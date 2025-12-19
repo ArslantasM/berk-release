@@ -1,0 +1,109 @@
+// Arduino SPI Module for BERK
+// High-speed SPI communication
+//
+// For SD cards, displays, and more! 💾
+
+extern "C" {
+    fn SPI_begin();
+    fn SPI_end();
+    fn SPI_beginTransaction();
+    fn SPI_endTransaction();
+    fn SPI_transfer(data: u8) -> u8;
+    fn SPI_setBitOrder(order: u8);
+    fn SPI_setDataMode(mode: u8);
+    fn SPI_setClockDivider(divider: u8);
+}
+
+const MSBFIRST: u8 = 1;
+const LSBFIRST: u8 = 0;
+
+const SPI_MODE0: u8 = 0;
+const SPI_MODE1: u8 = 1;
+const SPI_MODE2: u8 = 2;
+const SPI_MODE3: u8 = 3;
+
+const SPI_CLOCK_DIV4: u8 = 4;
+const SPI_CLOCK_DIV16: u8 = 16;
+
+// Initialize SPI
+pub fn begin() {
+    unsafe { SPI_begin(); }
+}
+
+// Transfer byte (send and receive)
+pub fn transfer(data: u8) -> u8 {
+    unsafe { SPI_transfer(data) }
+}
+
+// Begin transaction
+pub fn begin_transaction() {
+    unsafe { SPI_beginTransaction(); }
+}
+
+// End transaction
+pub fn end_transaction() {
+    unsafe { SPI_endTransaction(); }
+}
+
+// Set bit order
+pub fn set_bit_order(order: u8) {
+    unsafe { SPI_setBitOrder(order); }
+}
+
+// Set data mode
+pub fn set_data_mode(mode: u8) {
+    unsafe { SPI_setDataMode(mode); }
+}
+
+// Set clock divider
+pub fn set_clock_divider(divider: u8) {
+    unsafe { SPI_setClockDivider(divider); }
+}
+
+// 📱 VIRAL EXAMPLE: MAX7219 LED Matrix
+pub fn example_max7219() {
+    use super::gpio;
+    
+    let cs = gpio::pin(10).output();
+    
+    begin();
+    set_bit_order(MSBFIRST);
+    set_data_mode(SPI_MODE0);
+    
+    // Initialize MAX7219
+    cs.low();
+    transfer(0x0C);  // Shutdown register
+    transfer(0x01);  // Normal operation
+    cs.high();
+    
+    cs.low();
+    transfer(0x0A);  // Intensity register
+    transfer(0x08);  // Medium brightness
+    cs.high();
+    
+    // Display pattern
+    cs.low();
+    transfer(0x01);  // Row 1
+    transfer(0xFF);  // All LEDs on
+    cs.high();
+}
+
+// 💳 VIRAL EXAMPLE: RFID Reader (RC522)
+pub fn example_rfid() {
+    use super::{gpio, serial, time};
+    
+    let cs = gpio::pin(10).output();
+    let rst = gpio::pin(9).output();
+    
+    begin();
+    serial::begin(9600);
+    
+    // Initialize RFID
+    rst.high();
+    time::delay_ms(10);
+    
+    serial::println("RFID Reader Ready!");
+    serial::println("Scan your card...");
+    
+    // Card reading loop would go here
+}

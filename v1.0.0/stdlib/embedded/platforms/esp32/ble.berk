@@ -1,0 +1,495 @@
+// stdlib/embedded/platforms/esp32/ble.berk
+// ESP32 BLE (Bluetooth Low Energy) HAL Implementation
+// ESP-IDF Bluedroid BLE stack bindings
+
+// BLE operation modes
+pub enum BLERole {
+    Disabled,
+    Server,    // GATT Server (Peripheral)
+    Client,    // GATT Client (Central)
+    Both,      // Server + Client
+}
+
+pub enum BLEAdvType {
+    IND,           // Connectable undirected advertising
+    DIRECT_IND,    // Connectable directed advertising
+    SCAN_IND,      // Scannable undirected advertising
+    NONCONN_IND,   // Non-connectable undirected advertising
+}
+
+pub enum BLEError {
+    NotInitialized,
+    AlreadyInitialized,
+    InvalidParameter,
+    ConnectionFailed,
+    ServiceNotFound,
+    CharacteristicNotFound,
+    AdvertisingFailed,
+    ScanFailed,
+    Timeout,
+}
+
+pub type Result<T> = result<T, BLEError>
+
+// ESP-IDF BLE constants
+const ESP_BT_MODE_IDLE: u32 = 0
+const ESP_BT_MODE_BLE: u32 = 1
+const ESP_BT_MODE_CLASSIC_BT: u32 = 2
+const ESP_BT_MODE_BTDM: u32 = 3
+
+const ESP_BLE_ADV_TYPE_IND: u32 = 0
+const ESP_BLE_ADV_TYPE_DIRECT_IND_HIGH: u32 = 1
+const ESP_BLE_ADV_TYPE_SCAN_IND: u32 = 2
+const ESP_BLE_ADV_TYPE_NONCONN_IND: u32 = 3
+
+const ESP_BLE_ADV_DATA_FLAG: u32 = 0x01
+const ESP_BLE_ADV_DATA_16SRV_PART: u32 = 0x02
+const ESP_BLE_ADV_DATA_16SRV_CMPL: u32 = 0x03
+const ESP_BLE_ADV_DATA_NAME_SHORT: u32 = 0x08
+const ESP_BLE_ADV_DATA_NAME_CMPL: u32 = 0x09
+const ESP_BLE_ADV_DATA_TX_PWR: u32 = 0x0A
+const ESP_BLE_ADV_DATA_MANUFACTURER: u32 = 0xFF
+
+// UUID types
+const ESP_UUID_LEN_16: u32 = 2
+const ESP_UUID_LEN_32: u32 = 4
+const ESP_UUID_LEN_128: u32 = 16
+
+// ESP-IDF BLE structures
+struct esp_bt_controller_config_t {
+    controller_task_stack_size: u16,
+    controller_task_prio: u8,
+    hci_uart_no: u8,
+    hci_uart_baudrate: u32,
+    scan_duplicate_mode: u8,
+    scan_duplicate_type: u8,
+    normal_adv_size: u16,
+    mesh_adv_size: u16,
+    send_adv_reserved_size: u16,
+    controller_debug_flag: u32,
+    mode: u8,
+    ble_max_conn: u8,
+    bt_max_acl_conn: u8,
+    bt_sco_datapath: u8,
+    auto_latency: bool,
+    bt_legacy_auth_vs_evt: bool,
+    bt_max_sync_conn: u8,
+    ble_sca: u8,
+    pcm_role: u8,
+    pcm_polar: u8,
+    magic: u32,
+}
+
+struct esp_ble_adv_params_t {
+    adv_int_min: u16,
+    adv_int_max: u16,
+    adv_type: u32,
+    own_addr_type: u32,
+    peer_addr: [u8; 6],
+    peer_addr_type: u32,
+    channel_map: u8,
+    adv_filter_policy: u32,
+}
+
+struct esp_ble_adv_data_t {
+    set_scan_rsp: bool,
+    include_name: bool,
+    include_txpower: bool,
+    min_interval: i32,
+    max_interval: i32,
+    appearance: i32,
+    manufacturer_len: u16,
+    p_manufacturer_data: *u8,
+    service_data_len: u16,
+    p_service_data: *u8,
+    service_uuid_len: u16,
+    p_service_uuid: *u8,
+    flag: u8,
+}
+
+struct esp_ble_scan_params_t {
+    scan_type: u32,
+    own_addr_type: u32,
+    scan_filter_policy: u32,
+    scan_interval: u16,
+    scan_window: u16,
+    scan_duplicate: u32,
+}
+
+struct esp_bd_addr_t {
+    addr: [u8; 6],
+}
+
+// ESP-IDF BLE functions
+extern "C" {
+    fn esp_bt_controller_mem_release(mode: u32) -> i32
+    fn esp_bt_controller_init(cfg: *esp_bt_controller_config_t) -> i32
+    fn esp_bt_controller_deinit() -> i32
+    fn esp_bt_controller_enable(mode: u32) -> i32
+    fn esp_bt_controller_disable() -> i32
+    fn esp_bluedroid_init() -> i32
+    fn esp_bluedroid_enable() -> i32
+    fn esp_bluedroid_disable() -> i32
+    fn esp_bluedroid_deinit() -> i32
+    fn esp_ble_gap_set_device_name(name: *u8) -> i32
+    fn esp_ble_gap_config_adv_data(adv_data: *esp_ble_adv_data_t) -> i32
+    fn esp_ble_gap_start_advertising(adv_params: *esp_ble_adv_params_t) -> i32
+    fn esp_ble_gap_stop_advertising() -> i32
+    fn esp_ble_gap_set_scan_params(scan_params: *esp_ble_scan_params_t) -> i32
+    fn esp_ble_gap_start_scanning(duration: u32) -> i32
+    fn esp_ble_gap_stop_scanning() -> i32
+}
+
+const ESP_OK: i32 = 0
+
+// Global BLE state
+static mut ble_initialized: bool = false
+static mut ble_advertising: bool = false
+static mut ble_scanning: bool = false
+
+/// Initialize BLE stack
+pub fn init() -> Result<()> {
+    unsafe {
+        if ble_initialized {
+            return Err(BLEError.AlreadyInitialized)
+        }
+        
+        // Release Classic BT memory
+        esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT)
+        
+        // Initialize BT controller with default config
+        let bt_cfg = esp_bt_controller_config_t {
+            controller_task_stack_size: 4096,
+            controller_task_prio: 5,
+            hci_uart_no: 1,
+            hci_uart_baudrate: 921600,
+            scan_duplicate_mode: 0,
+            scan_duplicate_type: 0,
+            normal_adv_size: 20,
+            mesh_adv_size: 0,
+            send_adv_reserved_size: 0,
+            controller_debug_flag: 0,
+            mode: ESP_BT_MODE_BLE as u8,
+            ble_max_conn: 3,
+            bt_max_acl_conn: 0,
+            bt_sco_datapath: 0,
+            auto_latency: false,
+            bt_legacy_auth_vs_evt: false,
+            bt_max_sync_conn: 0,
+            ble_sca: 0,
+            pcm_role: 0,
+            pcm_polar: 0,
+            magic: 0x5A5AA5A5,
+        }
+        
+        let mut ret = esp_bt_controller_init(&bt_cfg)
+        if ret != ESP_OK {
+            return Err(BLEError.NotInitialized)
+        }
+        
+        ret = esp_bt_controller_enable(ESP_BT_MODE_BLE)
+        if ret != ESP_OK {
+            return Err(BLEError.NotInitialized)
+        }
+        
+        // Initialize and enable Bluedroid
+        ret = esp_bluedroid_init()
+        if ret != ESP_OK {
+            return Err(BLEError.NotInitialized)
+        }
+        
+        ret = esp_bluedroid_enable()
+        if ret != ESP_OK {
+            return Err(BLEError.NotInitialized)
+        }
+        
+        ble_initialized = true
+        Ok(())
+    }
+}
+
+/// Deinitialize BLE stack
+pub fn deinit() -> Result<()> {
+    unsafe {
+        if !ble_initialized {
+            return Err(BLEError.NotInitialized)
+        }
+        
+        if ble_advertising {
+            stop_advertising()
+        }
+        
+        if ble_scanning {
+            stop_scan()
+        }
+        
+        esp_bluedroid_disable()
+        esp_bluedroid_deinit()
+        esp_bt_controller_disable()
+        esp_bt_controller_deinit()
+        
+        ble_initialized = false
+        Ok(())
+    }
+}
+
+/// Set BLE device name
+pub fn set_device_name(name: &str) -> Result<()> {
+    unsafe {
+        if !ble_initialized {
+            return Err(BLEError.NotInitialized)
+        }
+        
+        if name.len() > 29 {
+            return Err(BLEError.InvalidParameter)
+        }
+        
+        let ret = esp_ble_gap_set_device_name(name.as_ptr() as *u8)
+        if ret == ESP_OK {
+            Ok(())
+        } else {
+            Err(BLEError.InvalidParameter)
+        }
+    }
+}
+
+/// Configure and start BLE advertising
+pub fn start_advertising(device_name: &str) -> Result<()> {
+    unsafe {
+        if !ble_initialized {
+            return Err(BLEError.NotInitialized)
+        }
+        
+        if ble_advertising {
+            return Ok(())  // Already advertising
+        }
+        
+        // Set device name
+        set_device_name(device_name)?
+        
+        // Configure advertising data
+        let adv_data = esp_ble_adv_data_t {
+            set_scan_rsp: false,
+            include_name: true,
+            include_txpower: true,
+            min_interval: 0x0006,
+            max_interval: 0x0010,
+            appearance: 0,
+            manufacturer_len: 0,
+            p_manufacturer_data: null,
+            service_data_len: 0,
+            p_service_data: null,
+            service_uuid_len: 0,
+            p_service_uuid: null,
+            flag: 0x06,  // LE General Discoverable + BR/EDR Not Supported
+        }
+        
+        let mut ret = esp_ble_gap_config_adv_data(&adv_data)
+        if ret != ESP_OK {
+            return Err(BLEError.AdvertisingFailed)
+        }
+        
+        // Configure advertising parameters
+        let adv_params = esp_ble_adv_params_t {
+            adv_int_min: 0x20,   // 20ms
+            adv_int_max: 0x40,   // 40ms
+            adv_type: ESP_BLE_ADV_TYPE_IND,
+            own_addr_type: 0,    // Public address
+            peer_addr: [0; 6],
+            peer_addr_type: 0,
+            channel_map: 0x07,   // All channels
+            adv_filter_policy: 0,
+        }
+        
+        ret = esp_ble_gap_start_advertising(&adv_params)
+        if ret == ESP_OK {
+            ble_advertising = true
+            Ok(())
+        } else {
+            Err(BLEError.AdvertisingFailed)
+        }
+    }
+}
+
+/// Stop BLE advertising
+pub fn stop_advertising() -> Result<()> {
+    unsafe {
+        if !ble_initialized {
+            return Err(BLEError.NotInitialized)
+        }
+        
+        if !ble_advertising {
+            return Ok(())
+        }
+        
+        let ret = esp_ble_gap_stop_advertising()
+        if ret == ESP_OK {
+            ble_advertising = false
+            Ok(())
+        } else {
+            Err(BLEError.AdvertisingFailed)
+        }
+    }
+}
+
+/// Start BLE scanning
+pub fn start_scan(duration_sec: u32) -> Result<()> {
+    unsafe {
+        if !ble_initialized {
+            return Err(BLEError.NotInitialized)
+        }
+        
+        if ble_scanning {
+            return Ok(())  // Already scanning
+        }
+        
+        // Configure scan parameters
+        let scan_params = esp_ble_scan_params_t {
+            scan_type: 0,         // Active scan
+            own_addr_type: 0,     // Public address
+            scan_filter_policy: 0,
+            scan_interval: 0x50,  // 50ms
+            scan_window: 0x30,    // 30ms
+            scan_duplicate: 1,    // Filter duplicates
+        }
+        
+        let mut ret = esp_ble_gap_set_scan_params(&scan_params)
+        if ret != ESP_OK {
+            return Err(BLEError.ScanFailed)
+        }
+        
+        ret = esp_ble_gap_start_scanning(duration_sec)
+        if ret == ESP_OK {
+            ble_scanning = true
+            Ok(())
+        } else {
+            Err(BLEError.ScanFailed)
+        }
+    }
+}
+
+/// Stop BLE scanning
+pub fn stop_scan() -> Result<()> {
+    unsafe {
+        if !ble_initialized {
+            return Err(BLEError.NotInitialized)
+        }
+        
+        if !ble_scanning {
+            return Ok(())
+        }
+        
+        let ret = esp_ble_gap_stop_scanning()
+        if ret == ESP_OK {
+            ble_scanning = false
+            Ok(())
+        } else {
+            Err(BLEError.ScanFailed)
+        }
+    }
+}
+
+/// Check if BLE is advertising
+pub fn is_advertising() -> bool {
+    unsafe { ble_advertising }
+}
+
+/// Check if BLE is scanning
+pub fn is_scanning() -> bool {
+    unsafe { ble_scanning }
+}
+
+// Helper structures
+
+pub struct BLEDevice {
+    pub address: [u8; 6],
+    pub name: String,
+    pub rssi: i8,
+    pub tx_power: i8,
+}
+
+pub struct BLEService {
+    pub uuid: [u8; 16],
+    pub characteristics: Vec<BLECharacteristic>,
+}
+
+pub struct BLECharacteristic {
+    pub uuid: [u8; 16],
+    pub properties: u8,
+    pub value: Vec<u8>,
+}
+
+// BLE characteristic properties
+pub const CHAR_PROP_BROADCAST: u8 = 0x01
+pub const CHAR_PROP_READ: u8 = 0x02
+pub const CHAR_PROP_WRITE_NO_RSP: u8 = 0x04
+pub const CHAR_PROP_WRITE: u8 = 0x08
+pub const CHAR_PROP_NOTIFY: u8 = 0x10
+pub const CHAR_PROP_INDICATE: u8 = 0x20
+
+/// Create BLE beacon (iBeacon format)
+pub fn create_ibeacon(uuid: [u8; 16], major: u16, minor: u16, tx_power: i8) -> Vec<u8> {
+    let mut beacon_data: Vec<u8> = Vec::new()
+    
+    // Apple iBeacon prefix
+    beacon_data.push(0x02)  // Length
+    beacon_data.push(0x01)  // Flags
+    beacon_data.push(0x06)  // LE General Discoverable + BR/EDR Not Supported
+    
+    beacon_data.push(0x1A)  // Length
+    beacon_data.push(0xFF)  // Manufacturer Specific Data
+    beacon_data.push(0x4C)  // Apple Company ID (0x004C)
+    beacon_data.push(0x00)
+    beacon_data.push(0x02)  // iBeacon type
+    beacon_data.push(0x15)  // iBeacon length
+    
+    // UUID (16 bytes)
+    for byte in uuid {
+        beacon_data.push(byte)
+    }
+    
+    // Major (2 bytes, big-endian)
+    beacon_data.push((major >> 8) as u8)
+    beacon_data.push((major & 0xFF) as u8)
+    
+    // Minor (2 bytes, big-endian)
+    beacon_data.push((minor >> 8) as u8)
+    beacon_data.push((minor & 0xFF) as u8)
+    
+    // TX Power
+    beacon_data.push(tx_power as u8)
+    
+    beacon_data
+}
+
+/// Calculate distance from RSSI (approximate)
+pub fn calculate_distance(rssi: i8, tx_power: i8) -> f32 {
+    let ratio = (rssi as f32 - tx_power as f32) / -20.0
+    let distance = 10.0_f32.powf(ratio)
+    distance
+}
+
+/// Get proximity zone from distance
+pub fn get_proximity_zone(distance: f32) -> &str {
+    if distance < 0.5 {
+        "Immediate"
+    } else if distance < 3.0 {
+        "Near"
+    } else if distance < 10.0 {
+        "Far"
+    } else {
+        "Unknown"
+    }
+}
+
+/// Format MAC address as string
+pub fn format_mac_address(addr: [u8; 6]) -> String {
+    let mut result = String::new()
+    for i in 0..6 {
+        if i > 0 {
+            result.push(':')
+        }
+        result.push_str(&format!("{:02X}", addr[i]))
+    }
+    result
+}

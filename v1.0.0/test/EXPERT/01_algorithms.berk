@@ -1,0 +1,141 @@
+/// ═══════════════════════════════════════════════════════════════════════════
+/// BERK Programlama Dili - Algoritmalar
+/// Seviye: Uzman (Expert)
+/// ═══════════════════════════════════════════════════════════════════════════
+
+kullan std::io
+use std::time
+
+yaz("============================================================")
+yaz("              Algoritmalar / Algorithms                     ")
+yaz("============================================================")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 1: Matematiksel Algoritmalar
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 1: Matematiksel Algoritmalar ---")
+
+// En Buyuk Ortak Bolen (EBOB / GCD)
+fonksiyon ebob(a: tamsayı, b: tamsayı) -> tamsayı yap
+    eğer b == 0
+        dön a
+    son
+    dön ebob(b, a % b)
+son
+
+// En Kucuk Ortak Kat (EKOK / LCM)
+fonksiyon ekok(a: tamsayı, b: tamsayı) -> tamsayı yap
+    dön (a * b) / ebob(a, b)
+son
+
+değişken num1 = 48
+değişken num2 = 18
+yaz("\n   a = ", num1, ", b = ", num2)
+yaz("   EBOB(a, b) = ", ebob(num1, num2))
+yaz("   EKOK(a, b) = ", ekok(num1, num2))
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 2: Faktoriyel
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 2: Faktoriyel ---")
+
+fonksiyon faktoriyel(n: tamsayı) -> tamsayı yap
+    eğer n <= 1
+        dön 1
+    son
+    dön n * faktoriyel(n - 1)
+son
+
+yaz("\n   Faktoriyel hesaplama:")
+için i içinde 1..8 yap
+    yaz("   ", i, "! = ", faktoriyel(i))
+son
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 3: Kuvvet Hesaplama
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 3: Kuvvet Hesaplama ---")
+
+fonksiyon kuvvet(taban: tamsayı, us: tamsayı) -> tamsayı yap
+    eğer us == 0
+        dön 1
+    son
+    eğer us == 1
+        dön taban
+    son
+    dön taban * kuvvet(taban, us - 1)
+son
+
+yaz("\n   Kuvvet hesaplama:")
+yaz("   2^10 = ", kuvvet(2, 10))
+yaz("   3^5 = ", kuvvet(3, 5))
+yaz("   5^3 = ", kuvvet(5, 3))
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 4: Fibonacci Karsilastirma
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 4: Fibonacci Karsilastirma ---")
+
+// Iteratif Fibonacci
+fonksiyon fib_iteratif(n: tamsayı) -> tamsayı yap
+    eğer n <= 1
+        dön n
+    son
+    
+    değişken a = 0
+    değişken b = 1
+    
+    için i içinde 2..=n yap
+        değişken c = a + b
+        a = b
+        b = c
+    son
+    
+    dön b
+son
+
+// Recursive Fibonacci
+fonksiyon fib_recursive(n: tamsayı) -> tamsayı yap
+    eğer n <= 1
+        dön n
+    son
+    dön fib_recursive(n - 1) + fib_recursive(n - 2)
+son
+
+değişken test_n = 15
+
+yaz("\n   Fibonacci(", test_n, ") karsilastirmasi:")
+
+değişken t1 = time::now()
+değişken r1 = fib_iteratif(test_n)
+değişken s1 = time::elapsed(t1)
+yaz("   Iteratif: ", r1, " (", s1, " ms)")
+
+değişken t2 = time::now()
+değişken r2 = fib_recursive(test_n)
+değişken s2 = time::elapsed(t2)
+yaz("   Recursive: ", r2, " (", s2, " ms)")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 5: Hanoi Kuleleri
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 5: Hanoi Kuleleri ---")
+
+fonksiyon hanoi_hamle_sayisi(n: tamsayı) -> tamsayı yap
+    eğer n == 1
+        dön 1
+    son
+    dön 2 * hanoi_hamle_sayisi(n - 1) + 1
+son
+
+yaz("\n   Hanoi Kuleleri hamle sayisi:")
+için n içinde 1..8 yap
+    yaz("   ", n, " disk icin: ", hanoi_hamle_sayisi(n), " hamle")
+son
+
+yaz("\n[OK] Algoritmalar demosu tamamlandi!")

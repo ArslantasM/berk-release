@@ -1,0 +1,154 @@
+/// ═══════════════════════════════════════════════════════════════════════════
+/// BERK Library Demo - JSON Module (English Version)
+/// JSON data operations
+/// ═══════════════════════════════════════════════════════════════════════════
+
+use std::io
+use std::json
+
+print("============================================================")
+print("         Library Demo: JSON Module                          ")
+print("============================================================")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 1: JSON Structure
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 1: JSON Structure ---")
+
+print("\n   JSON Data Types:")
+print("   - String:  \"value\"")
+print("   - Number:  42, 3.14")
+print("   - Boolean: true, false")
+print("   - Null:    null")
+print("   - Array:   [1, 2, 3]")
+print("   - Object:  {\"key\": \"value\"}")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 2: Simple JSON Example
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 2: Simple JSON Example ---")
+
+print("   {")
+print("     \"name\": \"BERK\",")
+print("     \"version\": \"1.0.0\",")
+print("     \"active\": true,")
+print("     \"features\": [")
+print("       \"Turkish syntax\",")
+print("       \"Dual language support\",")
+print("       \"Embedded systems\"")
+print("     ]")
+print("   }")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 3: Nested JSON
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 3: Nested JSON ---")
+
+print("   {")
+print("     \"user\": {")
+print("       \"id\": 1001,")
+print("       \"firstName\": \"John\",")
+print("       \"lastName\": \"Smith\",")
+print("       \"address\": {")
+print("         \"city\": \"New York\",")
+print("         \"state\": \"NY\",")
+print("         \"zipCode\": \"10001\"")
+print("       },")
+print("       \"phones\": [")
+print("         \"+1 555 111 2233\",")
+print("         \"+1 555 444 5566\"")
+print("       ]")
+print("     }")
+print("   }")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 4: JSON Array Example
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 4: JSON Array Example ---")
+
+print("   {")
+print("     \"students\": [")
+print("       {\"id\": 1, \"name\": \"Alice\", \"grade\": 85},")
+print("       {\"id\": 2, \"name\": \"Bob\", \"grade\": 92},")
+print("       {\"id\": 3, \"name\": \"Carol\", \"grade\": 78}")
+print("     ]")
+print("   }")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 5: API Response Example
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 5: API Response Example ---")
+
+print("   {")
+print("     \"status\": 200,")
+print("     \"message\": \"Success\",")
+print("     \"data\": {")
+print("       \"total\": 150,")
+print("       \"page\": 1,")
+print("       \"limit\": 10,")
+print("       \"results\": [...]")
+print("     },")
+print("     \"timestamp\": \"2024-12-15T14:30:00Z\"")
+print("   }")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 6: Configuration File Example
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 6: Configuration File ---")
+
+print("   {")
+print("     \"app\": {")
+print("       \"name\": \"BERK Application\",")
+print("       \"port\": 8080,")
+print("       \"debug\": false")
+print("     },")
+print("     \"database\": {")
+print("       \"host\": \"localhost\",")
+print("       \"port\": 5432,")
+print("       \"name\": \"berk_db\"")
+print("     },")
+print("     \"logging\": {")
+print("       \"level\": \"info\",")
+print("       \"file\": \"/var/log/berk.log\"")
+print("     }")
+print("   }")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 7: JSON Simulation
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 7: BERK JSON Data ---")
+
+// Array as JSON-like data
+let user_id = 1001
+let user_name = "Michael"
+let user_age = 30
+let user_active = true
+
+print("   User Information:")
+print("   - ID: ", user_id)
+print("   - Name: ", user_name)
+print("   - Age: ", user_age)
+print("   - Active: ", user_active)
+
+// Product list
+let product1_name = "Laptop"
+let product1_price = 1500
+
+let product2_name = "Phone"
+let product2_price = 800
+
+print("\n   Product List:")
+print("   - ", product1_name, ": $", product1_price)
+print("   - ", product2_name, ": $", product2_price)
+
+let total = product1_price + product2_price
+print("   - Total: $", total)
+
+print("\n[OK] JSON library demo completed!")

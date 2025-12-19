@@ -1,0 +1,249 @@
+// stdlib/embedded/platforms/rp2040/gpio.berk
+// RP2040 GPIO HAL Implementation
+// Pico SDK GPIO bindings
+
+import "embedded/bal/gpio" as GPIO
+
+// Pico SDK GPIO constants
+const GPIO_FUNC_XIP: u32 = 0
+const GPIO_FUNC_SPI: u32 = 1
+const GPIO_FUNC_UART: u32 = 2
+const GPIO_FUNC_I2C: u32 = 3
+const GPIO_FUNC_PWM: u32 = 4
+const GPIO_FUNC_SIO: u32 = 5  // Software controlled I/O
+const GPIO_FUNC_PIO0: u32 = 6
+const GPIO_FUNC_PIO1: u32 = 7
+const GPIO_FUNC_GPCK: u32 = 8
+const GPIO_FUNC_USB: u32 = 9
+const GPIO_FUNC_NULL: u32 = 0x1f
+
+const GPIO_OUT: u32 = 1
+const GPIO_IN: u32 = 0
+
+const GPIO_IRQ_LEVEL_LOW: u32 = 0x1
+const GPIO_IRQ_LEVEL_HIGH: u32 = 0x2
+const GPIO_IRQ_EDGE_FALL: u32 = 0x4
+const GPIO_IRQ_EDGE_RISE: u32 = 0x8
+
+// Pico SDK GPIO functions
+extern "C" {
+    fn gpio_init(gpio: u32)
+    fn gpio_deinit(gpio: u32)
+    fn gpio_set_function(gpio: u32, fn_: u32)
+    fn gpio_get_function(gpio: u32) -> u32
+    fn gpio_set_dir(gpio: u32, out: bool)
+    fn gpio_get_dir(gpio: u32) -> bool
+    fn gpio_put(gpio: u32, value: bool)
+    fn gpio_get(gpio: u32) -> bool
+    fn gpio_pull_up(gpio: u32)
+    fn gpio_pull_down(gpio: u32)
+    fn gpio_disable_pulls(gpio: u32)
+    fn gpio_set_pulls(gpio: u32, up: bool, down: bool)
+    fn gpio_set_irq_enabled(gpio: u32, events: u32, enabled: bool)
+    fn gpio_acknowledge_irq(gpio: u32, events: u32)
+}
+
+// GPIO interrupt handlers
+static mut gpio_handlers: [Option<fn()>; 30] = [None; 30]
+
+// RP2040 GPIO HAL implementation
+pub struct RP2040_GPIO {}
+
+impl GPIO.GPIO_HAL for RP2040_GPIO {
+    fn init_output(pin: u8, mode: GPIO.OutputMode) -> GPIO.Result<()> {
+        if pin >= 30 {
+            return Err(GPIO.Error.InvalidPin)
+        }
+        
+        gpio_init(pin as u32)
+        gpio_set_function(pin as u32, GPIO_FUNC_SIO)
+        gpio_set_dir(pin as u32, true)
+        
+        Ok(())
+    }
+    
+    fn init_input(pin: u8, pull: GPIO.Pull) -> GPIO.Result<()> {
+        if pin >= 30 {
+            return Err(GPIO.Error.InvalidPin)
+        }
+        
+        gpio_init(pin as u32)
+        gpio_set_function(pin as u32, GPIO_FUNC_SIO)
+        gpio_set_dir(pin as u32, false)
+        
+        match pull {
+            GPIO.Pull.None => gpio_disable_pulls(pin as u32),
+            GPIO.Pull.Up => gpio_pull_up(pin as u32),
+            GPIO.Pull.Down => gpio_pull_down(pin as u32),
+        }
+        
+        Ok(())
+    }
+    
+    fn deinit(pin: u8) {
+        if pin < 30 {
+            gpio_deinit(pin as u32)
+        }
+    }
+    
+    fn set_level(pin: u8, level: GPIO.Level) {
+        if pin < 30 {
+            gpio_put(pin as u32, level == GPIO.Level.High)
+        }
+    }
+    
+    fn get_level(pin: u8) -> GPIO.Level {
+        if pin < 30 {
+            if gpio_get(pin as u32) {
+                GPIO.Level.High
+            } else {
+                GPIO.Level.Low
+            }
+        } else {
+            GPIO.Level.Low
+        }
+    }
+    
+    fn toggle(pin: u8) {
+        let current = RP2040_GPIO.get_level(pin)
+        let new_level = if current == GPIO.Level.High {
+            GPIO.Level.Low
+        } else {
+            GPIO.Level.High
+        }
+        RP2040_GPIO.set_level(pin, new_level)
+    }
+    
+    fn enable_interrupt(pin: u8, trigger: GPIO.Trigger, handler: fn()) -> GPIO.Result<()> {
+        if pin >= 30 {
+            return Err(GPIO.Error.InvalidPin)
+        }
+        
+        unsafe {
+            gpio_handlers[pin as usize] = Some(handler)
+        }
+        
+        let events = match trigger {
+            GPIO.Trigger.Rising => GPIO_IRQ_EDGE_RISE,
+            GPIO.Trigger.Falling => GPIO_IRQ_EDGE_FALL,
+            GPIO.Trigger.Both => GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL,
+            GPIO.Trigger.LowLevel => GPIO_IRQ_LEVEL_LOW,
+            GPIO.Trigger.HighLevel => GPIO_IRQ_LEVEL_HIGH,
+        }
+        
+        gpio_set_irq_enabled(pin as u32, events, true)
+        
+        Ok(())
+    }
+    
+    fn disable_interrupt(pin: u8) {
+        if pin < 30 {
+            gpio_set_irq_enabled(pin as u32, 0x0F, false)
+            unsafe {
+                gpio_handlers[pin as usize] = None
+            }
+        }
+    }
+    
+    fn set_pull(pin: u8, pull: GPIO.Pull) {
+        if pin < 30 {
+            match pull {
+                GPIO.Pull.None => gpio_disable_pulls(pin as u32),
+                GPIO.Pull.Up => gpio_pull_up(pin as u32),
+                GPIO.Pull.Down => gpio_pull_down(pin as u32),
+            }
+        }
+    }
+    
+    fn set_drive_strength(pin: u8, strength: GPIO.DriveStrength) {
+        // RP2040 has fixed drive strength (2/4/8/12 mA via pads control)
+        // Not implemented in simplified version
+    }
+}
+
+// RP2040-specific GPIO functions
+
+/// Set alternate function for peripheral
+pub fn set_alternate_function(pin: u8, function: u8) {
+    if pin < 30 {
+        gpio_set_function(pin as u32, function as u32)
+    }
+}
+
+/// Get current pin function
+pub fn get_function(pin: u8) -> u8 {
+    if pin < 30 {
+        gpio_get_function(pin as u32) as u8
+    } else {
+        0xFF
+    }
+}
+
+/// Initialize built-in LED (GP25 on Raspberry Pi Pico)
+pub fn init_led() {
+    gpio_init(25)
+    gpio_set_function(25, GPIO_FUNC_SIO)
+    gpio_set_dir(25, true)
+}
+
+/// Set built-in LED state
+pub fn set_led(on: bool) {
+    gpio_put(25, on)
+}
+
+/// Toggle built-in LED
+pub fn toggle_led() {
+    let current = gpio_get(25)
+    gpio_put(25, !current)
+}
+
+/// Initialize pin for I2C
+pub fn init_i2c_pins(sda: u8, scl: u8) {
+    gpio_init(sda as u32)
+    gpio_init(scl as u32)
+    gpio_set_function(sda as u32, GPIO_FUNC_I2C)
+    gpio_set_function(scl as u32, GPIO_FUNC_I2C)
+    gpio_pull_up(sda as u32)
+    gpio_pull_up(scl as u32)
+}
+
+/// Initialize pin for SPI
+pub fn init_spi_pins(sck: u8, mosi: u8, miso: u8) {
+    gpio_init(sck as u32)
+    gpio_init(mosi as u32)
+    gpio_init(miso as u32)
+    gpio_set_function(sck as u32, GPIO_FUNC_SPI)
+    gpio_set_function(mosi as u32, GPIO_FUNC_SPI)
+    gpio_set_function(miso as u32, GPIO_FUNC_SPI)
+}
+
+/// Initialize pin for UART
+pub fn init_uart_pins(tx: u8, rx: u8) {
+    gpio_init(tx as u32)
+    gpio_init(rx as u32)
+    gpio_set_function(tx as u32, GPIO_FUNC_UART)
+    gpio_set_function(rx as u32, GPIO_FUNC_UART)
+}
+
+/// Initialize pin for PWM
+pub fn init_pwm_pin(pin: u8) {
+    gpio_init(pin as u32)
+    gpio_set_function(pin as u32, GPIO_FUNC_PWM)
+}
+
+/// Initialize pin for PIO
+pub fn init_pio_pin(pin: u8, pio_num: u8) {
+    gpio_init(pin as u32)
+    let func = if pio_num == 0 { GPIO_FUNC_PIO0 } else { GPIO_FUNC_PIO1 }
+    gpio_set_function(pin as u32, func)
+}
+
+/// Check if pin is valid GPIO
+pub fn is_valid_gpio(pin: u8) -> bool {
+    pin < 30
+}
+
+/// Get GPIO pin count
+pub fn get_pin_count() -> u8 {
+    30
+}

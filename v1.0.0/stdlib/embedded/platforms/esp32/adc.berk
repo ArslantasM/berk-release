@@ -1,0 +1,354 @@
+// stdlib/embedded/platforms/esp32/adc.berk
+// ESP32 ADC HAL Implementation
+// ESP-IDF ADC driver bindings
+
+import "embedded/bal/adc" as ADC
+
+// ESP-IDF ADC constants
+const ADC_UNIT_1: u32 = 0
+const ADC_UNIT_2: u32 = 1
+
+const ADC_ATTEN_DB_0: u32 = 0    // 100mV ~ 950mV
+const ADC_ATTEN_DB_2_5: u32 = 1  // 100mV ~ 1250mV
+const ADC_ATTEN_DB_6: u32 = 2    // 150mV ~ 1750mV
+const ADC_ATTEN_DB_11: u32 = 3   // 150mV ~ 2450mV (default)
+
+const ADC_WIDTH_BIT_9: u32 = 0   // 0-511
+const ADC_WIDTH_BIT_10: u32 = 1  // 0-1023
+const ADC_WIDTH_BIT_11: u32 = 2  // 0-2047
+const ADC_WIDTH_BIT_12: u32 = 3  // 0-4095
+
+const ADC_CHANNEL_0: u32 = 0
+const ADC_CHANNEL_1: u32 = 1
+const ADC_CHANNEL_2: u32 = 2
+const ADC_CHANNEL_3: u32 = 3
+const ADC_CHANNEL_4: u32 = 4
+const ADC_CHANNEL_5: u32 = 5
+const ADC_CHANNEL_6: u32 = 6
+const ADC_CHANNEL_7: u32 = 7
+
+// ESP-IDF ADC functions
+extern "C" {
+    fn adc1_config_width(width_bit: u32) -> i32
+    fn adc1_config_channel_atten(channel: u32, atten: u32) -> i32
+    fn adc1_get_raw(channel: u32) -> i32
+    fn adc2_config_channel_atten(channel: u32, atten: u32) -> i32
+    fn adc2_get_raw(channel: u32, width_bit: u32, raw_out: *mut i32) -> i32
+    
+    // Calibration functions
+    fn esp_adc_cal_check_efuse(atten: u32) -> i32
+    fn esp_adc_cal_raw_to_voltage(adc_reading: u32, chars: *void) -> u32
+}
+
+const ESP_OK: i32 = 0
+const ESP_ERR_INVALID_STATE: i32 = 259
+const ESP_ERR_TIMEOUT: i32 = 262
+
+// GPIO to ADC channel mapping (ESP32)
+const GPIO_TO_ADC1: [i8; 40] = [
+    -1, -1, -1, -1, -1, -1, -1, -1,  // 0-7
+    -1, -1, -1, -1, -1, -1, -1, -1,  // 8-15
+    -1, -1, -1, -1, -1, -1, -1, -1,  // 16-23
+    -1, -1, -1, -1, -1, -1, -1, -1,  // 24-31
+    0,  1,  2,  3,  4,  5,  6,  7,   // 32-39 (ADC1_CH0-7)
+]
+
+const GPIO_TO_ADC2: [i8; 40] = [
+    0,  -1, 1,  -1, 2,  -1, -1, -1,  // 0-7 (GPIO 0,2,4)
+    -1, 3,  -1, -1, 4,  5,  6,  7,   // 8-15 (GPIO 9,12,13,14,15)
+    -1, -1, -1, -1, -1, -1, -1, -1,  // 16-23
+    -1, 8,  9,  -1, -1, -1, -1, -1,  // 24-31 (GPIO 25,26)
+    -1, -1, -1, -1, -1, -1, -1, -1,  // 32-39
+]
+
+// Channel configuration state
+static mut channel_configs: [ChannelConfig; 16] = [ChannelConfig::default(); 16]
+
+struct ChannelConfig {
+    initialized: bool,
+    unit: u32,
+    channel: u32,
+    attenuation: u32,
+    resolution: u32,
+}
+
+impl ChannelConfig {
+    fn default() -> ChannelConfig {
+        ChannelConfig {
+            initialized: false,
+            unit: ADC_UNIT_1,
+            channel: 0,
+            attenuation: ADC_ATTEN_DB_11,
+            resolution: 12,
+        }
+    }
+}
+
+// ESP32 ADC HAL implementation
+pub struct ESP32_ADC {}
+
+impl ADC.ADC_HAL for ESP32_ADC {
+    fn init(config: ADC.Config) -> ADC.Result<()> {
+        // Determine ADC unit and channel
+        let adc1_ch = GPIO_TO_ADC1[config.pin as usize]
+        let adc2_ch = GPIO_TO_ADC2[config.pin as usize]
+        
+        let (unit, channel) = if adc1_ch >= 0 {
+            (ADC_UNIT_1, adc1_ch as u32)
+        } else if adc2_ch >= 0 {
+            (ADC_UNIT_2, adc2_ch as u32)
+        } else {
+            return Err(ADC.Error.InvalidChannel)
+        }
+        
+        // Map resolution to ESP32 width
+        let width = match config.resolution {
+            9 => ADC_WIDTH_BIT_9,
+            10 => ADC_WIDTH_BIT_10,
+            11 => ADC_WIDTH_BIT_11,
+            12 => ADC_WIDTH_BIT_12,
+            _ => return Err(ADC.Error.InvalidResolution),
+        }
+        
+        // Map reference voltage to attenuation
+        let atten = if config.reference_mv <= 950 {
+            ADC_ATTEN_DB_0
+        } else if config.reference_mv <= 1250 {
+            ADC_ATTEN_DB_2_5
+        } else if config.reference_mv <= 1750 {
+            ADC_ATTEN_DB_6
+        } else {
+            ADC_ATTEN_DB_11
+        }
+        
+        // Configure ADC
+        let ret = if unit == ADC_UNIT_1 {
+            adc1_config_width(width)
+            adc1_config_channel_atten(channel, atten)
+        } else {
+            adc2_config_channel_atten(channel, atten)
+        }
+        
+        if ret != ESP_OK {
+            return Err(ADC.Error.HardwareError)
+        }
+        
+        // Save configuration
+        unsafe {
+            let idx = if unit == ADC_UNIT_1 { channel } else { 8 + channel } as usize
+            channel_configs[idx] = ChannelConfig {
+                initialized: true,
+                unit: unit,
+                channel: channel,
+                attenuation: atten,
+                resolution: config.resolution,
+            }
+        }
+        
+        Ok(())
+    }
+    
+    fn deinit(channel: u8) {
+        unsafe {
+            if (channel as usize) < 16 {
+                channel_configs[channel as usize].initialized = false
+            }
+        }
+    }
+    
+    fn read_raw(pin: u8) -> ADC.Result<u16> {
+        let adc1_ch = GPIO_TO_ADC1[pin as usize]
+        let adc2_ch = GPIO_TO_ADC2[pin as usize]
+        
+        if adc1_ch >= 0 {
+            let raw = adc1_get_raw(adc1_ch as u32)
+            if raw >= 0 {
+                Ok(raw as u16)
+            } else {
+                Err(ADC.Error.ReadError)
+            }
+        } else if adc2_ch >= 0 {
+            let mut raw: i32 = 0
+            let ret = adc2_get_raw(adc2_ch as u32, ADC_WIDTH_BIT_12, &mut raw)
+            if ret == ESP_OK {
+                Ok(raw as u16)
+            } else {
+                Err(ADC.Error.ReadError)
+            }
+        } else {
+            Err(ADC.Error.InvalidChannel)
+        }
+    }
+    
+    fn read_voltage(pin: u8) -> ADC.Result<u16> {
+        let raw = ESP32_ADC.read_raw(pin)?
+        
+        // Get channel config
+        let adc1_ch = GPIO_TO_ADC1[pin as usize]
+        let adc2_ch = GPIO_TO_ADC2[pin as usize]
+        
+        let (unit, channel) = if adc1_ch >= 0 {
+            (ADC_UNIT_1, adc1_ch as u32)
+        } else if adc2_ch >= 0 {
+            (ADC_UNIT_2, adc2_ch as u32)
+        } else {
+            return Err(ADC.Error.InvalidChannel)
+        }
+        
+        // Get attenuation from config
+        unsafe {
+            let idx = if unit == ADC_UNIT_1 { channel } else { 8 + channel } as usize
+            let atten = channel_configs[idx].attenuation
+            
+            // Simple linear conversion based on attenuation
+            let max_voltage = match atten {
+                ADC_ATTEN_DB_0 => 950,
+                ADC_ATTEN_DB_2_5 => 1250,
+                ADC_ATTEN_DB_6 => 1750,
+                _ => 2450,  // ADC_ATTEN_DB_11
+            }
+            
+            let voltage = ((raw as u32 * max_voltage) / 4095) as u16
+            Ok(voltage)
+        }
+    }
+    
+    fn set_reference(channel: u8, reference_mv: u16) -> ADC.Result<()> {
+        // ESP32 requires reconfiguration to change reference
+        // Would need to reinitialize the channel
+        Err(ADC.Error.HardwareError)
+    }
+    
+    fn set_resolution(channel: u8, bits: u8) -> ADC.Result<()> {
+        // ESP32 requires reconfiguration to change resolution
+        Err(ADC.Error.InvalidResolution)
+    }
+    
+    fn set_averaging(channel: u8, samples: u16) {
+        // Software averaging implemented in BAL layer
+    }
+}
+
+// ESP32-specific ADC functions
+
+/// Read voltage with calibration (more accurate)
+pub fn read_voltage_calibrated(pin: u8) -> ADC.Result<u16> {
+    let raw = ESP32_ADC.read_raw(pin)?
+    
+    // Get attenuation from config
+    let adc1_ch = GPIO_TO_ADC1[pin as usize]
+    let adc2_ch = GPIO_TO_ADC2[pin as usize]
+    
+    let (unit, channel) = if adc1_ch >= 0 {
+        (ADC_UNIT_1, adc1_ch as u32)
+    } else if adc2_ch >= 0 {
+        (ADC_UNIT_2, adc2_ch as u32)
+    } else {
+        return Err(ADC.Error.InvalidChannel)
+    }
+    
+    unsafe {
+        let idx = if unit == ADC_UNIT_1 { channel } else { 8 + channel } as usize
+        let atten = channel_configs[idx].attenuation
+        
+        // Check if calibration is available
+        let cal_available = esp_adc_cal_check_efuse(atten)
+        
+        if cal_available == ESP_OK {
+            // Use hardware calibration
+            let voltage = esp_adc_cal_raw_to_voltage(raw as u32, null)
+            Ok(voltage as u16)
+        } else {
+            // Fall back to linear conversion
+            ESP32_ADC.read_voltage(pin)
+        }
+    }
+}
+
+/// Set ADC attenuation (affects voltage range)
+pub fn set_attenuation(pin: u8, attenuation_db: u8) -> ADC.Result<()> {
+    let atten = match attenuation_db {
+        0 => ADC_ATTEN_DB_0,
+        3 => ADC_ATTEN_DB_2_5,
+        6 => ADC_ATTEN_DB_6,
+        11 => ADC_ATTEN_DB_11,
+        _ => return Err(ADC.Error.HardwareError),
+    }
+    
+    let adc1_ch = GPIO_TO_ADC1[pin as usize]
+    let adc2_ch = GPIO_TO_ADC2[pin as usize]
+    
+    let ret = if adc1_ch >= 0 {
+        adc1_config_channel_atten(adc1_ch as u32, atten)
+    } else if adc2_ch >= 0 {
+        adc2_config_channel_atten(adc2_ch as u32, atten)
+    } else {
+        return Err(ADC.Error.InvalidChannel)
+    }
+    
+    if ret == ESP_OK {
+        Ok(())
+    } else {
+        Err(ADC.Error.HardwareError)
+    }
+}
+
+/// Check if ADC2 is available (WiFi can block ADC2)
+pub fn is_adc2_available(pin: u8) -> bool {
+    let adc2_ch = GPIO_TO_ADC2[pin as usize]
+    if adc2_ch >= 0 {
+        let mut raw: i32 = 0
+        let ret = adc2_get_raw(adc2_ch as u32, ADC_WIDTH_BIT_12, &mut raw)
+        ret != ESP_ERR_TIMEOUT
+    } else {
+        false
+    }
+}
+
+/// Get voltage range for current attenuation
+pub fn get_voltage_range(pin: u8) -> (u16, u16) {
+    let adc1_ch = GPIO_TO_ADC1[pin as usize]
+    let adc2_ch = GPIO_TO_ADC2[pin as usize]
+    
+    let (unit, channel) = if adc1_ch >= 0 {
+        (ADC_UNIT_1, adc1_ch as u32)
+    } else if adc2_ch >= 0 {
+        (ADC_UNIT_2, adc2_ch as u32)
+    } else {
+        return (0, 0)
+    }
+    
+    unsafe {
+        let idx = if unit == ADC_UNIT_1 { channel } else { 8 + channel } as usize
+        
+        if !channel_configs[idx].initialized {
+            return (0, 0)
+        }
+        
+        match channel_configs[idx].attenuation {
+            ADC_ATTEN_DB_0 => (100, 950),
+            ADC_ATTEN_DB_2_5 => (100, 1250),
+            ADC_ATTEN_DB_6 => (150, 1750),
+            _ => (150, 2450),  // ADC_ATTEN_DB_11
+        }
+    }
+}
+
+/// Initialize battery monitoring on ADC pin
+pub fn init_battery_monitor(pin: u8, voltage_divider_ratio: f32) -> ADC.Result<()> {
+    let config = ADC.Config {
+        channel: pin,
+        pin: pin,
+        resolution: 12,
+        reference_mv: 2450,  // 11dB attenuation
+        averaging: 16,  // 16 samples for stability
+    }
+    ESP32_ADC.init(config)
+}
+
+/// Read battery voltage (with voltage divider compensation)
+pub fn read_battery_voltage(pin: u8, divider_ratio: f32) -> ADC.Result<u16> {
+    let voltage = read_voltage_calibrated(pin)?
+    let battery_mv = (voltage as f32 * divider_ratio) as u16
+    Ok(battery_mv)
+}

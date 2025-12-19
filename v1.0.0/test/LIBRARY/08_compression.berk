@@ -1,0 +1,142 @@
+// =============================================================================
+// BERK Standard Library - Compression Module Demo
+// Veri sıkıştırma işlemleri
+// =============================================================================
+
+kullan std::compression
+kullan std::fs
+
+yazdır("=== BERK Compression Demo ===\n")
+
+// -----------------------------------------------------------------------------
+// Gzip Sıkıştırma
+// -----------------------------------------------------------------------------
+
+yazdır("🗜️  Gzip Sıkıştırma:")
+yazdır("-" * 40)
+
+olsun metin = "Bu metin sıkıştırılacak. " * 100
+yazdır("Orijinal boyut: {} byte", metin.uzunluk())
+
+// Sıkıştır
+olsun sikistirilmis = compression::gzip_compress(metin)
+yazdır("Sıkıştırılmış: {} byte", sikistirilmis.uzunluk())
+yazdır("Oran: %{:.1f}", (1.0 - sikistirilmis.uzunluk() / metin.uzunluk()) * 100)
+
+// Aç
+olsun acilmis = compression::gzip_decompress(sikistirilmis)
+yazdır("Açılmış: {} byte", acilmis.uzunluk())
+yazdır("Eşleşme: {}", metin == acilmis)
+
+// -----------------------------------------------------------------------------
+// Zlib Sıkıştırma
+// -----------------------------------------------------------------------------
+
+yazdır("\n📦 Zlib Sıkıştırma:")
+yazdır("-" * 40)
+
+// Farklı sıkıştırma seviyeleri
+döngü seviye için [1, 6, 9] yap
+    olsun zlib_sikis = compression::zlib_compress(metin, seviye)
+    yazdır("Seviye {}: {} byte", seviye, zlib_sikis.uzunluk())
+son
+
+// -----------------------------------------------------------------------------
+// Deflate
+// -----------------------------------------------------------------------------
+
+yazdır("\n💨 Deflate Sıkıştırma:")
+yazdır("-" * 40)
+
+olsun deflate_sikis = compression::deflate(metin)
+yazdır("Deflate: {} byte", deflate_sikis.uzunluk())
+
+olsun inflate_acik = compression::inflate(deflate_sikis)
+yazdır("Inflate: {} byte", inflate_acik.uzunluk())
+
+// -----------------------------------------------------------------------------
+// ZIP Arşivleme
+// -----------------------------------------------------------------------------
+
+yazdır("\n📁 ZIP Arşivleme:")
+yazdır("-" * 40)
+
+yazdır("""
+// ZIP oluştur
+olsun zip = compression::zip_create("arsiv.zip")
+
+// Dosya ekle
+compression::zip_add_file(zip, "dosya1.txt", "İçerik 1")
+compression::zip_add_file(zip, "klasor/dosya2.txt", "İçerik 2")
+
+// Mevcut dosyayı ekle
+compression::zip_add_from_disk(zip, "belgeler/rapor.pdf")
+
+// Kapat
+compression::zip_close(zip)
+""")
+
+yazdır("""
+// ZIP aç
+olsun zip = compression::zip_open("arsiv.zip")
+
+// Dosyaları listele
+olsun dosyalar = compression::zip_list(zip)
+her dosya için dosyalar yap
+    yazdır("  {}: {} byte", dosya.name, dosya.size)
+son
+
+// Dosya çıkar
+olsun icerik = compression::zip_extract(zip, "dosya1.txt")
+yazdır("İçerik: {}", icerik)
+
+// Tümünü çıkar
+compression::zip_extract_all(zip, "./cikti/")
+
+compression::zip_close(zip)
+""")
+
+// -----------------------------------------------------------------------------
+// Byte Dizisi Sıkıştırma
+// -----------------------------------------------------------------------------
+
+yazdır("\n🔢 Binary Veri Sıkıştırma:")
+yazdır("-" * 40)
+
+olsun binary_veri = [0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF] * 50
+yazdır("Binary veri: {} byte", binary_veri.uzunluk())
+
+olsun sikis = compression::compress_bytes(binary_veri, "gzip")
+yazdır("Sıkıştırılmış: {} byte", sikis.uzunluk())
+
+// -----------------------------------------------------------------------------
+// Akış Sıkıştırma
+// -----------------------------------------------------------------------------
+
+yazdır("\n🌊 Akış Sıkıştırma (Streaming):")
+yazdır("-" * 40)
+
+yazdır("""
+// Büyük dosyaları akış olarak sıkıştır
+olsun encoder = compression::create_encoder("gzip", 6)
+
+olsun dosya = fs::open("buyuk_dosya.bin", "rb")
+olsun cikti = fs::create("buyuk_dosya.bin.gz")
+
+döngü yap
+    olsun chunk = fs::read_bytes(dosya, 4096)
+    eğer chunk.uzunluk() == 0 ise dur son
+    
+    olsun sikis_chunk = compression::encode_chunk(encoder, chunk)
+    fs::write_bytes(cikti, sikis_chunk)
+son
+
+// Son bloğu yaz
+olsun son_blok = compression::finish_encode(encoder)
+fs::write_bytes(cikti, son_blok)
+
+fs::close(dosya)
+fs::close(cikti)
+""")
+
+yazdır("\n✅ Compression demo tamamlandı!")

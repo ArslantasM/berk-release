@@ -1,0 +1,398 @@
+/// ═══════════════════════════════════════════════════════════════════════════
+/// BERK HAL - Interrupt & DMA Demo
+/// Kesme ve DMA Transfer Sistemleri
+/// ═══════════════════════════════════════════════════════════════════════════
+
+kullan std::io
+kullan std::stm32
+kullan std::hal
+
+yaz("============================================================")
+yaz("         HAL Demo: Interrupt & DMA                          ")
+yaz("         Kesme ve DMA Transfer Yonetimi                     ")
+yaz("============================================================")
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BOLUM 1: Interrupt Temelleri
+// ═══════════════════════════════════════════════════════════════════════════
+
+yaz("\n--- BOLUM 1: Interrupt Temelleri ---")
+
+yaz("\n   Interrupt (Kesme) Nedir?")
+yaz("   - CPU'nun normal akisini durduran sinyal")
+yaz("   - Olay tabanli programlama saglar")
+yaz("   - Polling'den cok daha verimli")
+
+yaz("\n   Interrupt Turleri:")
+yaz("   ┌────────────────────┬────────────────────────────┐")
+yaz("   │ Tur                │ Kaynak                     │")
+yaz("   ├────────────────────┼────────────────────────────┤")
+yaz("   │ External (EXTI)    │ GPIO pinleri               │")
+yaz("   │ Timer              │ Timer overflow/compare     │")
+yaz("   │ UART               │ RX complete, TX empty      │")
+yaz("   │ SPI                │ Transfer complete          │")
+yaz("   │ ADC                │ Conversion complete        │")
+yaz("   │ DMA                │ Transfer complete/error    │")
+yaz("   │ Systick            │ Sistem timer tick          │")
+yaz("   └────────────────────┴────────────────────────────┘")
+
+// Interrupt kayitlari
+yaz("\n   ARM Cortex-M NVIC Registerlari:")
+yaz("   - ISER: Interrupt Set Enable")
+yaz("   - ICER: Interrupt Clear Enable")
+yaz("   - ISPR: Interrupt Set Pending")
+yaz("   - ICPR: Interrupt Clear Pending")
+yaz("   - IPR:  Interrupt Priority")
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BOLUM 2: External Interrupt (EXTI)
+// ═══════════════════════════════════════════════════════════════════════════
+
+yaz("\n--- BOLUM 2: External Interrupt (EXTI) ---")
+
+değişken BUTTON_PIN = 2   // INT0
+değişken LED_PIN = 13
+
+yaz("\n   EXTI Tetikleme Modlari:")
+yaz("   - RISING:  Yukselen kenar (0 -> 1)")
+yaz("   - FALLING: Dusen kenar (1 -> 0)")
+yaz("   - CHANGE:  Her iki kenar")
+yaz("   - LOW:     Dusuk seviye")
+
+// Interrupt handler (ISR)
+olsun button_count = 0
+olsun led_state = yanlış
+
+fonksiyon button_isr() yap
+    // KRITIK: ISR cok kisa olmali!
+    button_count = button_count + 1
+    led_state = led_state == yanlış
+    // Sadece flag set et, is main loop'ta yap
+son
+
+fonksiyon exti_ayarla(pin: tamsayı, mod: metin) yap
+    yaz("   EXTI ayarlandi: Pin ", pin, " mod=", mod)
+    yaz("   - Interrupt handler kayitlandi")
+son
+
+// Debounce mekanizmasi
+değişken DEBOUNCE_MS = 50
+olsun son_interrupt_zamani = 0
+
+fonksiyon debounce_kontrol(simdiki_zaman: tamsayı) -> doğruyanlış yap
+    eğer simdiki_zaman - son_interrupt_zamani > DEBOUNCE_MS ise
+        son_interrupt_zamani = simdiki_zaman
+        dön doğru
+    son
+    dön yanlış
+son
+
+yaz("\n   Debounce Ornegi:")
+yaz("   - Minimum aralik: ", DEBOUNCE_MS, " ms")
+yaz("   - Switch bounce'unu filtreler")
+
+// EXTI Test
+yaz("\n   EXTI Kurulum:")
+exti_ayarla(BUTTON_PIN, "FALLING")
+yaz("   Buton: Pin ", BUTTON_PIN, " -> Falling edge interrupt")
+yaz("   LED:   Pin ", LED_PIN, " -> Toggle on interrupt")
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BOLUM 3: Timer Interrupt
+// ═══════════════════════════════════════════════════════════════════════════
+
+yaz("\n--- BOLUM 3: Timer Interrupt ---")
+
+değişken TIMER_PRESCALER = 72 - 1    // 72 MHz -> 1 MHz
+değişken TIMER_PERIOD = 1000 - 1     // 1 MHz -> 1 kHz (1ms)
+
+yaz("\n   Timer Parametreleri (STM32 72MHz):")
+yaz("   - Prescaler: ", TIMER_PRESCALER + 1)
+yaz("   - Period:    ", TIMER_PERIOD + 1)
+yaz("   - Frekans:   1 kHz (1ms interrupt)")
+
+olsun ms_counter = 0
+
+fonksiyon timer_isr() yap
+    ms_counter = ms_counter + 1
+    // Periyodik gorevler burada
+son
+
+fonksiyon timer_baslat(prescaler: tamsayı, period: tamsayı) yap
+    yaz("   Timer baslatildi:")
+    yaz("   - Prescaler: ", prescaler)
+    yaz("   - Period: ", period)
+    yaz("   - Interrupt aktif")
+son
+
+// Yazilim timer (software timer) sistemi
+değişken MAX_TIMERS = 8
+olsun timer_aktif = [yanlış, yanlış, yanlış, yanlış, yanlış, yanlış, yanlış, yanlış]
+olsun timer_period = [0, 0, 0, 0, 0, 0, 0, 0]
+olsun timer_counter = [0, 0, 0, 0, 0, 0, 0, 0]
+
+fonksiyon sw_timer_olustur(id: tamsayı, period_ms: tamsayı) yap
+    eğer id < MAX_TIMERS ise
+        timer_aktif[id] = doğru
+        timer_period[id] = period_ms
+        timer_counter[id] = 0
+        yaz("   SW Timer ", id, " olusturuldu: ", period_ms, " ms")
+    son
+son
+
+fonksiyon sw_timer_guncelle() yap
+    // Her 1ms timer ISR'da cagirilir
+    olsun i = 0
+    iken i < MAX_TIMERS yap
+        eğer timer_aktif[i] ise
+            timer_counter[i] = timer_counter[i] + 1
+            eğer timer_counter[i] >= timer_period[i] ise
+                timer_counter[i] = 0
+                // Callback cagir
+                yaz("   Timer ", i, " expired!")
+            son
+        son
+        i = i + 1
+    son
+son
+
+yaz("\n   Yazilim Timer Ornekleri:")
+sw_timer_olustur(0, 100)   // 100ms
+sw_timer_olustur(1, 500)   // 500ms
+sw_timer_olustur(2, 1000)  // 1s
+
+timer_baslat(TIMER_PRESCALER, TIMER_PERIOD)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BOLUM 4: Interrupt Oncelik Sistemi (Priority)
+// ═══════════════════════════════════════════════════════════════════════════
+
+yaz("\n--- BOLUM 4: Interrupt Oncelik ---")
+
+yaz("\n   ARM Cortex-M Oncelik Sistemi:")
+yaz("   - 0 = En yuksek oncelik")
+yaz("   - 255 = En dusuk oncelik")
+yaz("   - Preemption Priority + Sub Priority")
+
+yaz("\n   Oncelik Gruplari (4 bit ornek):")
+yaz("   ┌──────────────┬──────────────┬──────────────┐")
+yaz("   │ Grup         │ Preemption   │ Sub Priority │")
+yaz("   ├──────────────┼──────────────┼──────────────┤")
+yaz("   │ NVIC_0       │ 4 bit        │ 0 bit        │")
+yaz("   │ NVIC_1       │ 3 bit        │ 1 bit        │")
+yaz("   │ NVIC_2       │ 2 bit        │ 2 bit        │")
+yaz("   │ NVIC_3       │ 1 bit        │ 3 bit        │")
+yaz("   │ NVIC_4       │ 0 bit        │ 4 bit        │")
+yaz("   └──────────────┴──────────────┴──────────────┘")
+
+fonksiyon interrupt_oncelik_ayarla(irq: tamsayı, oncelik: tamsayı) yap
+    yaz("   IRQ ", irq, " oncelik: ", oncelik)
+son
+
+yaz("\n   Ornek Oncelik Atamasi:")
+interrupt_oncelik_ayarla(0, 0)   // Systick - en yuksek
+interrupt_oncelik_ayarla(1, 1)   // EXTI - yuksek
+interrupt_oncelik_ayarla(2, 2)   // Timer - orta
+interrupt_oncelik_ayarla(3, 3)   // UART - dusuk
+interrupt_oncelik_ayarla(4, 4)   // ADC - en dusuk
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BOLUM 5: DMA (Direct Memory Access)
+// ═══════════════════════════════════════════════════════════════════════════
+
+yaz("\n--- BOLUM 5: DMA Temelleri ---")
+
+yaz("\n   DMA Nedir?")
+yaz("   - CPU olmadan bellek transferi")
+yaz("   - Peripheral <-> Memory")
+yaz("   - Memory <-> Memory")
+yaz("   - CPU bos kalir, is paralel yurutur")
+
+yaz("\n   DMA Transfer Modlari:")
+yaz("   ┌────────────────┬────────────────────────────────┐")
+yaz("   │ Mod            │ Aciklama                       │")
+yaz("   ├────────────────┼────────────────────────────────┤")
+yaz("   │ Normal         │ Bir kez transfer, sonra dur    │")
+yaz("   │ Circular       │ Surekli dongu (buffer loop)    │")
+yaz("   │ Double Buffer  │ Ping-pong buffer               │")
+yaz("   └────────────────┴────────────────────────────────┘")
+
+yaz("\n   DMA Transfer Yonleri:")
+yaz("   - Peripheral -> Memory (P2M): ADC, UART RX")
+yaz("   - Memory -> Peripheral (M2P): UART TX, SPI TX")
+yaz("   - Memory -> Memory (M2M): Buffer kopyalama")
+
+// DMA konfigurasyonu
+fonksiyon dma_ayarla(kanal: tamsayı, kaynak: tamsayı, hedef: tamsayı, boyut: tamsayı, yon: metin) yap
+    yaz("   DMA Kanal ", kanal, " ayarlandi:")
+    yaz("   - Kaynak: 0x", kaynak)
+    yaz("   - Hedef:  0x", hedef)
+    yaz("   - Boyut:  ", boyut, " bytes")
+    yaz("   - Yon:    ", yon)
+son
+
+fonksiyon dma_baslat(kanal: tamsayı) yap
+    yaz("   DMA Kanal ", kanal, " baslatildi")
+son
+
+fonksiyon dma_bekle(kanal: tamsayı) yap
+    yaz("   DMA Kanal ", kanal, " tamamlandi")
+son
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BOLUM 6: ADC + DMA Entegrasyonu
+// ═══════════════════════════════════════════════════════════════════════════
+
+yaz("\n--- BOLUM 6: ADC + DMA ---")
+
+değişken ADC_BUFFER_SIZE = 256
+değişken ADC_CHANNELS = 4
+
+yaz("\n   Cok Kanalli ADC + DMA:")
+yaz("   - ", ADC_CHANNELS, " ADC kanali")
+yaz("   - Circular DMA buffer")
+yaz("   - ", ADC_BUFFER_SIZE, " sample buffer")
+
+// ADC+DMA ornegi
+fonksiyon adc_dma_baslat(kanal_sayisi: tamsayı, buffer_boyut: tamsayı) yap
+    yaz("   ADC DMA Kurulum:")
+    yaz("   - Kanal sayisi: ", kanal_sayisi)
+    yaz("   - Buffer boyut: ", buffer_boyut, " samples")
+    yaz("   - Mod: Circular (surekli)")
+    
+    // DMA konfigurasyonu
+    dma_ayarla(1, 0x40012440, 0x20000100, buffer_boyut * 2, "P2M")
+    
+    yaz("   ADC + DMA baslatildi")
+    yaz("   CPU serbest, veri arka planda aliniyor")
+son
+
+adc_dma_baslat(ADC_CHANNELS, ADC_BUFFER_SIZE)
+
+// Half-Transfer ve Transfer-Complete interrupt
+yaz("\n   DMA Interrupt Olaylari:")
+yaz("   - HT (Half Transfer): Buffer yarisinda")
+yaz("   - TC (Transfer Complete): Buffer tamamlandi")
+yaz("   - TE (Transfer Error): Hata olustu")
+
+fonksiyon dma_ht_isr() yap
+    yaz("   DMA Half Transfer - Buffer[0..127] hazir")
+    // Ilk yarisi isle
+son
+
+fonksiyon dma_tc_isr() yap
+    yaz("   DMA Transfer Complete - Buffer[128..255] hazir")
+    // Ikinci yarisi isle
+son
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BOLUM 7: UART + DMA (Verimli Seri Iletisim)
+// ═══════════════════════════════════════════════════════════════════════════
+
+yaz("\n--- BOLUM 7: UART + DMA ---")
+
+değişken UART_TX_BUFFER_SIZE = 256
+değişken UART_RX_BUFFER_SIZE = 512
+
+yaz("\n   UART DMA Avantajlari:")
+yaz("   - CPU interrupt yukunu azaltir")
+yaz("   - Yuksek hizda kayipsiz iletisim")
+yaz("   - Idle Line Detection ile degisken uzunluk")
+
+fonksiyon uart_dma_tx(veri: metin, uzunluk: tamsayı) yap
+    yaz("   UART DMA TX: '", veri, "' (", uzunluk, " bytes)")
+    // DMA ile non-blocking gonder
+son
+
+fonksiyon uart_dma_rx_baslat(buffer_boyut: tamsayı) yap
+    yaz("   UART DMA RX baslatildi")
+    yaz("   - Circular buffer: ", buffer_boyut, " bytes")
+    yaz("   - Idle Line Detection aktif")
+son
+
+// IDLE Line Detection - paket sonu tespiti
+fonksiyon uart_idle_isr() yap
+    // DMA counter'dan alinan byte sayisini hesapla
+    yaz("   UART IDLE: Paket alindi")
+son
+
+yaz("\n   UART DMA Test:")
+uart_dma_rx_baslat(UART_RX_BUFFER_SIZE)
+uart_dma_tx("Merhaba DMA!", 12)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BOLUM 8: Interrupt-Safe Programlama
+// ═══════════════════════════════════════════════════════════════════════════
+
+yaz("\n--- BOLUM 8: Interrupt-Safe Kodlama ---")
+
+yaz("\n   Kritik Kurallar:")
+yaz("   1. ISR cok kisa olmali (< 10us ideal)")
+yaz("   2. ISR icinde bekleme/delay YASAK")
+yaz("   3. ISR icinde print/log DIKKAT")
+yaz("   4. Paylasilan degiskenlere volatile")
+yaz("   5. Atomic islemler veya critical section")
+
+// Critical Section ornegi
+fonksiyon interrupt_disable() yap
+    yaz("   __disable_irq()")
+son
+
+fonksiyon interrupt_enable() yap
+    yaz("   __enable_irq()")
+son
+
+fonksiyon kritik_bolum_ornek() yap
+    interrupt_disable()
+    // Kritik islemler burada
+    // Paylasilan degisken erisimi
+    interrupt_enable()
+son
+
+// Atomic flag ornegi
+olsun veri_hazir = yanlış  // volatile olmali
+
+fonksiyon producer_isr() yap
+    // Veriyi buffer'a yaz
+    veri_hazir = doğru  // Atomic flag set
+son
+
+fonksiyon consumer_main() yap
+    eğer veri_hazir ise
+        veri_hazir = yanlış  // Atomic flag clear
+        // Veriyi isle
+        yaz("   Veri islendi")
+    son
+son
+
+// Ring Buffer (ISR-safe)
+yaz("\n   ISR-Safe Ring Buffer:")
+yaz("   - Head: Producer (ISR) yazma noktasi")
+yaz("   - Tail: Consumer (main) okuma noktasi")
+yaz("   - Sadece tek writer, tek reader")
+yaz("   - Lock-free implementasyon")
+
+yaz("\n============================================================")
+yaz("              INTERRUPT/DMA MIMARISI                         ")
+yaz("============================================================")
+
+yaz("\n   ┌───────────────────────────────────────────────────────┐")
+yaz("   │                    SISTEM YAPISI                       │")
+yaz("   │                                                        │")
+yaz("   │   ┌─────────┐     ┌─────────┐     ┌─────────┐         │")
+yaz("   │   │ SENSOR  │────>│   DMA   │────>│ BUFFER  │         │")
+yaz("   │   │  (ADC)  │     │         │     │ (RAM)   │         │")
+yaz("   │   └─────────┘     └────┬────┘     └────┬────┘         │")
+yaz("   │                        │               │              │")
+yaz("   │                   Interrupt        Main Loop          │")
+yaz("   │                        │               │              │")
+yaz("   │                        v               v              │")
+yaz("   │                   ┌─────────┐     ┌─────────┐         │")
+yaz("   │                   │  FLAG   │────>│ PROCESS │         │")
+yaz("   │                   │   SET   │     │  DATA   │         │")
+yaz("   │                   └─────────┘     └─────────┘         │")
+yaz("   └───────────────────────────────────────────────────────┘")
+
+yaz("\n============================================================")
+yaz("         HAL Interrupt & DMA Demo Tamamlandi                 ")
+yaz("============================================================")

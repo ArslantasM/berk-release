@@ -1,0 +1,353 @@
+// ============================================================================
+// BERK GUI Framework - Render Context
+// ============================================================================
+// GPU rendering context ve backend abstraction
+// ============================================================================
+
+modül gui::core::context
+
+kullan gui::style::colors::Color
+kullan gui::rendering::canvas::Canvas
+
+// ============================================================================
+// RENDER CONTEXT
+// ============================================================================
+
+/// Render context - GPU/yazılım rendering için soyutlama katmanı
+pub tip RenderContext = yapı yap
+    /// Boyutlar
+    width: tamsayı,
+    height: tamsayı,
+    
+    /// DPI ölçek faktörü
+    dpi_scale: ondalık,
+    
+    /// Backend türü
+    backend: RenderBackend,
+    
+    /// Canvas nesnesi
+    canvas: Canvas,
+    
+    /// Native context handle
+    native_handle: tamsayı,
+    
+    /// Double buffering etkin mi?
+    double_buffered: mantıksal,
+    
+    /// VSync etkin mi?
+    vsync: mantıksal,
+    
+    /// Anti-aliasing seviyesi
+    msaa: tamsayı
+son
+
+/// Render backend türleri
+pub tip RenderBackend = enum yap
+    /// OpenGL (cross-platform)
+    OpenGL(version: OpenGLVersion),
+    
+    /// Vulkan (modern, high-performance)
+    Vulkan,
+    
+    /// DirectX 11 (Windows)
+    DirectX11,
+    
+    /// DirectX 12 (Windows, modern)
+    DirectX12,
+    
+    /// Metal (macOS, iOS)
+    Metal,
+    
+    /// WebGL (web)
+    WebGL,
+    
+    /// WebGPU (web, modern)
+    WebGPU,
+    
+    /// Software renderer (fallback)
+    Software
+son
+
+/// OpenGL sürüm bilgisi
+pub tip OpenGLVersion = yapı yap
+    major: tamsayı,
+    minor: tamsayı,
+    core_profile: mantıksal
+son
+
+// ============================================================================
+// RENDER CONTEXT IMPLEMENTATION
+// ============================================================================
+
+impl RenderContext:
+    /// Yeni context oluştur
+    pub fn new(width: tamsayı, height: tamsayı) döndür RenderContext:
+        // En uygun backend'i seç
+        değişken backend = __native_select_best_backend()
+        
+        // Native context oluştur
+        değişken native_handle = __native_create_context(width, height, backend)
+        
+        döndür RenderContext yap
+            width: width,
+            height: height,
+            dpi_scale: __native_get_dpi_scale(),
+            backend: backend,
+            canvas: Canvas::new(width, height),
+            native_handle: native_handle,
+            double_buffered: doğru,
+            vsync: doğru,
+            msaa: 4
+        son
+    son
+    
+    /// Belirli backend ile context oluştur
+    pub fn with_backend(width: tamsayı, height: tamsayı, backend: RenderBackend) döndür RenderContext:
+        değişken native_handle = __native_create_context(width, height, backend)
+        
+        döndür RenderContext yap
+            width: width,
+            height: height,
+            dpi_scale: __native_get_dpi_scale(),
+            backend: backend,
+            canvas: Canvas::new(width, height),
+            native_handle: native_handle,
+            double_buffered: doğru,
+            vsync: doğru,
+            msaa: 4
+        son
+    son
+    
+    /// Boyutlandır
+    pub fn resize(mut self, width: tamsayı, height: tamsayı) döndür void:
+        self.width = width
+        self.height = height
+        self.canvas.resize(width, height)
+        __native_resize_context(self.native_handle, width, height)
+    son
+    
+    /// Temizle
+    pub fn clear(mut self, color: Color) döndür void:
+        __native_clear_context(self.native_handle, color.r, color.g, color.b, color.a)
+    son
+    
+    /// Frame buffer'ı swap et (present)
+    pub fn present(mut self) döndür void:
+        __native_present_context(self.native_handle)
+    son
+    
+    /// VSync ayarla
+    pub fn set_vsync(mut self, enabled: mantıksal) döndür void:
+        self.vsync = enabled
+        __native_set_vsync(self.native_handle, enabled)
+    son
+    
+    /// MSAA ayarla
+    pub fn set_msaa(mut self, level: tamsayı) döndür void:
+        self.msaa = level
+        __native_set_msaa(self.native_handle, level)
+    son
+    
+    /// Canvas al
+    pub fn canvas(mut self) döndür Canvas:
+        döndür self.canvas
+    son
+    
+    /// Fiziksel boyut (piksel cinsinden)
+    pub fn physical_size(self) döndür (tamsayı, tamsayı):
+        döndür ((self.width * self.dpi_scale) as tamsayı,
+                (self.height * self.dpi_scale) as tamsayı)
+    son
+    
+    /// Backend bilgisi
+    pub fn backend_info(self) döndür BackendInfo:
+        döndür __native_get_backend_info(self.native_handle)
+    son
+    
+    /// GPU bilgisi
+    pub fn gpu_info(self) döndür GPUInfo:
+        döndür __native_get_gpu_info(self.native_handle)
+    son
+    
+    /// Context'i aktif yap
+    pub fn make_current(mut self) döndür void:
+        __native_make_context_current(self.native_handle)
+    son
+    
+    /// Kapat
+    pub fn destroy(mut self) döndür void:
+        __native_destroy_context(self.native_handle)
+    son
+son
+
+// ============================================================================
+// BACKEND INFO
+// ============================================================================
+
+/// Backend bilgisi
+pub tip BackendInfo = yapı yap
+    /// Backend adı
+    name: yazı,
+    
+    /// Sürüm
+    version: yazı,
+    
+    /// Shader dili
+    shader_language: yazı,
+    
+    /// Shader sürümü
+    shader_version: yazı,
+    
+    /// Maksimum texture boyutu
+    max_texture_size: tamsayı,
+    
+    /// Maksimum MSAA seviyesi
+    max_msaa: tamsayı,
+    
+    /// Anisotropic filtering desteği
+    anisotropic_filtering: mantıksal,
+    
+    /// Max anisotropy
+    max_anisotropy: tamsayı
+son
+
+/// GPU bilgisi
+pub tip GPUInfo = yapı yap
+    /// GPU adı
+    name: yazı,
+    
+    /// Vendor (NVIDIA, AMD, Intel, etc.)
+    vendor: yazı,
+    
+    /// Driver sürümü
+    driver_version: yazı,
+    
+    /// VRAM (MB)
+    vram_mb: tamsayı,
+    
+    /// Ray tracing desteği
+    ray_tracing: mantıksal,
+    
+    /// Mesh shaders desteği
+    mesh_shaders: mantıksal
+son
+
+// ============================================================================
+// VIEWPORT
+// ============================================================================
+
+/// Görüntüleme alanı (viewport)
+pub tip Viewport = yapı yap
+    x: tamsayı,
+    y: tamsayı,
+    width: tamsayı,
+    height: tamsayı
+son
+
+impl Viewport:
+    pub fn new(x: tamsayı, y: tamsayı, width: tamsayı, height: tamsayı) döndür Viewport:
+        döndür Viewport yap x: x, y: y, width: width, height: height son
+    son
+    
+    pub fn full(width: tamsayı, height: tamsayı) döndür Viewport:
+        döndür Viewport yap x: 0, y: 0, width: width, height: height son
+    son
+son
+
+// ============================================================================
+// SCISSOR RECT
+// ============================================================================
+
+/// Kesme dikdörtgeni (scissor rect)
+pub tip ScissorRect = yapı yap
+    x: tamsayı,
+    y: tamsayı,
+    width: tamsayı,
+    height: tamsayı,
+    enabled: mantıksal
+son
+
+impl ScissorRect:
+    pub fn new(x: tamsayı, y: tamsayı, width: tamsayı, height: tamsayı) döndür ScissorRect:
+        döndür ScissorRect yap
+            x: x, y: y, width: width, height: height,
+            enabled: doğru
+        son
+    son
+    
+    pub fn disabled() döndür ScissorRect:
+        döndür ScissorRect yap
+            x: 0, y: 0, width: 0, height: 0,
+            enabled: yanlış
+        son
+    son
+son
+
+// ============================================================================
+// RENDER STATE
+// ============================================================================
+
+/// Render durumu (state)
+pub tip RenderState = yapı yap
+    /// Viewport
+    viewport: Viewport,
+    
+    /// Scissor rect
+    scissor: ScissorRect,
+    
+    /// Blend mode
+    blend_mode: BlendMode,
+    
+    /// Depth test
+    depth_test: mantıksal,
+    
+    /// Cull face
+    cull_face: CullFace
+son
+
+/// Blend mode
+pub tip BlendMode = enum yap
+    None,           // Blending kapalı
+    Alpha,          // Standart alpha blending
+    Additive,       // Ekleyici (parlak efektler için)
+    Multiply,       // Çarpımsal (karanlık efektler için)
+    Screen,         // Screen blending
+    Overlay         // Overlay blending
+son
+
+/// Cull face
+pub tip CullFace = enum yap
+    None,           // Culling kapalı
+    Front,          // Ön yüzleri kaldır
+    Back,           // Arka yüzleri kaldır
+    FrontAndBack    // Her ikisini de kaldır
+son
+
+impl RenderState:
+    pub fn default() döndür RenderState:
+        döndür RenderState yap
+            viewport: Viewport::new(0, 0, 800, 600),
+            scissor: ScissorRect::disabled(),
+            blend_mode: BlendMode::Alpha,
+            depth_test: yanlış,
+            cull_face: CullFace::None
+        son
+    son
+son
+
+// ============================================================================
+// NATIVE BINDINGS
+// ============================================================================
+
+dış fn __native_select_best_backend() döndür RenderBackend
+dış fn __native_create_context(width: tamsayı, height: tamsayı, backend: RenderBackend) döndür tamsayı
+dış fn __native_resize_context(handle: tamsayı, width: tamsayı, height: tamsayı) döndür void
+dış fn __native_clear_context(handle: tamsayı, r: tamsayı, g: tamsayı, b: tamsayı, a: tamsayı) döndür void
+dış fn __native_present_context(handle: tamsayı) döndür void
+dış fn __native_set_vsync(handle: tamsayı, enabled: mantıksal) döndür void
+dış fn __native_set_msaa(handle: tamsayı, level: tamsayı) döndür void
+dış fn __native_get_dpi_scale() döndür ondalık
+dış fn __native_get_backend_info(handle: tamsayı) döndür BackendInfo
+dış fn __native_get_gpu_info(handle: tamsayı) döndür GPUInfo
+dış fn __native_make_context_current(handle: tamsayı) döndür void
+dış fn __native_destroy_context(handle: tamsayı) döndür void

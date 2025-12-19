@@ -1,0 +1,126 @@
+// Arduino Serial Module for BERK
+// Type-safe serial communication
+//
+// Debug your projects easily! 🖥️
+
+extern "C" {
+    fn Serial_begin(baud: u32);
+    fn Serial_end();
+    fn Serial_available() -> i32;
+    fn Serial_read() -> i32;
+    fn Serial_write(data: u8) -> u32;
+    fn Serial_print_str(str: *const u8);
+    fn Serial_print_int(val: i32);
+    fn Serial_print_float(val: f32);
+    fn Serial_println();
+}
+
+// Initialize serial communication
+pub fn begin(baud: u32) {
+    unsafe { Serial_begin(baud); }
+}
+
+// Check bytes available
+pub fn available() -> i32 {
+    unsafe { Serial_available() }
+}
+
+// Read single byte
+pub fn read() -> Option<u8> {
+    let val = unsafe { Serial_read() };
+    if val >= 0 {
+        Some(val as u8)
+    } else {
+        None
+    }
+}
+
+// Write single byte
+pub fn write(byte: u8) {
+    unsafe { Serial_write(byte); }
+}
+
+// Print string
+pub fn print(s: &str) {
+    unsafe { Serial_print_str(s.as_ptr()); }
+}
+
+// Print integer
+pub fn print_int(val: i32) {
+    unsafe { Serial_print_int(val); }
+}
+
+// Print float
+pub fn print_float(val: f32) {
+    unsafe { Serial_print_float(val); }
+}
+
+// Print with newline
+pub fn println(s: &str) {
+    print(s);
+    unsafe { Serial_println(); }
+}
+
+// 📱 VIRAL EXAMPLE: Serial echo
+pub fn example_echo() {
+    begin(9600);
+    println("Echo Ready!");
+    
+    loop {
+        if let Some(byte) = read() {
+            write(byte);  // Echo back
+        }
+    }
+}
+
+// 📱 VIRAL EXAMPLE: Sensor data logger
+pub fn example_data_logger() {
+    use super::{analog, time};
+    
+    begin(9600);
+    println("Data Logger Started");
+    
+    let mut count = 0;
+    
+    loop {
+        let sensor = analog::read(0);
+        
+        print("Reading #");
+        print_int(count);
+        print(": ");
+        print_int(sensor as i32);
+        println("");
+        
+        count += 1;
+        time::delay_ms(1000);
+    }
+}
+
+// 🎮 VIRAL EXAMPLE: Simple command interface
+pub fn example_command() {
+    use super::gpio;
+    use super::time;
+    
+    begin(9600);
+    let led = gpio::pin(13).output();
+    
+    println("Commands: ON, OFF");
+    
+    loop {
+        if available() > 0 {
+            if let Some(cmd) = read() {
+                match cmd {
+                    b'1' => {
+                        led.high();
+                        println("LED ON");
+                    }
+                    b'0' => {
+                        led.low();
+                        println("LED OFF");
+                    }
+                    _ => println("Unknown command")
+                }
+            }
+        }
+    }
+}

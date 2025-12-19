@@ -1,0 +1,9 @@
+// GD32 CAN Module
+// Compatible with STM32 bxCAN implementation
+
+pub use stm32f4::can::*;
+
+// GD32 CAN notes:
+// - bxCAN 2.0B compatible
+// - Same filter configuration
+// - Identical mailbox system

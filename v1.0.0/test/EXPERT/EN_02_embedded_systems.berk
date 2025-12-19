@@ -1,0 +1,194 @@
+/// ═══════════════════════════════════════════════════════════════════════════
+/// BERK Expert Demo - Embedded Systems (English Version)
+/// Hardware abstraction, GPIO, sensors, PWM
+/// ═══════════════════════════════════════════════════════════════════════════
+
+use std::io
+use std::embedded
+
+print("============================================================")
+print("         Expert Demo: Embedded Systems                      ")
+print("============================================================")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 1: GPIO Simulation
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 1: GPIO Simulation ---")
+
+let LED_PIN = 13
+let BUTTON_PIN = 2
+
+fn gpio_init(pin: int, mode: string) do
+    print("   GPIO ", pin, " initialized as ", mode)
+end
+
+fn digital_write(pin: int, value: int) do
+    if value == 1 then
+        print("   GPIO ", pin, " -> HIGH")
+    end
+    if value == 0 then
+        print("   GPIO ", pin, " -> LOW")
+    end
+end
+
+gpio_init(LED_PIN, "OUTPUT")
+gpio_init(BUTTON_PIN, "INPUT")
+
+digital_write(LED_PIN, 1)
+digital_write(LED_PIN, 0)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 2: Sensor Simulation
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 2: Sensor Simulation ---")
+
+fn read_temperature() -> int do
+    return 25
+end
+
+fn read_humidity() -> int do
+    return 60
+end
+
+fn read_light() -> int do
+    return 750
+end
+
+let temp = read_temperature()
+let humidity = read_humidity()
+let light = read_light()
+
+print("   Temperature: ", temp, " C")
+print("   Humidity: ", humidity, " %")
+print("   Light: ", light, " lux")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 3: PWM Control
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 3: PWM Control ---")
+
+fn pwm_set(pin: int, duty: int) do
+    let percent = (duty * 100) / 255
+    print("   PWM Pin ", pin, ": Duty = ", percent, "%")
+end
+
+print("   LED Brightness Control:")
+pwm_set(9, 0)
+pwm_set(9, 64)
+pwm_set(9, 128)
+pwm_set(9, 192)
+pwm_set(9, 255)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 4: Serial Communication
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 4: Serial Communication ---")
+
+let BAUD_RATE = 115200
+print("   Baud Rate: ", BAUD_RATE)
+
+print("\n   UART Configuration:")
+print("   - Data Bits: 8")
+print("   - Stop Bits: 1")
+print("   - Parity: None")
+print("   - Flow Control: None")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 5: Timer/Interrupt
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 5: Timer/Interrupt ---")
+
+fn setup_timer(prescaler: int, period: int) do
+    let frequency = 16000000 / (prescaler * period)
+    print("   Timer Setup:")
+    print("   - Prescaler: ", prescaler)
+    print("   - Period: ", period)
+    print("   - Frequency: ", frequency, " Hz")
+end
+
+setup_timer(64, 250)
+setup_timer(256, 625)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 6: Memory Management
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 6: Memory Management ---")
+
+print("   Memory Map (ATmega328P):")
+print("   ┌───────────────────────────────┐")
+print("   │ Flash: 32 KB (0x0000-0x7FFF)  │")
+print("   │ SRAM:  2 KB  (0x0100-0x08FF)  │")
+print("   │ EEPROM: 1 KB (0x0000-0x03FF)  │")
+print("   └───────────────────────────────┘")
+
+let total_ram = 2048
+let used_ram = 512
+let free_ram = total_ram - used_ram
+
+print("\n   RAM Usage:")
+print("   - Total: ", total_ram, " bytes")
+print("   - Used: ", used_ram, " bytes")
+print("   - Free: ", free_ram, " bytes")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 7: State Machine
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 7: State Machine ---")
+
+let STATE_IDLE = 0
+let STATE_RUNNING = 1
+let STATE_ERROR = 2
+let STATE_DONE = 3
+
+fn state_name(state: int) -> string do
+    if state == 0 then
+        return "IDLE"
+    end
+    if state == 1 then
+        return "RUNNING"
+    end
+    if state == 2 then
+        return "ERROR"
+    end
+    return "DONE"
+end
+
+print("   State Transitions:")
+print("   IDLE -> RUNNING -> DONE")
+print("   IDLE -> RUNNING -> ERROR -> IDLE")
+
+let current_state = STATE_IDLE
+print("\n   Current State: ", state_name(current_state))
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 8: Power Management
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 8: Power Management ---")
+
+print("   Sleep Modes:")
+print("   - Idle: ~15 mA")
+print("   - ADC Noise Reduction: ~6.5 mA")
+print("   - Power-save: ~0.75 uA")
+print("   - Power-down: ~0.1 uA")
+
+fn calculate_battery_life(capacity_mah: int, current_ma: int) -> int do
+    return capacity_mah / current_ma
+end
+
+let battery = 2000
+let active_current = 20
+let sleep_current = 1
+
+print("\n   Battery Life (2000 mAh):")
+print("   - Active (20 mA): ", calculate_battery_life(battery, active_current), " hours")
+print("   - Sleep (1 mA): ", calculate_battery_life(battery, sleep_current), " hours")
+
+print("\n[OK] Embedded Systems demo completed!")

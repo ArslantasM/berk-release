@@ -1,0 +1,309 @@
+//! # Result and Option Module
+//!
+//! Modern error handling without exceptions.
+//!
+//! Hata yönetimi için Option ve Result tipleri.
+//!
+//! ## Features / Özellikler
+//!
+//! ### Option Type
+//! Represents presence or absence of a value (like Rust's Option or Haskell's Maybe).
+//!
+//! Bir değerin var olup olmadığını temsil eder (Rust'un Option veya Haskell'in Maybe tipi gibi).
+//!
+//! - `Some(T)` / `Bazı(T)`: Value exists / Değer var
+//! - `None` / `Hiç`: No value / Değer yok
+//!
+//! ### Result Type
+//! Represents success or failure (like Rust's Result or Haskell's Either).
+//!
+//! Başarı veya hata durumunu temsil eder (Rust'un Result veya Haskell'in Either tipi gibi).
+//!
+//! - `Ok(T)` / `Tamam(T)`: Success with value / Başarılı sonuç
+//! - `Err(E)` / `Hata(E)`: Error with error value / Hata mesajı
+//!
+//! ## Example / Örnek
+//!
+//! ```berk
+//! kullan result
+//!
+//! // Option usage / Option kullanımı
+//! değişken kullanıcı = bul_kullanıcı(id)
+//! eşleşme kullanıcı yap
+//!     Bazı[u] => io.println("Kullanıcı: {u.ad}"),
+//!     Hiç => io.println("Kullanıcı bulunamadı")
+//! son
+//!
+//! // Result usage / Result kullanımı
+//! değişken dosya = io.open("config.txt", "Read")?
+//! eşleşme dosya yap
+//!     Tamam[f] => // process file / dosyayı işle,
+//!     Hata[e] => io.eprintln("Hata: {e}")
+//! son
+//! ```
+//!
+//! ## Philosophy / Felsefe
+//!
+//! No exceptions! Errors are values. / Hariç durum yok! Hatalar değerdir.
+//!
+//! - Explicit error handling / Açık hata yönetimi
+//! - Compiler-enforced / Derleyici zorlar
+//! - Composable with `?` operator / `?` operatörü ile birleştirilebilir
+
+// ============================================
+// OPTION TİPİ / OPTION TYPE
+// ============================================
+// Bir değerin var olup olmadığını temsil eder
+// Represents presence or absence of a value
+//
+// Kullanım / Usage:
+//   değişken sonuç = bul_kullanıcı(id)
+//   eğer sonuç.var_mı() ise yap
+//       değişken kullanıcı = sonuç.değer()
+//   son
+
+// Option yapısı - Backend'de implement edilecek
+// Şimdilik fonksiyonlarla simüle ediyoruz
+
+// Değer var mı kontrolü
+// Check if value exists
+fonksiyon option_var_mı(değer: tamsayı, geçerli: mantıksal) -> mantıksal yap
+    dön geçerli
+son
+
+// Değeri al (varsayılan ile)
+// Get value or default
+fonksiyon option_değer_veya(değer: tamsayı, geçerli: mantıksal, varsayılan: tamsayı) -> tamsayı yap
+    eğer geçerli ise yap
+        dön değer
+    değilse yap
+        dön varsayılan
+    son
+son
+
+// Değer varsa map uygula
+// Map if value exists
+fonksiyon option_map_int(değer: tamsayı, geçerli: mantıksal, çarpan: tamsayı) -> tamsayı yap
+    eğer geçerli ise yap
+        dön değer * çarpan
+    değilse yap
+        dön 0
+    son
+son
+
+// ============================================
+// RESULT TİPİ / RESULT TYPE
+// ============================================
+// Başarı veya hata durumunu temsil eder
+// Represents success (Ok) or failure (Err)
+//
+// Kullanım / Usage:
+//   değişken sonuç = dosya_oku("config.txt")
+//   eğer sonuç.başarılı_mı() ise yap
+//       // Dosya okundu
+//   değilse yap
+//       // Hata oluştu
+//   son
+
+// Result başarılı mı?
+// Is result successful?
+fonksiyon result_başarılı_mı(başarılı: mantıksal) -> mantıksal yap
+    dön başarılı
+son
+
+// Result hatalı mı?
+// Is result error?
+fonksiyon result_hatalı_mı(başarılı: mantıksal) -> mantıksal yap
+    dön başarılı == yanlış
+son
+
+// Başarılı değeri al veya panic
+// Unwrap successful value or panic
+fonksiyon result_unwrap(değer: tamsayı, başarılı: mantıksal) -> tamsayı yap
+    eğer başarılı ise yap
+        dön değer
+    değilse yap
+        // Panic! - Backend implementasyonu
+        dön 0
+    son
+son
+
+// Başarılı değeri al veya varsayılan döndür
+// Get value or return default
+fonksiyon result_unwrap_veya(değer: tamsayı, başarılı: mantıksal, varsayılan: tamsayı) -> tamsayı yap
+    eğer başarılı ise yap
+        dön değer
+    değilse yap
+        dön varsayılan
+    son
+son
+
+// ============================================
+// HATA KODLARI / ERROR CODES
+// ============================================
+
+// Standart hata kodları
+sabit HATA_YOK = 0
+sabit HATA_GENEL = 1
+sabit HATA_DOSYA_BULUNAMADI = 2
+sabit HATA_ERİŞİM_REDDEDİLDİ = 3
+sabit HATA_GEÇERSİZ_GİRDİ = 4
+sabit HATA_BELLEk_YETMİYOR = 5
+sabit HATA_ZAMAN_AŞIMI = 6
+sabit HATA_BAĞLANTI_HATASI = 7
+
+// Hata kodu açıklaması
+// Error code description
+fonksiyon hata_mesajı(kod: tamsayı) -> yazı yap
+    eğer kod == 0 ise yap
+        dön "Hata yok"
+    değilse eğer kod == 1 ise yap
+        dön "Genel hata"
+    değilse eğer kod == 2 ise yap
+        dön "Dosya bulunamadı"
+    değilse eğer kod == 3 ise yap
+        dön "Erişim reddedildi"
+    değilse eğer kod == 4 ise yap
+        dön "Geçersiz girdi"
+    değilse eğer kod == 5 ise yap
+        dön "Bellek yetersiz"
+    değilse eğer kod == 6 ise yap
+        dön "Zaman aşımı"
+    değilse eğer kod == 7 ise yap
+        dön "Bağlantı hatası"
+    değilse yap
+        dön "Bilinmeyen hata"
+    son
+son
+
+// ============================================
+// GUARD FONKSIYONLARI / GUARD FUNCTIONS
+// ============================================
+
+// Null check guard
+fonksiyon require_not_null(değer: tamsayı, null_mu: mantıksal) -> mantıksal yap
+    dön null_mu == yanlış
+son
+
+// Range check guard
+fonksiyon require_in_range(değer: tamsayı, min: tamsayı, max: tamsayı) -> mantıksal yap
+    dön (değer >= min) ve (değer <= max)
+son
+
+// Pozitif sayı kontrolü
+// Require positive number
+fonksiyon require_positive(değer: tamsayı) -> mantıksal yap
+    dön değer > 0
+son
+
+// Negatif olmayan sayı kontrolü
+// Require non-negative number
+fonksiyon require_non_negative(değer: tamsayı) -> mantıksal yap
+    dön değer >= 0
+son
+
+// ============================================
+// YARDIMCI FONKSIYONLAR / HELPER FUNCTIONS
+// ============================================
+
+// Try-catch simülasyonu
+// Simulates try-catch behavior
+fonksiyon try_operation(işlem_kodu: tamsayı) -> mantıksal yap
+    // İşlem kodu:
+    // 0 = başarılı
+    // 1+ = hata kodu
+    dön işlem_kodu == 0
+son
+
+// Hata zincirleme
+// Error chaining
+fonksiyon chain_error(ilk_hata: tamsayı, ikinci_hata: tamsayı) -> tamsayı yap
+    eğer ilk_hata != 0 ise yap
+        dön ilk_hata
+    değilse yap
+        dön ikinci_hata
+    son
+son
+
+// ============================================
+// English Versions / İngilizce Versiyonlar
+// ============================================
+
+constant ERROR_NONE = 0
+constant ERROR_GENERAL = 1
+constant ERROR_NOT_FOUND = 2
+constant ERROR_ACCESS_DENIED = 3
+constant ERROR_INVALID_INPUT = 4
+constant ERROR_OUT_OF_MEMORY = 5
+constant ERROR_TIMEOUT = 6
+constant ERROR_CONNECTION_FAILED = 7
+
+function option_is_some(value: integer, valid: boolean) -> boolean do
+    return valid
+end
+
+function option_value_or(value: integer, valid: boolean, default: integer) -> integer do
+    if valid then do
+        return value
+    else do
+        return default
+    end
+end
+
+function result_is_ok(successful: boolean) -> boolean do
+    return successful
+end
+
+function result_is_err(successful: boolean) -> boolean do
+    return successful == false
+end
+
+function result_unwrap(value: integer, successful: boolean) -> integer do
+    if successful then do
+        return value
+    else do
+        return 0  // Panic in real implementation
+    end
+end
+
+function result_unwrap_or(value: integer, successful: boolean, default: integer) -> integer do
+    if successful then do
+        return value
+    else do
+        return default
+    end
+end
+
+function error_message(code: integer) -> string do
+    if code == 0 then do
+        return "No error"
+    else if code == 1 then do
+        return "General error"
+    else if code == 2 then do
+        return "File not found"
+    else if code == 3 then do
+        return "Access denied"
+    else if code == 4 then do
+        return "Invalid input"
+    else if code == 5 then do
+        return "Out of memory"
+    else if code == 6 then do
+        return "Timeout"
+    else if code == 7 then do
+        return "Connection failed"
+    else do
+        return "Unknown error"
+    end
+end
+
+function require_positive(value: integer) -> boolean do
+    return value > 0
+end
+
+function require_non_negative(value: integer) -> boolean do
+    return value >= 0
+end
+
+function require_in_range(value: integer, min: integer, max: integer) -> boolean do
+    return (value >= min) and (value <= max)
+end

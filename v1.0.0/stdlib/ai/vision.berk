@@ -1,0 +1,267 @@
+// stdlib/ai/vision.berk
+// Computer Vision Library
+// ResNet, YOLO, Image Segmentation implementations
+// 
+// Özellikler:
+// - Önceden eğitilmiş modeller (ResNet, VGG, EfficientNet)
+// - Object detection (YOLO v8, Faster R-CNN)
+// - Segmentation (U-Net, Mask R-CNN, SAM)
+// - Image transformations ve augmentation
+// - Transfer learning utilities
+
+import "ai/tensor" as tensor
+import "ai/nn" as nn
+import "collections" as collections
+
+/// Image preprocessing utilities
+pub mod preprocess {
+    use tensor.Tensor
+    
+    /// Resize image to target size
+    @native("vision::resize")
+    pub fn resize(img: Tensor, height: u32, width: u32, interpolation: str = "bilinear") -> Tensor {
+        // Supported: "nearest", "bilinear", "bicubic"
+    }
+    
+    /// Normalize image with mean and std
+    @native("vision::normalize")
+    pub fn normalize(img: Tensor, mean: [f32], std: [f32]) -> Tensor {
+        // ImageNet normalization: mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
+    }
+    
+    /// Convert image to RGB
+    @native("vision::to_rgb")
+    pub fn to_rgb(img: Tensor) -> Tensor {
+        // Handle grayscale, RGBA, BGR conversions
+    }
+    
+    /// Center crop image
+    @native("vision::center_crop")
+    pub fn center_crop(img: Tensor, height: u32, width: u32) -> Tensor {
+        // Crop center region
+    }
+}
+
+/// ResNet architecture
+pub mod resnet {
+    use tensor.Tensor
+    use nn.Module
+    
+    /// ResNet-18 (11.7M parameters)
+    @native("vision::resnet18")
+    pub fn resnet18(pretrained: bool = false, num_classes: u32 = 1000) -> Module {
+        // 18-layer ResNet
+        // Input: (B, 3, 224, 224)
+        // Output: (B, num_classes)
+    }
+    
+    /// ResNet-34 (21.8M parameters)
+    @native("vision::resnet34")
+    pub fn resnet34(pretrained: bool = false, num_classes: u32 = 1000) -> Module {
+        // 34-layer ResNet
+    }
+    
+    /// ResNet-50 (25.6M parameters)
+    @native("vision::resnet50")
+    pub fn resnet50(pretrained: bool = false, num_classes: u32 = 1000) -> Module {
+        // 50-layer ResNet with bottleneck blocks
+        // ImageNet pretrained: Top-1 accuracy 76.1%
+    }
+    
+    /// ResNet-101 (44.5M parameters)
+    @native("vision::resnet101")
+    pub fn resnet101(pretrained: bool = false, num_classes: u32 = 1000) -> Module {
+        // 101-layer ResNet
+    }
+    
+    /// ResNet-152 (60.2M parameters)
+    @native("vision::resnet152")
+    pub fn resnet152(pretrained: bool = false, num_classes: u32 = 1000) -> Module {
+        // 152-layer ResNet
+    }
+}
+
+/// YOLO (You Only Look Once) object detection
+pub mod yolo {
+    use tensor.Tensor
+    
+    /// YOLO detection result
+    pub struct Detection {
+        pub bbox: [f32; 4],      // [x1, y1, x2, y2]
+        pub confidence: f32,
+        pub class_id: u32,
+        pub class_name: str,
+    }
+    
+    /// YOLOv8 detector
+    pub struct YOLOv8 {
+        model_path: str,
+        confidence_threshold: f32,
+        iou_threshold: f32,
+    }
+    
+    impl YOLOv8 {
+        /// Create YOLOv8 detector
+        @native("vision::yolov8_new")
+        pub fn new(
+            model_path: str,
+            confidence_threshold: f32 = 0.25,
+            iou_threshold: f32 = 0.45
+        ) -> YOLOv8 {
+            // Load YOLOv8n/s/m/l/x model
+        }
+        
+        /// Detect objects in image
+        @native("vision::yolov8_detect")
+        pub fn detect(self, img: Tensor) -> [Detection] {
+            // Returns list of detections with bounding boxes
+            // Input: (B, 3, H, W) or (3, H, W)
+            // Output: List of Detection objects
+        }
+        
+        /// Detect with batch processing
+        @native("vision::yolov8_detect_batch")
+        pub fn detect_batch(self, imgs: [Tensor]) -> [[Detection]] {
+            // Batch inference for multiple images
+        }
+    }
+}
+
+/// Image segmentation models
+pub mod segmentation {
+    use tensor.Tensor
+    use nn.Module
+    
+    /// U-Net for image segmentation
+    @native("vision::unet")
+    pub fn unet(in_channels: u32 = 3, out_channels: u32 = 1, pretrained: bool = false) -> Module {
+        // U-Net architecture for semantic segmentation
+        // Input: (B, in_channels, H, W)
+        // Output: (B, out_channels, H, W)
+    }
+    
+    /// Segment Anything Model (SAM)
+    pub struct SAM {
+        model_path: str,
+        device: tensor.Device,
+    }
+    
+    impl SAM {
+        /// Load SAM model
+        @native("vision::sam_new")
+        pub fn new(model_path: str, device: tensor.Device = tensor.Device.CPU) -> SAM {
+            // Load SAM-B/L/H model
+        }
+        
+        /// Segment everything in image
+        @native("vision::sam_segment_everything")
+        pub fn segment_everything(self, img: Tensor) -> [Tensor] {
+            // Returns list of segmentation masks
+        }
+        
+        /// Segment with point prompts
+        @native("vision::sam_segment_points")
+        pub fn segment_points(self, img: Tensor, points: [[f32; 2]], labels: [i32]) -> Tensor {
+            // points: [(x, y), ...], labels: [1=foreground, 0=background]
+        }
+        
+        /// Segment with box prompt
+        @native("vision::sam_segment_box")
+        pub fn segment_box(self, img: Tensor, bbox: [f32; 4]) -> Tensor {
+            // bbox: [x1, y1, x2, y2]
+        }
+    }
+}
+
+/// Feature extraction and embeddings
+pub mod features {
+    use tensor.Tensor
+    
+    /// Extract features from image using pretrained model
+    @native("vision::extract_features")
+    pub fn extract_features(img: Tensor, model: str = "resnet50", layer: str = "avgpool") -> Tensor {
+        // Extract intermediate layer features
+        // Useful for transfer learning, similarity search
+    }
+    
+    /// Compute image similarity using cosine distance
+    @native("vision::image_similarity")
+    pub fn image_similarity(img1: Tensor, img2: Tensor, model: str = "resnet50") -> f32 {
+        // Returns similarity score [0, 1]
+    }
+}
+
+/// Image augmentation
+pub mod augmentation {
+    use tensor.Tensor
+    
+    /// Random horizontal flip
+    @native("vision::random_horizontal_flip")
+    pub fn random_horizontal_flip(img: Tensor, p: f32 = 0.5) -> Tensor {
+        // Flip with probability p
+    }
+    
+    /// Random rotation
+    @native("vision::random_rotation")
+    pub fn random_rotation(img: Tensor, degrees: [f32; 2]) -> Tensor {
+        // Rotate by random angle in range [min, max]
+    }
+    
+    /// Random crop
+    @native("vision::random_crop")
+    pub fn random_crop(img: Tensor, height: u32, width: u32) -> Tensor {
+        // Random crop to target size
+    }
+    
+    /// Color jitter
+    @native("vision::color_jitter")
+    pub fn color_jitter(
+        img: Tensor,
+        brightness: f32 = 0.0,
+        contrast: f32 = 0.0,
+        saturation: f32 = 0.0,
+        hue: f32 = 0.0
+    ) -> Tensor {
+        // Randomly change brightness, contrast, saturation, hue
+    }
+    
+    /// Mixup augmentation
+    @native("vision::mixup")
+    pub fn mixup(img1: Tensor, img2: Tensor, alpha: f32 = 1.0) -> (Tensor, f32) {
+        // Returns (mixed_image, lambda)
+    }
+    
+    /// CutMix augmentation
+    @native("vision::cutmix")
+    pub fn cutmix(img1: Tensor, img2: Tensor, alpha: f32 = 1.0) -> (Tensor, f32) {
+        // Returns (mixed_image, lambda)
+    }
+}
+
+/// Example usage:
+/// ```berk
+/// import "ai/vision" as vision
+/// import "ai/tensor" as tensor
+/// 
+/// // Image classification with ResNet
+/// let model = vision.resnet.resnet50(pretrained: true)
+/// let img = tensor.Tensor.load_image("cat.jpg")
+/// let img = vision.preprocess.resize(img, 224, 224)
+/// let img = vision.preprocess.normalize(img, [0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+/// let logits = model.forward(img)
+/// let pred = logits.argmax()
+/// yaz("Predicted class: {}", pred)
+/// 
+/// // Object detection with YOLOv8
+/// let yolo = vision.yolo.YOLOv8.new("yolov8n.pt")
+/// let detections = yolo.detect(img)
+/// for det in detections {
+///     yaz("Class: {}, Confidence: {:.2f}, BBox: {:?}", 
+///         det.class_name, det.confidence, det.bbox)
+/// }
+/// 
+/// // Segmentation with SAM
+/// let sam = vision.segmentation.SAM.new("sam_vit_b.pt")
+/// let masks = sam.segment_everything(img)
+/// yaz("Found {} segments", masks.len())
+/// ```

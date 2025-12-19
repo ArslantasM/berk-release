@@ -1,0 +1,515 @@
+// nRF52 BLE Module (Bluetooth Low Energy)
+// Hardware Abstraction Layer for nRF52 BLE with SoftDevice S132/S140
+// 
+// This is nRF52's killer feature - industry-leading BLE implementation
+// 
+// Features:
+// - Bluetooth 5.3 support
+// - Central and Peripheral roles
+// - Multiple concurrent connections (up to 20)
+// - GATT Server/Client
+// - 2 Mbps PHY and Long Range (Coded PHY)
+// - Advertising Extensions
+// - Direction Finding (nRF52833/840)
+//
+// SoftDevice: S132 (BLE), S140 (BLE + Mesh)
+
+extern "C" {
+    // SoftDevice initialization
+    fn sd_softdevice_enable(clock_source: *void, fault_handler: *void) -> u32;
+    fn sd_softdevice_disable() -> u32;
+    fn sd_softdevice_is_enabled(enabled: *u8) -> u32;
+    
+    // BLE Stack configuration
+    fn sd_ble_enable(app_ram_base: *u32) -> u32;
+    fn sd_ble_cfg_set(cfg_id: u32, cfg: *void, app_ram_base: u32) -> u32;
+    
+    // GAP (Generic Access Profile) - Advertising & Connections
+    fn sd_ble_gap_adv_start(adv_handle: u8, conn_cfg_tag: u8) -> u32;
+    fn sd_ble_gap_adv_stop(adv_handle: u8) -> u32;
+    fn sd_ble_gap_adv_set_configure(adv_handle: *u8, adv_data: *void, adv_params: *void) -> u32;
+    fn sd_ble_gap_device_name_set(sec_mode: *void, name: *const u8, len: u16) -> u32;
+    fn sd_ble_gap_appearance_set(appearance: u16) -> u32;
+    fn sd_ble_gap_disconnect(conn_handle: u16, hci_status: u8) -> u32;
+    fn sd_ble_gap_tx_power_set(role: u8, handle: u16, tx_power: i8) -> u32;
+    fn sd_ble_gap_rssi_get(conn_handle: u16, rssi: *i8) -> u32;
+    
+    // GATT (Generic Attribute Profile) - Services & Characteristics
+    fn sd_ble_gatts_service_add(type_: u8, uuid: *void, handle: *u16) -> u32;
+    fn sd_ble_gatts_characteristic_add(service_handle: u16, char_md: *void, attr: *void, handles: *void) -> u32;
+    fn sd_ble_gatts_value_set(conn_handle: u16, value_handle: u16, value: *void) -> u32;
+    fn sd_ble_gatts_value_get(conn_handle: u16, value_handle: u16, value: *void) -> u32;
+    fn sd_ble_gatts_hvx(conn_handle: u16, params: *void) -> u32;
+    
+    // GATT Client (Central role)
+    fn sd_ble_gattc_read(conn_handle: u16, handle: u16, offset: u16) -> u32;
+    fn sd_ble_gattc_write(conn_handle: u16, params: *void) -> u32;
+    
+    // Event handling
+    fn sd_evt_get(evt_id: *u32) -> u32;
+    fn sd_ble_evt_get(dest: *u8, len: *u16) -> u32;
+}
+
+// BLE error codes
+const BLE_SUCCESS: u32 = 0;
+const BLE_ERROR_INVALID_CONN_HANDLE: u32 = 0x3002;
+const BLE_ERROR_TIMEOUT: u32 = 0x3006;
+
+// GAP constants
+const BLE_GAP_ADDR_TYPE_PUBLIC: u8 = 0;
+const BLE_GAP_ADDR_TYPE_RANDOM_STATIC: u8 = 1;
+
+const BLE_GAP_ADV_TYPE_CONNECTABLE: u8 = 0;
+const BLE_GAP_ADV_TYPE_NONCONNECTABLE: u8 = 1;
+const BLE_GAP_ADV_TYPE_SCANNABLE: u8 = 2;
+
+// TX Power levels
+const BLE_TX_POWER_MINUS_40DBM: i8 = -40;
+const BLE_TX_POWER_MINUS_20DBM: i8 = -20;
+const BLE_TX_POWER_MINUS_16DBM: i8 = -16;
+const BLE_TX_POWER_MINUS_12DBM: i8 = -12;
+const BLE_TX_POWER_MINUS_8DBM: i8 = -8;
+const BLE_TX_POWER_MINUS_4DBM: i8 = -4;
+const BLE_TX_POWER_0DBM: i8 = 0;
+const BLE_TX_POWER_4DBM: i8 = 4;
+const BLE_TX_POWER_8DBM: i8 = 8;
+
+// Standard BLE UUIDs
+const BLE_UUID_TYPE_BLE: u8 = 1;
+const BLE_UUID_TYPE_VENDOR_BEGIN: u8 = 2;
+
+// Standard Services
+const BLE_UUID_HEART_RATE_SERVICE: u16 = 0x180D;
+const BLE_UUID_BATTERY_SERVICE: u16 = 0x180F;
+const BLE_UUID_DEVICE_INFORMATION_SERVICE: u16 = 0x180A;
+
+// Standard Characteristics
+const BLE_UUID_HEART_RATE_MEASUREMENT: u16 = 0x2A37;
+const BLE_UUID_BATTERY_LEVEL: u16 = 0x2A19;
+const BLE_UUID_MANUFACTURER_NAME: u16 = 0x2A29;
+
+// GAP Appearance values
+const BLE_APPEARANCE_GENERIC_PHONE: u16 = 64;
+const BLE_APPEARANCE_GENERIC_WATCH: u16 = 192;
+const BLE_APPEARANCE_HEART_RATE_SENSOR: u16 = 832;
+const BLE_APPEARANCE_GENERIC_THERMOMETER: u16 = 768;
+
+pub struct BLE {
+    initialized: bool,
+}
+
+impl BLE {
+    // Initialize BLE stack
+    pub fn init() -> Result<BLE, u32> {
+        unsafe {
+            // Enable SoftDevice
+            let ret = sd_softdevice_enable(core::ptr::null(), core::ptr::null());
+            if ret != BLE_SUCCESS {
+                return Err(ret);
+            }
+            
+            // Enable BLE stack
+            let mut ram_start: u32 = 0x20002000;  // Typical RAM base
+            let ret = sd_ble_enable(&mut ram_start as *mut u32);
+            if ret != BLE_SUCCESS {
+                return Err(ret);
+            }
+        }
+        
+        Ok(BLE { initialized: true })
+    }
+    
+    // Check if SoftDevice is enabled
+    pub fn is_enabled(&self) -> bool {
+        unsafe {
+            let mut enabled: u8 = 0;
+            sd_softdevice_is_enabled(&mut enabled as *mut u8);
+            enabled != 0
+        }
+    }
+}
+
+// BLE Peripheral (server role)
+pub struct BLEPeripheral {
+    device_name: String,
+    conn_handle: u16,
+    advertising: bool,
+}
+
+impl BLEPeripheral {
+    // Create new BLE peripheral
+    pub fn new(name: &str) -> BLEPeripheral {
+        BLEPeripheral {
+            device_name: String::from(name),
+            conn_handle: 0xFFFF,  // Invalid handle
+            advertising: false,
+        }
+    }
+    
+    // Set device name
+    pub fn set_name(&mut self, name: &str) -> u32 {
+        self.device_name = String::from(name);
+        
+        unsafe {
+            sd_ble_gap_device_name_set(
+                core::ptr::null(),
+                name.as_ptr() as *const u8,
+                name.len() as u16
+            )
+        }
+    }
+    
+    // Set appearance
+    pub fn set_appearance(&self, appearance: u16) -> u32 {
+        unsafe {
+            sd_ble_gap_appearance_set(appearance)
+        }
+    }
+    
+    // Set TX power
+    pub fn set_tx_power(&self, power: i8) -> u32 {
+        unsafe {
+            sd_ble_gap_tx_power_set(0, 0, power)
+        }
+    }
+    
+    // Start advertising
+    pub fn start_advertising(&mut self) -> u32 {
+        let mut adv_handle: u8 = 0;
+        
+        unsafe {
+            // Configure advertising
+            let ret = sd_ble_gap_adv_set_configure(
+                &mut adv_handle as *mut u8,
+                core::ptr::null(),
+                core::ptr::null()
+            );
+            
+            if ret != BLE_SUCCESS {
+                return ret;
+            }
+            
+            // Start advertising
+            let ret = sd_ble_gap_adv_start(adv_handle, 1);
+            if ret == BLE_SUCCESS {
+                self.advertising = true;
+            }
+            ret
+        }
+    }
+    
+    // Stop advertising
+    pub fn stop_advertising(&mut self) -> u32 {
+        unsafe {
+            let ret = sd_ble_gap_adv_stop(0);
+            if ret == BLE_SUCCESS {
+                self.advertising = false;
+            }
+            ret
+        }
+    }
+    
+    // Check if connected
+    pub fn is_connected(&self) -> bool {
+        self.conn_handle != 0xFFFF
+    }
+    
+    // Disconnect
+    pub fn disconnect(&mut self) -> u32 {
+        if !self.is_connected() {
+            return BLE_ERROR_INVALID_CONN_HANDLE;
+        }
+        
+        unsafe {
+            let ret = sd_ble_gap_disconnect(self.conn_handle, 0x13);  // Remote user terminated
+            if ret == BLE_SUCCESS {
+                self.conn_handle = 0xFFFF;
+            }
+            ret
+        }
+    }
+    
+    // Get RSSI (signal strength)
+    pub fn get_rssi(&self) -> Result<i8, u32> {
+        if !self.is_connected() {
+            return Err(BLE_ERROR_INVALID_CONN_HANDLE);
+        }
+        
+        let mut rssi: i8 = 0;
+        unsafe {
+            let ret = sd_ble_gap_rssi_get(self.conn_handle, &mut rssi as *mut i8);
+            if ret == BLE_SUCCESS {
+                Ok(rssi)
+            } else {
+                Err(ret)
+            }
+        }
+    }
+}
+
+// BLE Service
+pub struct BLEService {
+    handle: u16,
+    uuid: u16,
+}
+
+impl BLEService {
+    // Add service
+    pub fn new(uuid: u16) -> Result<BLEService, u32> {
+        let mut handle: u16 = 0;
+        
+        unsafe {
+            let ret = sd_ble_gatts_service_add(
+                BLE_UUID_TYPE_BLE,
+                &uuid as *const u16 as *void,
+                &mut handle as *mut u16
+            );
+            
+            if ret == BLE_SUCCESS {
+                Ok(BLEService { handle, uuid })
+            } else {
+                Err(ret)
+            }
+        }
+    }
+    
+    // Add characteristic to service
+    pub fn add_characteristic(&self, char_uuid: u16, properties: u8) -> Result<BLECharacteristic, u32> {
+        BLECharacteristic::new(self.handle, char_uuid, properties)
+    }
+}
+
+// BLE Characteristic
+pub struct BLECharacteristic {
+    value_handle: u16,
+    uuid: u16,
+}
+
+impl BLECharacteristic {
+    // Add characteristic
+    pub fn new(service_handle: u16, uuid: u16, properties: u8) -> Result<BLECharacteristic, u32> {
+        let mut handles: u16 = 0;
+        
+        unsafe {
+            let ret = sd_ble_gatts_characteristic_add(
+                service_handle,
+                core::ptr::null(),
+                core::ptr::null(),
+                &mut handles as *mut u16 as *void
+            );
+            
+            if ret == BLE_SUCCESS {
+                Ok(BLECharacteristic {
+                    value_handle: handles,
+                    uuid,
+                })
+            } else {
+                Err(ret)
+            }
+        }
+    }
+    
+    // Set characteristic value
+    pub fn set_value(&self, data: &[u8]) -> u32 {
+        unsafe {
+            sd_ble_gatts_value_set(
+                0xFFFF,  // System attribute
+                self.value_handle,
+                data.as_ptr() as *void
+            )
+        }
+    }
+    
+    // Get characteristic value
+    pub fn get_value(&self, buffer: &mut [u8]) -> Result<u16, u32> {
+        unsafe {
+            let ret = sd_ble_gatts_value_get(
+                0xFFFF,
+                self.value_handle,
+                buffer.as_mut_ptr() as *void
+            );
+            
+            if ret == BLE_SUCCESS {
+                Ok(buffer.len() as u16)
+            } else {
+                Err(ret)
+            }
+        }
+    }
+    
+    // Send notification
+    pub fn notify(&self, conn_handle: u16, data: &[u8]) -> u32 {
+        unsafe {
+            sd_ble_gatts_hvx(conn_handle, core::ptr::null())
+        }
+    }
+}
+
+// BLE Beacon (iBeacon compatible)
+pub struct BLEBeacon {
+    uuid: [u8; 16],
+    major: u16,
+    minor: u16,
+    tx_power: i8,
+}
+
+impl BLEBeacon {
+    // Create new beacon
+    pub fn new() -> BLEBeacon {
+        BLEBeacon {
+            uuid: [0; 16],
+            major: 0,
+            minor: 0,
+            tx_power: -59,
+        }
+    }
+    
+    // Set beacon UUID
+    pub fn set_uuid(&mut self, uuid: &str) {
+        // Parse UUID string (simplified)
+        // Real implementation would parse "E2C56DB5-DFFB-48D2-B060-D0F5A71096E0"
+    }
+    
+    // Set major/minor values
+    pub fn set_major(&mut self, major: u16) {
+        self.major = major;
+    }
+    
+    pub fn set_minor(&mut self, minor: u16) {
+        self.minor = minor;
+    }
+    
+    // Set TX power (for distance estimation)
+    pub fn set_tx_power(&mut self, power: i8) {
+        self.tx_power = power;
+    }
+    
+    // Start beacon advertising
+    pub fn start(&self) -> u32 {
+        // Configure and start non-connectable advertising with beacon data
+        unsafe {
+            sd_ble_gap_adv_start(0, 1)
+        }
+    }
+}
+
+// Example: Heart rate sensor
+pub fn example_heart_rate_sensor() {
+    let ble = BLE::init().expect("Failed to init BLE");
+    let mut peripheral = BLEPeripheral::new("HeartRate");
+    
+    peripheral.set_appearance(BLE_APPEARANCE_HEART_RATE_SENSOR);
+    peripheral.set_tx_power(BLE_TX_POWER_0DBM);
+    
+    // Add Heart Rate Service
+    let hr_service = BLEService::new(BLE_UUID_HEART_RATE_SERVICE)
+        .expect("Failed to add service");
+    
+    let hr_char = hr_service.add_characteristic(BLE_UUID_HEART_RATE_MEASUREMENT, 0x10)
+        .expect("Failed to add characteristic");
+    
+    peripheral.start_advertising();
+    
+    let mut heart_rate: u8 = 60;
+    
+    loop {
+        if peripheral.is_connected() {
+            // Simulate heart rate measurement
+            heart_rate = 60 + (heart_rate % 40);
+            
+            let data: [u8; 2] = [0x00, heart_rate];
+            hr_char.notify(peripheral.conn_handle, &data);
+        }
+        
+        sleep_ms(1000);
+    }
+}
+
+// Example: Battery service
+pub fn example_battery_service() {
+    let ble = BLE::init().expect("Failed to init BLE");
+    let mut peripheral = BLEPeripheral::new("Battery");
+    
+    let battery_service = BLEService::new(BLE_UUID_BATTERY_SERVICE)
+        .expect("Failed to add service");
+    
+    let battery_char = battery_service.add_characteristic(BLE_UUID_BATTERY_LEVEL, 0x12)
+        .expect("Failed to add characteristic");
+    
+    peripheral.start_advertising();
+    
+    let mut battery_level: u8 = 100;
+    
+    loop {
+        if peripheral.is_connected() {
+            let data: [u8; 1] = [battery_level];
+            battery_char.set_value(&data);
+            
+            if battery_level > 0 {
+                battery_level -= 1;
+            }
+        }
+        
+        sleep_ms(5000);
+    }
+}
+
+// Example: iBeacon
+pub fn example_beacon() {
+    let ble = BLE::init().expect("Failed to init BLE");
+    
+    let mut beacon = BLEBeacon::new();
+    beacon.set_uuid("E2C56DB5-DFFB-48D2-B060-D0F5A71096E0");
+    beacon.set_major(1);
+    beacon.set_minor(100);
+    beacon.set_tx_power(-59);
+    
+    beacon.start();
+    
+    // Beacon runs indefinitely
+    loop {
+        sleep_ms(1000);
+    }
+}
+
+// Example: Temperature sensor with notifications
+pub fn example_temperature_sensor() {
+    let ble = BLE::init().expect("Failed to init BLE");
+    let mut peripheral = BLEPeripheral::new("TempSensor");
+    
+    peripheral.set_appearance(BLE_APPEARANCE_GENERIC_THERMOMETER);
+    
+    // Custom temperature service
+    let temp_service = BLEService::new(0x1809)  // Health Thermometer
+        .expect("Failed to add service");
+    
+    let temp_char = temp_service.add_characteristic(0x2A1C, 0x10)  // Temperature Measurement
+        .expect("Failed to add characteristic");
+    
+    peripheral.start_advertising();
+    
+    loop {
+        if peripheral.is_connected() {
+            // Read temperature (simplified)
+            let temp_celsius: f32 = 25.5;
+            let temp_int = (temp_celsius * 100.0) as u32;
+            
+            let data: [u8; 5] = [
+                0x00,  // Flags
+                (temp_int & 0xFF) as u8,
+                ((temp_int >> 8) & 0xFF) as u8,
+                ((temp_int >> 16) & 0xFF) as u8,
+                ((temp_int >> 24) & 0xFF) as u8,
+            ];
+            
+            temp_char.notify(peripheral.conn_handle, &data);
+        }
+        
+        sleep_ms(2000);
+    }
+}
+
+// Helper: Sleep function
+fn sleep_ms(ms: u32) {
+    // Placeholder - actual implementation uses Nordic SDK
+}

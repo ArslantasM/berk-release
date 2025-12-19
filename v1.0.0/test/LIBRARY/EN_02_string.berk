@@ -1,0 +1,114 @@
+/// ═══════════════════════════════════════════════════════════════════════════
+/// BERK Library Demo - String Module (English Version)
+/// Text operations
+/// ═══════════════════════════════════════════════════════════════════════════
+
+use std::io
+use std::string
+
+print("============================================================")
+print("         Library Demo: String Operations                    ")
+print("============================================================")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 1: Basic String Operations
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 1: Basic String Operations ---")
+
+let text = "Hello World"
+print("   Original: ", text)
+
+let length = text.uzunluk()
+print("   Length: ", length)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 2: String Concatenation
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 2: String Concatenation ---")
+
+let name = "BERK"
+let version = "1.0"
+print("   Name: ", name)
+print("   Version: ", version)
+print("   Combined: ", name, " v", version)
+
+let word1 = "Turkish "
+let word2 = "programming "
+let word3 = "language"
+print("   Sentence: ", word1, word2, word3)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 3: String Comparison
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 3: String Comparison ---")
+
+let s1 = "abc"
+let s2 = "abc"
+let s3 = "xyz"
+
+let equal1 = s1 == s2
+let equal2 = s1 == s3
+
+print("   '", s1, "' == '", s2, "' : ", equal1)
+print("   '", s1, "' == '", s3, "' : ", equal2)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 4: Character Operations
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 4: ASCII Codes ---")
+
+print("   Uppercase letters: A=65, B=66, ... Z=90")
+print("   Lowercase letters: a=97, b=98, ... z=122")
+print("   Digits: 0=48, 1=49, ... 9=57")
+print("   Special: space=32, !=33, ?=63")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 5: Format Examples
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 5: Format Examples ---")
+
+let number = 42
+let decimal = 3.14159
+let logic = true
+
+print("   Integer: ", number)
+print("   Decimal: ", decimal)
+print("   Boolean: ", logic)
+
+// Different format styles
+print("\n   Output Formats:")
+print("   - With comma: ", number, ", ", decimal, ", ", logic)
+print("   - Parentheses: (", number, ")")
+print("   - Brackets: [", decimal, "]")
+print("   - Quotes: '", name, "'")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 6: Practical Examples
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 6: Practical Examples ---")
+
+// Greeting message creation
+fn greet(person_name: string) -> string do
+    return "Hello, " + person_name + "!"
+end
+
+print("   ", greet("John"))
+print("   ", greet("Jane"))
+
+// Simple templates
+print("\n   Table Format:")
+print("   ┌──────────────┬──────────┐")
+print("   │ Student      │ Grade    │")
+print("   ├──────────────┼──────────┤")
+print("   │ Alice        │ 85       │")
+print("   │ Bob          │ 92       │")
+print("   │ Carol        │ 78       │")
+print("   └──────────────┴──────────┘")
+
+print("\n[OK] String library demo completed!")

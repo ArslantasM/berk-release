@@ -1,0 +1,294 @@
+// stdlib/embedded/platforms/stm32f4/uart.berk
+// STM32F4 UART/USART HAL Implementation
+// STM32 HAL library bindings
+
+import "embedded/bal/uart" as UART_BAL
+
+// STM32 HAL UART constants
+const UART_WORDLENGTH_8B: u32 = 0x00000000
+const UART_WORDLENGTH_9B: u32 = 0x00001000
+
+const UART_STOPBITS_1: u32 = 0x00000000
+const UART_STOPBITS_2: u32 = 0x00002000
+
+const UART_PARITY_NONE: u32 = 0x00000000
+const UART_PARITY_EVEN: u32 = 0x00000400
+const UART_PARITY_ODD: u32 = 0x00000600
+
+const UART_MODE_RX: u32 = 0x00000004
+const UART_MODE_TX: u32 = 0x00000008
+const UART_MODE_TX_RX: u32 = 0x0000000C
+
+const UART_HWCONTROL_NONE: u32 = 0x00000000
+const UART_HWCONTROL_RTS: u32 = 0x00000100
+const UART_HWCONTROL_CTS: u32 = 0x00000200
+const UART_HWCONTROL_RTS_CTS: u32 = 0x00000300
+
+// USART base addresses
+const USART1_BASE: u32 = 0x40011000
+const USART2_BASE: u32 = 0x40004400
+const USART3_BASE: u32 = 0x40004800
+const UART4_BASE: u32 = 0x40004C00
+const UART5_BASE: u32 = 0x40005000
+const USART6_BASE: u32 = 0x40011400
+
+// STM32 HAL UART structures
+struct USART_TypeDef {
+    SR: u32,
+    DR: u32,
+    BRR: u32,
+    CR1: u32,
+    CR2: u32,
+    CR3: u32,
+    GTPR: u32,
+}
+
+struct UART_InitTypeDef {
+    BaudRate: u32,
+    WordLength: u32,
+    StopBits: u32,
+    Parity: u32,
+    Mode: u32,
+    HwFlowCtl: u32,
+    OverSampling: u32,
+}
+
+struct UART_HandleTypeDef {
+    Instance: *mut USART_TypeDef,
+    Init: UART_InitTypeDef,
+    pTxBuffPtr: *mut u8,
+    TxXferSize: u16,
+    TxXferCount: u16,
+    pRxBuffPtr: *mut u8,
+    RxXferSize: u16,
+    RxXferCount: u16,
+    hdmatx: *mut void,
+    hdmarx: *mut void,
+    Lock: u32,
+    gState: u32,
+    RxState: u32,
+    ErrorCode: u32,
+}
+
+// STM32 HAL UART functions
+extern "C" {
+    fn HAL_UART_Init(huart: *mut UART_HandleTypeDef) -> i32
+    fn HAL_UART_DeInit(huart: *mut UART_HandleTypeDef) -> i32
+    fn HAL_UART_Transmit(huart: *mut UART_HandleTypeDef, pData: *u8, Size: u16, Timeout: u32) -> i32
+    fn HAL_UART_Receive(huart: *mut UART_HandleTypeDef, pData: *mut u8, Size: u16, Timeout: u32) -> i32
+    fn HAL_UART_Transmit_IT(huart: *mut UART_HandleTypeDef, pData: *u8, Size: u16) -> i32
+    fn HAL_UART_Receive_IT(huart: *mut UART_HandleTypeDef, pData: *mut u8, Size: u16) -> i32
+}
+
+const HAL_OK: i32 = 0
+const HAL_ERROR: i32 = 1
+const HAL_BUSY: i32 = 2
+const HAL_TIMEOUT: i32 = 3
+
+// UART handles storage (6 UART/USART peripherals)
+static mut uart_handles: [UART_HandleTypeDef; 6] = [
+    UART_HandleTypeDef {
+        Instance: USART1_BASE as *mut USART_TypeDef,
+        Init: UART_InitTypeDef {
+            BaudRate: 115200,
+            WordLength: UART_WORDLENGTH_8B,
+            StopBits: UART_STOPBITS_1,
+            Parity: UART_PARITY_NONE,
+            Mode: UART_MODE_TX_RX,
+            HwFlowCtl: UART_HWCONTROL_NONE,
+            OverSampling: 0,
+        },
+        pTxBuffPtr: null,
+        TxXferSize: 0,
+        TxXferCount: 0,
+        pRxBuffPtr: null,
+        RxXferSize: 0,
+        RxXferCount: 0,
+        hdmatx: null,
+        hdmarx: null,
+        Lock: 0,
+        gState: 0,
+        RxState: 0,
+        ErrorCode: 0,
+    },
+    // USART2-6/UART4-5 similar initialization
+    UART_HandleTypeDef { Instance: USART2_BASE as *mut USART_TypeDef, Init: UART_InitTypeDef { BaudRate: 115200, WordLength: UART_WORDLENGTH_8B, StopBits: UART_STOPBITS_1, Parity: UART_PARITY_NONE, Mode: UART_MODE_TX_RX, HwFlowCtl: UART_HWCONTROL_NONE, OverSampling: 0 }, pTxBuffPtr: null, TxXferSize: 0, TxXferCount: 0, pRxBuffPtr: null, RxXferSize: 0, RxXferCount: 0, hdmatx: null, hdmarx: null, Lock: 0, gState: 0, RxState: 0, ErrorCode: 0 },
+    UART_HandleTypeDef { Instance: USART3_BASE as *mut USART_TypeDef, Init: UART_InitTypeDef { BaudRate: 115200, WordLength: UART_WORDLENGTH_8B, StopBits: UART_STOPBITS_1, Parity: UART_PARITY_NONE, Mode: UART_MODE_TX_RX, HwFlowCtl: UART_HWCONTROL_NONE, OverSampling: 0 }, pTxBuffPtr: null, TxXferSize: 0, TxXferCount: 0, pRxBuffPtr: null, RxXferSize: 0, RxXferCount: 0, hdmatx: null, hdmarx: null, Lock: 0, gState: 0, RxState: 0, ErrorCode: 0 },
+    UART_HandleTypeDef { Instance: UART4_BASE as *mut USART_TypeDef, Init: UART_InitTypeDef { BaudRate: 115200, WordLength: UART_WORDLENGTH_8B, StopBits: UART_STOPBITS_1, Parity: UART_PARITY_NONE, Mode: UART_MODE_TX_RX, HwFlowCtl: UART_HWCONTROL_NONE, OverSampling: 0 }, pTxBuffPtr: null, TxXferSize: 0, TxXferCount: 0, pRxBuffPtr: null, RxXferSize: 0, RxXferCount: 0, hdmatx: null, hdmarx: null, Lock: 0, gState: 0, RxState: 0, ErrorCode: 0 },
+    UART_HandleTypeDef { Instance: UART5_BASE as *mut USART_TypeDef, Init: UART_InitTypeDef { BaudRate: 115200, WordLength: UART_WORDLENGTH_8B, StopBits: UART_STOPBITS_1, Parity: UART_PARITY_NONE, Mode: UART_MODE_TX_RX, HwFlowCtl: UART_HWCONTROL_NONE, OverSampling: 0 }, pTxBuffPtr: null, TxXferSize: 0, TxXferCount: 0, pRxBuffPtr: null, RxXferSize: 0, RxXferCount: 0, hdmatx: null, hdmarx: null, Lock: 0, gState: 0, RxState: 0, ErrorCode: 0 },
+    UART_HandleTypeDef { Instance: USART6_BASE as *mut USART_TypeDef, Init: UART_InitTypeDef { BaudRate: 115200, WordLength: UART_WORDLENGTH_8B, StopBits: UART_STOPBITS_1, Parity: UART_PARITY_NONE, Mode: UART_MODE_TX_RX, HwFlowCtl: UART_HWCONTROL_NONE, OverSampling: 0 }, pTxBuffPtr: null, TxXferSize: 0, TxXferCount: 0, pRxBuffPtr: null, RxXferSize: 0, RxXferCount: 0, hdmatx: null, hdmarx: null, Lock: 0, gState: 0, RxState: 0, ErrorCode: 0 },
+]
+
+fn enable_uart_clock(port: u8) {
+    unsafe {
+        let rcc_apb1enr = 0x40023840 as *mut u32
+        let rcc_apb2enr = 0x40023844 as *mut u32
+        
+        match port {
+            1 => *rcc_apb2enr |= 1 << 4,   // USART1
+            2 => *rcc_apb1enr |= 1 << 17,  // USART2
+            3 => *rcc_apb1enr |= 1 << 18,  // USART3
+            4 => *rcc_apb1enr |= 1 << 19,  // UART4
+            5 => *rcc_apb1enr |= 1 << 20,  // UART5
+            6 => *rcc_apb2enr |= 1 << 5,   // USART6
+            _ => {},
+        }
+    }
+}
+
+// STM32F4 UART HAL implementation
+pub struct STM32F4_UART {}
+
+impl UART_BAL.UART_HAL for STM32F4_UART {
+    fn init(config: UART_BAL.Config) -> UART_BAL.Result<()> {
+        let port = config.port
+        if port == 0 || port > 6 {
+            return Err(UART_BAL.Error.InvalidPort)
+        }
+        
+        enable_uart_clock(port)
+        
+        unsafe {
+            let handle = &mut uart_handles[(port - 1) as usize]
+            handle.Init.BaudRate = config.baud_rate
+            
+            handle.Init.WordLength = match config.data_bits {
+                8 => UART_WORDLENGTH_8B,
+                9 => UART_WORDLENGTH_9B,
+                _ => UART_WORDLENGTH_8B,
+            }
+            
+            handle.Init.StopBits = match config.stop_bits {
+                1 => UART_STOPBITS_1,
+                2 => UART_STOPBITS_2,
+                _ => UART_STOPBITS_1,
+            }
+            
+            handle.Init.Parity = match config.parity {
+                UART_BAL.Parity.None => UART_PARITY_NONE,
+                UART_BAL.Parity.Even => UART_PARITY_EVEN,
+                UART_BAL.Parity.Odd => UART_PARITY_ODD,
+            }
+            
+            handle.Init.HwFlowCtl = if config.flow_control {
+                UART_HWCONTROL_RTS_CTS
+            } else {
+                UART_HWCONTROL_NONE
+            }
+            
+            let ret = HAL_UART_Init(handle)
+            if ret == HAL_OK {
+                Ok(())
+            } else {
+                Err(UART_BAL.Error.InitError)
+            }
+        }
+    }
+    
+    fn deinit(port: u8) {
+        if port == 0 || port > 6 {
+            return
+        }
+        
+        unsafe {
+            let handle = &mut uart_handles[(port - 1) as usize]
+            HAL_UART_DeInit(handle)
+        }
+    }
+    
+    fn write(port: u8, data: &[u8]) -> UART_BAL.Result<usize> {
+        if port == 0 || port > 6 {
+            return Err(UART_BAL.Error.InvalidPort)
+        }
+        
+        unsafe {
+            let handle = &mut uart_handles[(port - 1) as usize]
+            let ret = HAL_UART_Transmit(handle, data.as_ptr(), data.len() as u16, 1000)
+            
+            if ret == HAL_OK {
+                Ok(data.len())
+            } else if ret == HAL_TIMEOUT {
+                Err(UART_BAL.Error.Timeout)
+            } else {
+                Err(UART_BAL.Error.TransmitError)
+            }
+        }
+    }
+    
+    fn read(port: u8, buffer: &mut [u8]) -> UART_BAL.Result<usize> {
+        if port == 0 || port > 6 {
+            return Err(UART_BAL.Error.InvalidPort)
+        }
+        
+        unsafe {
+            let handle = &mut uart_handles[(port - 1) as usize]
+            let ret = HAL_UART_Receive(handle, buffer.as_mut_ptr(), buffer.len() as u16, 1000)
+            
+            if ret == HAL_OK {
+                Ok(buffer.len())
+            } else if ret == HAL_TIMEOUT {
+                Err(UART_BAL.Error.Timeout)
+            } else {
+                Err(UART_BAL.Error.ReceiveError)
+            }
+        }
+    }
+    
+    fn available(port: u8) -> usize {
+        // Check RX buffer (implementation depends on interrupt/DMA setup)
+        0
+    }
+    
+    fn flush(port: u8) {
+        // Wait for TX complete
+    }
+    
+    fn set_baud_rate(port: u8, baud_rate: u32) -> UART_BAL.Result<()> {
+        if port == 0 || port > 6 {
+            return Err(UART_BAL.Error.InvalidPort)
+        }
+        
+        unsafe {
+            let handle = &mut uart_handles[(port - 1) as usize]
+            HAL_UART_DeInit(handle)
+            handle.Init.BaudRate = baud_rate
+            let ret = HAL_UART_Init(handle)
+            
+            if ret == HAL_OK {
+                Ok(())
+            } else {
+                Err(UART_BAL.Error.InitError)
+            }
+        }
+    }
+}
+
+// STM32F4-specific UART functions
+
+/// Initialize UART with standard settings
+pub fn init(port: u8, baud_rate: u32) -> UART_BAL.Result<()> {
+    let config = UART_BAL.Config {
+        port: port,
+        tx_pin: 0,
+        rx_pin: 0,
+        baud_rate: baud_rate,
+        data_bits: 8,
+        stop_bits: 1,
+        parity: UART_BAL.Parity.None,
+        flow_control: false,
+    }
+    STM32F4_UART.init(config)
+}
+
+/// Print string to UART
+pub fn println(port: u8, text: &str) {
+    let _ = STM32F4_UART.write(port, text.as_bytes())
+    let newline: [u8; 2] = [13, 10]  // CR LF
+    let _ = STM32F4_UART.write(port, &newline)
+}
+
+/// Printf-style formatted output
+pub fn printf(port: u8, format: &str, args: ...) {
+    let text = format!(format, args)
+    let _ = STM32F4_UART.write(port, text.as_bytes())
+}

@@ -1,0 +1,586 @@
+// ============================================================================
+// BERK SENSOR API - Measurement (Ölçüm)
+// ============================================================================
+// Sensör = Ölçüm üreten bileşen, sürücü değil.
+// Physical World → Typed Data → Edge Logic
+// ============================================================================
+
+modül sensor::measurement
+
+// ============================================================================
+// TEMEL ÖLÇÜM YAPISI
+// ============================================================================
+
+/// Güven seviyesi (0.0 - 1.0)
+pub tip Confidence = ondalık
+
+impl Confidence:
+    pub fn high() döndür Confidence: 0.95 son
+    pub fn medium() döndür Confidence: 0.75 son
+    pub fn low() döndür Confidence: 0.50 son
+    pub fn unknown() döndür Confidence: 0.0 son
+    
+    pub fn from_snr(snr_db: ondalık) döndür Confidence:
+        // Signal-to-Noise Ratio'dan güven hesapla
+        eğer snr_db >= 30.0: döndür 0.95 son
+        eğer snr_db >= 20.0: döndür 0.85 son
+        eğer snr_db >= 10.0: döndür 0.70 son
+        eğer snr_db >= 5.0: döndür 0.50 son
+        döndür 0.30
+    son
+    
+    pub fn is_reliable(self) döndür mantıksal:
+        döndür self >= 0.7
+    son
+son
+
+/// Fiziksel birimler
+pub tip Unit = özyinelemeli yap
+    // Sıcaklık
+    | Celsius
+    | Fahrenheit
+    | Kelvin
+    
+    // Basınç
+    | Pascal
+    | Hectopascal
+    | Bar
+    | Psi
+    | Atmosphere
+    
+    // Nem
+    | RelativeHumidity      // %RH
+    | AbsoluteHumidity      // g/m³
+    
+    // Işık
+    | Lux
+    | Lumens
+    
+    // Mesafe
+    | Meter
+    | Centimeter
+    | Millimeter
+    | Inch
+    | Foot
+    
+    // Hız
+    | MetersPerSecond
+    | KilometersPerHour
+    | MilesPerHour
+    
+    // İvme
+    | MetersPerSecondSquared
+    | G                      // 9.81 m/s²
+    
+    // Açısal hız
+    | DegreesPerSecond
+    | RadiansPerSecond
+    
+    // Açı
+    | Degrees
+    | Radians
+    
+    // Manyetik alan
+    | Tesla
+    | Gauss
+    | MicroTesla
+    
+    // Elektrik
+    | Volt
+    | Millivolt
+    | Ampere
+    | Milliampere
+    | Ohm
+    | Watt
+    
+    // Ses
+    | Decibel
+    
+    // Zaman
+    | Second
+    | Millisecond
+    | Microsecond
+    
+    // Frekans
+    | Hertz
+    | Kilohertz
+    
+    // Genel
+    | Percent
+    | Count
+    | Raw                    // Birimsiz ham değer
+    | Custom(yazı)
+son
+
+impl Unit:
+    pub fn symbol(self) döndür yazı:
+        eşleştir self:
+            Unit::Celsius: "°C"
+            Unit::Fahrenheit: "°F"
+            Unit::Kelvin: "K"
+            Unit::Pascal: "Pa"
+            Unit::Hectopascal: "hPa"
+            Unit::Bar: "bar"
+            Unit::Psi: "psi"
+            Unit::Atmosphere: "atm"
+            Unit::RelativeHumidity: "%RH"
+            Unit::AbsoluteHumidity: "g/m³"
+            Unit::Lux: "lx"
+            Unit::Lumens: "lm"
+            Unit::Meter: "m"
+            Unit::Centimeter: "cm"
+            Unit::Millimeter: "mm"
+            Unit::Inch: "in"
+            Unit::Foot: "ft"
+            Unit::MetersPerSecond: "m/s"
+            Unit::KilometersPerHour: "km/h"
+            Unit::MilesPerHour: "mph"
+            Unit::MetersPerSecondSquared: "m/s²"
+            Unit::G: "g"
+            Unit::DegreesPerSecond: "°/s"
+            Unit::RadiansPerSecond: "rad/s"
+            Unit::Degrees: "°"
+            Unit::Radians: "rad"
+            Unit::Tesla: "T"
+            Unit::Gauss: "G"
+            Unit::MicroTesla: "µT"
+            Unit::Volt: "V"
+            Unit::Millivolt: "mV"
+            Unit::Ampere: "A"
+            Unit::Milliampere: "mA"
+            Unit::Ohm: "Ω"
+            Unit::Watt: "W"
+            Unit::Decibel: "dB"
+            Unit::Second: "s"
+            Unit::Millisecond: "ms"
+            Unit::Microsecond: "µs"
+            Unit::Hertz: "Hz"
+            Unit::Kilohertz: "kHz"
+            Unit::Percent: "%"
+            Unit::Count: ""
+            Unit::Raw: "raw"
+            Unit::Custom(s): s
+        son
+    son
+son
+
+/// Zaman damgası
+pub tip Timestamp = yapı yap
+    /// Unix epoch'tan milisaniye
+    millis: sayı,
+    /// Monotonic clock (ms)
+    monotonic: sayı,
+son
+
+impl Timestamp:
+    pub fn now() döndür Timestamp:
+        // Native: system_time_millis(), monotonic_millis()
+        döndür Timestamp { millis: 0, monotonic: 0 }
+    son
+    
+    pub fn from_millis(ms: sayı) döndür Timestamp:
+        döndür Timestamp { millis: ms, monotonic: ms }
+    son
+    
+    pub fn elapsed_since(self, other: Timestamp) döndür sayı:
+        döndür self.monotonic - other.monotonic
+    son
+    
+    pub fn to_iso8601(self) döndür yazı:
+        // "2025-12-17T10:30:00.000Z"
+        döndür "2025-12-17T00:00:00.000Z"  // Native implementation needed
+    son
+son
+
+// ============================================================================
+// ANA ÖLÇÜM YAPISI
+// ============================================================================
+
+/// Temel ölçüm yapısı - TÜM sensörler için ortak
+pub tip Measurement = yapı yap
+    /// Ölçülen değer
+    value: ondalık,
+    
+    /// Fiziksel birim
+    unit: Unit,
+    
+    /// Ölçüm zamanı
+    timestamp: Timestamp,
+    
+    /// Güven seviyesi (0.0 - 1.0)
+    confidence: Confidence,
+    
+    /// Kaynak sensör ID
+    source: yazı,
+    
+    /// Opsiyonel metadata
+    metadata: Seçenek[MeasurementMetadata],
+son
+
+/// Ölçüm metadata
+pub tip MeasurementMetadata = yapı yap
+    /// Ham ADC değeri
+    raw_value: Seçenek[sayı],
+    /// Örnek numarası
+    sample_number: sayı,
+    /// Sensör sıcaklığı (drift kompanzasyonu için)
+    sensor_temp: Seçenek[ondalık],
+    /// Hata kodu (varsa)
+    error_code: Seçenek[sayı],
+son
+
+impl Measurement:
+    /// Yeni ölçüm oluştur
+    pub fn new(value: ondalık, unit: Unit, source: yazı) döndür Measurement:
+        döndür Measurement {
+            value: value,
+            unit: unit,
+            timestamp: Timestamp::now(),
+            confidence: Confidence::high(),
+            source: source,
+            metadata: Hiçbiri,
+        }
+    son
+    
+    /// Ham değerden oluştur
+    pub fn from_raw(raw: sayı, unit: Unit, source: yazı) döndür Measurement:
+        döndür Measurement {
+            value: raw doğru ondalık,
+            unit: unit,
+            timestamp: Timestamp::now(),
+            confidence: Confidence::unknown(),
+            source: source,
+            metadata: Bazı(MeasurementMetadata {
+                raw_value: Bazı(raw),
+                sample_number: 0,
+                sensor_temp: Hiçbiri,
+                error_code: Hiçbiri,
+            }),
+        }
+    son
+    
+    /// Güvenle oluştur
+    pub fn with_confidence(mut self, conf: Confidence) döndür Measurement:
+        self.confidence = conf
+        döndür self
+    son
+    
+    /// Metadata ekle
+    pub fn with_metadata(mut self, meta: MeasurementMetadata) döndür Measurement:
+        self.metadata = Bazı(meta)
+        döndür self
+    son
+    
+    /// Değeri al
+    pub fn get_value(self) döndür ondalık:
+        döndür self.value
+    son
+    
+    /// Birimle birlikte string
+    pub fn to_string(self) döndür yazı:
+        döndür self.value.to_string() + " " + self.unit.symbol()
+    son
+    
+    /// JSON formatı
+    pub fn to_json(self) döndür yazı:
+        döndür "{" +
+            "\"value\":" + self.value.to_string() + "," +
+            "\"unit\":\"" + self.unit.symbol() + "\"," +
+            "\"timestamp\":" + self.timestamp.millis.to_string() + "," +
+            "\"confidence\":" + self.confidence.to_string() + "," +
+            "\"source\":\"" + self.source + "\"" +
+        "}"
+    son
+    
+    /// Güvenilir mi?
+    pub fn is_valid(self) döndür mantıksal:
+        döndür self.confidence.is_reliable()
+    son
+    
+    /// Yaşı (ms)
+    pub fn age_ms(self) döndür sayı:
+        döndür Timestamp::now().elapsed_since(self.timestamp)
+    son
+    
+    /// Birim dönüşümü
+    pub fn convert_to(self, target: Unit) döndür Measurement:
+        değişken new_value = self.value
+        
+        // Sıcaklık dönüşümleri
+        eşleştir (self.unit, target):
+            (Unit::Celsius, Unit::Fahrenheit):
+                new_value = self.value * 9.0 / 5.0 + 32.0
+            (Unit::Celsius, Unit::Kelvin):
+                new_value = self.value + 273.15
+            (Unit::Fahrenheit, Unit::Celsius):
+                new_value = (self.value - 32.0) * 5.0 / 9.0
+            (Unit::Kelvin, Unit::Celsius):
+                new_value = self.value - 273.15
+            
+            // Basınç dönüşümleri
+            (Unit::Pascal, Unit::Hectopascal):
+                new_value = self.value / 100.0
+            (Unit::Hectopascal, Unit::Pascal):
+                new_value = self.value * 100.0
+            (Unit::Bar, Unit::Pascal):
+                new_value = self.value * 100000.0
+            
+            // Mesafe dönüşümleri
+            (Unit::Meter, Unit::Centimeter):
+                new_value = self.value * 100.0
+            (Unit::Centimeter, Unit::Meter):
+                new_value = self.value / 100.0
+            (Unit::Meter, Unit::Millimeter):
+                new_value = self.value * 1000.0
+            (Unit::Inch, Unit::Centimeter):
+                new_value = self.value * 2.54
+            
+            // İvme dönüşümleri
+            (Unit::G, Unit::MetersPerSecondSquared):
+                new_value = self.value * 9.80665
+            (Unit::MetersPerSecondSquared, Unit::G):
+                new_value = self.value / 9.80665
+            
+            // Açı dönüşümleri
+            (Unit::Degrees, Unit::Radians):
+                new_value = self.value * 3.14159265359 / 180.0
+            (Unit::Radians, Unit::Degrees):
+                new_value = self.value * 180.0 / 3.14159265359
+            
+            _:
+                // Bilinmeyen dönüşüm - değeri koru
+                new_value = self.value
+        son
+        
+        döndür Measurement {
+            value: new_value,
+            unit: target,
+            timestamp: self.timestamp,
+            confidence: self.confidence,
+            source: self.source,
+            metadata: self.metadata,
+        }
+    son
+son
+
+// ============================================================================
+// VEKTÖREL ÖLÇÜM
+// ============================================================================
+
+/// 3D vektör ölçümü (IMU, magnetometre vb.)
+pub tip Vector3Measurement = yapı yap
+    x: ondalık,
+    y: ondalık,
+    z: ondalık,
+    unit: Unit,
+    timestamp: Timestamp,
+    confidence: Confidence,
+    source: yazı,
+son
+
+impl Vector3Measurement:
+    pub fn new(x: ondalık, y: ondalık, z: ondalık, unit: Unit, source: yazı) döndür Vector3Measurement:
+        döndür Vector3Measurement {
+            x: x, y: y, z: z,
+            unit: unit,
+            timestamp: Timestamp::now(),
+            confidence: Confidence::high(),
+            source: source,
+        }
+    son
+    
+    /// Magnitude (büyüklük)
+    pub fn magnitude(self) döndür ondalık:
+        döndür (self.x * self.x + self.y * self.y + self.z * self.z).sqrt()
+    son
+    
+    /// Normalize
+    pub fn normalized(self) döndür Vector3Measurement:
+        değişken mag = self.magnitude()
+        eğer mag < 0.0001:
+            döndür self
+        son
+        döndür Vector3Measurement {
+            x: self.x / mag,
+            y: self.y / mag,
+            z: self.z / mag,
+            unit: self.unit,
+            timestamp: self.timestamp,
+            confidence: self.confidence,
+            source: self.source,
+        }
+    son
+    
+    /// Dot product
+    pub fn dot(self, other: Vector3Measurement) döndür ondalık:
+        döndür self.x * other.x + self.y * other.y + self.z * other.z
+    son
+    
+    /// Cross product
+    pub fn cross(self, other: Vector3Measurement) döndür Vector3Measurement:
+        döndür Vector3Measurement {
+            x: self.y * other.z - self.z * other.y,
+            y: self.z * other.x - self.x * other.z,
+            z: self.x * other.y - self.y * other.x,
+            unit: self.unit,
+            timestamp: self.timestamp,
+            confidence: self.confidence.min(other.confidence),
+            source: self.source,
+        }
+    son
+    
+    /// Açı hesapla (x-y düzlemi)
+    pub fn heading_degrees(self) döndür ondalık:
+        döndür self.y.atan2(self.x) * 180.0 / 3.14159265359
+    son
+    
+    /// Pitch açısı
+    pub fn pitch_degrees(self) döndür ondalık:
+        döndür self.x.atan2((self.y * self.y + self.z * self.z).sqrt()) * 180.0 / 3.14159265359
+    son
+    
+    /// Roll açısı
+    pub fn roll_degrees(self) döndür ondalık:
+        döndür self.y.atan2(self.z) * 180.0 / 3.14159265359
+    son
+    
+    /// Skaler measurement'a dönüştür (magnitude)
+    pub fn to_scalar(self) döndür Measurement:
+        döndür Measurement {
+            value: self.magnitude(),
+            unit: self.unit,
+            timestamp: self.timestamp,
+            confidence: self.confidence,
+            source: self.source,
+            metadata: Hiçbiri,
+        }
+    son
+    
+    pub fn to_json(self) döndür yazı:
+        döndür "{" +
+            "\"x\":" + self.x.to_string() + "," +
+            "\"y\":" + self.y.to_string() + "," +
+            "\"z\":" + self.z.to_string() + "," +
+            "\"unit\":\"" + self.unit.symbol() + "\"," +
+            "\"magnitude\":" + self.magnitude().to_string() +
+        "}"
+    son
+son
+
+// ============================================================================
+// QUATERNION (Oryantasyon için)
+// ============================================================================
+
+/// Quaternion (rotasyon temsili)
+pub tip Quaternion = yapı yap
+    w: ondalık,
+    x: ondalık,
+    y: ondalık,
+    z: ondalık,
+son
+
+impl Quaternion:
+    pub fn identity() döndür Quaternion:
+        döndür Quaternion { w: 1.0, x: 0.0, y: 0.0, z: 0.0 }
+    son
+    
+    pub fn from_euler(roll: ondalık, pitch: ondalık, yaw: ondalık) döndür Quaternion:
+        // Euler açılarından quaternion
+        değişken cr = (roll * 0.5).cos()
+        değişken sr = (roll * 0.5).sin()
+        değişken cp = (pitch * 0.5).cos()
+        değişken sp = (pitch * 0.5).sin()
+        değişken cy = (yaw * 0.5).cos()
+        değişken sy = (yaw * 0.5).sin()
+        
+        döndür Quaternion {
+            w: cr * cp * cy + sr * sp * sy,
+            x: sr * cp * cy - cr * sp * sy,
+            y: cr * sp * cy + sr * cp * sy,
+            z: cr * cp * sy - sr * sp * cy,
+        }
+    son
+    
+    pub fn to_euler(self) döndür (ondalık, ondalık, ondalık):
+        // Roll
+        değişken sinr_cosp = 2.0 * (self.w * self.x + self.y * self.z)
+        değişken cosr_cosp = 1.0 - 2.0 * (self.x * self.x + self.y * self.y)
+        değişken roll = sinr_cosp.atan2(cosr_cosp)
+        
+        // Pitch
+        değişken sinp = 2.0 * (self.w * self.y - self.z * self.x)
+        değişken pitch = eğer sinp.abs() >= 1.0:
+            1.5707963268 * sinp.signum()  // π/2
+        yoksa:
+            sinp.asin()
+        son
+        
+        // Yaw
+        değişken siny_cosp = 2.0 * (self.w * self.z + self.x * self.y)
+        değişken cosy_cosp = 1.0 - 2.0 * (self.y * self.y + self.z * self.z)
+        değişken yaw = siny_cosp.atan2(cosy_cosp)
+        
+        döndür (roll, pitch, yaw)
+    son
+    
+    pub fn normalize(self) döndür Quaternion:
+        değişken mag = (self.w * self.w + self.x * self.x + self.y * self.y + self.z * self.z).sqrt()
+        döndür Quaternion {
+            w: self.w / mag,
+            x: self.x / mag,
+            y: self.y / mag,
+            z: self.z / mag,
+        }
+    son
+    
+    pub fn multiply(self, other: Quaternion) döndür Quaternion:
+        döndür Quaternion {
+            w: self.w * other.w - self.x * other.x - self.y * other.y - self.z * other.z,
+            x: self.w * other.x + self.x * other.w + self.y * other.z - self.z * other.y,
+            y: self.w * other.y - self.x * other.z + self.y * other.w + self.z * other.x,
+            z: self.w * other.z + self.x * other.y - self.y * other.x + self.z * other.w,
+        }
+    son
+son
+
+/// Oryantasyon ölçümü
+pub tip OrientationMeasurement = yapı yap
+    quaternion: Quaternion,
+    timestamp: Timestamp,
+    confidence: Confidence,
+    source: yazı,
+son
+
+impl OrientationMeasurement:
+    pub fn new(q: Quaternion, source: yazı) döndür OrientationMeasurement:
+        döndür OrientationMeasurement {
+            quaternion: q,
+            timestamp: Timestamp::now(),
+            confidence: Confidence::high(),
+            source: source,
+        }
+    son
+    
+    pub fn from_euler_degrees(roll: ondalık, pitch: ondalık, yaw: ondalık, source: yazı) döndür OrientationMeasurement:
+        değişken deg_to_rad = 3.14159265359 / 180.0
+        döndür OrientationMeasurement::new(
+            Quaternion::from_euler(roll * deg_to_rad, pitch * deg_to_rad, yaw * deg_to_rad),
+            source
+        )
+    son
+    
+    pub fn roll_degrees(self) döndür ondalık:
+        değişken (roll, _, _) = self.quaternion.to_euler()
+        döndür roll * 180.0 / 3.14159265359
+    son
+    
+    pub fn pitch_degrees(self) döndür ondalık:
+        değişken (_, pitch, _) = self.quaternion.to_euler()
+        döndür pitch * 180.0 / 3.14159265359
+    son
+    
+    pub fn yaw_degrees(self) döndür ondalık:
+        değişken (_, _, yaw) = self.quaternion.to_euler()
+        döndür yaw * 180.0 / 3.14159265359
+    son
+son

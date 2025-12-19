@@ -1,0 +1,566 @@
+// ============================================================================
+// BERK GUI Framework - Curve System
+// ============================================================================
+// Synfig curve.h'den ilham alınmıştır
+// Bezier ve Hermite eğrileri için matematiksel operasyonlar
+// ============================================================================
+
+modül gui::animation::curve
+
+kullan std::math
+
+// ============================================================================
+// VECTOR 2D
+// ============================================================================
+
+/// 2D vektör
+pub tip Vec2 = yapı yap
+    x: ondalık,
+    y: ondalık,
+son
+
+impl Vec2:
+    pub fn new(x: ondalık, y: ondalık) döndür Vec2:
+        döndür Vec2 { x: x, y: y }
+    son
+    
+    pub fn zero() döndür Vec2:
+        döndür Vec2 { x: 0.0, y: 0.0 }
+    son
+    
+    pub fn one() döndür Vec2:
+        döndür Vec2 { x: 1.0, y: 1.0 }
+    son
+    
+    pub fn add(self, other: Vec2) döndür Vec2:
+        döndür Vec2 { x: self.x + other.x, y: self.y + other.y }
+    son
+    
+    pub fn sub(self, other: Vec2) döndür Vec2:
+        döndür Vec2 { x: self.x - other.x, y: self.y - other.y }
+    son
+    
+    pub fn mul(self, scalar: ondalık) döndür Vec2:
+        döndür Vec2 { x: self.x * scalar, y: self.y * scalar }
+    son
+    
+    pub fn div(self, scalar: ondalık) döndür Vec2:
+        döndür Vec2 { x: self.x / scalar, y: self.y / scalar }
+    son
+    
+    pub fn dot(self, other: Vec2) döndür ondalık:
+        döndür self.x * other.x + self.y * other.y
+    son
+    
+    pub fn cross(self, other: Vec2) döndür ondalık:
+        döndür self.x * other.y - self.y * other.x
+    son
+    
+    pub fn length(self) döndür ondalık:
+        döndür (self.x * self.x + self.y * self.y).sqrt()
+    son
+    
+    pub fn length_squared(self) döndür ondalık:
+        döndür self.x * self.x + self.y * self.y
+    son
+    
+    pub fn normalize(self) döndür Vec2:
+        değişken len = self.length()
+        eğer len < 0.0001:
+            döndür Vec2::zero()
+        son
+        döndür self.div(len)
+    son
+    
+    pub fn lerp(a: Vec2, b: Vec2, t: ondalık) döndür Vec2:
+        döndür a.add(b.sub(a).mul(t))
+    son
+    
+    pub fn distance(self, other: Vec2) döndür ondalık:
+        döndür self.sub(other).length()
+    son
+    
+    pub fn angle(self) döndür ondalık:
+        döndür math::atan2(self.y, self.x)
+    son
+    
+    pub fn rotate(self, angle: ondalık) döndür Vec2:
+        değişken cos_a = angle.cos()
+        değişken sin_a = angle.sin()
+        döndür Vec2 {
+            x: self.x * cos_a - self.y * sin_a,
+            y: self.x * sin_a + self.y * cos_a
+        }
+    son
+    
+    pub fn perpendicular(self) döndür Vec2:
+        döndür Vec2 { x: -self.y, y: self.x }
+    son
+son
+
+// ============================================================================
+// HERMITE CURVE
+// ============================================================================
+
+/// Hermite eğrisi - iki nokta ve tanjantlar ile tanımlı
+pub tip HermiteCurve = yapı yap
+    /// Başlangıç noktası
+    p0: Vec2,
+    /// Bitiş noktası
+    p1: Vec2,
+    /// Başlangıç tanjantı
+    t0: Vec2,
+    /// Bitiş tanjantı
+    t1: Vec2,
+son
+
+impl HermiteCurve:
+    /// Yeni Hermite eğrisi
+    pub fn new(p0: Vec2, p1: Vec2, t0: Vec2, t1: Vec2) döndür HermiteCurve:
+        döndür HermiteCurve { p0: p0, p1: p1, t0: t0, t1: t1 }
+    son
+    
+    /// İki nokta arasında doğrusal (tanjant = p1 - p0)
+    pub fn linear(p0: Vec2, p1: Vec2) döndür HermiteCurve:
+        değişken tangent = p1.sub(p0)
+        döndür HermiteCurve::new(p0, p1, tangent, tangent)
+    son
+    
+    /// Tek noktada (hareketsiz)
+    pub fn point(p: Vec2) döndür HermiteCurve:
+        döndür HermiteCurve::new(p, p, Vec2::zero(), Vec2::zero())
+    son
+    
+    /// Eğri üzerindeki noktayı hesapla (t: 0-1)
+    pub fn point_at(self, t: ondalık) döndür Vec2:
+        değişken t2 = t * t
+        değişken t3 = t2 * t
+        
+        // Hermite basis fonksiyonları
+        değişken h00 = 2.0 * t3 - 3.0 * t2 + 1.0
+        değişken h10 = t3 - 2.0 * t2 + t
+        değişken h01 = -2.0 * t3 + 3.0 * t2
+        değişken h11 = t3 - t2
+        
+        döndür self.p0.mul(h00)
+              .add(self.t0.mul(h10))
+              .add(self.p1.mul(h01))
+              .add(self.t1.mul(h11))
+    son
+    
+    /// Eğri üzerindeki tanjantı hesapla (t: 0-1)
+    pub fn tangent_at(self, t: ondalık) döndür Vec2:
+        değişken t2 = t * t
+        
+        // Türev basis fonksiyonları
+        değişken h00_prime = 6.0 * t2 - 6.0 * t
+        değişken h10_prime = 3.0 * t2 - 4.0 * t + 1.0
+        değişken h01_prime = -6.0 * t2 + 6.0 * t
+        değişken h11_prime = 3.0 * t2 - 2.0 * t
+        
+        döndür self.p0.mul(h00_prime)
+              .add(self.t0.mul(h10_prime))
+              .add(self.p1.mul(h01_prime))
+              .add(self.t1.mul(h11_prime))
+    son
+    
+    /// Normalize edilmiş yön vektörü
+    pub fn direction_at(self, t: ondalık) döndür Vec2:
+        döndür self.tangent_at(t).normalize()
+    son
+    
+    /// Eğri uzunluğunu yaklaşık hesapla
+    pub fn approximate_length(self, segments: sayı) döndür ondalık:
+        değişken length = 0.0
+        değişken prev = self.p0
+        
+        döngü i in 1..=segments:
+            değişken t = i.to_float() / segments.to_float()
+            değişken current = self.point_at(t)
+            length = length + prev.distance(current)
+            prev = current
+        son
+        
+        döndür length
+    son
+    
+    /// Bounding box
+    pub fn bounding_box(self) döndür (Vec2, Vec2):
+        // Basit yaklaşım: örnekleme ile
+        değişken min_x = self.p0.x.min(self.p1.x)
+        değişken max_x = self.p0.x.max(self.p1.x)
+        değişken min_y = self.p0.y.min(self.p1.y)
+        değişken max_y = self.p0.y.max(self.p1.y)
+        
+        döngü i in 1..10:
+            değişken t = i.to_float() / 10.0
+            değişken p = self.point_at(t)
+            min_x = min_x.min(p.x)
+            max_x = max_x.max(p.x)
+            min_y = min_y.min(p.y)
+            max_y = max_y.max(p.y)
+        son
+        
+        döndür (Vec2::new(min_x, min_y), Vec2::new(max_x, max_y))
+    son
+son
+
+// ============================================================================
+// BEZIER CURVE
+// ============================================================================
+
+/// Cubic Bezier eğrisi - 4 kontrol noktası ile tanımlı
+pub tip BezierCurve = yapı yap
+    /// Başlangıç noktası
+    p0: Vec2,
+    /// Kontrol noktası 1
+    p1: Vec2,
+    /// Kontrol noktası 2
+    p2: Vec2,
+    /// Bitiş noktası
+    p3: Vec2,
+son
+
+impl BezierCurve:
+    /// Yeni Bezier eğrisi
+    pub fn new(p0: Vec2, p1: Vec2, p2: Vec2, p3: Vec2) döndür BezierCurve:
+        döndür BezierCurve { p0: p0, p1: p1, p2: p2, p3: p3 }
+    son
+    
+    /// İki nokta arasında doğrusal
+    pub fn linear(start: Vec2, end: Vec2) döndür BezierCurve:
+        döndür BezierCurve::new(start, start, end, end)
+    son
+    
+    /// Hermite'den Bezier'e dönüştür
+    pub fn from_hermite(hermite: HermiteCurve) döndür BezierCurve:
+        // P1 = P0 + T0/3
+        // P2 = P3 - T1/3
+        değişken p1 = hermite.p0.add(hermite.t0.div(3.0))
+        değişken p2 = hermite.p1.sub(hermite.t1.div(3.0))
+        döndür BezierCurve::new(hermite.p0, p1, p2, hermite.p1)
+    son
+    
+    /// Hermite'e dönüştür
+    pub fn to_hermite(self) döndür HermiteCurve:
+        // T0 = 3 * (P1 - P0)
+        // T1 = 3 * (P3 - P2)
+        değişken t0 = self.p1.sub(self.p0).mul(3.0)
+        değişken t1 = self.p3.sub(self.p2).mul(3.0)
+        döndür HermiteCurve::new(self.p0, self.p3, t0, t1)
+    son
+    
+    /// Eğri üzerindeki noktayı hesapla (t: 0-1)
+    pub fn point_at(self, t: ondalık) döndür Vec2:
+        değişken u = 1.0 - t
+        değişken u2 = u * u
+        değişken u3 = u2 * u
+        değişken t2 = t * t
+        değişken t3 = t2 * t
+        
+        döndür self.p0.mul(u3)
+              .add(self.p1.mul(3.0 * u2 * t))
+              .add(self.p2.mul(3.0 * u * t2))
+              .add(self.p3.mul(t3))
+    son
+    
+    /// Tanjant hesapla
+    pub fn tangent_at(self, t: ondalık) döndür Vec2:
+        değişken u = 1.0 - t
+        değişken u2 = u * u
+        değişken t2 = t * t
+        
+        // B'(t) = 3(1-t)²(P1-P0) + 6(1-t)t(P2-P1) + 3t²(P3-P2)
+        döndür self.p1.sub(self.p0).mul(3.0 * u2)
+              .add(self.p2.sub(self.p1).mul(6.0 * u * t))
+              .add(self.p3.sub(self.p2).mul(3.0 * t2))
+    son
+    
+    /// Normalize edilmiş yön
+    pub fn direction_at(self, t: ondalık) döndür Vec2:
+        döndür self.tangent_at(t).normalize()
+    son
+    
+    /// İkinci türev (eğrilik için)
+    pub fn second_derivative_at(self, t: ondalık) döndür Vec2:
+        değişken u = 1.0 - t
+        
+        // B''(t) = 6(1-t)(P2-2P1+P0) + 6t(P3-2P2+P1)
+        değişken a = self.p2.sub(self.p1.mul(2.0)).add(self.p0)
+        değişken b = self.p3.sub(self.p2.mul(2.0)).add(self.p1)
+        
+        döndür a.mul(6.0 * u).add(b.mul(6.0 * t))
+    son
+    
+    /// Eğrilik (curvature)
+    pub fn curvature_at(self, t: ondalık) döndür ondalık:
+        değişken d1 = self.tangent_at(t)
+        değişken d2 = self.second_derivative_at(t)
+        
+        değişken cross = d1.cross(d2)
+        değişken len_cubed = d1.length_squared().powi(3).sqrt()
+        
+        eğer len_cubed < 0.0001:
+            döndür 0.0
+        son
+        
+        döndür cross / len_cubed
+    son
+    
+    /// De Casteljau ile eğriyi böl
+    pub fn split_at(self, t: ondalık) döndür (BezierCurve, BezierCurve):
+        // De Casteljau algoritması
+        değişken a = Vec2::lerp(self.p0, self.p1, t)
+        değişken b = Vec2::lerp(self.p1, self.p2, t)
+        değişken c = Vec2::lerp(self.p2, self.p3, t)
+        
+        değişken d = Vec2::lerp(a, b, t)
+        değişken e = Vec2::lerp(b, c, t)
+        
+        değişken f = Vec2::lerp(d, e, t)  // Bölme noktası
+        
+        döndür (
+            BezierCurve::new(self.p0, a, d, f),
+            BezierCurve::new(f, e, c, self.p3)
+        )
+    son
+    
+    /// Yaklaşık uzunluk
+    pub fn approximate_length(self, segments: sayı) döndür ondalık:
+        değişken length = 0.0
+        değişken prev = self.p0
+        
+        döngü i in 1..=segments:
+            değişken t = i.to_float() / segments.to_float()
+            değişken current = self.point_at(t)
+            length = length + prev.distance(current)
+            prev = current
+        son
+        
+        döndür length
+    son
+    
+    /// Bounding box
+    pub fn bounding_box(self) döndür (Vec2, Vec2):
+        değişken min_x = self.p0.x.min(self.p1.x).min(self.p2.x).min(self.p3.x)
+        değişken max_x = self.p0.x.max(self.p1.x).max(self.p2.x).max(self.p3.x)
+        değişken min_y = self.p0.y.min(self.p1.y).min(self.p2.y).min(self.p3.y)
+        değişken max_y = self.p0.y.max(self.p1.y).max(self.p2.y).max(self.p3.y)
+        
+        döndür (Vec2::new(min_x, min_y), Vec2::new(max_x, max_y))
+    son
+    
+    /// En yakın noktayı bul
+    pub fn closest_point(self, target: Vec2, iterations: sayı) döndür (ondalık, Vec2):
+        değişken best_t = 0.0
+        değişken best_dist = self.p0.distance(target)
+        
+        // Kaba arama
+        döngü i in 0..=iterations:
+            değişken t = i.to_float() / iterations.to_float()
+            değişken p = self.point_at(t)
+            değişken dist = p.distance(target)
+            
+            eğer dist < best_dist:
+                best_dist = dist
+                best_t = t
+            son
+        son
+        
+        döndür (best_t, self.point_at(best_t))
+    son
+son
+
+// ============================================================================
+// CATMULL-ROM SPLINE
+// ============================================================================
+
+/// Catmull-Rom spline - noktalardan geçen pürüzsüz eğri
+pub tip CatmullRomSpline = yapı yap
+    points: Liste[Vec2],
+    tension: ondalık,  // 0.0 = standard, 0.5 = centripetal, 1.0 = chordal
+son
+
+impl CatmullRomSpline:
+    /// Yeni Catmull-Rom spline
+    pub fn new(points: Liste[Vec2]) döndür CatmullRomSpline:
+        döndür CatmullRomSpline { points: points, tension: 0.5 }
+    son
+    
+    /// Tension ayarla (centripetal için 0.5 önerilir)
+    pub fn with_tension(mut self, tension: ondalık) döndür CatmullRomSpline:
+        self.tension = tension
+        döndür self
+    son
+    
+    /// Segment sayısı
+    pub fn segment_count(self) döndür sayı:
+        eğer self.points.len() < 2:
+            döndür 0
+        son
+        döndür self.points.len() - 1
+    son
+    
+    /// Belirli bir segmentte nokta hesapla
+    pub fn point_at_segment(self, segment: sayı, t: ondalık) döndür Seçenek[Vec2]:
+        eğer segment >= self.segment_count():
+            döndür Hiçbiri
+        son
+        
+        // 4 kontrol noktası gerekli
+        değişken n = self.points.len()
+        değişken p0_idx = eğer segment == 0: 0 değilse: segment - 1 son
+        değişken p1_idx = segment
+        değişken p2_idx = segment + 1
+        değişken p3_idx = eğer segment + 2 >= n: n - 1 değilse: segment + 2 son
+        
+        değişken p0 = self.points[p0_idx]
+        değişken p1 = self.points[p1_idx]
+        değişken p2 = self.points[p2_idx]
+        değişken p3 = self.points[p3_idx]
+        
+        döndür Bazı(self.catmull_rom_point(p0, p1, p2, p3, t))
+    son
+    
+    /// Global t parametresi ile nokta (0 = başlangıç, 1 = bitiş)
+    pub fn point_at(self, t: ondalık) döndür Seçenek[Vec2]:
+        eğer self.points.len() < 2:
+            döndür Hiçbiri
+        son
+        
+        değişken t_clamped = t.clamp(0.0, 1.0)
+        değişken total_segments = self.segment_count()
+        değişken scaled_t = t_clamped * total_segments.to_float()
+        değişken segment = scaled_t.floor().to_int().min(total_segments - 1)
+        değişken local_t = scaled_t - segment.to_float()
+        
+        döndür self.point_at_segment(segment, local_t)
+    son
+    
+    /// Catmull-Rom hesaplama
+    fn catmull_rom_point(self, p0: Vec2, p1: Vec2, p2: Vec2, p3: Vec2, t: ondalık) döndür Vec2:
+        değişken t2 = t * t
+        değişken t3 = t2 * t
+        
+        // Catmull-Rom basis fonksiyonları
+        değişken alpha = self.tension
+        
+        döndür Vec2 {
+            x: 0.5 * ((2.0 * p1.x) +
+                      (-p0.x + p2.x) * t +
+                      (2.0 * p0.x - 5.0 * p1.x + 4.0 * p2.x - p3.x) * t2 +
+                      (-p0.x + 3.0 * p1.x - 3.0 * p2.x + p3.x) * t3),
+            y: 0.5 * ((2.0 * p1.y) +
+                      (-p0.y + p2.y) * t +
+                      (2.0 * p0.y - 5.0 * p1.y + 4.0 * p2.y - p3.y) * t2 +
+                      (-p0.y + 3.0 * p1.y - 3.0 * p2.y + p3.y) * t3)
+        }
+    son
+    
+    /// Bezier eğrisine dönüştür
+    pub fn to_bezier_segments(self) döndür Liste[BezierCurve]:
+        değişken beziers: Liste[BezierCurve] = []
+        
+        döngü i in 0..self.segment_count():
+            değişken n = self.points.len()
+            değişken p0_idx = eğer i == 0: 0 değilse: i - 1 son
+            değişken p1_idx = i
+            değişken p2_idx = i + 1
+            değişken p3_idx = eğer i + 2 >= n: n - 1 değilse: i + 2 son
+            
+            değişken p0 = self.points[p0_idx]
+            değişken p1 = self.points[p1_idx]
+            değişken p2 = self.points[p2_idx]
+            değişken p3 = self.points[p3_idx]
+            
+            // Catmull-Rom'dan Bezier'e
+            değişken b0 = p1
+            değişken b1 = p1.add(p2.sub(p0).div(6.0))
+            değişken b2 = p2.sub(p3.sub(p1).div(6.0))
+            değişken b3 = p2
+            
+            beziers.push(BezierCurve::new(b0, b1, b2, b3))
+        son
+        
+        döndür beziers
+    son
+son
+
+// ============================================================================
+// POLYNOMIAL SOLVER
+// ============================================================================
+
+/// Polinom kök bulucu (eğri kesişimleri için)
+pub modül polynomial:
+    /// Lineer denklem çöz: k0 + k1*x = 0
+    pub fn solve_linear(k0: ondalık, k1: ondalık) döndür Liste[ondalık]:
+        eğer k1.abs() < 0.0001:
+            döndür []
+        son
+        döndür [-k0 / k1]
+    son
+    
+    /// Kuadratik denklem çöz: k0 + k1*x + k2*x² = 0
+    pub fn solve_quadratic(k0: ondalık, k1: ondalık, k2: ondalık) döndür Liste[ondalık]:
+        eğer k2.abs() < 0.0001:
+            döndür solve_linear(k0, k1)
+        son
+        
+        değişken discriminant = k1 * k1 - 4.0 * k0 * k2
+        
+        eğer discriminant < 0.0:
+            döndür []
+        değilse eğer discriminant < 0.0001:
+            döndür [-k1 / (2.0 * k2)]
+        değilse:
+            değişken sqrt_d = discriminant.sqrt()
+            döndür [
+                (-k1 + sqrt_d) / (2.0 * k2),
+                (-k1 - sqrt_d) / (2.0 * k2)
+            ]
+        son
+    son
+    
+    /// Kübik denklem çöz: k0 + k1*x + k2*x² + k3*x³ = 0
+    pub fn solve_cubic(k0: ondalık, k1: ondalık, k2: ondalık, k3: ondalık) döndür Liste[ondalık]:
+        eğer k3.abs() < 0.0001:
+            döndür solve_quadratic(k0, k1, k2)
+        son
+        
+        // Cardano formülü
+        değişken a = k2 / k3
+        değişken b = k1 / k3
+        değişken c = k0 / k3
+        
+        değişken p = b - a * a / 3.0
+        değişken q = 2.0 * a * a * a / 27.0 - a * b / 3.0 + c
+        
+        değişken discriminant = q * q / 4.0 + p * p * p / 27.0
+        
+        değişken results: Liste[ondalık] = []
+        
+        eğer discriminant > 0.0001:
+            // Bir reel kök
+            değişken sqrt_d = discriminant.sqrt()
+            değişken u = (-q / 2.0 + sqrt_d).cbrt()
+            değişken v = (-q / 2.0 - sqrt_d).cbrt()
+            results.push(u + v - a / 3.0)
+        değilse eğer discriminant > -0.0001:
+            // Çift kök
+            değişken u = (-q / 2.0).cbrt()
+            results.push(2.0 * u - a / 3.0)
+            results.push(-u - a / 3.0)
+        değilse:
+            // Üç reel kök
+            değişken r = (-p * p * p / 27.0).sqrt()
+            değişken theta = math::acos(-q / (2.0 * r))
+            değişken cbrt_r = r.cbrt()
+            
+            results.push(2.0 * cbrt_r * (theta / 3.0).cos() - a / 3.0)
+            results.push(2.0 * cbrt_r * ((theta + 2.0 * math::PI) / 3.0).cos() - a / 3.0)
+            results.push(2.0 * cbrt_r * ((theta + 4.0 * math::PI) / 3.0).cos() - a / 3.0)
+        son
+        
+        döndür results
+    son
+son

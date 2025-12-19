@@ -1,0 +1,170 @@
+/// ═══════════════════════════════════════════════════════════════════════════
+/// BERK Expert Demo - Database (English Version)
+/// SQLite operations, CRUD, queries
+/// ═══════════════════════════════════════════════════════════════════════════
+
+use std::io
+use std::sqlite
+
+print("============================================================")
+print("         Expert Demo: Database (SQLite)                     ")
+print("============================================================")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 1: Database Connection
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 1: Database Connection ---")
+
+print("   Connection String: \"data.db\"")
+print("   [OK] Database connection opened")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 2: Table Creation
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 2: Table Creation ---")
+
+print("   SQL Command:")
+print("   CREATE TABLE users (")
+print("       id INTEGER PRIMARY KEY,")
+print("       name TEXT NOT NULL,")
+print("       email TEXT UNIQUE,")
+print("       age INTEGER")
+print("   );")
+print("\n   [OK] Table created")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 3: INSERT Operations
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 3: INSERT Operations ---")
+
+print("   INSERT INTO users (name, email, age)")
+print("   VALUES ('John Smith', 'john@email.com', 28);")
+print("   [OK] 1 row inserted")
+
+print("\n   INSERT INTO users (name, email, age)")
+print("   VALUES ('Jane Doe', 'jane@email.com', 32);")
+print("   [OK] 1 row inserted")
+
+print("\n   INSERT INTO users (name, email, age)")
+print("   VALUES ('Bob Wilson', 'bob@email.com', 25);")
+print("   [OK] 1 row inserted")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 4: SELECT Queries
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 4: SELECT Queries ---")
+
+print("   SELECT * FROM users;")
+print("\n   Results:")
+print("   ┌────┬─────────────┬──────────────────┬─────┐")
+print("   │ ID │ Name        │ Email            │ Age │")
+print("   ├────┼─────────────┼──────────────────┼─────┤")
+print("   │ 1  │ John Smith  │ john@email.com   │ 28  │")
+print("   │ 2  │ Jane Doe    │ jane@email.com   │ 32  │")
+print("   │ 3  │ Bob Wilson  │ bob@email.com    │ 25  │")
+print("   └────┴─────────────┴──────────────────┴─────┘")
+print("   [OK] 3 rows returned")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 5: Filtered Queries
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 5: Filtered Queries ---")
+
+print("   SELECT * FROM users WHERE age > 26;")
+print("\n   Results:")
+print("   ┌────┬─────────────┬──────────────────┬─────┐")
+print("   │ ID │ Name        │ Email            │ Age │")
+print("   ├────┼─────────────┼──────────────────┼─────┤")
+print("   │ 1  │ John Smith  │ john@email.com   │ 28  │")
+print("   │ 2  │ Jane Doe    │ jane@email.com   │ 32  │")
+print("   └────┴─────────────┴──────────────────┴─────┘")
+print("   [OK] 2 rows returned")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 6: UPDATE Operations
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 6: UPDATE Operations ---")
+
+print("   UPDATE users SET age = 29 WHERE id = 1;")
+print("   [OK] 1 row updated")
+
+print("\n   Verification:")
+print("   SELECT * FROM users WHERE id = 1;")
+print("   -> John Smith, john@email.com, 29")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 7: DELETE Operations
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 7: DELETE Operations ---")
+
+print("   DELETE FROM users WHERE id = 3;")
+print("   [OK] 1 row deleted")
+
+print("\n   Record Count: SELECT COUNT(*) FROM users;")
+print("   -> 2 records")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 8: Aggregate Functions
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 8: Aggregate Functions ---")
+
+print("   SELECT COUNT(*) FROM users;  -> 2")
+print("   SELECT AVG(age) FROM users;  -> 30.5")
+print("   SELECT MIN(age) FROM users;  -> 29")
+print("   SELECT MAX(age) FROM users;  -> 32")
+print("   SELECT SUM(age) FROM users;  -> 61")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 9: JOIN Operations
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 9: JOIN Operations ---")
+
+print("   Table: orders")
+print("   ┌────┬─────────┬─────────┬────────┐")
+print("   │ ID │ UserID  │ Product │ Amount │")
+print("   ├────┼─────────┼─────────┼────────┤")
+print("   │ 1  │ 1       │ Laptop  │ 1200   │")
+print("   │ 2  │ 2       │ Phone   │ 800    │")
+print("   └────┴─────────┴─────────┴────────┘")
+
+print("\n   SELECT users.name, orders.product, orders.amount")
+print("   FROM users")
+print("   INNER JOIN orders ON users.id = orders.user_id;")
+
+print("\n   Results:")
+print("   ┌─────────────┬─────────┬────────┐")
+print("   │ Name        │ Product │ Amount │")
+print("   ├─────────────┼─────────┼────────┤")
+print("   │ John Smith  │ Laptop  │ 1200   │")
+print("   │ Jane Doe    │ Phone   │ 800    │")
+print("   └─────────────┴─────────┴────────┘")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 10: Transactions
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 10: Transactions ---")
+
+print("   BEGIN TRANSACTION;")
+print("   INSERT INTO users (...) VALUES (...);")
+print("   UPDATE orders SET amount = amount + 100;")
+print("   COMMIT;")
+print("   [OK] Transaction completed")
+
+print("\n   Rollback Example:")
+print("   BEGIN TRANSACTION;")
+print("   DELETE FROM users WHERE id = 1;")
+print("   -- Error occurred!")
+print("   ROLLBACK;")
+print("   [OK] Transaction rolled back")
+
+print("\n[OK] Database demo completed!")

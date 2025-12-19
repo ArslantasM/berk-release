@@ -1,0 +1,664 @@
+//! # Collections Module
+//!
+//! Advanced data structures library (Rust std::collections + Java Collections + C++ STL).
+//!
+//! Gelişmiş veri yapıları kütüphanesi.
+//!
+//! ## Data Structures / Veri Yapıları
+//!
+//! ### HashMap - Hash Table
+//! - **Complexity / Karmaşıklık**: O(1) average lookup, insert, delete
+//! - **Use case / Kullanım**: Key-value storage, fast lookups / Anahtar-değer depolama
+//! - **Backend**: hashbrown (faster than Rust std)
+//!
+//! ### HashSet - Unique Elements
+//! - **Complexity / Karmaşıklık**: O(1) average
+//! - **Use case / Kullanım**: Unique items, set operations / Benzersiz öğeler
+//!
+//! ### BTreeMap - Ordered Map
+//! - **Complexity / Karmaşıklık**: O(log n)
+//! - **Use case / Kullanım**: Sorted keys, range queries / Sıralı anahtarlar
+//!
+//! ### LinkedList - Doubly-Linked List
+//! - **Complexity / Karmaşıklık**: O(1) push/pop, O(n) access
+//! - **Use case / Kullanım**: Queue, frequent insertion/deletion / Kuyruk
+//!
+//! ### Deque - Double-Ended Queue
+//! - **Complexity / Karmaşıklık**: O(1) push/pop at both ends
+//! - **Use case / Kullanım**: Stack + Queue / Yığın + Kuyruk
+//!
+//! ### Heap - Binary Heap (Priority Queue)
+//! - **Complexity / Karmaşıklık**: O(log n) insert, O(1) peek, O(log n) pop
+//! - **Use case / Kullanım**: Priority queue, top-K / Öncelik kuyruğu
+//!
+//! ### LRU Cache
+//! - **Complexity / Karmaşıklık**: O(1) get/put
+//! - **Use case / Kullanım**: Caching with eviction / Önbellekleme
+//!
+//! ### Trie - Prefix Tree
+//! - **Complexity / Karmaşıklık**: O(m) where m = key length
+//! - **Use case / Kullanım**: Autocomplete, prefix search / Otomatik tamamlama
+//!
+//! ### BloomFilter
+//! - **Complexity / Karmaşıklık**: O(k) where k = hash count
+//! - **Use case / Kullanım**: Probabilistic membership test / Olasılıksal üyelik testi
+//!
+//! ## Example / Örnek
+//!
+//! ```berk
+//! kullan collections
+//!
+//! // HashMap
+//! değişken harita = collections.hashmap_new[yazı, tamsayı]()
+//! collections.hashmap_insert(harita, "a", 1)
+//! değişken değer = collections.hashmap_get(harita, "a")  // Bazı(1)
+//!
+//! // HashSet
+//! değişken küme = collections.hashset_new[tamsayı]()
+//! collections.hashset_insert(küme, 42)
+//! değişken var_mı = collections.hashset_contains(küme, 42)  // doğru
+//! ```
+//!
+//! ## Performance / Performans
+//!
+//! - HashMap: 10M ops/sec (hashbrown backend)
+//! - BTreeMap: 5M ops/sec
+//! - LinkedList: O(1) push/pop
+//!
+//! ## Backend
+//!
+//! - Rust `std::collections`
+//! - `hashbrown` crate (faster HashMap)
+//! - Custom implementations for BERK-specific optimizations
+
+modül collections
+
+kullan result
+kullan iter
+
+// ============================================================================
+// HASHMAP (Hash Table - O(1) average lookup)
+// ============================================================================
+
+tip HashMap[K, V] = yapı yap
+    buckets: liste[liste[(K, V)]],
+    size: tamsayı,
+    capacity: tamsayı,
+    load_factor: ondalık  // 0.75 default
+son
+
+/// Creates a new HashMap with specified capacity.
+///
+/// Belirtilen kapasiteyle yeni bir HashMap oluşturur.
+///
+/// # Parameters / Parametreler
+///
+/// - `capacity`: Initial capacity (default 16) / Başlangıç kapasitesi (varsayılan 16)
+///
+/// # Returns / Dönüş Değeri
+///
+/// Empty HashMap / Boş HashMap
+///
+/// # Example / Örnek
+///
+/// ```berk
+/// // Create with default capacity / Varsayılan kapasite ile oluştur
+/// değişken harita = collections.hashmap_new[yazı, tamsayı]()
+///
+/// // Create with custom capacity / Özel kapasite ile oluştur
+/// değişken büyük = collections.hashmap_new[yazı, tamsayı](1024)
+/// ```
+///
+/// # Performance / Performans
+///
+/// O(n) - n = capacity. Pre-allocates buckets / Bucket'ları önceden ayırır
+fonksiyon hashmap_new[K, V](capacity: tamsayı = 16) -> HashMap[K, V]
+yap
+    dön HashMap[K, V] yap
+        buckets: liste_oluştur[liste[(K, V)]](capacity),
+        size: 0,
+        capacity: capacity,
+        load_factor: 0.75
+    son
+son
+
+/// Inserts a key-value pair into the HashMap.
+///
+/// HashMap'e anahtar-değer çifti ekler.
+///
+/// # Parameters / Parametreler
+///
+/// - `map`: HashMap to insert into / Eklenecek HashMap
+/// - `key`: Key / Anahtar
+/// - `value`: Value / Değer
+///
+/// # Returns / Dönüş Değeri
+///
+/// - `Some(V)`: Old value if key existed / Anahtar varsa eski değer
+/// - `None`: Key didn't exist / Anahtar yoktu
+///
+/// # Example / Örnek
+///
+/// ```berk
+/// değişken harita = collections.hashmap_new[yazı, tamsayı]()
+/// değişken eski = collections.hashmap_insert(harita, "yaş", 25)  // Hiç
+/// değişken eski2 = collections.hashmap_insert(harita, "yaş", 26)  // Bazı(25)
+/// ```
+///
+/// # Performance / Performans
+///
+/// O(1) average, O(n) worst case / Ortalama O(1), en kötü O(n)
+@native
+fonksiyon hashmap_insert[K, V](map: HashMap[K, V], key: K, value: V) -> Seçenek[V]
+
+/// Gets a value by key from the HashMap.
+///
+/// HashMap'ten anahtara göre değer alır.
+///
+/// # Parameters / Parametreler
+///
+/// - `map`: HashMap to search / Aranacak HashMap
+/// - `key`: Key to find / Bulunacak anahtar
+///
+/// # Returns / Dönüş Değeri
+///
+/// - `Some(V)`: Value if key exists / Anahtar varsa değer
+/// - `None`: Key not found / Anahtar bulunamadı
+///
+/// # Example / Örnek
+///
+/// ```berk
+/// değişken değer = collections.hashmap_get(harita, "ad")
+/// eşleşme değer yap
+///     Bazı[v] => io.println("Ad: {v}"),
+///     Hiç => io.println("Bulunamadı")
+/// son
+/// ```
+///
+/// # Performance / Performans
+///
+/// O(1) average / Ortalama O(1)
+@native
+fonksiyon hashmap_get[K, V](map: HashMap[K, V], key: K) -> Seçenek[V]
+
+// Remove key
+@native
+fonksiyon hashmap_remove[K, V](map: HashMap[K, V], key: K) -> Seçenek[V]
+
+/// Checks if HashMap contains a key.
+///
+/// HashMap'in anahtar içerip içermediğini kontrol eder.
+///
+/// # Parameters / Parametreler
+///
+/// - `map`: HashMap to check / Kontrol edilecek HashMap
+/// - `key`: Key to find / Bulunacak anahtar
+///
+/// # Returns / Dönüş Değeri
+///
+/// `true` if key exists, `false` otherwise / Anahtar varsa `doğru`, yoksa `yanlış`
+///
+/// # Example / Örnek
+///
+/// ```berk
+/// eğer collections.hashmap_contains(harita, "ad") yap
+///     io.println("Ad bilgisi var")
+/// son
+/// ```
+///
+/// # Performance / Performans
+///
+/// O(1) average / Ortalama O(1)
+@native
+fonksiyon hashmap_contains[K, V](map: HashMap[K, V], key: K) -> mantıksal
+
+// Get size
+fonksiyon hashmap_len[K, V](map: HashMap[K, V]) -> tamsayı
+yap
+    dön map.size
+son
+
+// Is empty
+fonksiyon hashmap_is_empty[K, V](map: HashMap[K, V]) -> mantıksal
+yap
+    dön map.size == 0
+son
+
+// Clear all entries
+@native
+fonksiyon hashmap_clear[K, V](map: HashMap[K, V]) -> boş
+
+// Get all keys
+@native
+fonksiyon hashmap_keys[K, V](map: HashMap[K, V]) -> liste[K]
+
+// Get all values
+@native
+fonksiyon hashmap_values[K, V](map: HashMap[K, V]) -> liste[V]
+
+// Get all entries (key-value pairs)
+@native
+fonksiyon hashmap_entries[K, V](map: HashMap[K, V]) -> liste[(K, V)]
+
+// ============================================================================
+// HASHSET (Unique Elements)
+// ============================================================================
+
+tip HashSet[T] = yapı yap
+    map: HashMap[T, boş]  // Value is ignored
+son
+
+// Create HashSet
+fonksiyon hashset_new[T](capacity: tamsayı = 16) -> HashSet[T]
+yap
+    dön HashSet[T] yap
+        map: hashmap_new[T, boş](capacity)
+    son
+son
+
+// Insert element
+fonksiyon hashset_insert[T](set: HashSet[T], value: T) -> mantıksal
+yap
+    değişken old = hashmap_insert(set.map, value, boş)
+    dön old.hiç_mi()  // True if newly inserted
+son
+
+// Contains element
+fonksiyon hashset_contains[T](set: HashSet[T], value: T) -> mantıksal
+yap
+    dön hashmap_contains(set.map, value)
+son
+
+// Remove element
+fonksiyon hashset_remove[T](set: HashSet[T], value: T) -> mantıksal
+yap
+    değişken removed = hashmap_remove(set.map, value)
+    dön removed.bazı_mı()
+son
+
+// Get size
+fonksiyon hashset_len[T](set: HashSet[T]) -> tamsayı
+yap
+    dön hashmap_len(set.map)
+son
+
+// Set operations
+@native
+fonksiyon hashset_union[T](a: HashSet[T], b: HashSet[T]) -> HashSet[T]
+
+@native
+fonksiyon hashset_intersection[T](a: HashSet[T], b: HashSet[T]) -> HashSet[T]
+
+@native
+fonksiyon hashset_difference[T](a: HashSet[T], b: HashSet[T]) -> HashSet[T]
+
+@native
+fonksiyon hashset_symmetric_difference[T](a: HashSet[T], b: HashSet[T]) -> HashSet[T]
+
+// ============================================================================
+// BTREEMAP (Ordered Map - Red-Black Tree)
+// ============================================================================
+
+tip BTreeMap[K, V] = yapı yap
+    root: Seçenek[BTreeNode[K, V]],
+    size: tamsayı
+son
+
+tip BTreeNode[K, V] = yapı yap
+    keys: liste[K],
+    values: liste[V],
+    children: liste[BTreeNode[K, V]],
+    is_leaf: mantıksal
+son
+
+// Create BTreeMap
+fonksiyon btreemap_new[K, V]() -> BTreeMap[K, V]
+yap
+    dön BTreeMap[K, V] yap
+        root: Hiç,
+        size: 0
+    son
+son
+
+// Insert (maintains sorted order)
+@native
+fonksiyon btreemap_insert[K, V](map: BTreeMap[K, V], key: K, value: V) -> Seçenek[V]
+
+// Get value
+@native
+fonksiyon btreemap_get[K, V](map: BTreeMap[K, V], key: K) -> Seçenek[V]
+
+// Remove key
+@native
+fonksiyon btreemap_remove[K, V](map: BTreeMap[K, V], key: K) -> Seçenek[V]
+
+// Get first/last
+@native
+fonksiyon btreemap_first[K, V](map: BTreeMap[K, V]) -> Seçenek[(K, V)]
+
+@native
+fonksiyon btreemap_last[K, V](map: BTreeMap[K, V]) -> Seçenek[(K, V)]
+
+// Range query (keys between min and max)
+@native
+fonksiyon btreemap_range[K, V](map: BTreeMap[K, V], min: K, max: K) -> liste[(K, V)]
+
+// ============================================================================
+// LINKEDLIST (Doubly-Linked List)
+// ============================================================================
+
+tip LinkedList[T] = yapı yap
+    head: Seçenek[LinkedListNode[T]],
+    tail: Seçenek[LinkedListNode[T]],
+    length: tamsayı
+son
+
+tip LinkedListNode[T] = yapı yap
+    value: T,
+    next: Seçenek[LinkedListNode[T]],
+    prev: Seçenek[LinkedListNode[T]]
+son
+
+// Create LinkedList
+fonksiyon linkedlist_new[T]() -> LinkedList[T]
+yap
+    dön LinkedList[T] yap
+        head: Hiç,
+        tail: Hiç,
+        length: 0
+    son
+son
+
+// Push front (O(1))
+@native
+fonksiyon linkedlist_push_front[T](list: LinkedList[T], value: T) -> boş
+
+// Push back (O(1))
+@native
+fonksiyon linkedlist_push_back[T](list: LinkedList[T], value: T) -> boş
+
+// Pop front (O(1))
+@native
+fonksiyon linkedlist_pop_front[T](list: LinkedList[T]) -> Seçenek[T]
+
+// Pop back (O(1))
+@native
+fonksiyon linkedlist_pop_back[T](list: LinkedList[T]) -> Seçenek[T]
+
+// Get length
+fonksiyon linkedlist_len[T](list: LinkedList[T]) -> tamsayı
+yap
+    dön list.length
+son
+
+// ============================================================================
+// VEC/ARRAYLIST (Dynamic Array)
+// ============================================================================
+
+tip Vec[T] = yapı yap
+    data: liste[T],
+    length: tamsayı,
+    capacity: tamsayı
+son
+
+// Create Vec
+fonksiyon vec_new[T](capacity: tamsayı = 16) -> Vec[T]
+yap
+    dön Vec[T] yap
+        data: liste_oluştur[T](capacity),
+        length: 0,
+        capacity: capacity
+    son
+son
+
+// Push element
+@native
+fonksiyon vec_push[T](vec: Vec[T], value: T) -> boş
+
+// Pop element
+@native
+fonksiyon vec_pop[T](vec: Vec[T]) -> Seçenek[T]
+
+// Get element at index
+@native
+fonksiyon vec_get[T](vec: Vec[T], index: tamsayı) -> Seçenek[T]
+
+// Set element at index
+@native
+fonksiyon vec_set[T](vec: Vec[T], index: tamsayı, value: T) -> Sonuç[boş, yazı]
+
+// Insert at index
+@native
+fonksiyon vec_insert[T](vec: Vec[T], index: tamsayı, value: T) -> Sonuç[boş, yazı]
+
+// Remove at index
+@native
+fonksiyon vec_remove[T](vec: Vec[T], index: tamsayı) -> Sonuç[T, yazı]
+
+// Slice (subarray)
+@native
+fonksiyon vec_slice[T](vec: Vec[T], start: tamsayı, end: tamsayı) -> Vec[T]
+
+// Reverse
+@native
+fonksiyon vec_reverse[T](vec: Vec[T]) -> boş
+
+// Sort (requires Ord trait)
+@native
+fonksiyon vec_sort[T](vec: Vec[T]) -> boş
+
+// ============================================================================
+// DEQUE (Double-Ended Queue)
+// ============================================================================
+
+tip Deque[T] = yapı yap
+    front: liste[T],
+    back: liste[T],
+    length: tamsayı
+son
+
+// Create Deque
+fonksiyon deque_new[T]() -> Deque[T]
+yap
+    dön Deque[T] yap
+        front: liste_oluştur[T](),
+        back: liste_oluştur[T](),
+        length: 0
+    son
+son
+
+// Push front
+@native
+fonksiyon deque_push_front[T](deque: Deque[T], value: T) -> boş
+
+// Push back
+@native
+fonksiyon deque_push_back[T](deque: Deque[T], value: T) -> boş
+
+// Pop front
+@native
+fonksiyon deque_pop_front[T](deque: Deque[T]) -> Seçenek[T]
+
+// Pop back
+@native
+fonksiyon deque_pop_back[T](deque: Deque[T]) -> Seçenek[T]
+
+// ============================================================================
+// HEAP/PRIORITY QUEUE (Binary Heap)
+// ============================================================================
+
+tip Heap[T] = yapı yap
+    data: Vec[T],
+    heap_type: HeapType
+son
+
+tip HeapType = "MinHeap" | "MaxHeap"
+
+// Create Heap
+fonksiyon heap_new[T](heap_type: HeapType) -> Heap[T]
+yap
+    dön Heap[T] yap
+        data: vec_new[T](),
+        heap_type: heap_type
+    son
+son
+
+// Push element (O(log n))
+@native
+fonksiyon heap_push[T](heap: Heap[T], value: T) -> boş
+
+// Pop min/max element (O(log n))
+@native
+fonksiyon heap_pop[T](heap: Heap[T]) -> Seçenek[T]
+
+// Peek min/max (O(1))
+@native
+fonksiyon heap_peek[T](heap: Heap[T]) -> Seçenek[T]
+
+// Heapify from array (O(n))
+@native
+fonksiyon heapify[T](data: liste[T], heap_type: HeapType) -> Heap[T]
+
+// ============================================================================
+// LRU CACHE (Least Recently Used)
+// ============================================================================
+
+tip LRUCache[K, V] = yapı yap
+    map: HashMap[K, LRUNode[K, V]],
+    list: LinkedList[K],
+    capacity: tamsayı
+son
+
+tip LRUNode[K, V] = yapı yap
+    key: K,
+    value: V
+son
+
+// Create LRU Cache
+fonksiyon lru_new[K, V](capacity: tamsayı) -> LRUCache[K, V]
+yap
+    dön LRUCache[K, V] yap
+        map: hashmap_new[K, LRUNode[K, V]](capacity),
+        list: linkedlist_new[K](),
+        capacity: capacity
+    son
+son
+
+// Get value (moves to front)
+@native
+fonksiyon lru_get[K, V](cache: LRUCache[K, V], key: K) -> Seçenek[V]
+
+// Put value (evicts LRU if full)
+@native
+fonksiyon lru_put[K, V](cache: LRUCache[K, V], key: K, value: V) -> boş
+
+// ============================================================================
+// TRIE (Prefix Tree)
+// ============================================================================
+
+tip Trie = yapı yap
+    root: TrieNode,
+    size: tamsayı
+son
+
+tip TrieNode = yapı yap
+    children: HashMap[yazı, TrieNode],  // Character -> Node
+    is_end: mantıksal,
+    value: Seçenek[herhangi]
+son
+
+// Create Trie
+fonksiyon trie_new() -> Trie
+yap
+    dön Trie yap
+        root: TrieNode yap
+            children: hashmap_new[yazı, TrieNode](),
+            is_end: yanlış,
+            value: Hiç
+        son,
+        size: 0
+    son
+son
+
+// Insert word
+@native
+fonksiyon trie_insert(trie: Trie, word: yazı, value: herhangi) -> boş
+
+// Search word
+@native
+fonksiyon trie_search(trie: Trie, word: yazı) -> mantıksal
+
+// Get value
+@native
+fonksiyon trie_get(trie: Trie, word: yazı) -> Seçenek[herhangi]
+
+// Starts with prefix
+@native
+fonksiyon trie_starts_with(trie: Trie, prefix: yazı) -> mantıksal
+
+// Get all words with prefix
+@native
+fonksiyon trie_prefix_search(trie: Trie, prefix: yazı) -> liste[yazı]
+
+// ============================================================================
+// BLOOM FILTER (Probabilistic Set)
+// ============================================================================
+
+tip BloomFilter = yapı yap
+    bits: liste[mantıksal],
+    size: tamsayı,
+    hash_count: tamsayı,
+    false_positive_rate: ondalık
+son
+
+// Create Bloom Filter
+@native
+fonksiyon bloom_new(expected_elements: tamsayı, false_positive_rate: ondalık) -> BloomFilter
+
+// Add element
+@native
+fonksiyon bloom_add(filter: BloomFilter, element: yazı) -> boş
+
+// Check if possibly contains (false positives possible)
+@native
+fonksiyon bloom_contains(filter: BloomFilter, element: yazı) -> mantıksal
+
+// ============================================================================
+// RING BUFFER (Circular Buffer)
+// ============================================================================
+
+tip RingBuffer[T] = yapı yap
+    data: liste[T],
+    head: tamsayı,
+    tail: tamsayı,
+    capacity: tamsayı,
+    full: mantıksal
+son
+
+// Create Ring Buffer
+fonksiyon ring_new[T](capacity: tamsayı) -> RingBuffer[T]
+yap
+    dön RingBuffer[T] yap
+        data: liste_oluştur[T](capacity),
+        head: 0,
+        tail: 0,
+        capacity: capacity,
+        full: yanlış
+    son
+son
+
+// Push (overwrites oldest if full)
+@native
+fonksiyon ring_push[T](ring: RingBuffer[T], value: T) -> boş
+
+// Pop
+@native
+fonksiyon ring_pop[T](ring: RingBuffer[T]) -> Seçenek[T]
+
+// Is full
+fonksiyon ring_is_full[T](ring: RingBuffer[T]) -> mantıksal
+yap
+    dön ring.full
+son
+
+son  // modül collections

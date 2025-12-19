@@ -1,0 +1,245 @@
+// Arduino GPIO Module for BERK
+// Modern, safe wrapper around Arduino digitalRead/Write
+//
+// Viral-ready code examples for social media! 🚀
+
+extern "C" {
+    fn pinMode(pin: u8, mode: u8);
+    fn digitalWrite(pin: u8, value: u8);
+    fn digitalRead(pin: u8) -> u8;
+    fn pulseIn(pin: u8, state: u8) -> u32;
+}
+
+const OUTPUT: u8 = 1;
+const INPUT: u8 = 0;
+const INPUT_PULLUP: u8 = 2;
+
+pub struct DigitalPin {
+    pin: u8,
+}
+
+impl DigitalPin {
+    // Modern pin configuration (compile-time safety!)
+    pub fn output(pin: u8) -> DigitalPin {
+        unsafe { pinMode(pin, OUTPUT); }
+        DigitalPin { pin }
+    }
+    
+    pub fn input(pin: u8) -> DigitalPin {
+        unsafe { pinMode(pin, INPUT); }
+        DigitalPin { pin }
+    }
+    
+    pub fn input_pullup(pin: u8) -> DigitalPin {
+        unsafe { pinMode(pin, INPUT_PULLUP); }
+        DigitalPin { pin }
+    }
+    
+    // Clean API (no more HIGH/LOW constants!)
+    pub fn high(&self) {
+        unsafe { digitalWrite(self.pin, 1); }
+    }
+    
+    pub fn low(&self) {
+        unsafe { digitalWrite(self.pin, 0); }
+    }
+    
+    pub fn write(&self, value: bool) {
+        unsafe { digitalWrite(self.pin, if value { 1 } else { 0 }); }
+    }
+    
+    pub fn read(&self) -> bool {
+        unsafe { digitalRead(self.pin) != 0 }
+    }
+    
+    pub fn toggle(&self) {
+        self.write(!self.read());
+    }
+    
+    // Measure pulse (for ultrasonic sensors)
+    pub fn pulse_in(&self, state: bool) -> u32 {
+        unsafe { pulseIn(self.pin, if state { 1 } else { 0 }) }
+    }
+}
+
+// Convenient builder API
+pub fn pin(num: u8) -> PinBuilder {
+    PinBuilder { pin: num }
+}
+
+pub struct PinBuilder {
+    pin: u8,
+}
+
+impl PinBuilder {
+    pub fn output(self) -> DigitalPin {
+        DigitalPin::output(self.pin)
+    }
+    
+    pub fn input(self) -> DigitalPin {
+        DigitalPin::input(self.pin)
+    }
+    
+    pub fn input_pullup(self) -> DigitalPin {
+        DigitalPin::input_pullup(self.pin)
+    }
+}
+
+// 📱 VIRAL EXAMPLE 1: Classic Blink (but modern!)
+pub fn example_blink() {
+    use super::time;
+    
+    let led = pin(13).output();  // Built-in LED
+    
+    loop {
+        led.high();
+        time::delay_ms(1000);
+        led.low();
+        time::delay_ms(1000);
+    }
+}
+
+// 📱 VIRAL EXAMPLE 2: Button controlled LED
+pub fn example_button_led() {
+    let button = pin(2).input_pullup();
+    let led = pin(13).output();
+    
+    loop {
+        if button.read() {
+            led.high();
+        } else {
+            led.low();
+        }
+    }
+}
+
+// 📱 VIRAL EXAMPLE 3: Traffic light simulation
+pub fn example_traffic_light() {
+    use super::time;
+    
+    let red = pin(10).output();
+    let yellow = pin(11).output();
+    let green = pin(12).output();
+    
+    loop {
+        // Green phase
+        green.high();
+        time::delay_ms(5000);
+        green.low();
+        
+        // Yellow phase
+        yellow.high();
+        time::delay_ms(2000);
+        yellow.low();
+        
+        // Red phase
+        red.high();
+        time::delay_ms(5000);
+        red.low();
+    }
+}
+
+// 📱 VIRAL EXAMPLE 4: LED Knight Rider effect
+pub fn example_knight_rider() {
+    use super::time;
+    
+    let leds = [
+        pin(2).output(),
+        pin(3).output(),
+        pin(4).output(),
+        pin(5).output(),
+        pin(6).output(),
+        pin(7).output(),
+    ];
+    
+    loop {
+        // Forward
+        for led in &leds {
+            led.high();
+            time::delay_ms(100);
+            led.low();
+        }
+        
+        // Backward
+        for led in leds.iter().rev() {
+            led.high();
+            time::delay_ms(100);
+            led.low();
+        }
+    }
+}
+
+// 📱 VIRAL EXAMPLE 5: Ultrasonic distance sensor
+pub fn example_ultrasonic() {
+    use super::{time, serial};
+    
+    let trig = pin(9).output();
+    let echo = pin(10).input();
+    
+    serial::begin(9600);
+    serial::println("Ultrasonic Sensor Ready!");
+    
+    loop {
+        // Send 10µs pulse
+        trig.low();
+        time::delay_us(2);
+        trig.high();
+        time::delay_us(10);
+        trig.low();
+        
+        // Measure echo
+        let duration = echo.pulse_in(true);
+        let distance_cm = duration / 58;
+        
+        serial::print("Distance: ");
+        serial::print(distance_cm);
+        serial::println(" cm");
+        
+        time::delay_ms(500);
+    }
+}
+
+// 🎥 TIKTOK EXAMPLE: LED Chaser
+pub fn tiktok_led_chaser() {
+    use super::time;
+    
+    let leds: [DigitalPin; 8] = [
+        pin(2).output(), pin(3).output(),
+        pin(4).output(), pin(5).output(),
+        pin(6).output(), pin(7).output(),
+        pin(8).output(), pin(9).output(),
+    ];
+    
+    loop {
+        for i in 0..8 {
+            leds[i].high();
+            time::delay_ms(50);
+        }
+        for i in 0..8 {
+            leds[i].low();
+            time::delay_ms(50);
+        }
+    }
+}
+
+// 📸 INSTAGRAM EXAMPLE: Breathing LED
+pub fn instagram_breathing_led() {
+    use super::analog;
+    use super::time;
+    
+    let led_pin = 9;  // PWM pin
+    
+    loop {
+        // Fade in
+        for brightness in 0..=255 {
+            analog::write(led_pin, brightness);
+            time::delay_ms(5);
+        }
+        
+        // Fade out
+        for brightness in (0..=255).rev() {
+            analog::write(led_pin, brightness);
+            time::delay_ms(5);
+        }
+    }
+}

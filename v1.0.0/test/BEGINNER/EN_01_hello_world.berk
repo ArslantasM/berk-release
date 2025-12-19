@@ -1,0 +1,109 @@
+/// ═══════════════════════════════════════════════════════════════════════════
+/// BERK Beginner Demo - Hello World (English Version)
+/// Basic concepts, variables and printing
+/// ═══════════════════════════════════════════════════════════════════════════
+
+use std::io
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 1: Basic Printing
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("╔═══════════════════════════════════════════════════════════╗")
+print("║        Welcome to BERK! / BERK'e Hos Geldiniz!            ║")
+print("╚═══════════════════════════════════════════════════════════╝")
+print("")
+
+// Turkish greeting
+print("[TR] Merhaba Dunya!")
+
+// English greeting
+print("[EN] Hello World!")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 2: Variables
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n Variables:")
+
+// Turkish variables
+let name_tr = "Ahmet"
+let age_tr = 25
+let height_tr = 1.78
+
+// English variables
+let name_en = "John"
+let age_en = 30
+let height_en = 1.85
+
+print("   [TR] Name: ", name_tr, ", Age: ", age_tr, ", Height: ", height_tr, "m")
+print("   [EN] Name: ", name_en, ", Age: ", age_en, ", Height: ", height_en, "m")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 3: Data Types
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n Data Types:")
+
+let integer_val = 42
+let decimal_val = 3.14159
+let text_val = "BERK is awesome!"
+let boolean_val = true
+let array_val = [1, 2, 3, 4, 5]
+
+print("   Integer:  ", integer_val)
+print("   Decimal:  ", decimal_val)
+print("   String:   ", text_val)
+print("   Boolean:  ", boolean_val)
+print("   Array:    ", array_val)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 4: Math Operations
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n Math Operations:")
+
+let a = 15
+let b = 4
+
+print("   a = ", a, ", b = ", b)
+print("   a + b = ", a + b)
+print("   a - b = ", a - b)
+print("   a * b = ", a * b)
+print("   a / b = ", a / b)
+
+let remainder = a % b
+print("   a % b = ", remainder, " (modulo)")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 5: BERK's Unique Feature
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n BERK's Unique Feature: Dual-Language Support!")
+
+print("\n   ┌────────────────┬────────────────┐")
+print("   │ Turkish        │ English        │")
+print("   ├────────────────┼────────────────┤")
+print("   │ degisken       │ let/var        │")
+print("   │ fonksiyon      │ fn/function    │")
+print("   │ eger...ise     │ if...then      │")
+print("   │ iken           │ while          │")
+print("   │ don            │ return         │")
+print("   │ dogru/yanlis   │ true/false     │")
+print("   │ yaz            │ print          │")
+print("   └────────────────┴────────────────┘")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 6: Simple Function
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n Simple Function Example:")
+
+fn add(x: int, y: int) -> int do
+    return x + y
+end
+
+let result = add(10, 20)
+print("   add(10, 20) = ", result)
+
+print("\n[OK] Hello World demo completed!")

@@ -1,0 +1,139 @@
+/// ═══════════════════════════════════════════════════════════════════════════
+/// BERK HAL - RISC-V Platform Demo (English Version)
+/// Hardware Abstraction Layer - Open Source Processor
+/// ═══════════════════════════════════════════════════════════════════════════
+
+use std::io
+use std::riscv
+
+print("============================================================")
+print("         HAL Demo: RISC-V Platform                          ")
+print("============================================================")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 1: RISC-V Architecture
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 1: RISC-V Architecture ---")
+
+print("\n   RISC-V Advantages:")
+print("   - Open source ISA (Instruction Set Architecture)")
+print("   - Free and no licensing required")
+print("   - Modular design")
+print("   - Customizable extensions")
+
+print("\n   Base ISA Variants:")
+print("   - RV32I: 32-bit integer base set")
+print("   - RV64I: 64-bit integer base set")
+print("   - RV128I: 128-bit (future)")
+
+print("\n   Standard Extensions:")
+print("   - M: Multiplication/Division")
+print("   - A: Atomic operations")
+print("   - F: Single precision float")
+print("   - D: Double precision float")
+print("   - C: Compressed instructions")
+print("   - Example: RV32IMAC, RV64GC")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 2: Popular RISC-V Chips
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 2: Popular RISC-V Chips ---")
+
+print("\n   SiFive:")
+print("   - FE310-G002: RV32IMAC, 320MHz")
+print("   - U74: RV64GC, Linux capable")
+
+print("\n   ESP32-C3:")
+print("   - RV32IMC, 160MHz")
+print("   - WiFi + BLE integrated")
+
+print("\n   GD32VF103:")
+print("   - RV32IMAC, 108MHz")
+print("   - STM32 compatible peripherals")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 3: Register Structure
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 3: Register Structure ---")
+
+print("\n   General Purpose Registers (32 total):")
+print("   - reg0 (zero): Always zero")
+print("   - reg1 (ra): Return address")
+print("   - reg2 (sp): Stack pointer")
+print("   - reg3 (gp): Global pointer")
+print("   - reg4 (tp): Thread pointer")
+print("   - reg5-7: Temporaries")
+print("   - reg8-9: Saved registers")
+print("   - reg10-17: Argument/return")
+print("   - reg18-27: Saved registers")
+print("   - reg28-31: Temporaries")
+
+print("\n   CSR (Control and Status Registers):")
+print("   - mstatus: Machine status")
+print("   - mtvec: Trap vector")
+print("   - mepc: Exception PC")
+print("   - mcause: Trap cause")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 4: Memory Map Example
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 4: Memory Map (FE310) ---")
+
+print("\n   Address Ranges (Hex):")
+print("   - Debug ROM:  0x00000000")
+print("   - CLINT:      0x02000000")
+print("   - PLIC:       0x0C000000")
+print("   - AON:        0x10000000")
+print("   - GPIO:       0x10010000")
+print("   - UART0:      0x10013000")
+print("   - SPI0:       0x10024000")
+print("   - Flash XIP:  0x20000000")
+print("   - DTIM RAM:   0x80000000")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 5: GPIO Access
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 5: GPIO Access ---")
+
+let gpio_base_addr = 268509184
+let gpio_input_val_offset = 0
+let gpio_input_en_offset = 4
+let gpio_output_en_offset = 8
+let gpio_output_val_offset = 12
+
+print("\n   GPIO Register Offsets:")
+print("   - GPIO_BASE:       268509184 (0x10012000)")
+print("   - GPIO_INPUT_VAL:  +0")
+print("   - GPIO_INPUT_EN:   +4")
+print("   - GPIO_OUTPUT_EN:  +8")
+print("   - GPIO_OUTPUT_VAL: +12")
+
+print("\n   Example: Turn on LED")
+print("   - OUTPUT_EN |= (1 << pin)")
+print("   - OUTPUT_VAL |= (1 << pin)")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SECTION 6: Interrupt Structure
+// ─────────────────────────────────────────────────────────────────────────────
+
+print("\n--- SECTION 6: Interrupt Structure ---")
+
+print("\n   CLINT (Core Local Interrupter):")
+print("   - Software interrupt")
+print("   - Timer interrupt")
+
+print("\n   PLIC (Platform-Level Interrupt Controller):")
+print("   - External interrupt management")
+print("   - Priority levels")
+print("   - Interrupt enable/claim/complete")
+
+print("\n   Trap Types:")
+print("   - Exception: Synchronous (instruction fault)")
+print("   - Interrupt: Asynchronous (timer, external)")
+
+print("\n[OK] RISC-V HAL demo completed!")

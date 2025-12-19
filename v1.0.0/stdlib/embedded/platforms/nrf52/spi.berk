@@ -1,0 +1,64 @@
+// nRF52 SPI Module (SPIM with EasyDMA)
+// Hardware Abstraction Layer for nRF52 SPI
+//
+// nRF52 SPI Features:
+// - 3x SPIM interfaces (SPI Master with EasyDMA)
+// - Up to 8 Mbps
+// - Master and Slave modes
+// - EasyDMA for large transfers
+// - Configurable clock polarity/phase
+//
+// nRF5 SDK: nrf_drv_spi.h
+
+extern "C" {
+    fn nrf_drv_spi_init(instance: *void, config: *void, event_handler: *void) -> u32;
+    fn nrf_drv_spi_uninit(instance: *void);
+    fn nrf_drv_spi_transfer(instance: *void, tx: *const u8, tx_len: u8, rx: *u8, rx_len: u8) -> u32;
+}
+
+const SPI_FREQ_1M: u32 = 1000000;
+const SPI_FREQ_8M: u32 = 8000000;
+
+const SPI_MODE_0: u8 = 0;
+const SPI_MODE_1: u8 = 1;
+const SPI_MODE_2: u8 = 2;
+const SPI_MODE_3: u8 = 3;
+
+pub struct SPI {
+    instance: *void,
+    cs_pin: u32,
+    freq: u32,
+}
+
+impl SPI {
+    pub fn new(instance: u8, sck: u32, mosi: u32, miso: u32, cs: u32, freq: u32) -> SPI {
+        SPI { instance: core::ptr::null(), cs_pin: cs, freq }
+    }
+    
+    pub fn select(&self) {
+        // Set CS low
+    }
+    
+    pub fn deselect(&self) {
+        // Set CS high
+    }
+    
+    pub fn write(&self, data: &[u8]) -> u32 {
+        unsafe {
+            nrf_drv_spi_transfer(self.instance, data.as_ptr(), data.len() as u8, core::ptr::null_mut(), 0)
+        }
+    }
+    
+    pub fn read(&self, buffer: &mut [u8]) -> u32 {
+        unsafe {
+            nrf_drv_spi_transfer(self.instance, core::ptr::null(), 0, buffer.as_mut_ptr(), buffer.len() as u8)
+        }
+    }
+    
+    pub fn transfer(&self, tx: &[u8], rx: &mut [u8]) -> u32 {
+        let len = if tx.len() < rx.len() { tx.len() } else { rx.len() };
+        unsafe {
+            nrf_drv_spi_transfer(self.instance, tx.as_ptr(), len as u8, rx.as_mut_ptr(), len as u8)
+        }
+    }
+}

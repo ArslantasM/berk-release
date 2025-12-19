@@ -1,0 +1,113 @@
+/// ═══════════════════════════════════════════════════════════════════════════
+/// BERK Programlama Dili - Modul Sistemi
+/// Seviye: Orta (Intermediate)
+/// ═══════════════════════════════════════════════════════════════════════════
+
+kullan std::io
+kullan std::math
+use std::time
+
+yaz("============================================================")
+yaz("              Modul Sistemi / Module System                 ")
+yaz("============================================================")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 1: Standart Kutuphane Modulleri
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 1: Standart Kutuphane ---")
+
+yaz("\n   [std::io] Giris/Cikis Modulu:")
+yaz("   - yaz() fonksiyonu aktif")
+
+yaz("\n   [std::math] Matematik Modulu:")
+değişken sayi = -42
+yaz("   - abs(", sayi, ") = ", abs(sayi))
+yaz("   - max(10, 20) = ", max(10, 20))
+yaz("   - min(10, 20) = ", min(10, 20))
+
+yaz("\n   [std::time] Zaman Modulu:")
+değişken baslangic = time::now()
+// Kucuk bir islem yap
+değişken toplam = 0
+için i içinde 0..1000 yap
+    toplam = toplam + i
+son
+değişken gecen = time::elapsed(baslangic)
+yaz("   - 0-999 toplami: ", toplam)
+yaz("   - Gecen sure: ", gecen, " ms")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 2: Modul Fonksiyonlari
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 2: Modul Fonksiyonlari ---")
+
+// io modulu
+yaz("\n   io::format kullanimi:")
+değişken isim = "BERK"
+değişken versiyon = 1
+yaz("   Dil: ", isim, " v", versiyon, ".0")
+
+// time modulu detaylari
+yaz("\n   time modulu detaylari:")
+değişken t1 = time::now()
+değişken t2 = time::now()
+yaz("   - time::now() iki cagri arasi fark: ", t2 - t1, " ms")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 3: Platform Spesifik Moduller
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 3: Platform Spesifik Moduller ---")
+
+yaz("\n   Desteklenen platformlar:")
+yaz("   - std::arduino  (Arduino/AVR)")
+yaz("   - std::esp32    (ESP32/ESP-IDF)")
+yaz("   - std::stm32    (STM32/ARM)")
+yaz("   - std::riscv    (RISC-V)")
+
+yaz("\n   Desteklenen alanlar:")
+yaz("   - std::gui      (Grafiksel Arayuz)")
+yaz("   - std::graphics (2D/3D Grafik)")
+yaz("   - std::audio    (Ses Isleme)")
+yaz("   - std::image    (Goruntu Isleme)")
+yaz("   - std::sqlite   (Veritabani)")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 4: Modul Alias Kullanimi
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 4: Modul Alias ---")
+
+yaz("\n   Ornek kullanim:")
+yaz("   kullan std::math as m")
+yaz("   m::sqrt(16) --> 4")
+yaz("")
+yaz("   use std::time as t")
+yaz("   t::now() --> timestamp")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 5: Performans Olcumu
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 5: Performans Olcumu ---")
+
+fonksiyon fibonacci(n: tamsayı) -> tamsayı yap
+    eğer n <= 1
+        dön n
+    son
+    dön fibonacci(n - 1) + fibonacci(n - 2)
+son
+
+değişken test_n = 20
+yaz("\n   Fibonacci(", test_n, ") hesaplaniyor...")
+
+değişken start = time::now()
+değişken sonuc = fibonacci(test_n)
+değişken sure = time::elapsed(start)
+
+yaz("   Sonuc: ", sonuc)
+yaz("   Sure: ", sure, " ms")
+
+yaz("\n[OK] Modul sistemi demosu tamamlandi!")

@@ -1,0 +1,91 @@
+// =============================================================================
+// BERK Hardware Bridge - Serial Port Demo
+// USB/Serial iletişim örneği
+// =============================================================================
+
+kullan std::serial
+
+// -----------------------------------------------------------------------------
+// Port Keşfi
+// -----------------------------------------------------------------------------
+
+yazdır("=== BERK Serial Port Demo ===\n")
+
+// Mevcut portları listele
+yazdır("📡 Mevcut Serial Portlar:")
+yazdır("-" * 40)
+
+olsun portlar = serial::list_ports()
+
+eğer portlar.uzunluk() == 0 ise
+    yazdır("⚠️  Hiç serial port bulunamadı!")
+    yazdır("    USB cihaz bağlı mı kontrol edin.")
+değilse
+    her port için portlar yap
+        yazdır("  Port: {}", port["name"])
+        yazdır("    Tip: {}", port["type"])
+        eğer port["manufacturer"] != boş ise
+            yazdır("    Üretici: {}", port["manufacturer"])
+        son
+        eğer port["vid"] != boş ise
+            yazdır("    VID:PID: {:04X}:{:04X}", port["vid"], port["pid"])
+        son
+        yazdır("")
+    son
+son
+
+// -----------------------------------------------------------------------------
+// Basit İletişim Örneği (simülasyon)
+// -----------------------------------------------------------------------------
+
+yazdır("\n📝 Örnek Kullanım:")
+yazdır("-" * 40)
+
+yazdır("""
+// Port açma
+olsun port = serial::open("COM3", 115200)
+
+// Yazma
+serial::write(port, "Merhaba Arduino!\\n")
+serial::write_bytes(port, [0x01, 0x02, 0x03])
+
+// Okuma
+olsun yanit = serial::read_line(port)
+yazdır("Yanıt: {}", yanit)
+
+// Kapat
+serial::close(port)
+""")
+
+// -----------------------------------------------------------------------------
+// Gelişmiş Ayarlar
+// -----------------------------------------------------------------------------
+
+yazdır("\n⚙️  Gelişmiş Port Ayarları:")
+yazdır("-" * 40)
+
+yazdır("""
+// Tüm parametrelerle açma
+olsun port = serial::open_extended(
+    "COM3",     // Port adı
+    115200,     // Baud rate
+    8,          // Data bits (5, 6, 7, 8)
+    "none",     // Parity (none, odd, even)
+    1           // Stop bits (1, 2)
+)
+
+// Timeout ayarla (ms)
+serial::set_timeout(port, 1000)
+
+// Kontrol sinyalleri
+serial::set_dtr(port, doğru)
+serial::set_rts(port, doğru)
+
+// Buffer temizle
+serial::flush(port)
+
+// Okunacak byte sayısı
+olsun bekleyen = serial::available(port)
+""")
+
+yazdır("\n✅ Serial demo tamamlandı!")

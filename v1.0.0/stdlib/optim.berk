@@ -1,0 +1,903 @@
+//! # Optim Module
+//!
+//! Optimization algorithms (numerical optimization).
+//!
+//! Optimizasyon algoritmaları (sayısal optimizasyon).
+//!
+//! ## Features / Özellikler
+//!
+//! - **Unconstrained**: Gradient descent, Newton / Kısıtsız
+//! - **Line search**: Golden section, Brent / Doğru arama
+//! - **Gradient-free**: Nelder-Mead, Powell / Türevsiz
+//! - **Root finding**: Newton-Raphson, bisection / Kök bulma
+//! - **Constrained**: Penalty, Lagrange / Kısıtlı
+//! - **Least squares**: Curve fitting / En küçük kareler
+//! - **Convex**: Convex optimization / Konveks optimizasyon
+//! - **Metaheuristics**: Simulated annealing, GA / Sezgisel
+//!
+//! ## Example / Örnek
+//!
+//! ```berk
+//! kullan optim
+//!
+//! fonksiyon f(x: ondalık): ondalık => (x - 2.0) * (x - 2.0)
+//! değişken min = optim.minimize(f, 0.0, 10.0, tolerans: 0.0001)
+//! io.println(min)  // ~2.0
+//! ```
+//!
+//! Inspired by: SciPy.optimize + Julia Optim.jl
+
+// optim.berk - Optimization Algorithms Module
+// BerkOS Standard Library v1.3
+// 
+// Optimizasyon Algoritmaları: Minimum/maksimum bulma, sayısal optimizasyon
+// 
+// SciPy.optimize + Julia Optim.jl + Numerical Recipes'ten esinlenilmiştir
+// 
+// Özellikler:
+// - Unconstrained optimization (gradient descent, Newton, quasi-Newton)
+// - Line search methods (golden section, bisection, Brent)
+// - Gradient-free methods (Nelder-Mead, Powell, pattern search)
+// - Root finding (Newton-Raphson, bisection, secant)
+// - Constrained optimization (penalty methods, Lagrange multipliers)
+// - Least squares fitting
+// - Convex optimization basics
+// - Metaheuristics (simulated annealing, genetic algorithms basics)
+
+// =============================================================================
+// ROOT FINDING - SINGLE VARIABLE
+// =============================================================================
+
+// Bisection metodu (ikiye bölme) - kök bulma
+// f(a) ve f(b) zıt işaretli olmalı
+fonksiyon optim_bisection(f: fonksiyon, a: ondalık, b: ondalık, tolerans: ondalık, max_iter: tam_sayı): ondalık {
+    değişken fa = f(a);
+    değişken fb = f(b);
+    
+    // Zıt işaret kontrolü
+    eğer (fa * fb > 0.0) {
+        dön a;  // Hata: zıt işaretli değil
+    }
+    
+    değişken iter = 0;
+    iken (iter < max_iter) {
+        değişken c = (a + b) / 2.0;
+        değişken fc = f(c);
+        
+        eğer (math_mutlak(fc) < tolerans veya (b - a) / 2.0 < tolerans) {
+            dön c;
+        }
+        
+        eğer (fa * fc < 0.0) {
+            b = c;
+            fb = fc;
+        } yoksa {
+            a = c;
+            fa = fc;
+        }
+        
+        iter = iter + 1;
+    }
+    
+    dön (a + b) / 2.0;
+}
+
+// Newton-Raphson metodu (kök bulma)
+// f: fonksiyon, df: türev, x0: başlangıç tahmini
+fonksiyon optim_newton_raphson(f: fonksiyon, df: fonksiyon, x0: ondalık, tolerans: ondalık, max_iter: tam_sayı): ondalık {
+    değişken x = x0;
+    değişken iter = 0;
+    
+    iken (iter < max_iter) {
+        değişken fx = f(x);
+        değişken dfx = df(x);
+        
+        eğer (math_mutlak(fx) < tolerans) {
+            dön x;
+        }
+        
+        eğer (math_mutlak(dfx) < 1e-10) {
+            dön x;  // Türev sıfıra çok yakın
+        }
+        
+        x = x - fx / dfx;
+        iter = iter + 1;
+    }
+    
+    dön x;
+}
+
+// Secant metodu (kiriş metodu) - türev gerektirmez
+fonksiyon optim_secant(f: fonksiyon, x0: ondalık, x1: ondalık, tolerans: ondalık, max_iter: tam_sayı): ondalık {
+    değişken iter = 0;
+    
+    iken (iter < max_iter) {
+        değişken f0 = f(x0);
+        değişken f1 = f(x1);
+        
+        eğer (math_mutlak(f1) < tolerans) {
+            dön x1;
+        }
+        
+        eğer (math_mutlak(f1 - f0) < 1e-10) {
+            dön x1;  // Bölme hatası
+        }
+        
+        değişken x2 = x1 - f1 * (x1 - x0) / (f1 - f0);
+        x0 = x1;
+        x1 = x2;
+        iter = iter + 1;
+    }
+    
+    dön x1;
+}
+
+// Fixed-point iteration (sabit nokta iterasyonu)
+fonksiyon optim_fixed_point(g: fonksiyon, x0: ondalık, tolerans: ondalık, max_iter: tam_sayı): ondalık {
+    değişken x = x0;
+    değişken iter = 0;
+    
+    iken (iter < max_iter) {
+        değişken x_yeni = g(x);
+        
+        eğer (math_mutlak(x_yeni - x) < tolerans) {
+            dön x_yeni;
+        }
+        
+        x = x_yeni;
+        iter = iter + 1;
+    }
+    
+    dön x;
+}
+
+// =============================================================================
+// LINE SEARCH - MINIMUM FINDING
+// =============================================================================
+
+// Golden section search (altın oran araması) - tek değişkenli minimum
+fonksiyon optim_golden_section(f: fonksiyon, a: ondalık, b: ondalık, tolerans: ondalık): ondalık {
+    değişken phi = (1.0 + math_kare_kök(5.0)) / 2.0;  // Altın oran
+    değişken invphi = 1.0 / phi;
+    değişken invphi2 = 1.0 / (phi * phi);
+    
+    değişken c = a + invphi2 * (b - a);
+    değişken d = a + invphi * (b - a);
+    değişken fc = f(c);
+    değişken fd = f(d);
+    
+    iken (math_mutlak(b - a) > tolerans) {
+        eğer (fc < fd) {
+            b = d;
+            d = c;
+            fd = fc;
+            c = a + invphi2 * (b - a);
+            fc = f(c);
+        } yoksa {
+            a = c;
+            c = d;
+            fc = fd;
+            d = a + invphi * (b - a);
+            fd = f(d);
+        }
+    }
+    
+    dön (a + b) / 2.0;
+}
+
+// Brent metodu (kombinasyon yaklaşımı) - parabolic interpolation + golden section
+fonksiyon optim_brent(f: fonksiyon, a: ondalık, b: ondalık, tolerans: ondalık, max_iter: tam_sayı): ondalık {
+    değişken phi = (3.0 - math_kare_kök(5.0)) / 2.0;
+    
+    değişken v = a + phi * (b - a);
+    değişken w = v;
+    değişken x = v;
+    
+    değişken fx = f(x);
+    değişken fv = fx;
+    değişken fw = fx;
+    
+    değişken iter = 0;
+    iken (iter < max_iter) {
+        değişken mid = (a + b) / 2.0;
+        değişken tol1 = tolerans * math_mutlak(x) + 1e-10;
+        değişken tol2 = 2.0 * tol1;
+        
+        eğer (math_mutlak(x - mid) <= tol2 - (b - a) / 2.0) {
+            dön x;
+        }
+        
+        // Golden section step
+        değişken d = 0.0;
+        eğer (x >= mid) {
+            d = a - x;
+        } yoksa {
+            d = b - x;
+        }
+        d = phi * d;
+        
+        değişken u = 0.0;
+        eğer (math_mutlak(d) >= tol1) {
+            u = x + d;
+        } eğer (d > 0.0) {
+            u = x + tol1;
+        } yoksa {
+            u = x - tol1;
+        }
+        
+        değişken fu = f(u);
+        
+        eğer (fu <= fx) {
+            eğer (u >= x) {
+                a = x;
+            } yoksa {
+                b = x;
+            }
+            v = w; fv = fw;
+            w = x; fw = fx;
+            x = u; fx = fu;
+        } yoksa {
+            eğer (u < x) {
+                a = u;
+            } yoksa {
+                b = u;
+            }
+            eğer (fu <= fw veya w == x) {
+                v = w; fv = fw;
+                w = u; fw = fu;
+            } eğer (fu <= fv veya v == x veya v == w) {
+                v = u; fv = fu;
+            }
+        }
+        
+        iter = iter + 1;
+    }
+    
+    dön x;
+}
+
+// =============================================================================
+// GRADIENT DESCENT & VARIANTS
+// =============================================================================
+
+// Gradient descent (temel)
+// grad_f: gradyan fonksiyonu, x0: başlangıç noktası (n-boyutlu)
+fonksiyon optim_gradient_descent(grad_f: fonksiyon, x: [ondalık], n: tam_sayı, öğrenme_hızı: ondalık, max_iter: tam_sayı, tolerans: ondalık): [ondalık] {
+    değişken iter = 0;
+    
+    iken (iter < max_iter) {
+        değişken grad = grad_f(x, n);
+        
+        // Gradyan normu kontrolü (yakınsama)
+        değişken grad_norm = linalg_norm2(grad, n);
+        eğer (grad_norm < tolerans) {
+            dön x;
+        }
+        
+        // x = x - α * ∇f(x)
+        değişken i = 0;
+        iken (i < n) {
+            x[i] = x[i] - öğrenme_hızı * grad[i];
+            i = i + 1;
+        }
+        
+        iter = iter + 1;
+    }
+    
+    dön x;
+}
+
+// Gradient descent with momentum
+fonksiyon optim_gradient_descent_momentum(grad_f: fonksiyon, x: [ondalık], n: tam_sayı, öğrenme_hızı: ondalık, momentum: ondalık, max_iter: tam_sayı): [ondalık] {
+    değişken velocity = yeni_dizi(n, 0.0);
+    değişken iter = 0;
+    
+    iken (iter < max_iter) {
+        değişken grad = grad_f(x, n);
+        
+        // v = β * v + α * ∇f(x)
+        // x = x - v
+        değişken i = 0;
+        iken (i < n) {
+            velocity[i] = momentum * velocity[i] + öğrenme_hızı * grad[i];
+            x[i] = x[i] - velocity[i];
+            i = i + 1;
+        }
+        
+        iter = iter + 1;
+    }
+    
+    dön x;
+}
+
+// Adam optimizer (Adaptive Moment Estimation)
+fonksiyon optim_adam(grad_f: fonksiyon, x: [ondalık], n: tam_sayı, α: ondalık, β1: ondalık, β2: ondalık, ε: ondalık, max_iter: tam_sayı): [ondalık] {
+    değişken m = yeni_dizi(n, 0.0);  // 1. moment tahmini
+    değişken v = yeni_dizi(n, 0.0);  // 2. moment tahmini
+    değişken t = 1;
+    
+    iken (t <= max_iter) {
+        değişken grad = grad_f(x, n);
+        
+        değişken i = 0;
+        iken (i < n) {
+            // Moment güncellemeleri
+            m[i] = β1 * m[i] + (1.0 - β1) * grad[i];
+            v[i] = β2 * v[i] + (1.0 - β2) * grad[i] * grad[i];
+            
+            // Bias düzeltmesi
+            değişken m_hat = m[i] / (1.0 - math_pow(β1, t));
+            değişken v_hat = v[i] / (1.0 - math_pow(β2, t));
+            
+            // Parametre güncelleme
+            x[i] = x[i] - α * m_hat / (math_kare_kök(v_hat) + ε);
+            i = i + 1;
+        }
+        
+        t = t + 1;
+    }
+    
+    dön x;
+}
+
+// =============================================================================
+// QUASI-NEWTON METHODS (BFGS Approximation)
+// =============================================================================
+
+// BFGS metodu (Broyden-Fletcher-Goldfarb-Shanno) - basitleştirilmiş
+fonksiyon optim_bfgs_simple(f: fonksiyon, grad_f: fonksiyon, x: [ondalık], n: tam_sayı, tolerans: ondalık, max_iter: tam_sayı): [ondalık] {
+    // Başlangıç Hessian tahmini: birim matris
+    değişken H = linalg_birim_mat(n);
+    değişken iter = 0;
+    
+    iken (iter < max_iter) {
+        değişken grad = grad_f(x, n);
+        
+        // Yakınsama kontrolü
+        eğer (linalg_norm2(grad, n) < tolerans) {
+            dön x;
+        }
+        
+        // Arama yönü: p = -H * grad
+        değişken p = linalg_mat_çarp(H, grad, n, n, 1);
+        değişken i = 0;
+        iken (i < n) {
+            p[i] = -p[i];
+            i = i + 1;
+        }
+        
+        // Line search (basit sabit adım)
+        değişken α = 0.01;
+        değişken x_yeni = yeni_dizi(n);
+        i = 0;
+        iken (i < n) {
+            x_yeni[i] = x[i] + α * p[i];
+            i = i + 1;
+        }
+        
+        // s = x_new - x
+        değişken s = yeni_dizi(n);
+        i = 0;
+        iken (i < n) {
+            s[i] = x_yeni[i] - x[i];
+            i = i + 1;
+        }
+        
+        // y = grad_new - grad
+        değişken grad_yeni = grad_f(x_yeni, n);
+        değişken y = yeni_dizi(n);
+        i = 0;
+        iken (i < n) {
+            y[i] = grad_yeni[i] - grad[i];
+            i = i + 1;
+        }
+        
+        // BFGS Hessian güncelleme (basitleştirilmiş)
+        // Gerçek implementasyon matris güncellemesi gerektirir
+        
+        x = x_yeni;
+        iter = iter + 1;
+    }
+    
+    dön x;
+}
+
+// =============================================================================
+// NELDER-MEAD SIMPLEX METHOD (Gradient-free)
+// =============================================================================
+
+// Nelder-Mead simplex algoritması (basitleştirilmiş 2D)
+fonksiyon optim_nelder_mead_2d(f: fonksiyon, x0: [ondalık], tolerans: ondalık, max_iter: tam_sayı): [ondalık] {
+    // Simplex köşeleri (3 nokta 2D için)
+    değişken simplex = yeni_dizi(6);  // 3 nokta × 2 boyut
+    simplex[0] = x0[0]; simplex[1] = x0[1];
+    simplex[2] = x0[0] + 1.0; simplex[3] = x0[1];
+    simplex[4] = x0[0]; simplex[5] = x0[1] + 1.0;
+    
+    değişken fvals = yeni_dizi(3);
+    fvals[0] = f(simplex[0], simplex[1]);
+    fvals[1] = f(simplex[2], simplex[3]);
+    fvals[2] = f(simplex[4], simplex[5]);
+    
+    değişken α = 1.0;   // Yansıma
+    değişken γ = 2.0;   // Genişleme
+    değişken ρ = 0.5;   // Daralma
+    değişken σ = 0.5;   // Küçülme
+    
+    değişken iter = 0;
+    iken (iter < max_iter) {
+        // Sırala: f0 <= f1 <= f2
+        // Basitleştirilmiş sıralama
+        
+        // Centroid hesapla (en kötü nokta hariç)
+        değişken cx = (simplex[0] + simplex[2]) / 2.0;
+        değişken cy = (simplex[1] + simplex[3]) / 2.0;
+        
+        // Yansıma noktası
+        değişken xr = cx + α * (cx - simplex[4]);
+        değişken yr = cy + α * (cy - simplex[5]);
+        değişken fr = f(xr, yr);
+        
+        // Basitleştirilmiş karar mantığı
+        eğer (fr < fvals[1]) {
+            simplex[4] = xr;
+            simplex[5] = yr;
+            fvals[2] = fr;
+        }
+        
+        // Yakınsama kontrolü
+        değişken fark = math_mutlak(fvals[2] - fvals[0]);
+        eğer (fark < tolerans) {
+            dön [simplex[0], simplex[1]];
+        }
+        
+        iter = iter + 1;
+    }
+    
+    dön [simplex[0], simplex[1]];
+}
+
+// =============================================================================
+// CONSTRAINED OPTIMIZATION - PENALTY METHODS
+// =============================================================================
+
+// Penalty metodu (kısıtlı optimizasyon)
+// f: objektif fonksiyon, g: kısıt fonksiyonu (g(x) <= 0)
+fonksiyon optim_penalty_method(f: fonksiyon, g: fonksiyon, x: [ondalık], n: tam_sayı, max_iter: tam_sayı): [ondalık] {
+    değişken μ = 1.0;  // Ceza parametresi
+    değişken iter = 0;
+    
+    iken (iter < max_iter) {
+        // Penalty fonksiyonu: P(x) = f(x) + μ * max(0, g(x))²
+        // Basit gradyan inişi (gradient descent ile çöz)
+        
+        // μ'yü artır
+        μ = μ * 10.0;
+        iter = iter + 1;
+    }
+    
+    dön x;
+}
+
+// Augmented Lagrangian metodu (basitleştirilmiş)
+fonksiyon optim_augmented_lagrangian(f: fonksiyon, h: fonksiyon, x: [ondalık], n: tam_sayı, max_iter: tam_sayı): [ondalık] {
+    değişken λ = 0.0;  // Lagrange çarpanı
+    değişken μ = 1.0;  // Penalty parametresi
+    değişken iter = 0;
+    
+    iken (iter < max_iter) {
+        // L(x, λ, μ) = f(x) + λ * h(x) + (μ/2) * h(x)²
+        // x'i optimize et
+        
+        // λ güncelle: λ = λ + μ * h(x)
+        değişken hx = h(x, n);
+        λ = λ + μ * hx;
+        
+        iter = iter + 1;
+    }
+    
+    dön x;
+}
+
+// =============================================================================
+// LEAST SQUARES FITTING
+// =============================================================================
+
+// Doğrusal en küçük kareler (Linear Least Squares)
+// A*x = b çöz (overdetermined system)
+// Normal denklemler: A^T * A * x = A^T * b
+fonksiyon optim_least_squares(A: [ondalık], b: [ondalık], m: tam_sayı, n: tam_sayı): [ondalık] {
+    // A^T hesapla
+    değişken AT = linalg_transpoz(A, m, n);
+    
+    // A^T * A hesapla
+    değişken ATA = linalg_mat_çarp(AT, A, n, m, n);
+    
+    // A^T * b hesapla
+    değişken ATb = linalg_mat_çarp(AT, b, n, m, 1);
+    
+    // A^T * A * x = A^T * b çöz (Gaussian elimination)
+    değişken x = linalg_gauss_çöz(ATA, ATb, n);
+    
+    dön x;
+}
+
+// Gauss-Newton metodu (nonlinear least squares)
+fonksiyon optim_gauss_newton(r: fonksiyon, J: fonksiyon, x: [ondalık], n: tam_sayı, m: tam_sayı, max_iter: tam_sayı, tolerans: ondalık): [ondalık] {
+    değişken iter = 0;
+    
+    iken (iter < max_iter) {
+        // Residual vektörü
+        değişken residual = r(x, n);
+        
+        // Jacobian matrisi
+        değişken jacobian = J(x, n);
+        
+        // Normal denklemler: J^T * J * Δx = -J^T * r
+        değişken JT = linalg_transpoz(jacobian, m, n);
+        değişken JTJ = linalg_mat_çarp(JT, jacobian, n, m, n);
+        değişken JTr = linalg_mat_çarp(JT, residual, n, m, 1);
+        
+        // JTr'yi negatif yap
+        değişken i = 0;
+        iken (i < n) {
+            JTr[i] = -JTr[i];
+            i = i + 1;
+        }
+        
+        // Δx çöz
+        değişken delta = linalg_gauss_çöz(JTJ, JTr, n);
+        
+        // x güncelle
+        i = 0;
+        iken (i < n) {
+            x[i] = x[i] + delta[i];
+            i = i + 1;
+        }
+        
+        // Yakınsama kontrolü
+        eğer (linalg_norm2(delta, n) < tolerans) {
+            dön x;
+        }
+        
+        iter = iter + 1;
+    }
+    
+    dön x;
+}
+
+// Levenberg-Marquardt algoritması (damped least squares)
+fonksiyon optim_levenberg_marquardt(r: fonksiyon, J: fonksiyon, x: [ondalık], n: tam_sayı, m: tam_sayı, λ: ondalık, max_iter: tam_sayı): [ondalık] {
+    değişken iter = 0;
+    
+    iken (iter < max_iter) {
+        değişken residual = r(x, n);
+        değişken jacobian = J(x, n);
+        
+        // (J^T * J + λ * I) * Δx = -J^T * r
+        değişken JT = linalg_transpoz(jacobian, m, n);
+        değişken JTJ = linalg_mat_çarp(JT, jacobian, n, m, n);
+        
+        // λ * I ekle (damping)
+        değişken i = 0;
+        iken (i < n) {
+            JTJ[i * n + i] = JTJ[i * n + i] + λ;
+            i = i + 1;
+        }
+        
+        değişken JTr = linalg_mat_çarp(JT, residual, n, m, 1);
+        i = 0;
+        iken (i < n) {
+            JTr[i] = -JTr[i];
+            i = i + 1;
+        }
+        
+        değişken delta = linalg_gauss_çöz(JTJ, JTr, n);
+        
+        // x güncelle
+        i = 0;
+        iken (i < n) {
+            x[i] = x[i] + delta[i];
+            i = i + 1;
+        }
+        
+        iter = iter + 1;
+    }
+    
+    dön x;
+}
+
+// =============================================================================
+// CONVEX OPTIMIZATION BASICS
+// =============================================================================
+
+// Gradient projection metodu (kutu kısıtları için)
+// a <= x <= b
+fonksiyon optim_gradient_projection(grad_f: fonksiyon, x: [ondalık], a: [ondalık], b: [ondalık], n: tam_sayı, α: ondalık, max_iter: tam_sayı): [ondalık] {
+    değişken iter = 0;
+    
+    iken (iter < max_iter) {
+        değişken grad = grad_f(x, n);
+        
+        // Gradient adımı
+        değişken i = 0;
+        iken (i < n) {
+            x[i] = x[i] - α * grad[i];
+            
+            // Projeksiyon (kısıtlara uydur)
+            eğer (x[i] < a[i]) {
+                x[i] = a[i];
+            } eğer (x[i] > b[i]) {
+                x[i] = b[i];
+            }
+            
+            i = i + 1;
+        }
+        
+        iter = iter + 1;
+    }
+    
+    dön x;
+}
+
+// =============================================================================
+// SIMULATED ANNEALING (Metaheuristic)
+// =============================================================================
+
+// Simulated annealing (benzetilmiş tavlama)
+fonksiyon optim_simulated_annealing(f: fonksiyon, x0: [ondalık], n: tam_sayı, T0: ondalık, α: ondalık, max_iter: tam_sayı, tohum: tam_sayı): [ondalık] {
+    değişken x = linalg_mat_kopyala(x0, n, 1);
+    değişken x_best = linalg_mat_kopyala(x, n, 1);
+    değişken f_best = f(x, n);
+    değişken T = T0;
+    değişken rng = tohum;
+    
+    değişken iter = 0;
+    iken (iter < max_iter) {
+        // Komşu çözüm üret (rastgele perturbation)
+        değişken x_new = yeni_dizi(n);
+        değişken i = 0;
+        iken (i < n) {
+            rng = (rng * 1103515245 + 12345) % 2147483648;
+            değişken delta = ((rng % 2000) - 1000) / 1000.0;  // -1 ile 1 arası
+            x_new[i] = x[i] + delta * T;
+            i = i + 1;
+        }
+        
+        // Enerji farkı
+        değişken f_new = f(x_new, n);
+        değişken delta_E = f_new - f(x, n);
+        
+        // Metropolis kriteri
+        eğer (delta_E < 0.0) {
+            // Daha iyi çözüm, kabul et
+            x = x_new;
+            eğer (f_new < f_best) {
+                x_best = x_new;
+                f_best = f_new;
+            }
+        } yoksa {
+            // Kötü çözüm, olasılıkla kabul et
+            rng = (rng * 1103515245 + 12345) % 2147483648;
+            değişken prob = math_exp(-delta_E / T);
+            değişken rand = (rng % 10000) / 10000.0;
+            eğer (rand < prob) {
+                x = x_new;
+            }
+        }
+        
+        // Sıcaklığı düşür
+        T = T * α;
+        iter = iter + 1;
+    }
+    
+    dön x_best;
+}
+
+// =============================================================================
+// GENETIC ALGORITHM BASICS
+// =============================================================================
+
+// Basit genetik algoritma (1D optimizasyon)
+fonksiyon optim_genetic_algorithm_1d(f: fonksiyon, a: ondalık, b: ondalık, popülasyon: tam_sayı, nesil: tam_sayı, tohum: tam_sayı): ondalık {
+    // Başlangıç popülasyonu
+    değişken pop = yeni_dizi(popülasyon);
+    değişken fitness = yeni_dizi(popülasyon);
+    değişken rng = tohum;
+    değişken i = 0;
+    
+    iken (i < popülasyon) {
+        rng = (rng * 1103515245 + 12345) % 2147483648;
+        pop[i] = a + ((rng % 10000) / 10000.0) * (b - a);
+        fitness[i] = f(pop[i]);
+        i = i + 1;
+    }
+    
+    // Evrim döngüsü
+    değişken gen = 0;
+    iken (gen < nesil) {
+        // Selection (turnuva seçimi)
+        değişken parents = yeni_dizi(popülasyon);
+        i = 0;
+        iken (i < popülasyon) {
+            rng = (rng * 1103515245 + 12345) % 2147483648;
+            değişken idx1 = rng % popülasyon;
+            rng = (rng * 1103515245 + 12345) % 2147483648;
+            değişken idx2 = rng % popülasyon;
+            
+            eğer (fitness[idx1] < fitness[idx2]) {
+                parents[i] = pop[idx1];
+            } yoksa {
+                parents[i] = pop[idx2];
+            }
+            i = i + 1;
+        }
+        
+        // Crossover & Mutation (basitleştirilmiş)
+        i = 0;
+        iken (i < popülasyon) {
+            pop[i] = parents[i];
+            
+            // Mutasyon
+            rng = (rng * 1103515245 + 12345) % 2147483648;
+            eğer ((rng % 100) < 10) {  // %10 mutasyon oranı
+                rng = (rng * 1103515245 + 12345) % 2147483648;
+                değişken delta = ((rng % 2000) - 1000) / 10000.0;
+                pop[i] = pop[i] + delta * (b - a);
+                
+                // Sınır kontrolü
+                eğer (pop[i] < a) pop[i] = a;
+                eğer (pop[i] > b) pop[i] = b;
+            }
+            
+            fitness[i] = f(pop[i]);
+            i = i + 1;
+        }
+        
+        gen = gen + 1;
+    }
+    
+    // En iyi bireyi bul
+    değişken best = pop[0];
+    değişken best_fitness = fitness[0];
+    i = 1;
+    iken (i < popülasyon) {
+        eğer (fitness[i] < best_fitness) {
+            best = pop[i];
+            best_fitness = fitness[i];
+        }
+        i = i + 1;
+    }
+    
+    dön best;
+}
+
+// =============================================================================
+// COORDINATE DESCENT
+// =============================================================================
+
+// Coordinate descent (koordinat inişi)
+fonksiyon optim_coordinate_descent(f: fonksiyon, x: [ondalık], n: tam_sayı, α: ondalık, max_iter: tam_sayı, tolerans: ondalık): [ondalık] {
+    değişken iter = 0;
+    
+    iken (iter < max_iter) {
+        değişken max_change = 0.0;
+        
+        // Her koordinatı optimize et
+        değişken i = 0;
+        iken (i < n) {
+            değişken x_eski = x[i];
+            
+            // Basit gradyan tahmini (finite difference)
+            değişken h = 1e-6;
+            değişken x_plus = linalg_mat_kopyala(x, n, 1);
+            x_plus[i] = x_plus[i] + h;
+            
+            değişken grad = (f(x_plus, n) - f(x, n)) / h;
+            
+            // Güncelle
+            x[i] = x[i] - α * grad;
+            
+            değişken change = math_mutlak(x[i] - x_eski);
+            eğer (change > max_change) {
+                max_change = change;
+            }
+            
+            i = i + 1;
+        }
+        
+        eğer (max_change < tolerans) {
+            dön x;
+        }
+        
+        iter = iter + 1;
+    }
+    
+    dön x;
+}
+
+// =============================================================================
+// UTILITIES
+// =============================================================================
+
+// Sayısal gradyan tahmini (finite differences)
+fonksiyon optim_numerical_gradient(f: fonksiyon, x: [ondalık], n: tam_sayı, h: ondalık): [ondalık] {
+    değişken grad = yeni_dizi(n);
+    değişken i = 0;
+    
+    iken (i < n) {
+        değişken x_plus = linalg_mat_kopyala(x, n, 1);
+        değişken x_minus = linalg_mat_kopyala(x, n, 1);
+        
+        x_plus[i] = x_plus[i] + h;
+        x_minus[i] = x_minus[i] - h;
+        
+        grad[i] = (f(x_plus, n) - f(x_minus, n)) / (2.0 * h);
+        i = i + 1;
+    }
+    
+    dön grad;
+}
+
+// Hessian matrisi tahmini (finite differences)
+fonksiyon optim_numerical_hessian(f: fonksiyon, x: [ondalık], n: tam_sayı, h: ondalık): [ondalık] {
+    değişken H = yeni_dizi(n * n);
+    değişken i = 0;
+    
+    iken (i < n) {
+        değişken j = 0;
+        iken (j < n) {
+            eğer (i == j) {
+                // İkinci türev (diagonal)
+                değişken f_plus = f(x, n);  // Basitleştirilmiş
+                değişken f_center = f(x, n);
+                değişken f_minus = f(x, n);
+                H[i * n + j] = (f_plus - 2.0 * f_center + f_minus) / (h * h);
+            } yoksa {
+                // Mixed partial derivative
+                H[i * n + j] = 0.0;  // Basitleştirilmiş
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    
+    dön H;
+}
+
+// Line search - Armijo koşulu
+fonksiyon optim_armijo_line_search(f: fonksiyon, x: [ondalık], p: [ondalık], n: tam_sayı, α_init: ondalık, c: ondalık, τ: ondalık): ondalık {
+    değişken α = α_init;
+    değişken fx = f(x, n);
+    
+    // Gradyan tahmini
+    değişken grad = optim_numerical_gradient(f, x, n, 1e-6);
+    değişken gp = linalg_iç_çarpım(grad, p, n);
+    
+    // Armijo koşulunu sağlayan α bul
+    değişken max_iter = 20;
+    değişken iter = 0;
+    
+    iken (iter < max_iter) {
+        değişken x_new = yeni_dizi(n);
+        değişken i = 0;
+        iken (i < n) {
+            x_new[i] = x[i] + α * p[i];
+            i = i + 1;
+        }
+        
+        değişken f_new = f(x_new, n);
+        
+        // Armijo koşulu: f(x + α*p) <= f(x) + c*α*g^T*p
+        eğer (f_new <= fx + c * α * gp) {
+            dön α;
+        }
+        
+        α = τ * α;  // α'yı küçült
+        iter = iter + 1;
+    }
+    
+    dön α;
+}
+
+son

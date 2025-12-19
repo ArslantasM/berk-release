@@ -1,0 +1,1600 @@
+//! # CAD3D Module
+//!
+//! 3D CAD modeling system (code-first CAD).
+//!
+//! 3D CAD modelleme sistemi (code-first CAD).
+//!
+//! ## Features / Özellikler
+//!
+//! - **Parametric**: Code-first 3D modeling / Parametrik modelleme
+//! - **Primitives**: Box, sphere, cylinder, cone, torus / Temel şekiller
+//! - **Boolean ops**: Union, subtract, intersect / Boolean işlemler
+//! - **Sketch**: 2D draw + extrude/revolve/loft / Sketch API
+//! - **Filleting**: Fillets, chamfers / Yuvarlatma, pah kırma
+//! - **File I/O**: STEP, IGES, STL / Dosya işlemleri
+//! - **Triangulation**: Mesh for 3D printing / Mesh triangulation
+//! - **Transforms**: Translate, rotate, scale, mirror / Dönüştürmeler
+//! - **Assemblies**: Part combining / Parça birleştirme
+//!
+//! ## Example / Örnek
+//!
+//! ```berk
+//! kullan cad3d
+//!
+//! değişken box = cad3d.box(100.0, 50.0, 25.0)
+//! değişken sphere = cad3d.sphere(30.0).translate(50.0, 0.0, 12.5)
+//! değişken result = cad3d.subtract(box, sphere)
+//! cad3d.export_step(result, "part.step")
+//! ```
+//!
+//! Backend: OpenCascade Technology (OCCT) 7.8
+
+modül cad3d
+
+kullan string
+kullan io
+kullan math
+
+// ============================================================================
+// TÜRLER (Types) - OpenCascade Topoloji Hiyerarşisi
+// ============================================================================
+
+// Shape (temel topolojik varlık)
+tip Sekil = yapı yap
+    handle: tamsayı,      // Opaque pointer to TopoDS_Shape
+    sekil_tipi: SekilTipi
+son
+
+tip SekilTipi = "Vertex" | "Edge" | "Wire" | "Face" | "Shell" | "Solid" | "Compound"
+
+// Vertex (nokta - 0D)
+tip Nokta = yapı yap
+    handle: tamsayı,
+    pozisyon: Vec3
+son
+
+// Edge (çizgi/eğri - 1D)
+tip Kenar = yapı yap
+    handle: tamsayı,
+    baslangic: Vec3,
+    bitis: Vec3,
+    kenar_tipi: KenarTipi
+son
+
+tip KenarTipi = "Line" | "Arc" | "Circle" | "Ellipse" | "BezierCurve" | "BSplineCurve"
+
+// Wire (bağlı kenarlar zinciri - 1D loop)
+tip Tel = yapı yap
+    handle: tamsayı,
+    kapalı: mantıksal,
+    kenar_sayısı: tamsayı
+son
+
+// Face (yüzey - 2D)
+tip Yuzey = yapı yap
+    handle: tamsayı,
+    alan: ondalık,
+    yuzey_tipi: YuzeyTipi
+son
+
+tip YuzeyTipi = "Plane" | "Cylinder" | "Cone" | "Sphere" | "Torus" | "BezierSurface" | "BSplineSurface"
+
+// Shell (bağlı yüzeyler - 2D manifold)
+tip Kabuk = yapı yap
+    handle: tamsayı,
+    kapalı: mantıksal,
+    yuzey_sayısı: tamsayı
+son
+
+// Solid (katı cisim - 3D)
+tip Kati = yapı yap
+    handle: tamsayı,
+    hacim: ondalık,
+    kutle_merkezi: Vec3
+son
+
+// Compound (birleşik şekiller)
+tip BilesenSekil = yapı yap
+    handle: tamsayı,
+    alt_sekiller: liste[Sekil]
+son
+
+// Boolean işlem sonucu (yeni kenarlar ile)
+tip BooleanSonuc = yapı yap
+    sekil: Sekil,
+    yeni_kenarlar: liste[Kenar]  // İki şeklin kesişme kenarları
+son
+
+// 3D vektörler
+tip Vec3 = yapı yap x: ondalık, y: ondalık, z: ondalık son
+tip Vec2 = yapı yap x: ondalık, y: ondalık son
+
+// 4x4 transformasyon matrisi
+tip Transform = yapı yap
+    matris: liste[ondalık]  // 16 elemanlı
+son
+
+// Yön (Direction enum)
+tip Yon = "PosX" | "NegX" | "PosY" | "NegY" | "PosZ" | "NegZ" | Ozel[Vec3]
+
+// Workplane (2D sketch düzlemi)
+tip CizimDuzlemi = yapı yap
+    orijin: Vec3,
+    x_yon: Vec3,
+    normal: Vec3,      // Z ekseni
+    transform: Transform
+son
+
+// Sketch builder (2D çizim API)
+tip Cizim = yapı yap
+    ilk_nokta: Seçenek[Vec3],
+    konum: Vec3,             // Cursor (global koordinatlar)
+    duzlem: CizimDuzlemi,
+    kenarlar: liste[Kenar]
+son
+
+// Mesher ayarları (triangulation)
+tip MeshAyar = yapı yap
+    dogruluk: ondalık,        // Linear deflection (default: 0.1)
+    aci_dogrulugu: ondalık,   // Angular deflection in degrees (default: 28.0)
+    relative: mantıksal        // Relative vs absolute tolerance
+son
+
+// Mesh (triangulated surface)
+tip Mesh = yapı yap
+    vertexler: liste[Vec3],
+    normaller: liste[Vec3],
+    ucgenler: liste[tamsayı],  // Vertex indeksleri (3'lü gruplar)
+    uv_koordinatlari: Seçenek[liste[Vec2]]
+son
+
+// CAD hataları
+tip CADHata = yapı yap
+    mesaj: yazı,
+    hata_tipi: yazı  // "io", "topology", "geometry", "file_format", "triangulation"
+son
+
+// Join tipi (köşe birleştirme)
+tip BirlestirmeTipi = "Arc" | "Intersection"
+
+// ============================================================================
+// PRİMİTİFLER (Primitive Shapes)
+// ============================================================================
+
+// Kutu (box) oluştur
+fonksiyon kutu(genişlik: ondalık, derinlik: ondalık, yükseklik: ondalık) -> Kati
+yap
+    // BRepPrimAPI_MakeBox(gp_Pnt(0,0,0), width, depth, height)
+    değişken handle = occt_make_box(0.0, 0.0, 0.0, genişlik, derinlik, yükseklik)
+    
+    değişken hacim = genişlik * derinlik * yükseklik
+    değişken merkez = Vec3 yap 
+        x: genişlik / 2.0, 
+        y: derinlik / 2.0, 
+        z: yükseklik / 2.0 
+    son
+    
+    dön Kati yap
+        handle: handle,
+        hacim: hacim,
+        kutle_merkezi: merkez
+    son
+son
+
+// Küre (sphere) oluştur
+fonksiyon kure(yaricap: ondalık, merkez: Vec3 = vec3(0.0, 0.0, 0.0)) -> Kati
+yap
+    // BRepPrimAPI_MakeSphere(gp_Pnt(cx, cy, cz), radius)
+    değişken handle = occt_make_sphere(merkez.x, merkez.y, merkez.z, yaricap, 360.0)
+    
+    değişken hacim = (4.0 / 3.0) * math::PI * yaricap * yaricap * yaricap
+    
+    dön Kati yap
+        handle: handle,
+        hacim: hacim,
+        kutle_merkezi: merkez
+    son
+son
+
+// Silindir (cylinder) oluştur
+fonksiyon silindir(yaricap: ondalık, yükseklik: ondalık, merkez: Vec3 = vec3(0.0, 0.0, 0.0)) -> Kati
+yap
+    // BRepPrimAPI_MakeCylinder(gp_Ax2(center, Z), radius, height)
+    değişken handle = occt_make_cylinder(merkez.x, merkez.y, merkez.z, yaricap, yükseklik, 360.0)
+    
+    değişken hacim = math::PI * yaricap * yaricap * yükseklik
+    
+    dön Kati yap
+        handle: handle,
+        hacim: hacim,
+        kutle_merkezi: Vec3 yap x: merkez.x, y: merkez.y, z: merkez.z + yükseklik/2.0 son
+    son
+son
+
+// Koni (cone) oluştur
+fonksiyon koni(alt_yaricap: ondalık, ust_yaricap: ondalık, yükseklik: ondalık) -> Kati
+yap
+    // BRepPrimAPI_MakeCone(gp_Ax2, radius1, radius2, height)
+    değişken handle = occt_make_cone(0.0, 0.0, 0.0, alt_yaricap, ust_yaricap, yükseklik, 360.0)
+    
+    // Koni hacmi: V = (π h / 3) * (r1² + r1*r2 + r2²)
+    değişken hacim = (math::PI * yükseklik / 3.0) * 
+                     (alt_yaricap * alt_yaricap + alt_yaricap * ust_yaricap + ust_yaricap * ust_yaricap)
+    
+    dön Kati yap
+        handle: handle,
+        hacim: hacim,
+        kutle_merkezi: Vec3 yap x: 0.0, y: 0.0, z: yükseklik / 2.0 son
+    son
+son
+
+// Torus (halka) oluştur
+fonksiyon torus(ana_yaricap: ondalık, tup_yaricapi: ondalık) -> Kati
+yap
+    // BRepPrimAPI_MakeTorus(gp_Ax2, major_radius, minor_radius)
+    değişken handle = occt_make_torus(0.0, 0.0, 0.0, ana_yaricap, tup_yaricapi, 360.0, 360.0)
+    
+    // Torus hacmi: V = 2π²Rr²
+    değişken hacim = 2.0 * math::PI * math::PI * ana_yaricap * tup_yaricapi * tup_yaricapi
+    
+    dön Kati yap
+        handle: handle,
+        hacim: hacim,
+        kutle_merkezi: Vec3 yap x: 0.0, y: 0.0, z: 0.0 son
+    son
+son
+
+// ============================================================================
+// BOOLEAN İŞLEMLER (Boolean Operations)
+// ============================================================================
+
+// İki katıyı birleştir (union)
+fonksiyon birlestir(sekil1: Kati, sekil2: Kati) -> BooleanSonuc
+yap
+    // BRepAlgoAPI_Fuse
+    değişken sonuç_handle = occt_fuse(sekil1.handle, sekil2.handle)
+    değişken yeni_kenarlar = occt_get_section_edges(sonuç_handle)
+    
+    dön BooleanSonuc yap
+        sekil: Sekil yap handle: sonuç_handle, sekil_tipi: "Solid" son,
+        yeni_kenarlar: yeni_kenarlar
+    son
+son
+
+// Birinci katıdan ikincisini çıkar (difference)
+fonksiyon cikar(sekil1: Kati, sekil2: Kati) -> BooleanSonuc
+yap
+    // BRepAlgoAPI_Cut
+    değişken sonuç_handle = occt_cut(sekil1.handle, sekil2.handle)
+    değişken yeni_kenarlar = occt_get_section_edges(sonuç_handle)
+    
+    dön BooleanSonuc yap
+        sekil: Sekil yap handle: sonuç_handle, sekil_tipi: "Solid" son,
+        yeni_kenarlar: yeni_kenarlar
+    son
+son
+
+// İki katının kesişimini al (intersection)
+fonksiyon kesisim(sekil1: Kati, sekil2: Kati) -> BooleanSonuc
+yap
+    // BRepAlgoAPI_Common
+    değişken sonuç_handle = occt_common(sekil1.handle, sekil2.handle)
+    değişken yeni_kenarlar = occt_get_section_edges(sonuç_handle)
+    
+    dön BooleanSonuc yap
+        sekil: Sekil yap handle: sonuç_handle, sekil_tipi: "Solid" son,
+        yeni_kenarlar: yeni_kenarlar
+    son
+son
+
+// ============================================================================
+// FILLET ve CHAMFER (Edge Operations)
+// ============================================================================
+
+// Kenarları yuvarla (fillet)
+fonksiyon fillet(kati: Kati, yaricap: ondalık, kenarlar: liste[Kenar]) -> BilesenSekil
+yap
+    // BRepFilletAPI_MakeFillet
+    değişken sonuç_handle = occt_make_fillet(kati.handle, yaricap, kenarlar)
+    
+    dön BilesenSekil yap
+        handle: sonuç_handle,
+        alt_sekiller: []
+    son
+son
+
+// Kenarları pah kır (chamfer)
+fonksiyon chamfer(kati: Kati, mesafe: ondalık, kenarlar: liste[Kenar]) -> BilesenSekil
+yap
+    // BRepFilletAPI_MakeChamfer
+    değişken sonuç_handle = occt_make_chamfer(kati.handle, mesafe, kenarlar)
+    
+    dön BilesenSekil yap
+        handle: sonuç_handle,
+        alt_sekiller: []
+    son
+son
+
+// ============================================================================
+// WORKPLANE ve SKETCH (2D Drawing + 3D Extrude)
+// ============================================================================
+
+// Workplane oluştur (XY düzlemi)
+fonksiyon cizim_duzlemi_xy() -> CizimDuzlemi
+yap
+    dön CizimDuzlemi yap
+        orijin: Vec3 yap x: 0.0, y: 0.0, z: 0.0 son,
+        x_yon: Vec3 yap x: 1.0, y: 0.0, z: 0.0 son,
+        normal: Vec3 yap x: 0.0, y: 0.0, z: 1.0 son,
+        transform: transform_birim()
+    son
+son
+
+// Workplane oluştur (YZ düzlemi)
+fonksiyon cizim_duzlemi_yz() -> CizimDuzlemi
+yap
+    dön CizimDuzlemi yap
+        orijin: Vec3 yap x: 0.0, y: 0.0, z: 0.0 son,
+        x_yon: Vec3 yap x: 0.0, y: 1.0, z: 0.0 son,
+        normal: Vec3 yap x: 1.0, y: 0.0, z: 0.0 son,
+        transform: transform_birim()
+    son
+son
+
+// Workplane oluştur (XZ düzlemi)
+fonksiyon cizim_duzlemi_xz() -> CizimDuzlemi
+yap
+    dön CizimDuzlemi yap
+        orijin: Vec3 yap x: 0.0, y: 0.0, z: 0.0 son,
+        x_yon: Vec3 yap x: 1.0, y: 0.0, z: 0.0 son,
+        normal: Vec3 yap x: 0.0, y: 1.0, z: 0.0 son,
+        transform: transform_birim()
+    son
+son
+
+// Dikdörtgen çiz (workplane üzerinde)
+fonksiyon cizim_dikdortgen(duzlem: CizimDuzlemi, genişlik: ondalık, yükseklik: ondalık) -> Tel
+yap
+    değişken yarim_w = genişlik / 2.0
+    değişken yarim_h = yükseklik / 2.0
+    
+    // 4 köşe noktası (local coordinates)
+    değişken p1 = duzlem_to_dunya(duzlem, Vec3 yap x: -yarim_w, y:  yarim_h, z: 0.0 son)
+    değişken p2 = duzlem_to_dunya(duzlem, Vec3 yap x:  yarim_w, y:  yarim_h, z: 0.0 son)
+    değişken p3 = duzlem_to_dunya(duzlem, Vec3 yap x:  yarim_w, y: -yarim_h, z: 0.0 son)
+    değişken p4 = duzlem_to_dunya(duzlem, Vec3 yap x: -yarim_w, y: -yarim_h, z: 0.0 son)
+    
+    // 4 edge oluştur
+    değişken ust = kenar_dogru(p1, p2)
+    değişken sag = kenar_dogru(p2, p3)
+    değişken alt = kenar_dogru(p3, p4)
+    değişken sol = kenar_dogru(p4, p1)
+    
+    dön tel_olustur([ust, sag, alt, sol])
+son
+
+// Daire çiz (workplane üzerinde)
+fonksiyon cizim_daire(duzlem: CizimDuzlemi, x: ondalık, y: ondalık, yaricap: ondalık) -> Tel
+yap
+    değişken merkez = duzlem_to_dunya(duzlem, Vec3 yap x: x, y: y, z: 0.0 son)
+    
+    // BRepBuilderAPI_MakeWire + BRepBuilderAPI_MakeEdge circle
+    değişken daire_kenar = kenar_daire(merkez, duzlem.normal, yaricap)
+    
+    dön tel_olustur([daire_kenar])
+son
+
+// Sketch builder başlat
+fonksiyon cizim_baslat(duzlem: CizimDuzlemi) -> Cizim
+yap
+    değişken konum = duzlem.orijin
+    
+    dön Cizim yap
+        ilk_nokta: Hiç,
+        konum: konum,
+        duzlem: duzlem,
+        kenarlar: []
+    son
+son
+
+// Sketch: Konuma git (move_to)
+fonksiyon cizim_konum(cizim: değişken Cizim, x: ondalık, y: ondalık) -> boş
+yap
+    cizim.konum = duzlem_to_dunya(cizim.duzlem, Vec3 yap x: x, y: y, z: 0.0 son)
+son
+
+// Sketch: Çizgi çiz (line_to)
+fonksiyon cizim_cizgi(cizim: değişken Cizim, x: ondalık, y: ondalık) -> boş
+yap
+    değişken yeni_konum = duzlem_to_dunya(cizim.duzlem, Vec3 yap x: x, y: y, z: 0.0 son)
+    değişken yeni_kenar = kenar_dogru(cizim.konum, yeni_konum)
+    
+    eğer cizim.ilk_nokta.hic_mi() ise yap
+        cizim.ilk_nokta = Bazı(cizim.konum)
+    son
+    
+    cizim.kenarlar.ekle(yeni_kenar)
+    cizim.konum = yeni_konum
+son
+
+// Sketch: Yatay çizgi (dx kadar)
+fonksiyon cizim_yatay(cizim: değişken Cizim, dx: ondalık) -> boş
+yap
+    değişken local = dunya_to_duzlem(cizim.duzlem, cizim.konum)
+    cizim_cizgi(cizim, local.x + dx, local.y)
+son
+
+// Sketch: Dikey çizgi (dy kadar)
+fonksiyon cizim_dikey(cizim: değişken Cizim, dy: ondalık) -> boş
+yap
+    değişken local = dunya_to_duzlem(cizim.duzlem, cizim.konum)
+    cizim_cizgi(cizim, local.x, local.y + dy)
+son
+
+// Sketch: Yay çiz (3 noktalı)
+fonksiyon cizim_yay(cizim: değişken Cizim, p2: Vec2, p3: Vec2) -> boş
+yap
+    değişken p1_world = cizim.konum
+    değişken p2_world = duzlem_to_dunya(cizim.duzlem, Vec3 yap x: p2.x, y: p2.y, z: 0.0 son)
+    değişken p3_world = duzlem_to_dunya(cizim.duzlem, Vec3 yap x: p3.x, y: p3.y, z: 0.0 son)
+    
+    değişken yay_kenar = kenar_yay(p1_world, p2_world, p3_world)
+    
+    cizim.kenarlar.ekle(yay_kenar)
+    cizim.konum = p3_world
+son
+
+// Sketch'i Tel'e dönüştür
+fonksiyon cizim_bitir(cizim: Cizim) -> Tel
+yap
+    dön tel_olustur(cizim.kenarlar)
+son
+
+// Tel'i extrude et (katı cisim yap)
+fonksiyon extrude(tel: Tel, yükseklik: ondalık, yon: Vec3 = vec3(0.0, 0.0, 1.0)) -> Kati
+yap
+    // BRepPrimAPI_MakePrism
+    değişken yuzey = yuzey_olustur(tel)
+    değişken vector = vec3_carpim(yon, yükseklik)
+    değişken handle = occt_extrude(yuzey.handle, vector.x, vector.y, vector.z)
+    
+    // Hacim tahmini (basitleştirilmiş)
+    değişken alan = yuzey.alan
+    değişken hacim = alan * yükseklik
+    
+    dön Kati yap
+        handle: handle,
+        hacim: hacim,
+        kutle_merkezi: Vec3 yap x: 0.0, y: 0.0, z: yükseklik / 2.0 son
+    son
+son
+
+// Tel'i döndürerek katı oluştur (revolve)
+fonksiyon dondurerek_olustur(tel: Tel, eksen_baslangic: Vec3, eksen_yon: Vec3, açi: ondalık = 360.0) -> Kati
+yap
+    // BRepPrimAPI_MakeRevol
+    değişken yuzey = yuzey_olustur(tel)
+    değişken aci_rad = açi * math::PI / 180.0
+    
+    değişken handle = occt_revolve(yuzey.handle, 
+                                   eksen_baslangic.x, eksen_baslangic.y, eksen_baslangic.z,
+                                   eksen_yon.x, eksen_yon.y, eksen_yon.z,
+                                   aci_rad)
+    
+    dön Kati yap
+        handle: handle,
+        hacim: 0.0,  // OCCT'den hesaplanacak
+        kutle_merkezi: Vec3 yap x: 0.0, y: 0.0, z: 0.0 son
+    son
+son
+
+// Teller arasında loft (geçiş yüzeyi)
+fonksiyon loft(teller: liste[Tel]) -> Kati
+yap
+    // BRepOffsetAPI_ThruSections
+    değişken handle = occt_loft(teller, katı_mı: doğru)
+    
+    dön Kati yap
+        handle: handle,
+        hacim: 0.0,
+        kutle_merkezi: Vec3 yap x: 0.0, y: 0.0, z: 0.0 son
+    son
+son
+
+// ============================================================================
+// TRANSFORMASYONLAR (Transformations)
+// ============================================================================
+
+// Katıyı taşı (translate)
+fonksiyon tasi(kati: Kati, dx: ondalık, dy: ondalık, dz: ondalık) -> Kati
+yap
+    değişken yeni_handle = occt_translate(kati.handle, dx, dy, dz)
+    
+    dön Kati yap
+        handle: yeni_handle,
+        hacim: kati.hacim,
+        kutle_merkezi: Vec3 yap
+            x: kati.kutle_merkezi.x + dx,
+            y: kati.kutle_merkezi.y + dy,
+            z: kati.kutle_merkezi.z + dz
+        son
+    son
+son
+
+// Katıyı döndür (rotate)
+fonksiyon dondur(kati: Kati, eksen_baslangic: Vec3, eksen_yon: Vec3, açi: ondalık) -> Kati
+yap
+    değişken aci_rad = açi * math::PI / 180.0
+    değişken yeni_handle = occt_rotate(kati.handle, 
+                                       eksen_baslangic.x, eksen_baslangic.y, eksen_baslangic.z,
+                                       eksen_yon.x, eksen_yon.y, eksen_yon.z,
+                                       aci_rad)
+    
+    dön Kati yap
+        handle: yeni_handle,
+        hacim: kati.hacim,
+        kutle_merkezi: kati.kutle_merkezi  // Basitleştirilmiş
+    son
+son
+
+// Katıyı ölçeklendir (scale)
+fonksiyon olceklendir(kati: Kati, merkez: Vec3, olcek: ondalık) -> Kati
+yap
+    değişken yeni_handle = occt_scale(kati.handle, merkez.x, merkez.y, merkez.z, olcek)
+    
+    dön Kati yap
+        handle: yeni_handle,
+        hacim: kati.hacim * olcek * olcek * olcek,  // Volume scales cubically
+        kutle_merkezi: kati.kutle_merkezi
+    son
+son
+
+// Katıyı aynala (mirror)
+fonksiyon aynala(kati: Kati, duzlem_nokta: Vec3, duzlem_normal: Vec3) -> Kati
+yap
+    değişken yeni_handle = occt_mirror(kati.handle, 
+                                       duzlem_nokta.x, duzlem_nokta.y, duzlem_nokta.z,
+                                       duzlem_normal.x, duzlem_normal.y, duzlem_normal.z)
+    
+    dön Kati yap
+        handle: yeni_handle,
+        hacim: kati.hacim,
+        kutle_merkezi: kati.kutle_merkezi
+    son
+son
+
+// ============================================================================
+// DOSYA I/O (File Import/Export)
+// ============================================================================
+
+// STEP dosyası yükle (ISO 10303)
+fonksiyon step_yukle(dosya_yolu: yazı) -> Sonuç[Sekil, CADHata]
+yap
+    değişken handle = occt_step_read(dosya_yolu)
+    
+    eğer handle < 0 ise yap
+        dön Hata(CADHata yap
+            mesaj: "STEP dosyası yüklenemedi: " + dosya_yolu,
+            hata_tipi: "file_format"
+        son)
+    son
+    
+    dön Tamam(Sekil yap
+        handle: handle,
+        sekil_tipi: "Compound"
+    son)
+son
+
+// STEP dosyası kaydet
+fonksiyon step_kaydet(sekil: Sekil, dosya_yolu: yazı) -> Sonuç[boş, CADHata]
+yap
+    değişken sonuç = occt_step_write(sekil.handle, dosya_yolu)
+    
+    eğer sonuç < 0 ise yap
+        dön Hata(CADHata yap
+            mesaj: "STEP dosyası kaydedilemedi: " + dosya_yolu,
+            hata_tipi: "io"
+        son)
+    son
+    
+    dön Tamam(boş)
+son
+
+// IGES dosyası yükle
+fonksiyon iges_yukle(dosya_yolu: yazı) -> Sonuç[Sekil, CADHata]
+yap
+    değişken handle = occt_iges_read(dosya_yolu)
+    
+    eğer handle < 0 ise yap
+        dön Hata(CADHata yap
+            mesaj: "IGES dosyası yüklenemedi: " + dosya_yolu,
+            hata_tipi: "file_format"
+        son)
+    son
+    
+    dön Tamam(Sekil yap
+        handle: handle,
+        sekil_tipi: "Compound"
+    son)
+son
+
+// IGES dosyası kaydet
+fonksiyon iges_kaydet(sekil: Sekil, dosya_yolu: yazı) -> Sonuç[boş, CADHata]
+yap
+    değişken sonuç = occt_iges_write(sekil.handle, dosya_yolu)
+    
+    eğer sonuç < 0 ise yap
+        dön Hata(CADHata yap
+            mesaj: "IGES dosyası kaydedilemedi: " + dosya_yolu,
+            hata_tipi: "io"
+        son)
+    son
+    
+    dön Tamam(boş)
+son
+
+// STL dosyası kaydet (3D printing)
+fonksiyon stl_kaydet(sekil: Sekil, dosya_yolu: yazı, ascii: mantıksal = yanlış) -> Sonuç[boş, CADHata]
+yap
+    değişken sonuç = occt_stl_write(sekil.handle, dosya_yolu, ascii)
+    
+    eğer sonuç < 0 ise yap
+        dön Hata(CADHata yap
+            mesaj: "STL dosyası kaydedilemedi: " + dosya_yolu,
+            hata_tipi: "io"
+        son)
+    son
+    
+    dön Tamam(boş)
+son
+
+// SVG dosyası kaydet (2D projection)
+fonksiyon svg_kaydet(sekil: Sekil, dosya_yolu: yazı) -> Sonuç[boş, CADHata]
+yap
+    değişken sonuç = occt_svg_write(sekil.handle, dosya_yolu)
+    
+    eğer sonuç < 0 ise yap
+        dön Hata(CADHata yap
+            mesaj: "SVG dosyası kaydedilemedi: " + dosya_yolu,
+            hata_tipi: "io"
+        son)
+    son
+    
+    dön Tamam(boş)
+son
+
+// ============================================================================
+// MESH GENERATION (Triangulation for Rendering/3D Printing)
+// ============================================================================
+
+// Katıyı mesh'e çevir
+fonksiyon mesh_olustur(sekil: Sekil, ayarlar: MeshAyar = varsayilan_mesh_ayar()) -> Sonuç[Mesh, CADHata]
+yap
+    // BRepMesh_IncrementalMesh
+    değişken mesh_data = occt_triangulate(sekil.handle, ayarlar.dogruluk, ayarlar.aci_dogrulugu)
+    
+    eğer mesh_data.hata_mı() ise yap
+        dön Hata(CADHata yap
+            mesaj: "Mesh oluşturulamadı",
+            hata_tipi: "triangulation"
+        son)
+    son
+    
+    dön Tamam(mesh_data.unwrap())
+son
+
+// Varsayılan mesh ayarları
+fonksiyon varsayilan_mesh_ayar() -> MeshAyar
+yap
+    dön MeshAyar yap
+        dogruluk: 0.1,
+        aci_dogrulugu: 28.0,
+        relative: yanlış
+    son
+son
+
+// ============================================================================
+// KENAR ve TEL (Edge and Wire Operations)
+// ============================================================================
+
+// Doğru kenar oluştur
+fonksiyon kenar_dogru(baslangic: Vec3, bitis: Vec3) -> Kenar
+yap
+    değişken handle = occt_make_edge_line(baslangic.x, baslangic.y, baslangic.z,
+                                          bitis.x, bitis.y, bitis.z)
+    
+    dön Kenar yap
+        handle: handle,
+        baslangic: baslangic,
+        bitis: bitis,
+        kenar_tipi: "Line"
+    son
+son
+
+// Daire kenar oluştur
+fonksiyon kenar_daire(merkez: Vec3, normal: Vec3, yaricap: ondalık) -> Kenar
+yap
+    değişken handle = occt_make_edge_circle(merkez.x, merkez.y, merkez.z,
+                                            normal.x, normal.y, normal.z,
+                                            yaricap)
+    
+    dön Kenar yap
+        handle: handle,
+        baslangic: merkez,
+        bitis: merkez,  // Kapalı eğri
+        kenar_tipi: "Circle"
+    son
+son
+
+// Yay kenar oluştur (3 nokta)
+fonksiyon kenar_yay(p1: Vec3, p2: Vec3, p3: Vec3) -> Kenar
+yap
+    değişken handle = occt_make_edge_arc(p1.x, p1.y, p1.z,
+                                         p2.x, p2.y, p2.z,
+                                         p3.x, p3.y, p3.z)
+    
+    dön Kenar yap
+        handle: handle,
+        baslangic: p1,
+        bitis: p3,
+        kenar_tipi: "Arc"
+    son
+son
+
+// Tel oluştur (kenarlardan)
+fonksiyon tel_olustur(kenarlar: liste[Kenar]) -> Tel
+yap
+    değişken handle = occt_make_wire(kenarlar)
+    değişken kapalı = occt_wire_is_closed(handle)
+    
+    dön Tel yap
+        handle: handle,
+        kapalı: kapalı,
+        kenar_sayısı: kenarlar.uzunluk
+    son
+son
+
+// Yüzey oluştur (tel'den)
+fonksiyon yuzey_olustur(tel: Tel) -> Yuzey
+yap
+    değişken handle = occt_make_face(tel.handle)
+    değişken alan = occt_face_area(handle)
+    
+    dön Yuzey yap
+        handle: handle,
+        alan: alan,
+        yuzey_tipi: "Plane"
+    son
+son
+
+// ============================================================================
+// SORGULAR (Queries)
+// ============================================================================
+
+// Hacim hesapla
+fonksiyon hacim_hesapla(kati: Kati) -> ondalık
+yap
+    dön occt_compute_volume(kati.handle)
+son
+
+// Alan hesapla
+fonksiyon alan_hesapla(yuzey: Yuzey) -> ondalık
+yap
+    dön occt_compute_area(yuzey.handle)
+son
+
+// Kütle merkezi hesapla
+fonksiyon kutle_merkezi_hesapla(kati: Kati) -> Vec3
+yap
+    dön occt_compute_center_of_mass(kati.handle)
+son
+
+// Bounding box hesapla
+fonksiyon sinir_kutusu(sekil: Sekil) -> (Vec3, Vec3)
+yap
+    değişken bbox = occt_compute_bounding_box(sekil.handle)
+    dön (bbox.min, bbox.max)
+son
+
+// Kenarları bul (filtering)
+fonksiyon kenarlari_bul(sekil: Sekil, yon: Yon) -> liste[Kenar]
+yap
+    değişken tum_kenarlar = occt_explore_edges(sekil.handle)
+    
+    // Yöne göre filtrele
+    değişken filtrelenmis = []
+    değişken yon_vektoru = yon_to_vec3(yon)
+    
+    döngü kenar: tum_kenarlar yap
+        değişken kenar_yon = vec3_normalize(vec3_cikar(kenar.bitis, kenar.baslangic))
+        değişken paralellik = math::abs(vec3_nokta_carpim(kenar_yon, yon_vektoru))
+        
+        // Paralellik toleransı: 0.9999 (açı ~0.8 derece)
+        eğer paralellik > 0.9999 ise yap
+            filtrelenmis.ekle(kenar)
+        son
+    son
+    
+    dön filtrelenmis
+son
+
+// Yüzeyleri bul
+fonksiyon yuzeyleri_bul(sekil: Sekil) -> liste[Yuzey]
+yap
+    dön occt_explore_faces(sekil.handle)
+son
+
+// En uzak yüzeyi bul (direction)
+fonksiyon en_uzak_yuzey(sekil: Sekil, yon: Yon) -> Seçenek[Yuzey]
+yap
+    değişken yuzeyler = yuzeyleri_bul(sekil)
+    değişken yon_vektoru = yon_to_vec3(yon)
+    
+    değişken max_mesafe = -1000000.0
+    değişken en_uzak = Hiç
+    
+    döngü yuzey: yuzeyler yap
+        değişken merkez = occt_face_center_of_mass(yuzey.handle)
+        değişken mesafe = vec3_nokta_carpim(merkez, yon_vektoru)
+        
+        eğer mesafe > max_mesafe ise yap
+            max_mesafe = mesafe
+            en_uzak = Bazı(yuzey)
+        son
+    son
+    
+    dön en_uzak
+son
+
+// ============================================================================
+// VEKTÖR MATEMATİK (Vector Math Utilities)
+// ============================================================================
+
+// Vektör oluştur
+fonksiyon vec3(x: ondalık, y: ondalık, z: ondalık) -> Vec3
+yap
+    dön Vec3 yap x: x, y: y, z: z son
+son
+
+// Vektör toplama
+fonksiyon vec3_topla(a: Vec3, b: Vec3) -> Vec3
+yap
+    dön Vec3 yap x: a.x + b.x, y: a.y + b.y, z: a.z + b.z son
+son
+
+// Vektör çıkarma
+fonksiyon vec3_cikar(a: Vec3, b: Vec3) -> Vec3
+yap
+    dön Vec3 yap x: a.x - b.x, y: a.y - b.y, z: a.z - b.z son
+son
+
+// Vektör skaler çarpım
+fonksiyon vec3_carpim(a: Vec3, s: ondalık) -> Vec3
+yap
+    dön Vec3 yap x: a.x * s, y: a.y * s, z: a.z * s son
+son
+
+// Vektör nokta çarpım (dot product)
+fonksiyon vec3_nokta_carpim(a: Vec3, b: Vec3) -> ondalık
+yap
+    dön a.x * b.x + a.y * b.y + a.z * b.z
+son
+
+// Vektör çapraz çarpım (cross product)
+fonksiyon vec3_capraz_carpim(a: Vec3, b: Vec3) -> Vec3
+yap
+    dön Vec3 yap
+        x: a.y * b.z - a.z * b.y,
+        y: a.z * b.x - a.x * b.z,
+        z: a.x * b.y - a.y * b.x
+    son
+son
+
+// Vektör uzunluğu
+fonksiyon vec3_uzunluk(a: Vec3) -> ondalık
+yap
+    dön math::sqrt(a.x * a.x + a.y * a.y + a.z * a.z)
+son
+
+// Vektör normalize et
+fonksiyon vec3_normalize(a: Vec3) -> Vec3
+yap
+    değişken uzunluk = vec3_uzunluk(a)
+    eğer uzunluk < 0.000001 ise yap
+        dön Vec3 yap x: 0.0, y: 0.0, z: 1.0 son
+    son
+    dön vec3_carpim(a, 1.0 / uzunluk)
+son
+
+// Yön enum'u Vec3'e çevir
+fonksiyon yon_to_vec3(yon: Yon) -> Vec3
+yap
+    dön eşleşme yon yap
+        "PosX" -> Vec3 yap x: 1.0, y: 0.0, z: 0.0 son,
+        "NegX" -> Vec3 yap x: -1.0, y: 0.0, z: 0.0 son,
+        "PosY" -> Vec3 yap x: 0.0, y: 1.0, z: 0.0 son,
+        "NegY" -> Vec3 yap x: 0.0, y: -1.0, z: 0.0 son,
+        "PosZ" -> Vec3 yap x: 0.0, y: 0.0, z: 1.0 son,
+        "NegZ" -> Vec3 yap x: 0.0, y: 0.0, z: -1.0 son,
+        Ozel[v] -> vec3_normalize(v)
+    son
+son
+
+// ============================================================================
+// WORKPLANE YARDIMCI FONKSİYONLAR
+// ============================================================================
+
+// Local koordinattan global koordinata
+fonksiyon duzlem_to_dunya(duzlem: CizimDuzlemi, local: Vec3) -> Vec3
+yap
+    // Transform matrix: [x_dir, y_dir, normal, origin]
+    değişken x_yon = duzlem.x_yon
+    değişken y_yon = vec3_capraz_carpim(duzlem.normal, x_yon)
+    değişken z_yon = duzlem.normal
+    
+    dön Vec3 yap
+        x: duzlem.orijin.x + local.x * x_yon.x + local.y * y_yon.x + local.z * z_yon.x,
+        y: duzlem.orijin.y + local.x * x_yon.y + local.y * y_yon.y + local.z * z_yon.y,
+        z: duzlem.orijin.z + local.x * x_yon.z + local.y * y_yon.z + local.z * z_yon.z
+    son
+son
+
+// Global koordinattan local koordinata
+fonksiyon dunya_to_duzlem(duzlem: CizimDuzlemi, dunya: Vec3) -> Vec3
+yap
+    değişken delta = vec3_cikar(dunya, duzlem.orijin)
+    değişken y_yon = vec3_capraz_carpim(duzlem.normal, duzlem.x_yon)
+    
+    dön Vec3 yap
+        x: vec3_nokta_carpim(delta, duzlem.x_yon),
+        y: vec3_nokta_carpim(delta, y_yon),
+        z: vec3_nokta_carpim(delta, duzlem.normal)
+    son
+son
+
+// Birim transformasyon matrisi
+fonksiyon transform_birim() -> Transform
+yap
+    dön Transform yap
+        matris: [
+            1.0, 0.0, 0.0, 0.0,
+            0.0, 1.0, 0.0, 0.0,
+            0.0, 0.0, 1.0, 0.0,
+            0.0, 0.0, 0.0, 1.0
+        ]
+    son
+son
+
+// ============================================================================
+// EXTERNAL C++ BINDINGS (OpenCascade OCCT via cxx.rs)
+// ============================================================================
+
+// Primitive constructors
+dış fonksiyon occt_make_box(x: ondalık, y: ondalık, z: ondalık, w: ondalık, d: ondalık, h: ondalık) -> tamsayı
+dış fonksiyon occt_make_sphere(x: ondalık, y: ondalık, z: ondalık, r: ondalık, angle: ondalık) -> tamsayı
+dış fonksiyon occt_make_cylinder(x: ondalık, y: ondalık, z: ondalık, r: ondalık, h: ondalık, angle: ondalık) -> tamsayı
+dış fonksiyon occt_make_cone(x: ondalık, y: ondalık, z: ondalık, r1: ondalık, r2: ondalık, h: ondalık, angle: ondalık) -> tamsayı
+dış fonksiyon occt_make_torus(x: ondalık, y: ondalık, z: ondalık, major_r: ondalık, minor_r: ondalık, angle1: ondalık, angle2: ondalık) -> tamsayı
+
+// Boolean operations
+dış fonksiyon occt_fuse(shape1: tamsayı, shape2: tamsayı) -> tamsayı
+dış fonksiyon occt_cut(shape1: tamsayı, shape2: tamsayı) -> tamsayı
+dış fonksiyon occt_common(shape1: tamsayı, shape2: tamsayı) -> tamsayı
+dış fonksiyon occt_get_section_edges(handle: tamsayı) -> liste[Kenar]
+
+// Fillet/Chamfer
+dış fonksiyon occt_make_fillet(solid: tamsayı, radius: ondalık, edges: liste[Kenar]) -> tamsayı
+dış fonksiyon occt_make_chamfer(solid: tamsayı, distance: ondalık, edges: liste[Kenar]) -> tamsayı
+
+// Extrude/Revolve/Loft
+dış fonksiyon occt_extrude(face: tamsayı, vx: ondalık, vy: ondalık, vz: ondalık) -> tamsayı
+dış fonksiyon occt_revolve(face: tamsayı, ox: ondalık, oy: ondalık, oz: ondalık, dx: ondalık, dy: ondalık, dz: ondalık, angle: ondalık) -> tamsayı
+dış fonksiyon occt_loft(wires: liste[Tel], is_solid: mantıksal) -> tamsayı
+
+// Transformations
+dış fonksiyon occt_translate(shape: tamsayı, dx: ondalık, dy: ondalık, dz: ondalık) -> tamsayı
+dış fonksiyon occt_rotate(shape: tamsayı, ox: ondalık, oy: ondalık, oz: ondalık, dx: ondalık, dy: ondalık, dz: ondalık, angle: ondalık) -> tamsayı
+dış fonksiyon occt_scale(shape: tamsayı, cx: ondalık, cy: ondalık, cz: ondalık, factor: ondalık) -> tamsayı
+dış fonksiyon occt_mirror(shape: tamsayı, px: ondalık, py: ondalık, pz: ondalık, nx: ondalık, ny: ondalık, nz: ondalık) -> tamsayı
+
+// File I/O
+dış fonksiyon occt_step_read(path: yazı) -> tamsayı
+dış fonksiyon occt_step_write(shape: tamsayı, path: yazı) -> tamsayı
+dış fonksiyon occt_iges_read(path: yazı) -> tamsayı
+dış fonksiyon occt_iges_write(shape: tamsayı, path: yazı) -> tamsayı
+dış fonksiyon occt_stl_write(shape: tamsayı, path: yazı, ascii: mantıksal) -> tamsayı
+dış fonksiyon occt_svg_write(shape: tamsayı, path: yazı) -> tamsayı
+
+// Triangulation
+dış fonksiyon occt_triangulate(shape: tamsayı, deflection: ondalık, angle: ondalık) -> Sonuç[Mesh, yazı]
+
+// Edges and Wires
+dış fonksiyon occt_make_edge_line(x1: ondalık, y1: ondalık, z1: ondalık, x2: ondalık, y2: ondalık, z2: ondalık) -> tamsayı
+dış fonksiyon occt_make_edge_circle(cx: ondalık, cy: ondalık, cz: ondalık, nx: ondalık, ny: ondalık, nz: ondalık, r: ondalık) -> tamsayı
+dış fonksiyon occt_make_edge_arc(x1: ondalık, y1: ondalık, z1: ondalık, x2: ondalık, y2: ondalık, z2: ondalık, x3: ondalık, y3: ondalık, z3: ondalık) -> tamsayı
+dış fonksiyon occt_make_wire(edges: liste[Kenar]) -> tamsayı
+dış fonksiyon occt_wire_is_closed(wire: tamsayı) -> mantıksal
+dış fonksiyon occt_make_face(wire: tamsayı) -> tamsayı
+
+// Queries
+dış fonksiyon occt_compute_volume(solid: tamsayı) -> ondalık
+dış fonksiyon occt_compute_area(face: tamsayı) -> ondalık
+dış fonksiyon occt_face_area(face: tamsayı) -> ondalık
+dış fonksiyon occt_compute_center_of_mass(shape: tamsayı) -> Vec3
+dış fonksiyon occt_compute_bounding_box(shape: tamsayı) -> (min: Vec3, max: Vec3)
+dış fonksiyon occt_explore_edges(shape: tamsayı) -> liste[Kenar]
+dış fonksiyon occt_explore_faces(shape: tamsayı) -> liste[Yuzey]
+dış fonksiyon occt_face_center_of_mass(face: tamsayı) -> Vec3
+
+// ============================================================================
+// ADVANCED BREP (Boundary Representation) KERNEL (Yeni - v1.7)
+// ============================================================================
+
+// BREP Topology (OpenCascade style)
+tip BRep = yapı yap
+    vertices: liste[BRepVertex],
+    edges: liste[BRepEdge],
+    faces: liste[BRepFace],
+    shells: liste[BRepShell],
+    solids: liste[BRepSolid]
+son
+
+// BREP Vertex (oriented point)
+tip BRepVertex = yapı yap
+    id: tamsayı,
+    point: Vec3,
+    tolerance: ondalık
+son
+
+// BREP Edge (trimmed curve)
+tip BRepEdge = yapı yap
+    id: tamsayı,
+    curve: Curve3D,
+    start_vertex: tamsayı,
+    end_vertex: tamsayı,
+    tolerance: ondalık,
+    parametric_range: (ondalık, ondalık)  // u_min, u_max
+son
+
+// BREP Face (trimmed surface)
+tip BRepFace = yapı yap
+    id: tamsayı,
+    surface: Surface3D,
+    outer_wire: tamsayı,  // Wire ID
+    inner_wires: liste[tamsayı],  // Holes
+    orientation: Orientation,
+    tolerance: ondalık
+son
+
+// BREP Shell (connected faces)
+tip BRepShell = yapı yap
+    id: tamsayı,
+    faces: liste[tamsayı],  // Face IDs
+    closed: mantıksal
+son
+
+// BREP Solid (volume bounded by shells)
+tip BRepSolid = yapı yap
+    id: tamsayı,
+    outer_shell: tamsayı,  // Shell ID
+    inner_shells: liste[tamsayı],  // Voids
+    volume: ondalık,
+    center_of_mass: Vec3
+son
+
+tip Orientation = "Forward" | "Reversed" | "Internal" | "External"
+
+// 3D Curves (parametric)
+tip Curve3D = yapı yap
+    curve_type: CurveTipi,
+    data: CurveData
+son
+
+tip CurveTipi = "Line" | "Circle" | "Ellipse" | "Bezier" | "BSpline" | "Hyperbola" | "Parabola"
+
+tip CurveData = 
+    | Line3D yap p0: Vec3, direction: Vec3 son
+    | Circle3D yap center: Vec3, normal: Vec3, radius: ondalık son
+    | Ellipse3D yap center: Vec3, normal: Vec3, major_radius: ondalık, minor_radius: ondalık son
+    | Bezier3D yap control_points: liste[Vec3], weights: liste[ondalık] son
+    | BSpline3D yap control_points: liste[Vec3], knots: liste[ondalık], multiplicities: liste[tamsayı], degree: tamsayı son
+
+// 3D Surfaces (parametric)
+tip Surface3D = yapı yap
+    surface_type: SurfaceTipi,
+    data: SurfaceData
+son
+
+tip SurfaceTipi = "Plane" | "Cylinder" | "Cone" | "Sphere" | "Torus" | "BezierSurface" | "BSplineSurface" | "SurfaceOfRevolution" | "SurfaceOfExtrusion"
+
+tip SurfaceData = 
+    | Plane3D yap origin: Vec3, u_direction: Vec3, v_direction: Vec3 son
+    | Cylinder3D yap axis_origin: Vec3, axis_direction: Vec3, radius: ondalık son
+    | Cone3D yap apex: Vec3, axis_direction: Vec3, semi_angle: ondalık son
+    | Sphere3D yap center: Vec3, radius: ondalık son
+    | Torus3D yap center: Vec3, axis_direction: Vec3, major_radius: ondalık, minor_radius: ondalık son
+    | BezierSurface3D yap control_points: liste[liste[Vec3]], u_degree: tamsayı, v_degree: tamsayı son
+    | BSplineSurface3D yap control_points: liste[liste[Vec3]], u_knots: liste[ondalık], v_knots: liste[ondalık], u_degree: tamsayı, v_degree: tamsayı son
+
+// ============================================================================
+// ADVANCED CSG (Constructive Solid Geometry) BOOLEAN OPERATIONS
+// ============================================================================
+
+// CSG Tree (operation history)
+tip CSGNode = yapı yap
+    operation: CSGOperation,
+    left: Seçenek[CSGNode],
+    right: Seçenek[CSGNode],
+    shape: Seçenek[Sekil]
+son
+
+tip CSGOperation = "Primitive" | "Union" | "Difference" | "Intersection" | "Transform"
+
+// Gelişmiş Boolean - Fuse (Union) with history
+fonksiyon csg_union(sekil1: Sekil, sekil2: Sekil, keep_history: mantıksal = yanlış) -> Sonuç[BooleanSonuc, yazı]
+yap
+    değişken yeni_handle = occt_fuse(sekil1.handle, sekil2.handle)
+    
+    eğer yeni_handle == 0 ise yap
+        dön Hata("Boolean union başarısız - geometrik hata")
+    son
+    
+    // Section edges (kesişme kenarları) hesapla
+    değişken section_edges = eğer keep_history ise yap
+        occt_get_section_edges(yeni_handle)
+    son değilse yap
+        liste_oluştur[Kenar]()
+    son
+    
+    dön Tamam(BooleanSonuc yap
+        sekil: Sekil yap handle: yeni_handle, sekil_tipi: "Solid" son,
+        yeni_kenarlar: section_edges
+    son)
+son
+
+// Gelişmiş Boolean - Cut (Difference) with result analysis
+fonksiyon csg_difference(sekil1: Sekil, sekil2: Sekil, tolerance: ondalık = 0.001) -> Sonuç[BooleanSonuc, yazı]
+yap
+    // Önce bounding box intersection check (hızlı reject)
+    değişken bbox1 = occt_compute_bounding_box(sekil1.handle)
+    değişken bbox2 = occt_compute_bounding_box(sekil2.handle)
+    
+    eğer bbox_intersects(bbox1, bbox2) == yanlış ise yap
+        // No overlap - return original shape
+        dön Tamam(BooleanSonuc yap
+            sekil: sekil1,
+            yeni_kenarlar: liste_oluştur[Kenar]()
+        son)
+    son
+    
+    değişken yeni_handle = occt_cut(sekil1.handle, sekil2.handle)
+    
+    eğer yeni_handle == 0 ise yap
+        dön Hata("Boolean difference başarısız")
+    son
+    
+    değişken section_edges = occt_get_section_edges(yeni_handle)
+    
+    dön Tamam(BooleanSonuc yap
+        sekil: Sekil yap handle: yeni_handle, sekil_tipi: "Solid" son,
+        yeni_kenarlar: section_edges
+    son)
+son
+
+// Boolean - Common (Intersection)
+fonksiyon csg_intersection(sekil1: Sekil, sekil2: Sekil) -> Sonuç[Sekil, yazı]
+yap
+    değişken yeni_handle = occt_common(sekil1.handle, sekil2.handle)
+    
+    eğer yeni_handle == 0 ise yap
+        dön Hata("Boolean intersection başarısız - şekiller kesişmiyor olabilir")
+    son
+    
+    dön Tamam(Sekil yap handle: yeni_handle, sekil_tipi: "Solid" son)
+son
+
+// Bounding box intersection test
+fonksiyon bbox_intersects(bbox1: (Vec3, Vec3), bbox2: (Vec3, Vec3)) -> mantıksal
+yap
+    değişken (min1, max1) = bbox1
+    değişken (min2, max2) = bbox2
+    
+    dön (min1.x <= max2.x ve max1.x >= min2.x) ve
+         (min1.y <= max2.y ve max1.y >= min2.y) ve
+         (min1.z <= max2.z ve max1.z >= min2.z)
+son
+
+// ============================================================================
+// NURBS (Non-Uniform Rational B-Splines)
+// ============================================================================
+
+// NURBS Curve (industry standard)
+tip NURBSCurve = yapı yap
+    control_points: liste[Vec3],
+    weights: liste[ondalık],  // Rational weights (homogeneous coordinates)
+    knots: liste[ondalık],  // Knot vector
+    degree: tamsayı,  // 1=linear, 2=quadratic, 3=cubic, etc.
+    rational: mantıksal  // true = NURBS, false = B-Spline
+son
+
+// NURBS curve evaluation (de Boor's algorithm)
+fonksiyon nurbs_evaluate(curve: NURBSCurve, u: ondalık) -> Vec3
+yap
+    // Cox-de Boor recursion
+    değişken n = liste_uzunluk(curve.control_points) - 1
+    değişken p = curve.degree
+    
+    // Find knot span
+    değişken span = nurbs_find_span(n, p, u, curve.knots)
+    
+    // Compute basis functions
+    değişken basis = nurbs_basis_functions(span, u, p, curve.knots)
+    
+    // Compute curve point
+    değişken result = vec3(0.0, 0.0, 0.0)
+    değişken weight_sum = 0.0
+    
+    her biri i içinde aralık(p + 1) yap
+        değişken idx = span - p + i
+        değişken w = eğer curve.rational ise curve.weights[idx] değilse 1.0
+        değişken weighted_basis = basis[i] * w
+        
+        result = vec3_topla(result, vec3_carpim(curve.control_points[idx], weighted_basis))
+        weight_sum = weight_sum + weighted_basis
+    son
+    
+    eğer curve.rational ve weight_sum > 0.0001 ise yap
+        result = vec3_carpim(result, 1.0 / weight_sum)
+    son
+    
+    dön result
+son
+
+// Find knot span (binary search)
+fonksiyon nurbs_find_span(n: tamsayı, p: tamsayı, u: ondalık, knots: liste[ondalık]) -> tamsayı
+yap
+    // Special cases
+    eğer u >= knots[n + 1] ise yap
+        dön n
+    son
+    eğer u <= knots[p] ise yap
+        dön p
+    son
+    
+    // Binary search
+    değişken low = p
+    değişken high = n + 1
+    değişken mid = (low + high) / 2
+    
+    iken u < knots[mid] veya u >= knots[mid + 1] yap
+        eğer u < knots[mid] ise yap
+            high = mid
+        son değilse yap
+            low = mid
+        son
+        mid = (low + high) / 2
+    son
+    
+    dön mid
+son
+
+// NURBS basis functions (Cox-de Boor recursion)
+fonksiyon nurbs_basis_functions(span: tamsayı, u: ondalık, p: tamsayı, knots: liste[ondalık]) -> liste[ondalık]
+yap
+    değişken N = liste_oluştur[ondalık](p + 1, 0.0)
+    değişken left = liste_oluştur[ondalık](p + 1, 0.0)
+    değişken right = liste_oluştur[ondalık](p + 1, 0.0)
+    
+    N[0] = 1.0
+    
+    her biri j içinde aralık(1, p + 1) yap
+        left[j] = u - knots[span + 1 - j]
+        right[j] = knots[span + j] - u
+        
+        değişken saved = 0.0
+        her biri r içinde aralık(j) yap
+            değişken temp = N[r] / (right[r + 1] + left[j - r])
+            N[r] = saved + right[r + 1] * temp
+            saved = left[j - r] * temp
+        son
+        N[j] = saved
+    son
+    
+    dön N
+son
+
+// NURBS Surface (bicubic patches)
+tip NURBSSurface = yapı yap
+    control_points: liste[liste[Vec3]],  // 2D grid
+    weights: liste[liste[ondalık]],
+    u_knots: liste[ondalık],
+    v_knots: liste[ondalık],
+    u_degree: tamsayı,
+    v_degree: tamsayı
+son
+
+// NURBS surface evaluation
+fonksiyon nurbs_surface_evaluate(surface: NURBSSurface, u: ondalık, v: ondalık) -> Vec3
+yap
+    değişken n = liste_uzunluk(surface.control_points) - 1
+    değişken m = liste_uzunluk(surface.control_points[0]) - 1
+    
+    değişken u_span = nurbs_find_span(n, surface.u_degree, u, surface.u_knots)
+    değişken v_span = nurbs_find_span(m, surface.v_degree, v, surface.v_knots)
+    
+    değişken u_basis = nurbs_basis_functions(u_span, u, surface.u_degree, surface.u_knots)
+    değişken v_basis = nurbs_basis_functions(v_span, v, surface.v_degree, surface.v_knots)
+    
+    // Bilinear combination
+    değişken result = vec3(0.0, 0.0, 0.0)
+    değişken weight_sum = 0.0
+    
+    her biri i içinde aralık(surface.u_degree + 1) yap
+        her biri j içinde aralık(surface.v_degree + 1) yap
+            değişken u_idx = u_span - surface.u_degree + i
+            değişken v_idx = v_span - surface.v_degree + j
+            
+            değişken basis = u_basis[i] * v_basis[j]
+            değişken w = surface.weights[u_idx][v_idx]
+            değişken weighted_basis = basis * w
+            
+            result = vec3_topla(result, vec3_carpim(surface.control_points[u_idx][v_idx], weighted_basis))
+            weight_sum = weight_sum + weighted_basis
+        son
+    son
+    
+    eğer weight_sum > 0.0001 ise yap
+        result = vec3_carpim(result, 1.0 / weight_sum)
+    son
+    
+    dön result
+son
+
+// ============================================================================
+// STEP FILE FORMAT (ISO 10303-21) - CAD Interchange
+// ============================================================================
+
+// STEP AP203/AP214 writer (simplified)
+tip StepWriter = yapı yap
+    file_handle: tamsayı,
+    entities: liste[StepEntity],
+    next_id: tamsayı
+son
+
+tip StepEntity = yapı yap
+    id: tamsayı,
+    entity_type: yazı,  // "CARTESIAN_POINT", "DIRECTION", "AXIS2_PLACEMENT_3D", etc.
+    attributes: liste[yazı]
+son
+
+// STEP dosyasına yaz (gelişmiş)
+fonksiyon step_export_detayli(sekil: Sekil, dosya_yolu: yazı, schema: StepSchema = "AP214") -> Sonuç[boş, yazı]
+yap
+    // STEP header oluştur
+    değişken writer = StepWriter yap
+        file_handle: 0,
+        entities: liste_oluştur[StepEntity](),
+        next_id: 1
+    son
+    
+    // Shape'i STEP entities'e dönüştür
+    step_convert_shape_to_entities(writer, sekil)?
+    
+    // STEP dosyası yaz
+    değişken dosya_içerik = step_generate_file(writer, schema)
+    io::dosya_yaz(dosya_yolu, dosya_içerik)?
+    
+    dön Tamam(boş)
+son
+
+tip StepSchema = "AP203" | "AP214" | "AP242"
+
+// Shape'i STEP entities'e dönüştür (recursive)
+fonksiyon step_convert_shape_to_entities(writer: StepWriter, sekil: Sekil) -> Sonuç[tamsayı, yazı]
+yap
+    eşleşme sekil.sekil_tipi yap
+        "Solid" => yap
+            // MANIFOLD_SOLID_BREP
+            değişken shell_id = step_add_shell(writer, sekil)?
+            değişken solid_id = writer.next_id
+            writer.next_id = writer.next_id + 1
+            
+            liste_ekle(writer.entities, StepEntity yap
+                id: solid_id,
+                entity_type: "MANIFOLD_SOLID_BREP",
+                attributes: ["'Solid'", "#" + shell_id.to_string()]
+            son)
+            
+            dön Tamam(solid_id)
+        son,
+        
+        "Face" => yap
+            // ADVANCED_FACE
+            değişken surface_id = step_add_surface(writer, sekil)?
+            değişken face_id = writer.next_id
+            writer.next_id = writer.next_id + 1
+            
+            liste_ekle(writer.entities, StepEntity yap
+                id: face_id,
+                entity_type: "ADVANCED_FACE",
+                attributes: ["'Face'", "()", "#" + surface_id.to_string(), ".T."]
+            son)
+            
+            dön Tamam(face_id)
+        son,
+        
+        _ => dön Hata("Desteklenmeyen şekil tipi: " + sekil.sekil_tipi)
+    son
+son
+
+// STEP entity ekleme helpers
+fonksiyon step_add_cartesian_point(writer: StepWriter, p: Vec3) -> tamsayı
+yap
+    değişken id = writer.next_id
+    writer.next_id = writer.next_id + 1
+    
+    liste_ekle(writer.entities, StepEntity yap
+        id: id,
+        entity_type: "CARTESIAN_POINT",
+        attributes: ["''", "(" + p.x.to_string() + "," + p.y.to_string() + "," + p.z.to_string() + ")"]
+    son)
+    
+    dön id
+son
+
+fonksiyon step_add_direction(writer: StepWriter, dir: Vec3) -> tamsayı
+yap
+    değişken normalized = vec3_normalize(dir)
+    değişken id = writer.next_id
+    writer.next_id = writer.next_id + 1
+    
+    liste_ekle(writer.entities, StepEntity yap
+        id: id,
+        entity_type: "DIRECTION",
+        attributes: ["''", "(" + normalized.x.to_string() + "," + normalized.y.to_string() + "," + normalized.z.to_string() + ")"]
+    son)
+    
+    dön id
+son
+
+fonksiyon step_add_shell(writer: StepWriter, sekil: Sekil) -> Sonuç[tamsayı, yazı]
+yap
+    değişken faces = occt_explore_faces(sekil.handle)
+    değişken face_ids = liste_oluştur[tamsayı]()
+    
+    her biri face içinde faces yap
+        // Simplified - gerçek implementasyon her face'i recursive ekler
+        liste_ekle(face_ids, writer.next_id)
+        writer.next_id = writer.next_id + 1
+    son
+    
+    değişken shell_id = writer.next_id
+    writer.next_id = writer.next_id + 1
+    
+    değişken face_list = "(" + face_ids.map(|id| "#" + id.to_string()).join(",") + ")"
+    
+    liste_ekle(writer.entities, StepEntity yap
+        id: shell_id,
+        entity_type: "CLOSED_SHELL",
+        attributes: ["'Shell'", face_list]
+    son)
+    
+    dön Tamam(shell_id)
+son
+
+fonksiyon step_add_surface(writer: StepWriter, sekil: Sekil) -> Sonuç[tamsayı, yazı]
+yap
+    // Simplified - PLANE için
+    değişken id = writer.next_id
+    writer.next_id = writer.next_id + 1
+    
+    değişken origin_id = step_add_cartesian_point(writer, vec3(0.0, 0.0, 0.0))
+    değişken dir_id = step_add_direction(writer, vec3(0.0, 0.0, 1.0))
+    
+    liste_ekle(writer.entities, StepEntity yap
+        id: id,
+        entity_type: "PLANE",
+        attributes: ["'Surface'", "#" + origin_id.to_string()]
+    son)
+    
+    dön Tamam(id)
+son
+
+// STEP dosya içeriği oluştur
+fonksiyon step_generate_file(writer: StepWriter, schema: StepSchema) -> yazı
+yap
+    değişken içerik = "ISO-10303-21;\n"
+    içerik = içerik + "HEADER;\n"
+    içerik = içerik + "FILE_DESCRIPTION(('BERK CAD Export'),'2;1');\n"
+    içerik = içerik + "FILE_NAME('output.step','2025-01-01T00:00:00',('BERK'),('BerkOS'),'BERK-CAD','BERK-CAD v1.7','');\n"
+    
+    değişken schema_name = eşleşme schema yap
+        "AP203" -> "CONFIG_CONTROL_DESIGN",
+        "AP214" -> "AUTOMOTIVE_DESIGN",
+        "AP242" -> "MANAGED_MODEL_BASED_3D_ENGINEERING",
+        _ -> "AUTOMOTIVE_DESIGN"
+    son
+    
+    içerik = içerik + "FILE_SCHEMA(('" + schema_name + "'));\n"
+    içerik = içerik + "ENDSEC;\n\n"
+    
+    içerik = içerik + "DATA;\n"
+    
+    // Entities'i yaz
+    her biri entity içinde writer.entities yap
+        içerik = içerik + "#" + entity.id.to_string() + "=" + entity.entity_type + "("
+        içerik = içerik + entity.attributes.join(",")
+        içerik = içerik + ");\n"
+    son
+    
+    içerik = içerik + "ENDSEC;\n"
+    içerik = içerik + "END-ISO-10303-21;\n"
+    
+    dön içerik
+son
+
+// ============================================================================
+// MESH GENERATION (Tessellation/Triangulation)
+// ============================================================================
+
+// Adaptive mesh generation (quality-focused)
+fonksiyon mesh_adaptive(sekil: Sekil, max_edge_length: ondalık, max_angle: ondalık, 
+                        curvature_factor: ondalık = 0.5) -> Sonuç[Mesh, yazı]
+yap
+    // Curvature-adaptive deflection
+    // Higher curvature = finer mesh
+    
+    değişken faces = occt_explore_faces(sekil.handle)
+    değişken vertices = liste_oluştur[Vec3]()
+    değişken indices = liste_oluştur[tamsayı]()
+    değişken normals = liste_oluştur[Vec3]()
+    
+    her biri face içinde faces yap
+        // Compute curvature (Gaussian + Mean)
+        değişken curvature = face_curvature_estimate(face)
+        
+        // Adaptive deflection: finer mesh for high curvature
+        değişken local_deflection = max_edge_length / (1.0 + curvature * curvature_factor)
+        
+        // Triangulate face
+        değişken face_mesh = occt_triangulate_face(face.handle, local_deflection, max_angle)?
+        
+        // Merge into global mesh
+        değişken vertex_offset = liste_uzunluk(vertices)
+        vertices = vertices + face_mesh.vertices
+        normals = normals + face_mesh.normals
+        
+        // Offset indices
+        her biri idx içinde face_mesh.indices yap
+            liste_ekle(indices, idx + vertex_offset)
+        son
+    son
+    
+    dön Tamam(Mesh yap
+        vertices: vertices,
+        indices: indices,
+        normals: normals
+    son)
+son
+
+// Face curvature estimation (simplified)
+fonksiyon face_curvature_estimate(face: Yuzey) -> ondalık
+yap
+    eşleşme face.yuzey_tipi yap
+        "Plane" -> 0.0,  // No curvature
+        "Cylinder" -> 1.0,  // Constant curvature
+        "Sphere" -> 2.0,  // Maximum curvature
+        "Torus" -> 1.5,
+        _ -> 1.0
+    son
+son
+
+// Triangulation for single face
+dış fonksiyon occt_triangulate_face(face: tamsayı, deflection: ondalık, angle: ondalık) -> Sonuç[Mesh, yazı]
+
+// ============================================================================
+// Son - cad3d.berk (v1.7 Enhanced)
+// 52.8 KB - 1600+ satır
+// BREP kernel, CSG boolean operations, NURBS curves/surfaces,
+// STEP AP203/AP214/AP242 export, Adaptive mesh generation
+// ============================================================================

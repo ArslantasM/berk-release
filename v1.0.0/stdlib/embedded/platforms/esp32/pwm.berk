@@ -1,0 +1,368 @@
+// stdlib/embedded/platforms/esp32/pwm.berk
+// ESP32 PWM (LEDC) HAL Implementation
+// ESP-IDF LEDC (LED Control) peripheral bindings
+
+import "embedded/bal/pwm" as PWM
+
+// ESP-IDF LEDC constants
+const LEDC_HIGH_SPEED_MODE: u32 = 0
+const LEDC_LOW_SPEED_MODE: u32 = 1
+
+const LEDC_TIMER_0: u32 = 0
+const LEDC_TIMER_1: u32 = 1
+const LEDC_TIMER_2: u32 = 2
+const LEDC_TIMER_3: u32 = 3
+
+const LEDC_TIMER_13_BIT: u32 = 13
+const LEDC_TIMER_10_BIT: u32 = 10
+
+const LEDC_CHANNEL_0: u32 = 0
+const LEDC_CHANNEL_1: u32 = 1
+const LEDC_CHANNEL_2: u32 = 2
+const LEDC_CHANNEL_3: u32 = 3
+const LEDC_CHANNEL_4: u32 = 4
+const LEDC_CHANNEL_5: u32 = 5
+const LEDC_CHANNEL_6: u32 = 6
+const LEDC_CHANNEL_7: u32 = 7
+
+const LEDC_DUTY_RES_13: u32 = 13  // 13-bit resolution (0-8191)
+const LEDC_AUTO_CLK: u32 = 0
+
+// ESP-IDF LEDC structures
+struct ledc_timer_config_t {
+    speed_mode: u32,
+    duty_resolution: u32,
+    timer_num: u32,
+    freq_hz: u32,
+    clk_cfg: u32,
+}
+
+struct ledc_channel_config_t {
+    gpio_num: i32,
+    speed_mode: u32,
+    channel: u32,
+    intr_type: u32,
+    timer_sel: u32,
+    duty: u32,
+    hpoint: i32,
+}
+
+// ESP-IDF LEDC functions
+extern "C" {
+    fn ledc_timer_config(timer_conf: *ledc_timer_config_t) -> i32
+    fn ledc_channel_config(ledc_conf: *ledc_channel_config_t) -> i32
+    fn ledc_set_duty(speed_mode: u32, channel: u32, duty: u32) -> i32
+    fn ledc_update_duty(speed_mode: u32, channel: u32) -> i32
+    fn ledc_get_duty(speed_mode: u32, channel: u32) -> u32
+    fn ledc_set_freq(speed_mode: u32, timer_num: u32, freq_hz: u32) -> i32
+    fn ledc_get_freq(speed_mode: u32, timer_num: u32) -> u32
+    fn ledc_stop(speed_mode: u32, channel: u32, idle_level: u32) -> i32
+    fn ledc_fade_func_install(intr_alloc_flags: i32) -> i32
+    fn ledc_set_fade_with_time(speed_mode: u32, channel: u32, target_duty: u32, max_fade_time_ms: i32) -> i32
+    fn ledc_fade_start(speed_mode: u32, channel: u32, fade_mode: u32) -> i32
+}
+
+const ESP_OK: i32 = 0
+const LEDC_FADE_NO_WAIT: u32 = 0
+const LEDC_FADE_WAIT_DONE: u32 = 1
+
+// Channel state tracking
+static mut channel_configs: [ChannelState; 8] = [ChannelState::default(); 8]
+
+struct ChannelState {
+    initialized: bool,
+    frequency: u32,
+    duty_resolution: u32,
+    timer_num: u32,
+}
+
+impl ChannelState {
+    fn default() -> ChannelState {
+        ChannelState {
+            initialized: false,
+            frequency: 5000,
+            duty_resolution: LEDC_DUTY_RES_13,
+            timer_num: 0,
+        }
+    }
+}
+
+// ESP32 PWM HAL implementation
+pub struct ESP32_PWM {}
+
+impl PWM.PWM_HAL for ESP32_PWM {
+    fn init(config: PWM.Config) -> PWM.Result<()> {
+        if config.channel >= 8 {
+            return Err(PWM.Error.ChannelBusy)
+        }
+        
+        let timer_num = (config.channel / 2) as u32  // 2 channels per timer
+        let speed_mode = LEDC_LOW_SPEED_MODE
+        
+        // Configure timer
+        let timer_conf = ledc_timer_config_t {
+            speed_mode: speed_mode,
+            duty_resolution: LEDC_DUTY_RES_13,
+            timer_num: timer_num,
+            freq_hz: config.frequency,
+            clk_cfg: LEDC_AUTO_CLK,
+        }
+        
+        let ret = ledc_timer_config(&timer_conf)
+        if ret != ESP_OK {
+            return Err(PWM.Error.TimerError)
+        }
+        
+        // Calculate duty cycle (13-bit: 0-8191)
+        let max_duty: u32 = (1 << 13) - 1  // 8191
+        let duty = ((config.duty_cycle / 100.0) * max_duty as f32) as u32
+        
+        // Configure channel
+        let channel_conf = ledc_channel_config_t {
+            gpio_num: config.pin as i32,
+            speed_mode: speed_mode,
+            channel: config.channel as u32,
+            intr_type: 0,
+            timer_sel: timer_num,
+            duty: duty,
+            hpoint: 0,
+        }
+        
+        let ret = ledc_channel_config(&channel_conf)
+        if ret != ESP_OK {
+            return Err(PWM.Error.ChannelBusy)
+        }
+        
+        // Save state
+        unsafe {
+            channel_configs[config.channel as usize] = ChannelState {
+                initialized: true,
+                frequency: config.frequency,
+                duty_resolution: LEDC_DUTY_RES_13,
+                timer_num: timer_num,
+            }
+        }
+        
+        Ok(())
+    }
+    
+    fn deinit(channel: u8) {
+        ESP32_PWM.stop(channel)
+        
+        unsafe {
+            channel_configs[channel as usize].initialized = false
+        }
+    }
+    
+    fn start(channel: u8) {
+        // LEDC automatically starts output when configured
+        // Just ensure duty is not zero
+        let duty = ledc_get_duty(LEDC_LOW_SPEED_MODE, channel as u32)
+        if duty == 0 {
+            ledc_set_duty(LEDC_LOW_SPEED_MODE, channel as u32, 4095)  // 50%
+            ledc_update_duty(LEDC_LOW_SPEED_MODE, channel as u32)
+        }
+    }
+    
+    fn stop(channel: u8) {
+        ledc_stop(LEDC_LOW_SPEED_MODE, channel as u32, 0)
+    }
+    
+    fn set_frequency(channel: u8, frequency: u32) -> PWM.Result<()> {
+        unsafe {
+            if !channel_configs[channel as usize].initialized {
+                return Err(PWM.Error.ChannelBusy)
+            }
+            
+            let timer_num = channel_configs[channel as usize].timer_num
+            let ret = ledc_set_freq(LEDC_LOW_SPEED_MODE, timer_num, frequency)
+            
+            if ret != ESP_OK {
+                return Err(PWM.Error.InvalidFrequency)
+            }
+            
+            channel_configs[channel as usize].frequency = frequency
+        }
+        
+        Ok(())
+    }
+    
+    fn set_duty_cycle(channel: u8, duty_cycle: f32) -> PWM.Result<()> {
+        if duty_cycle < 0.0 || duty_cycle > 100.0 {
+            return Err(PWM.Error.InvalidDutyCycle)
+        }
+        
+        let max_duty: u32 = (1 << 13) - 1  // 8191 for 13-bit
+        let duty = ((duty_cycle / 100.0) * max_duty as f32) as u32
+        
+        ledc_set_duty(LEDC_LOW_SPEED_MODE, channel as u32, duty)
+        ledc_update_duty(LEDC_LOW_SPEED_MODE, channel as u32)
+        
+        Ok(())
+    }
+    
+    fn set_duty_raw(channel: u8, value: u32) -> PWM.Result<()> {
+        let max_duty: u32 = (1 << 13) - 1
+        
+        if value > max_duty {
+            return Err(PWM.Error.InvalidDutyCycle)
+        }
+        
+        ledc_set_duty(LEDC_LOW_SPEED_MODE, channel as u32, value)
+        ledc_update_duty(LEDC_LOW_SPEED_MODE, channel as u32)
+        
+        Ok(())
+    }
+    
+    fn get_duty_cycle(channel: u8) -> f32 {
+        let duty = ledc_get_duty(LEDC_LOW_SPEED_MODE, channel as u32)
+        let max_duty: u32 = (1 << 13) - 1
+        (duty as f32 / max_duty as f32) * 100.0
+    }
+    
+    fn set_polarity(channel: u8, polarity: PWM.Polarity) {
+        // ESP32 LEDC doesn't support polarity inversion directly
+        // Would need to invert duty cycle in software
+    }
+    
+    fn set_enabled(channel: u8, enabled: bool) {
+        if enabled {
+            ESP32_PWM.start(channel)
+        } else {
+            ESP32_PWM.stop(channel)
+        }
+    }
+}
+
+// ESP32-specific PWM functions
+
+/// Initialize fade service (required for smooth transitions)
+pub fn init_fade_service() -> PWM.Result<()> {
+    let ret = ledc_fade_func_install(0)
+    if ret == ESP_OK {
+        Ok(())
+    } else {
+        Err(PWM.Error.TimerError)
+    }
+}
+
+/// Smooth fade to target duty cycle
+pub fn fade_to_duty(channel: u8, target_duty: f32, duration_ms: u32) -> PWM.Result<()> {
+    if target_duty < 0.0 || target_duty > 100.0 {
+        return Err(PWM.Error.InvalidDutyCycle)
+    }
+    
+    let max_duty: u32 = (1 << 13) - 1
+    let duty = ((target_duty / 100.0) * max_duty as f32) as u32
+    
+    let ret = ledc_set_fade_with_time(
+        LEDC_LOW_SPEED_MODE,
+        channel as u32,
+        duty,
+        duration_ms as i32
+    )
+    
+    if ret != ESP_OK {
+        return Err(PWM.Error.TimerError)
+    }
+    
+    ledc_fade_start(LEDC_LOW_SPEED_MODE, channel as u32, LEDC_FADE_NO_WAIT)
+    
+    Ok(())
+}
+
+/// Get current PWM frequency
+pub fn get_frequency(channel: u8) -> u32 {
+    unsafe {
+        if channel_configs[channel as usize].initialized {
+            let timer_num = channel_configs[channel as usize].timer_num
+            ledc_get_freq(LEDC_LOW_SPEED_MODE, timer_num)
+        } else {
+            0
+        }
+    }
+}
+
+/// Configure RGB LED (3 channels)
+pub fn init_rgb(red_pin: u8, green_pin: u8, blue_pin: u8) -> PWM.Result<()> {
+    // Red channel
+    let red_config = PWM.Config {
+        channel: 0,
+        pin: red_pin,
+        frequency: 5000,
+        duty_cycle: 0.0,
+        polarity: PWM.Polarity.Normal,
+        alignment: PWM.Alignment.Edge,
+    }
+    ESP32_PWM.init(red_config)?
+    
+    // Green channel
+    let green_config = PWM.Config {
+        channel: 1,
+        pin: green_pin,
+        frequency: 5000,
+        duty_cycle: 0.0,
+        polarity: PWM.Polarity.Normal,
+        alignment: PWM.Alignment.Edge,
+    }
+    ESP32_PWM.init(green_config)?
+    
+    // Blue channel
+    let blue_config = PWM.Config {
+        channel: 2,
+        pin: blue_pin,
+        frequency: 5000,
+        duty_cycle: 0.0,
+        polarity: PWM.Polarity.Normal,
+        alignment: PWM.Alignment.Edge,
+    }
+    ESP32_PWM.init(blue_config)?
+    
+    Ok(())
+}
+
+/// Set RGB color (0-255 for each channel)
+pub fn set_rgb(red: u8, green: u8, blue: u8) -> PWM.Result<()> {
+    let red_duty = (red as f32 / 255.0) * 100.0
+    let green_duty = (green as f32 / 255.0) * 100.0
+    let blue_duty = (blue as f32 / 255.0) * 100.0
+    
+    ESP32_PWM.set_duty_cycle(0, red_duty)?
+    ESP32_PWM.set_duty_cycle(1, green_duty)?
+    ESP32_PWM.set_duty_cycle(2, blue_duty)?
+    
+    Ok(())
+}
+
+/// Smooth RGB color transition
+pub fn fade_rgb(red: u8, green: u8, blue: u8, duration_ms: u32) -> PWM.Result<()> {
+    init_fade_service()?
+    
+    let red_duty = (red as f32 / 255.0) * 100.0
+    let green_duty = (green as f32 / 255.0) * 100.0
+    let blue_duty = (blue as f32 / 255.0) * 100.0
+    
+    fade_to_duty(0, red_duty, duration_ms)?
+    fade_to_duty(1, green_duty, duration_ms)?
+    fade_to_duty(2, blue_duty, duration_ms)?
+    
+    Ok(())
+}
+
+/// RGB rainbow effect
+pub fn rainbow_effect(speed_ms: u32) {
+    let colors: [(u8, u8, u8); 7] = [
+        (255, 0, 0),     // Red
+        (255, 127, 0),   // Orange
+        (255, 255, 0),   // Yellow
+        (0, 255, 0),     // Green
+        (0, 0, 255),     // Blue
+        (75, 0, 130),    // Indigo
+        (148, 0, 211),   // Violet
+    ]
+    
+    for color in colors {
+        let _ = fade_rgb(color.0, color.1, color.2, speed_ms)
+        time.sleep_ms(speed_ms)
+    }
+}

@@ -1,0 +1,249 @@
+// stdlib/ai/audio.berk
+// Audio Processing Library
+// Whisper, Spectrogram, Mel-filterbank, Audio Features
+// 
+// Özellikler:
+// - Audio I/O (WAV, MP3, FLAC)
+// - Feature extraction (MFCC, Mel-spectrogram, Chroma)
+// - Speech-to-Text (Whisper)
+// - Audio classification
+// - Voice activity detection
+
+import "ai/tensor" as tensor
+import "ai/nn" as nn
+
+/// Audio loading and I/O
+pub mod io {
+    use tensor.Tensor
+    
+    /// Load audio file
+    @native("audio::load")
+    pub fn load(path: str, sample_rate: Option<u32> = None) -> (Tensor, u32) {
+        // Returns (waveform, sample_rate)
+        // waveform shape: (channels, samples)
+        // Supports: WAV, MP3, FLAC, OGG
+    }
+    
+    /// Save audio file
+    @native("audio::save")
+    pub fn save(path: str, waveform: Tensor, sample_rate: u32) {
+        // Save waveform to file
+    }
+    
+    /// Resample audio
+    @native("audio::resample")
+    pub fn resample(waveform: Tensor, orig_sr: u32, target_sr: u32) -> Tensor {
+        // Change sample rate
+    }
+}
+
+/// Audio features
+pub mod features {
+    use tensor.Tensor
+    
+    /// Mel-spectrogram
+    @native("audio::mel_spectrogram")
+    pub fn mel_spectrogram(
+        waveform: Tensor,
+        sample_rate: u32 = 16000,
+        n_fft: u32 = 400,
+        hop_length: u32 = 160,
+        n_mels: u32 = 80
+    ) -> Tensor {
+        // Returns (n_mels, time_steps)
+    }
+    
+    /// MFCC (Mel-Frequency Cepstral Coefficients)
+    @native("audio::mfcc")
+    pub fn mfcc(
+        waveform: Tensor,
+        sample_rate: u32 = 16000,
+        n_mfcc: u32 = 13,
+        n_fft: u32 = 400,
+        hop_length: u32 = 160
+    ) -> Tensor {
+        // Returns (n_mfcc, time_steps)
+    }
+    
+    /// Chroma features
+    @native("audio::chroma")
+    pub fn chroma(waveform: Tensor, sample_rate: u32 = 16000) -> Tensor {
+        // Returns (12, time_steps) - 12 pitch classes
+    }
+    
+    /// Zero-crossing rate
+    @native("audio::zero_crossing_rate")
+    pub fn zero_crossing_rate(waveform: Tensor) -> Tensor {
+        // Returns (time_steps,)
+    }
+    
+    /// Spectral centroid
+    @native("audio::spectral_centroid")
+    pub fn spectral_centroid(waveform: Tensor, sample_rate: u32 = 16000) -> Tensor {
+        // Center of mass of spectrum
+    }
+}
+
+/// Whisper speech-to-text
+pub mod whisper {
+    use tensor.Tensor
+    
+    /// Whisper model sizes
+    pub enum WhisperModel {
+        Tiny,       // 39M params, ~1GB RAM
+        Base,       // 74M params, ~1GB RAM
+        Small,      // 244M params, ~2GB RAM
+        Medium,     // 769M params, ~5GB RAM
+        Large,      // 1550M params, ~10GB RAM
+    }
+    
+    /// Transcription result
+    pub struct Transcription {
+        pub text: str,
+        pub language: str,
+        pub segments: [Segment],
+    }
+    
+    /// Transcription segment
+    pub struct Segment {
+        pub start: f32,      // Start time (seconds)
+        pub end: f32,        // End time (seconds)
+        pub text: str,
+        pub confidence: f32,
+    }
+    
+    /// Whisper ASR model
+    pub struct Whisper {
+        model: WhisperModel,
+        device: tensor.Device,
+    }
+    
+    impl Whisper {
+        /// Load Whisper model
+        @native("audio::whisper_load")
+        pub fn load(model: WhisperModel, device: tensor.Device = tensor.Device.CPU) -> Whisper {}
+        
+        /// Transcribe audio
+        @native("audio::whisper_transcribe")
+        pub fn transcribe(self, audio_path: str, language: Option<str> = None) -> Transcription {
+            // language: "en", "tr", "de", etc. (auto-detect if None)
+        }
+        
+        /// Transcribe with timestamps
+        @native("audio::whisper_transcribe_with_timestamps")
+        pub fn transcribe_with_timestamps(self, audio_path: str) -> Transcription {
+            // Returns text with word-level timestamps
+        }
+        
+        /// Translate to English
+        @native("audio::whisper_translate")
+        pub fn translate(self, audio_path: str) -> str {
+            // Translate any language to English
+        }
+    }
+}
+
+/// Voice Activity Detection
+pub mod vad {
+    use tensor.Tensor
+    
+    /// VAD result
+    pub struct VADSegment {
+        pub start: f32,
+        pub end: f32,
+        pub confidence: f32,
+    }
+    
+    /// Detect speech segments
+    @native("audio::detect_speech")
+    pub fn detect_speech(
+        waveform: Tensor,
+        sample_rate: u32 = 16000,
+        threshold: f32 = 0.5
+    ) -> [VADSegment] {
+        // Returns list of speech segments
+    }
+}
+
+/// Audio classification
+pub mod classification {
+    use tensor.Tensor
+    
+    /// Audio classifier
+    pub struct AudioClassifier {
+        model_path: str,
+    }
+    
+    impl AudioClassifier {
+        /// Load classifier
+        @native("audio::classifier_load")
+        pub fn load(model_path: str) -> AudioClassifier {}
+        
+        /// Classify audio
+        @native("audio::classifier_predict")
+        pub fn predict(self, audio_path: str, top_k: u32 = 5) -> [(str, f32)] {
+            // Returns list of (label, confidence)
+        }
+    }
+}
+
+/// Audio augmentation
+pub mod augmentation {
+    use tensor.Tensor
+    
+    /// Add white noise
+    @native("audio::add_noise")
+    pub fn add_noise(waveform: Tensor, noise_level: f32 = 0.005) -> Tensor {}
+    
+    /// Time stretching
+    @native("audio::time_stretch")
+    pub fn time_stretch(waveform: Tensor, rate: f32) -> Tensor {
+        // rate > 1.0: faster, rate < 1.0: slower
+    }
+    
+    /// Pitch shifting
+    @native("audio::pitch_shift")
+    pub fn pitch_shift(waveform: Tensor, sample_rate: u32, n_steps: i32) -> Tensor {
+        // n_steps: semitones to shift
+    }
+    
+    /// Time masking
+    @native("audio::time_mask")
+    pub fn time_mask(spectrogram: Tensor, mask_param: u32) -> Tensor {
+        // SpecAugment time masking
+    }
+    
+    /// Frequency masking
+    @native("audio::freq_mask")
+    pub fn freq_mask(spectrogram: Tensor, mask_param: u32) -> Tensor {
+        // SpecAugment frequency masking
+    }
+}
+
+/// Example usage:
+/// ```berk
+/// import "ai/audio" as audio
+/// 
+/// // Load and process audio
+/// let (waveform, sr) = audio.io.load("speech.wav")
+/// yaz("Sample rate: {} Hz, Duration: {:.2f} s", sr, waveform.shape[1] / sr)
+/// 
+/// // Extract features
+/// let mel_spec = audio.features.mel_spectrogram(waveform, sr)
+/// let mfcc = audio.features.mfcc(waveform, sr)
+/// yaz("Mel-spec shape: {:?}, MFCC shape: {:?}", mel_spec.shape, mfcc.shape)
+/// 
+/// // Speech-to-text with Whisper
+/// let whisper = audio.whisper.Whisper.load(audio.whisper.WhisperModel.Base)
+/// let transcription = whisper.transcribe("speech.wav", language: "tr")
+/// yaz("Transcription: {}", transcription.text)
+/// yaz("Language: {}", transcription.language)
+/// 
+/// for segment in transcription.segments {
+///     yaz("[{:.2f}s - {:.2f}s]: {}", segment.start, segment.end, segment.text)
+/// }
+/// 
+/// // Voice activity detection
+/// let speech_segments = audio.vad.detect_speech(waveform, sr)
+/// yaz("Found {} speech segments", speech_segments.len())
+/// ```
