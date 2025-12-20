@@ -1,6 +1,6 @@
 # BERK v1.0.0 Release
 
-**Release Date:** December 18, 2025
+**Release Date:** December 20, 2025
 
 ---
 
@@ -8,39 +8,46 @@
 
 ```
 v1.0.0/
-├── berk-lang.exe      # BERK Compiler & Runtime
-├── berk-lsp.exe       # Language Server Protocol
-├── berk-repl.exe      # Interactive REPL
-├── bin/               # LLVM Runtime Libraries
+├── setup.ps1          # Windows Installer Script
+├── bin/               # Executables & Libraries
+│   ├── berk-lang.exe  # BERK Compiler & Runtime
+│   ├── berk-lsp.exe   # Language Server Protocol
+│   ├── berk-repl.exe  # Interactive REPL
 │   ├── LLVM-C.dll     # LLVM C API
 │   ├── LTO.dll        # Link-Time Optimization
 │   ├── libz3.dll      # Z3 Theorem Prover
 │   └── Remarks.dll    # LLVM Remarks
-└── stdlib/            # Standard Library (188 files, 50+ modules)
+├── stdlib/            # Standard Library (188 files, 50+ modules)
+└── test/              # Test Suite (62 tests)
 ```
 
 ---
 
 ## Installation
 
-### Windows
+### Windows (Recommended)
 
 1. Extract the release archive
-2. Add the release folder to your PATH:
+2. Run the setup script:
    ```powershell
-   $env:PATH += ";C:\path\to\berk-release\v1.0.0"
+   .\setup.ps1
    ```
-3. Verify installation:
+3. Open a new terminal and verify:
    ```powershell
    berk-lang --version
    ```
 
-### Configuration
+### Manual Installation
 
-Set the stdlib path (optional, auto-detected in most cases):
-```powershell
-$env:BERK_STDLIB_PATH = "C:\path\to\berk-release\v1.0.0\stdlib"
-```
+1. Extract the release archive
+2. Add the `bin` folder to your PATH:
+   ```powershell
+   $env:PATH += ";C:\path\to\berk-release\v1.0.0\bin"
+   ```
+3. Set BERK_HOME (optional):
+   ```powershell
+   $env:BERK_HOME = "C:\path\to\berk-release\v1.0.0"
+   ```
 
 ---
 

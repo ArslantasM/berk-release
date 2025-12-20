@@ -15,7 +15,7 @@ Bu klasör BERK'in **Hardware Bridge** özelliklerini gösteren demo dosyaların
 | `07_sensor_reading.berk` | Sensör okuma (Modbus) |
 | `08_robot_arm.berk` | Robot kol servo kontrolü |
 
-## 🔧 Gereksinimler
+##  Gereksinimler
 
 ### Donanım
 - Arduino Uno/Mega (Firmata örnekleri için)
@@ -36,6 +36,6 @@ berk run 01_serial.berk
 berk run -e "kullan std::serial; yazdır(serial::list_ports())"
 ```
 
-## ⚠️ Not
+##  Not
 
 Bu demolar **gerçek donanım** gerektirir. Donanım bağlı değilse hata mesajları alırsınız.

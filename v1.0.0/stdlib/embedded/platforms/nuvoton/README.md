@@ -17,7 +17,7 @@ Nuvoton M0/M4 series targets Asia-Pacific markets and industrial IoT application
 
 ### M031 Series (Cortex-M0)
 - **CPU**: ARM Cortex-M0 @ 48/72 MHz
-- **Flash**: 16 KB - 128 KB  
+- **Flash**: 16 KB - 128 KB 
 - **RAM**: 4 KB - 16 KB
 - **Price**: ~$0.30-0.80
 - **Use Case**: Ultra-low cost applications

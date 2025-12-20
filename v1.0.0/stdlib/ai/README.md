@@ -5,9 +5,9 @@
 
 BERK dili için kapsamlı yapay zeka ve makine öğrenmesi kütüphanesi. PyTorch ve HuggingFace ile uyumlu API tasarımı.
 
-## 📦 Modüller (15)
+## Modüller (15)
 
-### 🔷 Temel Modüller (v1.0)
+### Temel Modüller (v1.0)
 
 | Modül | Açıklama | Satır | Durum |
 |-------|----------|-------|-------|
@@ -21,7 +21,7 @@ BERK dili için kapsamlı yapay zeka ve makine öğrenmesi kütüphanesi. PyTorc
 
 **Toplam: ~5,000 satır**
 
-### 🔶 Uygulama Modülleri (v1.0)
+### Uygulama Modülleri (v1.0)
 
 | Modül | Açıklama | Satır | Durum |
 |-------|----------|-------|-------|
@@ -36,26 +36,26 @@ BERK dili için kapsamlı yapay zeka ve makine öğrenmesi kütüphanesi. PyTorc
 
 **Toplam: ~2,500 satır**
 
-## 🏗️ Mimari
+## Mimari
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                   Üst Seviye API                         │
-│  vision | nlp | rl | audio | timeseries | gan | explain │
+│ Üst Seviye API │
+│ vision | nlp | rl | audio | timeseries | gan | explain │
 └────────────────────┬────────────────────────────────────┘
-                     │
+ │
 ┌────────────────────┴────────────────────────────────────┐
-│                  Temel Modüller                          │
-│     tensor | nn | optim | data | train | model | llm    │
+│ Temel Modüller │
+│ tensor | nn | optim | data | train | model | llm │
 └────────────────────┬────────────────────────────────────┘
-                     │
+ │
 ┌────────────────────┴────────────────────────────────────┐
-│                 LLVM Backend                             │
-│  AVX2/AVX-512 (x86_64) | NEON (ARM) | GPU (v2.0)       │
+│ LLVM Backend │
+│ AVX2/AVX-512 (x86_64) | NEON (ARM) | GPU (v2.0) │
 └─────────────────────────────────────────────────────────┘
 ```
 
-## 🚀 Hızlı Başlangıç
+## Hızlı Başlangıç
 
 ### 1. Basit Neural Network
 
@@ -66,10 +66,10 @@ import "ai/optim" as optim
 
 // Model tanımla
 let model = nn.Sequential([
-    nn.Linear(784, 128),
-    nn.ReLU(),
-    nn.Linear(128, 10),
-    nn.Softmax()
+ nn.Linear(784, 128),
+ nn.ReLU(),
+ nn.Linear(128, 10),
+ nn.Softmax()
 ])
 
 // Optimizer
@@ -77,8 +77,8 @@ let optimizer = optim.Adam(model.parameters(), lr: 0.001)
 
 // Training
 for epoch in range(10) {
-    let loss = train_step(model, X_train, y_train, optimizer)
-    yazdır("Epoch {}: Loss = {:.4f}", epoch, loss)
+ let loss = train_step(model, X_train, y_train, optimizer)
+ yazdır("Epoch {}: Loss = {:.4f}", epoch, loss)
 }
 ```
 
@@ -96,7 +96,7 @@ let yolo = vision.yolo.YOLOv8.new("yolov8n.pt")
 let detections = yolo.detect(image)
 
 for det in detections {
-    yazdır("{}: {:.2f}", det.class_name, det.confidence)
+ yazdır("{}: {:.2f}", det.class_name, det.confidence)
 }
 ```
 
@@ -111,16 +111,16 @@ let embeddings = bert.encode(["BERK programlama dili"])
 
 // Sentiment analysis
 let sentiment = nlp.classification.sentiment_analysis(
-    "Bu harika bir dil!", 
-    model: "dbmdz/bert-base-turkish-cased"
+ "Bu harika bir dil!", 
+ model: "dbmdz/bert-base-turkish-cased"
 )
 
 // Text generation
 let generated = nlp.generation.top_k_sampling(
-    model, 
-    prompt: "BERK dili",
-    max_length: 50,
-    k: 40
+ model, 
+ prompt: "BERK dili",
+ max_length: 50,
+ k: 40
 )
 ```
 
@@ -131,10 +131,10 @@ import "ai/rl" as rl
 
 // DQN agent
 let config = rl.dqn.DQNConfig {
-    state_dim: 4,
-    action_dim: 2,
-    hidden_dims: [64, 64],
-    learning_rate: 0.001,
+ state_dim: 4,
+ action_dim: 2,
+ hidden_dims: [64, 64],
+ learning_rate: 0.001,
 }
 
 let mut agent = rl.dqn.DQNAgent.new(config)
@@ -151,7 +151,7 @@ import "ai/audio" as audio
 
 // Speech-to-text with Whisper
 let whisper = audio.whisper.Whisper.load(
-    audio.whisper.WhisperModel.Base
+ audio.whisper.WhisperModel.Base
 )
 let transcription = whisper.transcribe("speech.wav", language: "tr")
 
@@ -169,9 +169,9 @@ import "ai/timeseries" as ts
 
 // LSTM forecasting
 let config = ts.lstm.LSTMConfig {
-    input_size: 1,
-    hidden_size: 64,
-    num_layers: 2,
+ input_size: 1,
+ hidden_size: 64,
+ num_layers: 2,
 }
 
 let mut forecaster = ts.lstm.LSTMForecaster.new(config, horizon: 5)
@@ -190,8 +190,8 @@ import "ai/gan" as gan
 
 // Train DCGAN
 let config = gan.dcgan.DCGANConfig {
-    latent_dim: 100,
-    img_size: 64,
+ latent_dim: 100,
+ img_size: 64,
 }
 
 let mut dcgan = gan.dcgan.DCGAN.new(config)
@@ -222,13 +222,13 @@ let lime_exp = lime.explain(X_test[0], feature_names)
 
 // GradCAM for images
 let heatmap = explain.saliency.grad_cam(
-    model, image, 
-    target_layer: "layer4",
-    target_class: 243
+ model, image, 
+ target_layer: "layer4",
+ target_class: 243
 )
 ```
 
-## 📈 Performans
+## Performans
 
 | Operasyon | BERK AI (CPU) | PyTorch (CPU) | Hızlanma |
 |-----------|---------------|---------------|----------|
@@ -239,17 +239,17 @@ let heatmap = explain.saliency.grad_cam(
 
 *LLVM backend AVX2 optimizasyonları ile. Benchmark: Intel i7-12700K*
 
-## 🎯 v2.0 Roadmap
+## v2.0 Roadmap
 
 ### GPU Acceleration
 
 | Modül | v1.0 (CPU) | v2.0 (GPU) |
 |-------|------------|------------|
-| tensor | ✅ AVX2/AVX-512 | 🔄 CUDA/ROCm |
-| nn | ✅ CPU impl | 🔄 cuDNN |
-| vision | ✅ ResNet/YOLO | 🔄 TensorRT |
-| nlp | ✅ Transformers | 🔄 Flash Attention |
-| gan | ✅ GAN/VAE/Diffusion | 🔄 Mixed precision |
+| tensor | ✅ AVX2/AVX-512 | CUDA/ROCm |
+| nn | ✅ CPU impl | cuDNN |
+| vision | ✅ ResNet/YOLO | TensorRT |
+| nlp | ✅ Transformers | Flash Attention |
+| gan | ✅ GAN/VAE/Diffusion | Mixed precision |
 
 ### Planlanan Özellikler
 
@@ -262,7 +262,7 @@ let heatmap = explain.saliency.grad_cam(
 - [ ] ONNX Runtime integration
 - [ ] AutoML utilities
 
-## 📚 Dokümantasyon
+## Dokümantasyon
 
 - [AI/ML Overview](https://arslantasm.github.io/berk/stdlib/ai-overview.html)
 - [Tensor Operations](https://arslantasm.github.io/berk/stdlib/ai-tensor.html)
@@ -272,7 +272,7 @@ let heatmap = explain.saliency.grad_cam(
 - [Reinforcement Learning](https://arslantasm.github.io/berk/stdlib/ai-rl.html)
 - [API Reference (Full)](https://arslantasm.github.io/berk/stdlib/)
 
-## 🧪 Testler
+## Testler
 
 ```bash
 # Tüm AI/ML testlerini çalıştır
@@ -298,33 +298,33 @@ cargo bench --features ai
 
 **Toplam: 203+ tests passing**
 
-## 📊 Kod İstatistikleri
+## Kod İstatistikleri
 
 ```
 stdlib/ai/
-├── tensor.berk      (850 satır)
-├── nn.berk          (920 satır)
-├── optim.berk       (780 satır)
-├── data.berk        (650 satır)
-├── train.berk       (720 satır)
-├── model.berk       (580 satır)
-├── llm.berk         (450 satır)
-├── vision.berk      (245 satır)
-├── nlp.berk         (340 satır)
-├── rl.berk          (380 satır)
-├── audio.berk       (270 satır)
-├── timeseries.berk  (320 satır)
-├── gan.berk         (340 satır)
-├── metrics.berk     (320 satır)
-└── explain.berk     (350 satır)
+├── tensor.berk (850 satır)
+├── nn.berk (920 satır)
+├── optim.berk (780 satır)
+├── data.berk (650 satır)
+├── train.berk (720 satır)
+├── model.berk (580 satır)
+├── llm.berk (450 satır)
+├── vision.berk (245 satır)
+├── nlp.berk (340 satır)
+├── rl.berk (380 satır)
+├── audio.berk (270 satır)
+├── timeseries.berk (320 satır)
+├── gan.berk (340 satır)
+├── metrics.berk (320 satır)
+└── explain.berk (350 satır)
 
 Toplam: ~7,500 satır kod
-        15 modül
-        730+ fonksiyon
-        203+ test
+ 15 modül
+ 730+ fonksiyon
+ 203+ test
 ```
 
-## 🤝 Katkıda Bulunma
+## Katkıda Bulunma
 
 AI/ML kütüphanesine katkıda bulunmak için:
 
@@ -340,11 +340,11 @@ AI/ML kütüphanesine katkıda bulunmak için:
 - [ ] Daha fazla pre-trained model
 - [ ] Benchmark suite expansion
 
-## 📄 Lisans
+## Lisans
 
 GPL v3 - BERK Programming Language
 
-## 🔗 Kaynaklar
+## Kaynaklar
 
 - [BERK Ana Repo](https://github.com/ArslantasM/berk)
 - [BERK Documentation](https://arslantasm.github.io/berk/)
@@ -353,6 +353,6 @@ GPL v3 - BERK Programming Language
 
 ---
 
-**Geliştirici:** ArslantasM-tools  
-**Son Güncelleme:** Aralık 2025  
+**Geliştirici:** ArslantasM-tools 
+**Son Güncelleme:** Aralık 2025 
 **Versiyon:** 1.0.0

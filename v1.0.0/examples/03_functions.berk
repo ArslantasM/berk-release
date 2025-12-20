@@ -1,0 +1,117 @@
+/// ═══════════════════════════════════════════════════════════════════════════
+/// BERK Programlama Dili - Fonksiyonlar
+/// Seviye: Baslangic (Beginner)
+/// ═══════════════════════════════════════════════════════════════════════════
+
+kullan std::io
+
+yaz("============================================================")
+yaz("           Fonksiyonlar / Functions                         ")
+yaz("============================================================")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 1: Temel Fonksiyonlar
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 1: Temel Fonksiyonlar ---")
+
+// Turkce fonksiyon tanimlama
+fonksiyon selamla(isim: metin) yap
+    yaz("   Merhaba, ", isim, "!")
+son
+
+// English function definition
+function greet(name: string) do
+    yaz("   Hello, ", name, "!")
+end
+
+yaz("\n[TR] Turkce fonksiyon:")
+selamla("Ahmet")
+
+yaz("\n[EN] English function:")
+greet("John")
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 2: Deger Donduren Fonksiyonlar
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 2: Deger Donduren Fonksiyonlar ---")
+
+fonksiyon topla(a: tamsayı, b: tamsayı) -> tamsayı yap
+    dön a + b
+son
+
+fonksiyon çarp(a: tamsayı, b: tamsayı) -> tamsayı yap
+    dön a * b
+son
+
+function subtract(a: integer, b: integer) -> integer do
+    return a - b
+end
+
+değişken x = 10
+değişken y = 5
+
+yaz("\n   x = ", x, ", y = ", y)
+yaz("   topla(x, y) = ", topla(x, y))
+yaz("   carp(x, y) = ", çarp(x, y))
+yaz("   subtract(x, y) = ", subtract(x, y))
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 3: Recursive Fonksiyonlar
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 3: Recursive (Ozyinelemeli) Fonksiyonlar ---")
+
+fonksiyon faktoriyel(n: tamsayı) -> tamsayı yap
+    eğer n <= 1
+        dön 1
+    son
+    dön n * faktoriyel(n - 1)
+son
+
+function fibonacci(n: integer) -> integer do
+    if n <= 1
+        return n
+    end
+    return fibonacci(n - 1) + fibonacci(n - 2)
+end
+
+yaz("\n   Faktoriyel hesaplama:")
+için i içinde 1..8 yap
+    yaz("   ", i, "! = ", faktoriyel(i))
+son
+
+yaz("\n   Fibonacci sayilari:")
+için i içinde 0..10 yap
+    yaz("   F(", i, ") = ", fibonacci(i))
+son
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BOLUM 4: Fonksiyonlari Birlestirme
+// ─────────────────────────────────────────────────────────────────────────────
+
+yaz("\n--- BOLUM 4: Fonksiyonlari Birlestirme ---")
+
+fonksiyon kare(n: tamsayı) -> tamsayı yap
+    dön n * n
+son
+
+fonksiyon küp(n: tamsayı) -> tamsayı yap
+    dön n * n * n
+son
+
+fonksiyon mutlak(n: tamsayı) -> tamsayı yap
+    eğer n < 0
+        dön 0 - n
+    son
+    dön n
+son
+
+değişken sayi = -5
+yaz("\n   sayi = ", sayi)
+yaz("   mutlak(sayi) = ", mutlak(sayi))
+yaz("   kare(mutlak(sayi)) = ", kare(mutlak(sayi)))
+yaz("   kup(mutlak(sayi)) = ", küp(mutlak(sayi)))
+
+yaz("\n[OK] Fonksiyonlar demosu tamamlandi!")

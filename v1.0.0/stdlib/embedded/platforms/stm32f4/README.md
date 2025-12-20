@@ -2,7 +2,7 @@
 
 STM32F4xx serisi ARM Cortex-M4F mikrodenetleyiciler için BERK HAL implementasyonu. STM32 HAL kütüphanesi bindings.
 
-## 📁 Modüller
+## Modüller
 
 | Modül | Satır | Durum | Özellikler |
 |-------|-------|-------|------------|
@@ -17,7 +17,7 @@ STM32F4xx serisi ARM Cortex-M4F mikrodenetleyiciler için BERK HAL implementasyo
 
 **Toplam:** 2850 satır (8/8 modül) ✅ **TIER-1 COMPLETE**
 
-## 🎯 Desteklenen STM32F4 Varyantlar
+## Desteklenen STM32F4 Varyantlar
 
 ### STM32F401
 - **Core:** ARM Cortex-M4F @ 84MHz
@@ -60,7 +60,7 @@ STM32F4xx serisi ARM Cortex-M4F mikrodenetleyiciler için BERK HAL implementasyo
 - **Devkit:** STM32F446RE Nucleo
 - **Use Case:** Audio processing, communications
 
-## ⚡ Performance
+## Performance
 
 | Feature | STM32F407 | STM32F429 | STM32F446 |
 |---------|-----------|-----------|-----------|
@@ -75,79 +75,79 @@ STM32F4xx serisi ARM Cortex-M4F mikrodenetleyiciler için BERK HAL implementasyo
 | **SPI** | 21 Mbps | 22.5 Mbps | 22.5 Mbps |
 | **UART** | 10.5 Mbps | 11.25 Mbps | 11.25 Mbps |
 
-## 🔧 Pin Mapping (STM32F407VG)
+## Pin Mapping (STM32F407VG)
 
 ```
 ┌─────────────────────────────────────────┐
-│         STM32F407VG (LQFP100)           │
+│ STM32F407VG (LQFP100) │
 ├─────────────────────────────────────────┤
-│  Power:                                 │
-│    VDD: 1.8V - 3.6V                    │
-│    VDDA: Analog supply                 │
-│    VREF+: ADC reference                │
-│                                         │
-│  GPIO Ports:                            │
-│    GPIOA: PA0-PA15 (ADC, USART, SPI)  │
-│    GPIOB: PB0-PB15 (I2C, TIM, CAN)    │
-│    GPIOC: PC0-PC15 (ADC, SPI)         │
-│    GPIOD: PD0-PD15 (USART, FMC)       │
-│    GPIOE: PE0-PE15 (TIM, FMC)         │
-│    GPIOH: PH0-PH1  (Crystal)          │
-│                                         │
-│  Communication:                         │
-│    USART1: PA9(TX), PA10(RX)          │
-│    USART2: PA2(TX), PA3(RX)           │
-│    USART3: PB10(TX), PB11(RX)         │
-│    I2C1:   PB6(SCL), PB7(SDA)         │
-│    I2C2:   PB10(SCL), PB11(SDA)       │
-│    SPI1:   PA5(SCK), PA6(MISO), PA7(MOSI) │
-│    SPI2:   PB13(SCK), PB14(MISO), PB15(MOSI) │
-│    CAN1:   PB8(RX), PB9(TX)           │
-│    USB:    PA11(DM), PA12(DP)         │
-│                                         │
-│  Timers:                                │
-│    TIM1:   Advanced (PA8-PA11)        │
-│    TIM2:   General (PA0-PA3)          │
-│    TIM3:   General (PA6-PA7, PB0-PB1)│
-│    TIM4:   General (PB6-PB9)          │
-│                                         │
-│  ADC:                                   │
-│    ADC1:   PA0-PA7, PB0-PB1, PC0-PC5  │
-│    ADC2:   PA0-PA7, PB0-PB1, PC0-PC5  │
-│    ADC3:   PA0-PA3, PF6-PF10          │
-│                                         │
-│  Debug:                                 │
-│    SWDIO:  PA13                        │
-│    SWCLK:  PA14                        │
-│    SWO:    PB3                         │
+│ Power: │
+│ VDD: 1.8V - 3.6V │
+│ VDDA: Analog supply │
+│ VREF+: ADC reference │
+│ │
+│ GPIO Ports: │
+│ GPIOA: PA0-PA15 (ADC, USART, SPI) │
+│ GPIOB: PB0-PB15 (I2C, TIM, CAN) │
+│ GPIOC: PC0-PC15 (ADC, SPI) │
+│ GPIOD: PD0-PD15 (USART, FMC) │
+│ GPIOE: PE0-PE15 (TIM, FMC) │
+│ GPIOH: PH0-PH1 (Crystal) │
+│ │
+│ Communication: │
+│ USART1: PA9(TX), PA10(RX) │
+│ USART2: PA2(TX), PA3(RX) │
+│ USART3: PB10(TX), PB11(RX) │
+│ I2C1: PB6(SCL), PB7(SDA) │
+│ I2C2: PB10(SCL), PB11(SDA) │
+│ SPI1: PA5(SCK), PA6(MISO), PA7(MOSI) │
+│ SPI2: PB13(SCK), PB14(MISO), PB15(MOSI) │
+│ CAN1: PB8(RX), PB9(TX) │
+│ USB: PA11(DM), PA12(DP) │
+│ │
+│ Timers: │
+│ TIM1: Advanced (PA8-PA11) │
+│ TIM2: General (PA0-PA3) │
+│ TIM3: General (PA6-PA7, PB0-PB1)│
+│ TIM4: General (PB6-PB9) │
+│ │
+│ ADC: │
+│ ADC1: PA0-PA7, PB0-PB1, PC0-PC5 │
+│ ADC2: PA0-PA7, PB0-PB1, PC0-PC5 │
+│ ADC3: PA0-PA3, PF6-PF10 │
+│ │
+│ Debug: │
+│ SWDIO: PA13 │
+│ SWCLK: PA14 │
+│ SWO: PB3 │
 └─────────────────────────────────────────┘
 ```
 
-## 🚀 Quick Start
+## Quick Start
 
 ```berk
 import "embedded/platforms/stm32f4/gpio" as GPIO
 import "embedded/platforms/stm32f4/uart" as UART
 
 fn main() -> i32 {
-    // Initialize system clock (168MHz)
-    SystemClock.init()
-    
-    // LED on PA5
-    GPIO.init_output(GPIO.Port.A, 5, GPIO.Speed.High)
-    
-    // UART2 on PA2/PA3
-    UART.init(2, 115200)
-    UART.println(2, "STM32F4 BERK HAL")
-    
-    loop {
-        GPIO.toggle(GPIO.Port.A, 5)
-        time.sleep_ms(500)
-    }
+ // Initialize system clock (168MHz)
+ SystemClock.init()
+
+ // LED on PA5
+ GPIO.init_output(GPIO.Port.A, 5, GPIO.Speed.High)
+
+ // UART2 on PA2/PA3
+ UART.init(2, 115200)
+ UART.println(2, "STM32F4 BERK HAL")
+
+ loop {
+ GPIO.toggle(GPIO.Port.A, 5)
+ time.sleep_ms(500)
+ }
 }
 ```
 
-## 📚 API Documentation
+## API Documentation
 
 ### GPIO Module
 
@@ -198,10 +198,10 @@ CAN.send(bus: u8, id: u32, data: &[u8]) -> Result<()>
 CAN.receive(bus: u8) -> Result<CAN.Message>
 
 // Error handling
-CAN.get_error_count(bus: u8) -> (u8, u8)  // (tx_errors, rx_errors)
+CAN.get_error_count(bus: u8) -> (u8, u8) // (tx_errors, rx_errors)
 ```
 
-## 🔌 Peripheral Availability
+## Peripheral Availability
 
 ### STM32F407VG
 
@@ -221,36 +221,36 @@ CAN.get_error_count(bus: u8) -> (u8, u8)  // (tx_errors, rx_errors)
 | CRC | 1 | - | Hardware CRC32 |
 | RNG | 1 | - | True random |
 
-## ⚠️ Known Limitations
+## Known Limitations
 
 1. **5V Tolerance:**
-   - Most GPIO pins are 5V tolerant
-   - Check datasheet for specific pins
-   - ADC pins are NOT 5V tolerant
+ - Most GPIO pins are 5V tolerant
+ - Check datasheet for specific pins
+ - ADC pins are NOT 5V tolerant
 
 2. **ADC2 Limitations:**
-   - ADC2 channels overlap with GPIOA
-   - ADC3 has fewer channels (STM32F40x)
+ - ADC2 channels overlap with GPIOA
+ - ADC3 has fewer channels (STM32F40x)
 
 3. **USB and CAN Conflicts:**
-   - USB and CAN1 share some pins
-   - Careful pin planning required
+ - USB and CAN1 share some pins
+ - Careful pin planning required
 
 4. **DMA Streams:**
-   - Limited DMA streams (8 per controller)
-   - Some peripherals share streams
-   - Prioritize critical peripherals
+ - Limited DMA streams (8 per controller)
+ - Some peripherals share streams
+ - Prioritize critical peripherals
 
 5. **CCM RAM:**
-   - 64KB CCM RAM not DMA-accessible
-   - Use for stack/heap, not buffers
-   - Place DMA buffers in main RAM
+ - 64KB CCM RAM not DMA-accessible
+ - Use for stack/heap, not buffers
+ - Place DMA buffers in main RAM
 
 6. **BOOT pins:**
-   - BOOT0: Must be low for normal operation
-   - BOOT1: Configurable
+ - BOOT0: Must be low for normal operation
+ - BOOT1: Configurable
 
-## 🛠️ Development Tools
+## Development Tools
 
 - **IDE:** STM32CubeIDE, Keil MDK, IAR EWARM
 - **Debugger:** ST-Link V2/V3, J-Link
@@ -258,21 +258,21 @@ CAN.get_error_count(bus: u8) -> (u8, u8)  // (tx_errors, rx_errors)
 - **HAL Version:** STM32Cube HAL v1.8.x
 - **CMSIS:** ARM CMSIS 5.x
 
-## 📦 Memory Layout
+## Memory Layout
 
 ```
 STM32F407VG Memory Map:
 ┌─────────────────────────────────┐
-│ 0x0800 0000 - 0x080F FFFF       │ Flash (1MB)
-│ 0x2000 0000 - 0x2001 FFFF       │ SRAM1 (112KB)
-│ 0x2002 0000 - 0x2002 FFFF       │ SRAM2 (16KB)
-│ 0x1000 0000 - 0x1000 FFFF       │ CCM RAM (64KB)
-│ 0x4000 0000 - 0x5FFF FFFF       │ Peripherals
-│ 0xE000 0000 - 0xE00F FFFF       │ Cortex-M4 Core
+│ 0x0800 0000 - 0x080F FFFF │ Flash (1MB)
+│ 0x2000 0000 - 0x2001 FFFF │ SRAM1 (112KB)
+│ 0x2002 0000 - 0x2002 FFFF │ SRAM2 (16KB)
+│ 0x1000 0000 - 0x1000 FFFF │ CCM RAM (64KB)
+│ 0x4000 0000 - 0x5FFF FFFF │ Peripherals
+│ 0xE000 0000 - 0xE00F FFFF │ Cortex-M4 Core
 └─────────────────────────────────┘
 ```
 
-## 🎓 Learning Resources
+## Learning Resources
 
 - **STM32F4 Reference Manual (RM0090)**
 - **STM32F407 Datasheet**
@@ -280,7 +280,7 @@ STM32F407VG Memory Map:
 - **AN4031: Using the STM32F2/F4/F7 DMA controller**
 - **UM1472: STM32CubeMX user manual**
 
-## 🏭 Industrial Applications
+## Industrial Applications
 
 STM32F4 is widely used in:
 - **Industrial automation** (PLCs, motor control)

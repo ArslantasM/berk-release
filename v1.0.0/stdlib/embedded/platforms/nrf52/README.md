@@ -96,9 +96,9 @@ Nordic nRF52 series is the industry-leading Bluetooth Low Energy (BLE) platform,
 
 ### Analog
 - **ADC**: 12-bit SAADC (Successive Approximation)
-  - 8 single-ended or 4 differential channels
-  - Oversampling up to 16-bit resolution
-  - Internal temperature sensor
+ - 8 single-ended or 4 differential channels
+ - Oversampling up to 16-bit resolution
+ - Internal temperature sensor
 - **Comparator**: LPCOMP (Low-Power Comparator)
 - **PDM**: Pulse Density Modulation microphone interface
 
@@ -155,25 +155,25 @@ Nordic provides the **SoftDevice** - a production-quality BLE protocol stack:
 
 ### nRF52832 (QFN48 package)
 ```
-Digital I/O:        P0.00 - P0.31 (32 GPIOs)
-UART0 (Debug):      TX: P0.06, RX: P0.08
-I2C0:               SDA: P0.26, SCL: P0.27
-SPI0:               MOSI: P0.23, MISO: P0.24, SCK: P0.25
-ADC:                AIN0-AIN7: P0.02-P0.05, P0.28-P0.31
-PWM:                Any GPIO (flexible mapping)
-NFC:                NFC1: P0.09, NFC2: P0.10 (if enabled)
+Digital I/O: P0.00 - P0.31 (32 GPIOs)
+UART0 (Debug): TX: P0.06, RX: P0.08
+I2C0: SDA: P0.26, SCL: P0.27
+SPI0: MOSI: P0.23, MISO: P0.24, SCK: P0.25
+ADC: AIN0-AIN7: P0.02-P0.05, P0.28-P0.31
+PWM: Any GPIO (flexible mapping)
+NFC: NFC1: P0.09, NFC2: P0.10 (if enabled)
 ```
 
 ### nRF52840 (QFN73 package)
 ```
-Digital I/O:        P0.00 - P0.31, P1.00 - P1.15 (48 GPIOs)
-UART0:              TX: P0.06, RX: P0.08
-I2C0:               SDA: P0.26, SCL: P0.27
-SPI0:               MOSI: P0.23, MISO: P0.24, SCK: P0.25
-QSPI:               IO0-IO3: P0.20-P0.23, SCK: P0.19, CS: P0.17
-USB:                D-: P0.24, D+: P0.23 (shared with other functions)
-ADC:                AIN0-AIN7: P0.02-P0.05, P0.28-P0.31
-NFC:                NFC1: P0.09, NFC2: P0.10
+Digital I/O: P0.00 - P0.31, P1.00 - P1.15 (48 GPIOs)
+UART0: TX: P0.06, RX: P0.08
+I2C0: SDA: P0.26, SCL: P0.27
+SPI0: MOSI: P0.23, MISO: P0.24, SCK: P0.25
+QSPI: IO0-IO3: P0.20-P0.23, SCK: P0.19, CS: P0.17
+USB: D-: P0.24, D+: P0.23 (shared with other functions)
+ADC: AIN0-AIN7: P0.02-P0.05, P0.28-P0.31
+NFC: NFC1: P0.09, NFC2: P0.10
 ```
 
 ## Power Consumption Examples
@@ -190,9 +190,9 @@ NFC:                NFC1: P0.09, NFC2: P0.10
 
 ### Coin Cell Battery Life
 - **CR2032** (225 mAh):
-  - BLE beacon (1 Hz): ~2.5 years
-  - Sensor node (1 Hz): ~1.5 years
-  - Always connected (100ms): ~6 months
+ - BLE beacon (1 Hz): ~2.5 years
+ - Sensor node (1 Hz): ~1.5 years
+ - Always connected (100ms): ~6 months
 
 ## BERK Platform Modules
 
@@ -227,9 +227,9 @@ let hr_char = hr_service.add_characteristic(ble::HEART_RATE_MEASUREMENT);
 ble_peripheral.start_advertising();
 
 loop {
-    let heart_rate = read_heart_rate_sensor();
-    hr_char.notify(heart_rate);
-    sleep_ms(1000);
+ let heart_rate = read_heart_rate_sensor();
+ hr_char.notify(heart_rate);
+ sleep_ms(1000);
 }
 ```
 

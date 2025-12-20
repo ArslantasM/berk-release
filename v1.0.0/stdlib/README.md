@@ -1,6 +1,6 @@
 # BERK Standart Kütüphanesi v2.0
 
-## 🎓 BİLİMSEL SEVİYE | SCIENTIFIC GRADE + 🤖 AI/ML FRAMEWORK
+## BİLİMSEL SEVİYE | SCIENTIFIC GRADE + AI/ML FRAMEWORK
 
 **Üniversite + Araştırma + Mühendislik + Yapay Zeka**
 
@@ -10,9 +10,9 @@
 
 ---
 
-## 🤖 AI/ML FRAMEWORK (Phase 5 - YENİ!)
+## AI/ML FRAMEWORK (Phase 5 - YENİ!)
 
-### 🔥 ai/tensor.berk (15 KB) - TENSOR İŞLEMLERİ
+### ai/tensor.berk (15 KB) - TENSOR İŞLEMLERİ
 **PyTorch Tensor equivalent - Automatic differentiation**
 
 **Özellikler:**
@@ -38,7 +38,7 @@ yaz("Gradient: {:?}", x.grad())
 
 ---
 
-### 🧠 ai/nn.berk (12 KB) - NEURAL NETWORKS
+### ai/nn.berk (12 KB) - NEURAL NETWORKS
 **PyTorch nn.Module equivalent**
 
 **Layers:**
@@ -50,25 +50,25 @@ yaz("Gradient: {:?}", x.grad())
 - `Dropout` - Regularization
 - `Embedding` - Word embeddings
 
-**Activations:** ReLU, GELU, Sigmoid, Softmax  
-**Pooling:** MaxPool2d, AvgPool2d  
-**Loss:** MSELoss, CrossEntropyLoss  
+**Activations:** ReLU, GELU, Sigmoid, Softmax 
+**Pooling:** MaxPool2d, AvgPool2d 
+**Loss:** MSELoss, CrossEntropyLoss 
 **Containers:** Sequential
 
 ```berk
 import "ai/nn" as nn
 
 let model = nn.Sequential.new([
-    nn.Linear.new(784, 256),
-    nn.ReLU.new(),
-    nn.Dropout.new(0.2),
-    nn.Linear.new(256, 10),
+ nn.Linear.new(784, 256),
+ nn.ReLU.new(),
+ nn.Dropout.new(0.2),
+ nn.Linear.new(256, 10),
 ])
 ```
 
 ---
 
-### ⚙️ ai/optim.berk (10 KB) - OPTIMIZERS
+### ai/optim.berk (10 KB) - OPTIMIZERS
 **PyTorch optim equivalent**
 
 **Optimizers:**
@@ -84,9 +84,9 @@ let model = nn.Sequential.new([
 import "ai/optim" as optim
 
 let optimizer = optim.AdamW.new(
-    model.parameters(),
-    lr: 2e-5,
-    weight_decay: 0.01
+ model.parameters(),
+ lr: 2e-5,
+ weight_decay: 0.01
 )
 
 let scheduler = optim.CosineAnnealingLR.new(optimizer, T_max: 10)
@@ -94,7 +94,7 @@ let scheduler = optim.CosineAnnealingLR.new(optimizer, T_max: 10)
 
 ---
 
-### 📊 ai/data.berk (12 KB) - DATA LOADING
+### ai/data.berk (12 KB) - DATA LOADING
 **PyTorch DataLoader/Dataset equivalent**
 
 **Core:**
@@ -115,20 +115,20 @@ let scheduler = optim.CosineAnnealingLR.new(optimizer, T_max: 10)
 import "ai/data" as data
 
 let loader = data.DataLoader.new(
-    dataset,
-    batch_size: 64,
-    shuffle: true,
-    num_workers: 4
+ dataset,
+ batch_size: 64,
+ shuffle: true,
+ num_workers: 4
 )
 
 for (inputs, targets) in loader.iter() {
-    // Training step
+ // Training step
 }
 ```
 
 ---
 
-### 🎯 ai/train.berk (14 KB) - TRAINING UTILITIES
+### ai/train.berk (14 KB) - TRAINING UTILITIES
 **Complete training framework**
 
 **Features:**
@@ -155,7 +155,7 @@ yaz("Test Accuracy: {:.2f}%", acc * 100.0)
 
 ---
 
-### 💾 ai/model.berk (11 KB) - MODEL LOADING
+### ai/model.berk (11 KB) - MODEL LOADING
 **GGUF, ONNX, SafeTensors support**
 
 **Formats:**
@@ -181,7 +181,7 @@ let pretrained = model.hub.load_from_hub("bert-base-uncased")?
 
 ---
 
-### 💬 ai/llm.berk (11 KB) - LLM INTEGRATION
+### ai/llm.berk (11 KB) - LLM INTEGRATION
 **OpenAI, Anthropic, Google Gemini, Ollama APIs**
 
 **Features:**
@@ -200,7 +200,7 @@ yaz("Cevap: {}", response.content)
 
 ---
 
-### 🌐 web/router.berk (13 KB) - REST API FRAMEWORK
+### web/router.berk (13 KB) - REST API FRAMEWORK
 **Express.js/FastAPI style web framework**
 
 **Features:**
@@ -216,13 +216,13 @@ import "web/router" as router
 let app = router.Router.new()
 
 app.get("/api/hello", |req, res| {
-    res.json({"message": "Merhaba Dünya!"})
+ res.json({"message": "Merhaba Dünya!"})
 })
 
 app.post("/api/chat", |req, res| {
-    // AI chatbot endpoint
-    let response = llm.chat(config, req.body.message)
-    res.json({"response": response.content})
+ // AI chatbot endpoint
+ let response = llm.chat(config, req.body.message)
+ res.json({"response": response.content})
 })
 
 app.listen(3000)
@@ -230,7 +230,7 @@ app.listen(3000)
 
 ---
 
-## 📐 math.berk **(27.5 KB) - BİLİMSEL MATEMATİK**
+## math.berk **(27.5 KB) - BİLİMSEL MATEMATİK**
 
 **Üniversite seviyesi matematik kütüphanesi**
 
@@ -253,19 +253,19 @@ app.listen(3000)
 kullan math
 
 // Trigonometri
-math::sin(math::PI / 2)              // 1.0
-math::cos(0.0)                        // 1.0
-math::sind(90.0)                      // sin(90°) = 1.0
+math::sin(math::PI / 2) // 1.0
+math::cos(0.0) // 1.0
+math::sind(90.0) // sin(90°) = 1.0
 
 // Özel fonksiyonlar
-math::gamma(5.0)                      // 24.0 (4! = 24)
-math::erf(1.0)                        // Error function
-math::bessel_j0(0.0)                  // Bessel function
+math::gamma(5.0) // 24.0 (4! = 24)
+math::erf(1.0) // Error function
+math::bessel_j0(0.0) // Bessel function
 
 // Sayısal analiz
-math::sqrt(2.0)                       // 1.414...
-math::cbrt(27.0)                      // 3.0
-math::hypot(3.0, 4.0)                 // 5.0 (Pisagor)
+math::sqrt(2.0) // 1.414...
+math::cbrt(27.0) // 3.0
+math::hypot(3.0, 4.0) // 5.0 (Pisagor)
 ```
 
 ---
@@ -292,29 +292,29 @@ math::hypot(3.0, 4.0)                 // 5.0 (Pisagor)
 kullan physics
 
 // Kinematik
-physics::projectile_range(100.0, 45.0)    // Atış menzili (45° optimal)
-physics::free_fall_velocity(2.0)           // 2 saniye serbest düşüş hızı
+physics::projectile_range(100.0, 45.0) // Atış menzili (45° optimal)
+physics::free_fall_velocity(2.0) // 2 saniye serbest düşüş hızı
 
 // Gravitasyon
-physics::escape_velocity(EARTH_MASS, EARTH_RADIUS)  // 11.2 km/s
-physics::orbital_period(SUN_MASS, EARTH_ORBIT)      // ~1 yıl
+physics::escape_velocity(EARTH_MASS, EARTH_RADIUS) // 11.2 km/s
+physics::orbital_period(SUN_MASS, EARTH_ORBIT) // ~1 yıl
 
 // Enerji
-physics::kinetic_energy(10.0, 5.0)        // KE = ½mv²
-physics::elastic_collision_1d(...)        // Elastik çarpışma
+physics::kinetic_energy(10.0, 5.0) // KE = ½mv²
+physics::elastic_collision_1d(...) // Elastik çarpışma
 
 // Elektromanyetizma
-physics::coulomb_force(q1, q2, r)         // Coulomb yasası
-physics::ohms_law_current(V, R)           // I = V/R
+physics::coulomb_force(q1, q2, r) // Coulomb yasası
+physics::ohms_law_current(V, R) // I = V/R
 
 // Termodinamik
-physics::ideal_gas_pressure(n, T, V)      // PV = nRT
-physics::carnot_efficiency(T_h, T_c)      // η = 1 - Tc/Th
+physics::ideal_gas_pressure(n, T, V) // PV = nRT
+physics::carnot_efficiency(T_h, T_c) // η = 1 - Tc/Th
 ```
 
 ---
 
-## 🧵 thread.berk **(13.8 KB) - PARALEL İŞLEME**
+## thread.berk **(13.8 KB) - PARALEL İŞLEME**
 
 **Modern threading - pthread + Windows threads**
 
@@ -344,14 +344,14 @@ thread::mutex_kilitle(mutex)
 thread::mutex_aç(mutex)
 
 // Thread pool
-değişken pool = thread::pool_oluştur(4)  // 4 worker thread
+değişken pool = thread::pool_oluştur(4) // 4 worker thread
 thread::pool_iş_ekle(pool, görev_id)
 thread::pool_bekle(pool)
 ```
 
 ---
 
-## 🛡️ result.berk (7.4 KB) - HATA YÖNETİMİ
+## result.berk (7.4 KB) - HATA YÖNETİMİ
 
 Modern error handling - Rust Option/Result pattern
 
@@ -363,13 +363,13 @@ Modern error handling - Rust Option/Result pattern
 ```berk
 kullan result
 eğer result::result_başarılı_mı(sonuç) ise yap
-    değişken değer = result::result_unwrap(sonuç)
+ değişken değer = result::result_unwrap(sonuç)
 son
 ```
 
 ---
 
-## 📁 fs.berk (7.8 KB) - DOSYA SİSTEMİ
+## fs.berk (7.8 KB) - DOSYA SİSTEMİ
 
 Kapsamlı file I/O operations
 
@@ -381,13 +381,13 @@ Kapsamlı file I/O operations
 ```berk
 kullan fs
 eğer fs::dosya_var_mı("test.txt") ise yap
-    değişken içerik = fs::dosya_oku_string("test.txt")
+ değişken içerik = fs::dosya_oku_string("test.txt")
 son
 ```
 
 ---
 
-## 🔄 iter.berk (9.2 KB) - FONKSİYONEL PROGRAMLAMA
+## iter.berk (9.2 KB) - FONKSİYONEL PROGRAMLAMA
 
 Map, filter, reduce operations
 
@@ -399,13 +399,13 @@ Map, filter, reduce operations
 
 ```berk
 kullan iter
-değişken toplam = iter::iter_sum([1, 2, 3, 4, 5])  // 15
-değişken çiftler = iter::iter_filter_even([1, 2, 3, 4])  // [2, 4]
+değişken toplam = iter::iter_sum([1, 2, 3, 4, 5]) // 15
+değişken çiftler = iter::iter_filter_even([1, 2, 3, 4]) // [2, 4]
 ```
 
 ---
 
-## 🎨 fmt.berk (9.1 KB) - STRING FORMATLAMA
+## fmt.berk (9.1 KB) - STRING FORMATLAMA
 
 Profesyonel string formatting
 
@@ -419,14 +419,14 @@ Profesyonel string formatting
 
 ```berk
 kullan fmt
-fmt::fmt_hex(255)                    // "0xFF"
-fmt::fmt_currency_tl(1234.56)       // "1.234,56 TL"
-fmt::fmt_red("HATA")                 // Kırmızı metin
+fmt::fmt_hex(255) // "0xFF"
+fmt::fmt_currency_tl(1234.56) // "1.234,56 TL"
+fmt::fmt_red("HATA") // Kırmızı metin
 ```
 
 ---
 
-## 📝 io.berk (3.9 KB) - KONSOL I/O
+## io.berk (3.9 KB) - KONSOL I/O
 
 Enhanced console I/O
 
@@ -443,7 +443,7 @@ io::hata_yazdır("Dosya bulunamadı")
 
 ---
 
-## 📄 string.berk (7.5 KB) - STRING İŞLEMLERİ
+## string.berk (7.5 KB) - STRING İŞLEMLERİ
 
 Comprehensive string operations
 
@@ -454,7 +454,7 @@ Comprehensive string operations
 
 ---
 
-## 📦 collections.berk (7.5 KB) - KOLEKSİYONLAR
+## collections.berk (7.5 KB) - KOLEKSİYONLAR
 
 Liste işlemleri
 
@@ -464,7 +464,7 @@ Liste işlemleri
 
 ---
 
-## ⏰ time.berk (6.6 KB) - ZAMAN İŞLEMLERİ
+## time.berk (6.6 KB) - ZAMAN İŞLEMLERİ
 
 Zaman/tarih utilities
 
@@ -474,7 +474,7 @@ Zaman/tarih utilities
 
 ---
 
-## 🚀 Kullanım
+## Kullanım
 
 ```berk
 // Modül import et
@@ -496,7 +496,7 @@ thread::thread_bekle(tid)
 
 ---
 
-## 📊 İstatistikler
+## İstatistikler
 
 | Modül | Boyut | Fonksiyon | Seviye |
 |-------|-------|-----------|--------|
@@ -511,11 +511,11 @@ thread::thread_bekle(tid)
 | collections.berk | 7.5 KB | 10+ | Temel |
 | io.berk | 3.9 KB | 15+ | Temel |
 | time.berk | 6.6 KB | 15+ | Temel |
-| **TOPLAM** | **125.8 KB** | **350+** | **🎓 Bilimsel** |
+| **TOPLAM** | **125.8 KB** | **350+** | ** Bilimsel** |
 
 ---
 
-## 🎯 Hedef Kullanıcılar
+## Hedef Kullanıcılar
 
 - ✅ Üniversite öğrencileri (fizik, matematik, mühendislik)
 - ✅ Araştırmacılar (simülasyon, hesaplama)
@@ -524,7 +524,7 @@ thread::thread_bekle(tid)
 
 ---
 
-## 🎯 KILLER USE CASES
+## KILLER USE CASES
 
 ### 1. AI Chatbot API (20 satır!)
 ```berk
@@ -535,8 +535,8 @@ let app = router.Router.new()
 let config = llm.Config.new("gpt-4", "api-key")
 
 app.post("/chat", |req, res| {
-    let response = llm.chat(config, req.body.message)
-    res.json({"response": response.content})
+ let response = llm.chat(config, req.body.message)
+ res.json({"response": response.content})
 })
 
 app.listen(3000)
@@ -547,10 +547,10 @@ app.listen(3000)
 import "ai/train" as train
 
 train.train_simple(
-    my_model,
-    (train_x, train_y),
-    epochs: 10,
-    batch_size: 64
+ my_model,
+ (train_x, train_y),
+ epochs: 10,
+ batch_size: 64
 )
 ```
 
@@ -565,15 +565,15 @@ trainer.fit(train_loader, val_loader)
 
 ---
 
-## 📊 İstatistikler (Güncellenmiş)
+## İstatistikler (Güncellenmiş)
 
 | Kategori | Modül Sayısı | Fonksiyon | Seviye |
 |----------|--------------|-----------|--------|
-| **AI/ML** | 7 | 190+ | 🔥 İleri |
-| **Web** | 1 | 25+ | 🌐 Orta |
-| **Bilimsel** | 11 | 350+ | 🎓 Üniversite |
-| **Embedded** | 29 | 200+ | ⚡ Platform-specific |
-| **TOPLAM** | **48** | **580+** | **🚀 Production-Ready** |
+| **AI/ML** | 7 | 190+ | İleri |
+| **Web** | 1 | 25+ | Orta |
+| **Bilimsel** | 11 | 350+ | Üniversite |
+| **Embedded** | 29 | 200+ | Platform-specific |
+| **TOPLAM** | **48** | **580+** | ** Production-Ready** |
 
 ### AI/ML Framework Detay:
 | Modül | Boyut | Fonksiyon | Açıklama |
@@ -589,7 +589,7 @@ trainer.fit(train_loader, val_loader)
 
 ---
 
-## 🚀 Performance
+## Performance
 
 **AI/ML Training**: 15-35% daha hızlı (Python PyTorch'a göre)
 - Native Rust backend
@@ -604,7 +604,7 @@ trainer.fit(train_loader, val_loader)
 
 ---
 
-## 📖 Gelecek Planlar (Phase 6)
+## Gelecek Planlar (Phase 6)
 
 ### AI/ML Native Implementations:
 - [ ] Native Rust tensor backend (~2000 lines)
@@ -622,7 +622,7 @@ trainer.fit(train_loader, val_loader)
 
 ---
 
-**BERK v2.0** 🚀 | Kasım 2025 - **AI-READY!**
+**BERK v2.0** | Kasım 2025 - **AI-READY!**
 
 **İlham Kaynakları**:
 - Julia: Math, FastMath, SpecialFunctions, DifferentialEquations
@@ -633,16 +633,16 @@ trainer.fit(train_loader, val_loader)
 
 ---
 
-##  Why Berk v2.0?
+## Why Berk v2.0?
 
-1.  **AI-Ready**: Complete PyTorch-style training framework
-2.  **15-35% Faster**: Native Rust backend beats Python
-3.  **Full-Stack**: Web backend + AI/ML in one language  
-4.  **Turkish-First**: Native Turkish language support
-5.  **Memory Safe**: Rust-level safety guarantees
-6.  **Scientific**: University-grade math & physics
-7.  **Modern**: GGUF, ONNX, SafeTensors, Hugging Face Hub
-8.  **Complete**: 48 modules, 580+ functions, production-ready
+1. **AI-Ready**: Complete PyTorch-style training framework
+2. **15-35% Faster**: Native Rust backend beats Python
+3. **Full-Stack**: Web backend + AI/ML in one language 
+4. **Turkish-First**: Native Turkish language support
+5. **Memory Safe**: Rust-level safety guarantees
+6. **Scientific**: University-grade math & physics
+7. **Modern**: GGUF, ONNX, SafeTensors, Hugging Face Hub
+8. **Complete**: 48 modules, 580+ functions, production-ready
 
 ---
 

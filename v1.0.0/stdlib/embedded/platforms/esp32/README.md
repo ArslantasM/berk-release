@@ -2,7 +2,7 @@
 
 ESP32 family için BERK HAL implementasyonu. ESP-IDF (Espressif IoT Development Framework) bindings.
 
-## 📁 Modüller
+## Modüller
 
 | Modül | Satır | Durum | Özellikler |
 |-------|-------|-------|------------|
@@ -17,7 +17,7 @@ ESP32 family için BERK HAL implementasyonu. ESP-IDF (Espressif IoT Development 
 
 **Toplam:** 2770 satır (8/8 modül) ✅ **TIER-1 COMPLETE**
 
-## 🎯 Desteklenen ESP32 Varyantlar
+## Desteklenen ESP32 Varyantlar
 
 ### ESP32 Classic
 - **Cores:** Dual-core Xtensa LX6 @ 240MHz
@@ -61,7 +61,7 @@ ESP32 family için BERK HAL implementasyonu. ESP-IDF (Espressif IoT Development 
 - **USB:** Native USB OTG
 - **Devkit:** ESP32-S3-DevKitC-1
 
-## 🚀 Hızlı Başlangıç
+## Hızlı Başlangıç
 
 ### 1. ESP-IDF Kurulumu
 
@@ -96,20 +96,20 @@ berk monitor --port COM3 --baud 115200
 import "embedded/platforms/esp32/gpio" as GPIO
 
 fn main() {
-    // GPIO 2 (built-in LED on most boards)
-    GPIO.ESP32_GPIO.init()
-    GPIO.ESP32_GPIO.configure(2, GPIO.Mode.Output)
-    
-    loop {
-        GPIO.ESP32_GPIO.write(2, GPIO.Level.High)
-        time.sleep_ms(500)
-        GPIO.ESP32_GPIO.write(2, GPIO.Level.Low)
-        time.sleep_ms(500)
-    }
+ // GPIO 2 (built-in LED on most boards)
+ GPIO.ESP32_GPIO.init()
+ GPIO.ESP32_GPIO.configure(2, GPIO.Mode.Output)
+
+ loop {
+ GPIO.ESP32_GPIO.write(2, GPIO.Level.High)
+ time.sleep_ms(500)
+ GPIO.ESP32_GPIO.write(2, GPIO.Level.Low)
+ time.sleep_ms(500)
+ }
 }
 ```
 
-## 📖 API Dokümantasyonu
+## API Dokümantasyonu
 
 ### GPIO
 
@@ -132,7 +132,7 @@ let level = GPIO.ESP32_GPIO.read(14)
 #### Interrupt Kullanımı
 ```berk
 fn button_handler() {
-    IO.println("Button pressed!")
+ IO.println("Button pressed!")
 }
 
 // Attach interrupt on falling edge
@@ -146,7 +146,7 @@ GPIO.ESP32_GPIO.enable_interrupt(0)
 GPIO.wakeup_enable(0, GPIO.Level.Low)
 
 // Enter deep sleep
-esp.deep_sleep(10_000_000)  // 10 seconds
+esp.deep_sleep(10_000_000) // 10 seconds
 ```
 
 ### I2C
@@ -156,12 +156,12 @@ esp.deep_sleep(10_000_000)  // 10 seconds
 import "embedded/platforms/esp32/i2c" as I2C
 
 let config = I2C.Config {
-    bus: 0,
-    scl_pin: 22,
-    sda_pin: 21,
-    speed: I2C.Speed.Fast,
-    address_mode: I2C.AddressMode.SevenBit,
-    timeout_ms: 1000,
+ bus: 0,
+ scl_pin: 22,
+ sda_pin: 21,
+ speed: I2C.Speed.Fast,
+ address_mode: I2C.AddressMode.SevenBit,
+ timeout_ms: 1000,
 }
 
 I2C.ESP32_I2C.init(config)?
@@ -176,7 +176,7 @@ IO.println("Temperature: " + temp.to_string())
 let devices = I2C.ESP32_I2C.scan(0)?
 IO.println("Found " + devices.len().to_string() + " devices:")
 for addr in devices {
-    IO.println("  0x" + addr.to_hex())
+ IO.println(" 0x" + addr.to_hex())
 }
 ```
 
@@ -187,16 +187,16 @@ for addr in devices {
 import "embedded/platforms/esp32/uart" as UART
 
 let config = UART.Config {
-    uart: 1,
-    tx_pin: 17,
-    rx_pin: 16,
-    baud_rate: UART.BaudRate.Baud115200,
-    data_bits: UART.DataBits.Bits8,
-    parity: UART.Parity.None,
-    stop_bits: UART.StopBits.One,
-    flow_control: UART.FlowControl.None,
-    rx_buffer_size: 1024,
-    tx_buffer_size: 1024,
+ uart: 1,
+ tx_pin: 17,
+ rx_pin: 16,
+ baud_rate: UART.BaudRate.Baud115200,
+ data_bits: UART.DataBits.Bits8,
+ parity: UART.Parity.None,
+ stop_bits: UART.StopBits.One,
+ flow_control: UART.FlowControl.None,
+ rx_buffer_size: 1024,
+ tx_buffer_size: 1024,
 }
 
 UART.ESP32_UART.init(config)?
@@ -206,34 +206,34 @@ UART.ESP32_UART.write_string(1, "Hello ESP32!\r\n")?
 
 // Read line
 match UART.read_line(1, 5000) {
-    Ok(line) => IO.println("Received: " + line),
-    Err(e) => IO.eprintln("Error: " + e.to_string()),
+ Ok(line) => IO.println("Received: " + line),
+ Err(e) => IO.eprintln("Error: " + e.to_string()),
 }
 ```
 
-## 🔧 Pin Mapping
+## Pin Mapping
 
 ### ESP32-DevKitC V4
 
 ```
-                     ESP32-DevKitC
-                    ┌────────────┐
-                3.3V│1        30 │GND
-               RESET│2        29 │GPIO23
-          (TX) GPIO1│3        28 │GPIO22 (I2C SCL)
-          (RX) GPIO3│4        27 │GPIO21 (I2C SDA)
-              GPIO15│5        26 │GPIO19 (SPI MISO)
-               GPIO2│6        25 │GPIO18 (SPI SCK)
-               GPIO0│7        24 │GPIO5  (SPI CS)
-               GPIO4│8        23 │GPIO17 (UART2 TX)
-              GPIO16│9        22 │GPIO16 (UART2 RX)
-              GPIO17│10       21 │GPIO4
-               GPIO5│11       20 │GPIO0
-              GPIO18│12       19 │GPIO2  (LED)
-              GPIO19│13       18 │GPIO15
-                  NC│14       17 │GPIO13
-               GPIO21│15       16 │GPIO12
-                    └────────────┘
+ ESP32-DevKitC
+ ┌────────────┐
+ 3.3V│1 30 │GND
+ RESET│2 29 │GPIO23
+ (TX) GPIO1│3 28 │GPIO22 (I2C SCL)
+ (RX) GPIO3│4 27 │GPIO21 (I2C SDA)
+ GPIO15│5 26 │GPIO19 (SPI MISO)
+ GPIO2│6 25 │GPIO18 (SPI SCK)
+ GPIO0│7 24 │GPIO5 (SPI CS)
+ GPIO4│8 23 │GPIO17 (UART2 TX)
+ GPIO16│9 22 │GPIO16 (UART2 RX)
+ GPIO17│10 21 │GPIO4
+ GPIO5│11 20 │GPIO0
+ GPIO18│12 19 │GPIO2 (LED)
+ GPIO19│13 18 │GPIO15
+ NC│14 17 │GPIO13
+ GPIO21│15 16 │GPIO12
+ └────────────┘
 ```
 
 ### Özel Fonksiyonlar
@@ -249,7 +249,7 @@ match UART.read_line(1, 5000) {
 | GPIO15 | MTDO | Strapping pin |
 | GPIO34-39 | Input only | Pull-up/down yok |
 
-## 📊 Performans
+## Performans
 
 ### GPIO
 - **Hız:** ~1MHz toggle (yazılımsal)
@@ -258,7 +258,7 @@ match UART.read_line(1, 5000) {
 
 ### I2C
 - **Standard mode:** 100kHz
-- **Fast mode:** 400kHz  
+- **Fast mode:** 400kHz 
 - **Fast mode plus:** 1MHz
 - **Transaction overhead:** ~100µs
 
@@ -268,7 +268,7 @@ match UART.read_line(1, 5000) {
 - **FIFO:** 128 bytes TX/RX
 - **DMA:** Supported
 
-## 🐛 Bilinen Kısıtlamalar
+## Bilinen Kısıtlamalar
 
 1. **GPIO 6-11:** SPI flash için ayrılmış, kullanılmamalı
 2. **GPIO 34-39:** Yalnızca input, pull-up/down desteklenmiyor
@@ -276,14 +276,14 @@ match UART.read_line(1, 5000) {
 4. **I2C clock stretching:** Slave mode'da sorunlu olabilir
 5. **UART RX interrupt:** ESP-IDF event queue kullanılmalı
 
-## 🔗 ESP-IDF Referansları
+## ESP-IDF Referansları
 
 - [ESP-IDF Programming Guide](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/)
 - [GPIO API Reference](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/peripherals/gpio.html)
 - [I2C API Reference](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/peripherals/i2c.html)
 - [UART API Reference](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/peripherals/uart.html)
 
-## 📝 TODO
+## TODO
 
 - [ ] PWM/LEDC implementation
 - [ ] SPI master/slave
@@ -296,7 +296,7 @@ match UART.read_line(1, 5000) {
 
 ---
 
-**Platform:** ESP32 Family (ESP32, ESP32-C3, ESP32-S2, ESP32-S3)  
-**SDK:** ESP-IDF v5.x  
-**BERK Version:** 1.0.0  
+**Platform:** ESP32 Family (ESP32, ESP32-C3, ESP32-S2, ESP32-S3) 
+**SDK:** ESP-IDF v5.x 
+**BERK Version:** 1.0.0 
 **Last Update:** November 21, 2025

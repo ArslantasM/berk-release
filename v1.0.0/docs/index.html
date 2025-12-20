@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BERK Programming Language - Documentation</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 900px; margin: 0 auto; padding: 20px; line-height: 1.6; }
+        h1 { color: #2563eb; border-bottom: 3px solid #2563eb; padding-bottom: 10px; }
+        h2 { color: #1e40af; margin-top: 30px; }
+        code { background: #f1f5f9; padding: 2px 6px; border-radius: 4px; font-family: 'Consolas', monospace; }
+        pre { background: #1e293b; color: #e2e8f0; padding: 15px; border-radius: 8px; overflow-x: auto; }
+        .highlight { background: #fef3c7; padding: 15px; border-left: 4px solid #f59e0b; margin: 20px 0; }
+        a { color: #2563eb; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin: 20px 0; }
+        .card { background: #f8fafc; padding: 20px; border-radius: 8px; border: 1px solid #e2e8f0; }
+        .card h3 { margin-top: 0; color: #1e40af; }
+    </style>
+</head>
+<body>
+    <h1>🚀 BERK Programming Language v1.0.0</h1>
+    
+    <div class="highlight">
+        <strong>Welcome to BERK!</strong> A modern, bilingual programming language with Turkish and English syntax support.
+    </div>
+
+    <h2>Quick Start</h2>
+    <p>Open a terminal and run:</p>
+    <pre>berk-lang run hello.berk</pre>
+
+    <h2>Example Programs</h2>
+    
+    <div class="grid">
+        <div class="card">
+            <h3>🇹🇷 Turkish Syntax</h3>
+            <pre>fonksiyon merhaba() yap
+    yazdır("Merhaba Dünya!")
+son
+
+merhaba()</pre>
+        </div>
+        <div class="card">
+            <h3>🇬🇧 English Syntax</h3>
+            <pre>fn hello() do
+    print("Hello World!")
+end
+
+hello()</pre>
+        </div>
+    </div>
+
+    <h2>Commands</h2>
+    <ul>
+        <li><code>berk-lang run &lt;file&gt;</code> - Run a BERK program</li>
+        <li><code>berk-lang check &lt;file&gt;</code> - Type check without running</li>
+        <li><code>berk-repl</code> - Interactive REPL environment</li>
+        <li><code>berk-lsp</code> - Language Server for IDE integration</li>
+    </ul>
+
+    <h2>Features</h2>
+    <ul>
+        <li>✅ Bilingual syntax (Turkish/English)</li>
+        <li>✅ Strong type system</li>
+        <li>✅ Pattern matching</li>
+        <li>✅ RTOS semantics for embedded systems</li>
+        <li>✅ Rich standard library</li>
+        <li>✅ VS Code extension support</li>
+    </ul>
+
+    <h2>Resources</h2>
+    <ul>
+        <li><a href="https://github.com/ArslantasM/berk-lang">GitHub Repository</a></li>
+        <li><a href="https://github.com/ArslantasM/berk-test">Example Programs</a></li>
+        <li><a href="https://marketplace.visualstudio.com/items?itemName=berk.berk-lang">VS Code Extension</a></li>
+    </ul>
+
+    <footer style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #e2e8f0; color: #64748b;">
+        <p>BERK Programming Language © 2024-2025 | GPL3 License</p>
+    </footer>
+</body>
+</html>

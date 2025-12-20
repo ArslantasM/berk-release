@@ -2,7 +2,7 @@
 
 Raspberry Pi RP2040 için BERK HAL implementasyonu. Pico SDK bindings.
 
-## 📁 Modüller
+## Modüller
 
 | Modül | Satır | Durum | Özellikler |
 |-------|-------|-------|------------|
@@ -17,7 +17,7 @@ Raspberry Pi RP2040 için BERK HAL implementasyonu. Pico SDK bindings.
 
 **Toplam:** 2340 satır (8/8 modül) ✅ **TIER-1 COMPLETE**
 
-## 🎯 RP2040 Specifications
+## RP2040 Specifications
 
 **Core:**
 - Dual ARM Cortex-M0+ @ 133 MHz
@@ -50,31 +50,31 @@ Raspberry Pi RP2040 için BERK HAL implementasyonu. Pico SDK bindings.
 - QFN-56 (7×7 mm)
 - Cost: ~$1 USD (qty 1000)
 
-## 🔌 Pin Mapping (Raspberry Pi Pico)
+## Pin Mapping (Raspberry Pi Pico)
 
 ```
-                    RP2040 / Raspberry Pi Pico
-                    
-         GP0 (UART0 TX)  [ 1]    [40]  VBUS (5V)
-         GP1 (UART0 RX)  [ 2]    [39]  VSYS (5V)
-              GND        [ 3]    [38]  GND
-         GP2            [ 4]    [37]  3V3_EN
-         GP3            [ 5]    [36]  3V3 OUT
-         GP4 (I2C0 SDA) [ 6]    [35]  ADC_VREF
-         GP5 (I2C0 SCL) [ 7]    [34]  GP28 (ADC2)
-              GND        [ 8]    [33]  GND
-         GP6            [ 9]    [32]  GP27 (ADC1)
-         GP7            [10]    [31]  GP26 (ADC0)
-         GP8            [11]    [30]  RUN
-         GP9            [12]    [29]  GP22
-              GND        [13]    [28]  GND
-         GP10           [14]    [27]  GP21
-         GP11           [15]    [26]  GP20
-         GP12           [16]    [25]  GP19 (SPI0 TX)
-         GP13           [17]    [24]  GP18 (SPI0 SCK)
-              GND        [18]    [23]  GND
-         GP14           [19]    [22]  GP17 (SPI0 CSn)
-         GP15           [20]    [21]  GP16 (SPI0 RX)
+ RP2040 / Raspberry Pi Pico
+
+ GP0 (UART0 TX) [ 1] [40] VBUS (5V)
+ GP1 (UART0 RX) [ 2] [39] VSYS (5V)
+ GND [ 3] [38] GND
+ GP2 [ 4] [37] 3V3_EN
+ GP3 [ 5] [36] 3V3 OUT
+ GP4 (I2C0 SDA) [ 6] [35] ADC_VREF
+ GP5 (I2C0 SCL) [ 7] [34] GP28 (ADC2)
+ GND [ 8] [33] GND
+ GP6 [ 9] [32] GP27 (ADC1)
+ GP7 [10] [31] GP26 (ADC0)
+ GP8 [11] [30] RUN
+ GP9 [12] [29] GP22
+ GND [13] [28] GND
+ GP10 [14] [27] GP21
+ GP11 [15] [26] GP20
+ GP12 [16] [25] GP19 (SPI0 TX)
+ GP13 [17] [24] GP18 (SPI0 SCK)
+ GND [18] [23] GND
+ GP14 [19] [22] GP17 (SPI0 CSn)
+ GP15 [20] [21] GP16 (SPI0 RX)
 ```
 
 **Built-in LED:** GP25 (on-board LED)
@@ -87,7 +87,7 @@ Raspberry Pi RP2040 için BERK HAL implementasyonu. Pico SDK bindings.
 - **SPI1:** GP8 (RX), GP9 (CSn), GP10 (SCK), GP11 (TX)
 - **ADC:** GP26 (ADC0), GP27 (ADC1), GP28 (ADC2), GP29 (ADC3)
 
-## ⚡ Performance Metrics
+## Performance Metrics
 
 | Peripheral | Max Speed | Resolution | Notes |
 |------------|-----------|------------|-------|
@@ -100,7 +100,7 @@ Raspberry Pi RP2040 için BERK HAL implementasyonu. Pico SDK bindings.
 | **PIO** | 133 MHz | - | 32 instructions per SM |
 | **USB** | 12 Mbit/s | - | Full Speed Device |
 
-## 🌟 Unique Feature: PIO (Programmable I/O)
+## Unique Feature: PIO (Programmable I/O)
 
 RP2040'ın en önemli özelliği **PIO (Programmable I/O)** bloklarıdır:
 
@@ -118,25 +118,25 @@ RP2040'ın en önemli özelliği **PIO (Programmable I/O)** bloklarıdır:
 - Manchester encoding/decoding
 - Custom UART with odd baud rates
 
-## 🚀 Quick Start
+## Quick Start
 
 ```berk
 import "embedded/platforms/rp2040/gpio" as GPIO
 
 fn main() {
-    // Initialize built-in LED (GP25)
-    GPIO.init_output(25, GPIO.OutputMode.PushPull)
-    
-    loop {
-        GPIO.set_high(25)
-        time.sleep_ms(1000)
-        GPIO.set_low(25)
-        time.sleep_ms(1000)
-    }
+ // Initialize built-in LED (GP25)
+ GPIO.init_output(25, GPIO.OutputMode.PushPull)
+
+ loop {
+ GPIO.set_high(25)
+ time.sleep_ms(1000)
+ GPIO.set_low(25)
+ time.sleep_ms(1000)
+ }
 }
 ```
 
-## 📦 Development Boards
+## Development Boards
 
 ### Raspberry Pi Pico
 - **Price:** $4 USD
@@ -164,7 +164,7 @@ fn main() {
 - **Flash:** 4-16 MB QSPI
 - **Features:** Built-in LiPo charger, RGB LED
 
-## 🔧 SDK & Tools
+## SDK & Tools
 
 **Pico SDK:**
 - Official C/C++ SDK from Raspberry Pi
@@ -183,7 +183,7 @@ fn main() {
 3. Drag UF2 file to RPI-RP2 drive
 4. Release BOOTSEL
 
-## 📚 Example Applications
+## Example Applications
 
 ### Education
 - **MicroPython:** Official Python support
@@ -202,7 +202,7 @@ fn main() {
 - Logic analyzers (PIO)
 - Audio interfaces (I2S via PIO)
 
-## 🐛 Known Limitations
+## Known Limitations
 
 - **No Hardware FPU:** Cortex-M0+ (use integer math or software FP)
 - **No Internal Flash:** Requires external QSPI flash
@@ -211,17 +211,17 @@ fn main() {
 - **No CAN Bus:** Must use SPI CAN controller (MCP2515)
 - **No Ethernet:** WiFi available on Pico W only
 
-## 💰 Cost Comparison
+## Cost Comparison
 
 | Platform | Price | Flash | RAM | Periph Score |
 |----------|-------|-------|-----|--------------|
-| RP2040 | $1 | 0* | 264 KB | ⭐⭐⭐⭐ |
-| ESP32 | $2 | 4 MB | 520 KB | ⭐⭐⭐⭐⭐ |
-| STM32F4 | $5 | 512 KB | 192 KB | ⭐⭐⭐⭐⭐ |
+| RP2040 | $1 | 0* | 264 KB | |
+| ESP32 | $2 | 4 MB | 520 KB | |
+| STM32F4 | $5 | 512 KB | 192 KB | |
 
 *Requires external QSPI flash (adds $0.50-2)
 
-## 🏭 Market Position
+## Market Position
 
 **Target Markets:**
 - **Education:** Raspberry Pi Foundation focus

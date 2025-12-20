@@ -10,7 +10,7 @@ Arduino is the world's largest maker/hobbyist platform with **30+ million users*
 
 ## Why Arduino Matters for BERK
 
-### Viral Marketing Potential 🚀
+### Viral Marketing Potential 
 - **Reddit**: r/arduino (600K+ members), r/embedded, r/programming
 - **Twitter/X**: #Arduino trending regularly
 - **YouTube**: Thousands of Arduino channels
@@ -26,11 +26,11 @@ Arduino is the world's largest maker/hobbyist platform with **30+ million users*
 
 ### BERK Differentiation
 Arduino typically uses C++, but BERK offers:
-- ✨ **Modern syntax** vs Arduino's C++
-- 🔒 **Memory safety** vs buffer overflows
-- ⚡ **Better performance** with optimizations
-- 🎯 **Type safety** vs Arduino's loose typing
-- 📦 **Proper module system** vs Arduino libraries
+- **Modern syntax** vs Arduino's C++
+- **Memory safety** vs buffer overflows
+- **Better performance** with optimizations
+- **Type safety** vs Arduino's loose typing
+- **Proper module system** vs Arduino libraries
 
 ## Supported Boards
 
@@ -39,27 +39,27 @@ Arduino typically uses C++, but BERK offers:
 - **Flash**: 32 KB
 - **RAM**: 2 KB
 - **Price**: $5-25
-- **Popularity**: ⭐⭐⭐⭐⭐ (Most iconic Arduino)
+- **Popularity**: (Most iconic Arduino)
 
 ### Arduino Mega (ATmega2560)
 - **CPU**: AVR @ 16 MHz
 - **Flash**: 256 KB
 - **RAM**: 8 KB
 - **I/O**: 54 digital pins
-- **Popularity**: ⭐⭐⭐⭐ (Complex projects)
+- **Popularity**: (Complex projects)
 
 ### Arduino Due (SAM3X8E)
 - **CPU**: ARM Cortex-M3 @ 84 MHz
 - **Flash**: 512 KB
 - **RAM**: 96 KB
 - **Price**: $38
-- **Popularity**: ⭐⭐⭐ (32-bit performance)
+- **Popularity**: (32-bit performance)
 
 ### Arduino Zero (SAMD21)
 - **CPU**: ARM Cortex-M0+ @ 48 MHz
 - **Flash**: 256 KB
 - **RAM**: 32 KB
-- **Popularity**: ⭐⭐⭐⭐ (Modern ARM)
+- **Popularity**: (Modern ARM)
 
 ## BERK Platform Modules
 
@@ -81,79 +81,79 @@ use arduino::gpio;
 use arduino::time;
 
 fn main() {
-    let led = gpio::pin(13).output();
-    
-    loop {
-        led.high();
-        time::delay_ms(1000);
-        led.low();
-        time::delay_ms(1000);
-    }
+ let led = gpio::pin(13).output();
+
+ loop {
+ led.high();
+ time::delay_ms(1000);
+ led.low();
+ time::delay_ms(1000);
+ }
 }
 ```
-**Tweet**: "Arduino Blink in BERK - cleaner than C++! 🚀 #Arduino #BERK"
+**Tweet**: "Arduino Blink in BERK - cleaner than C++! #Arduino #BERK"
 
 #### Ultrasonic Distance Sensor
 ```berk
 use arduino::{gpio, time, serial};
 
 fn main() {
-    let trig = gpio::pin(9).output();
-    let echo = gpio::pin(10).input();
-    serial::begin(9600);
-    
-    loop {
-        // Send pulse
-        trig.low();
-        time::delay_us(2);
-        trig.high();
-        time::delay_us(10);
-        trig.low();
-        
-        // Measure echo
-        let duration = echo.pulse_in(true);
-        let distance_cm = duration / 58;
-        
-        serial::println!("Distance: {} cm", distance_cm);
-        time::delay_ms(500);
-    }
+ let trig = gpio::pin(9).output();
+ let echo = gpio::pin(10).input();
+ serial::begin(9600);
+
+ loop {
+ // Send pulse
+ trig.low();
+ time::delay_us(2);
+ trig.high();
+ time::delay_us(10);
+ trig.low();
+
+ // Measure echo
+ let duration = echo.pulse_in(true);
+ let distance_cm = duration / 58;
+
+ serial::println!("Distance: {} cm", distance_cm);
+ time::delay_ms(500);
+ }
 }
 ```
-**TikTok**: "Ultrasonic sensor in BERK - watch it measure distance! 📏"
+**TikTok**: "Ultrasonic sensor in BERK - watch it measure distance! "
 
 #### RGB LED Mood Light
 ```berk
 use arduino::{analog, time};
 
 fn main() {
-    loop {
-        for hue in 0..360 {
-            let (r, g, b) = hsv_to_rgb(hue, 100, 50);
-            analog::write(9, r);
-            analog::write(10, g);
-            analog::write(11, b);
-            time::delay_ms(10);
-        }
-    }
+ loop {
+ for hue in 0..360 {
+ let (r, g, b) = hsv_to_rgb(hue, 100, 50);
+ analog::write(9, r);
+ analog::write(10, g);
+ analog::write(11, b);
+ time::delay_ms(10);
+ }
+ }
 }
 ```
-**Instagram**: "🌈 Rainbow mood light coded in BERK!"
+**Instagram**: " Rainbow mood light coded in BERK!"
 
 #### IoT Temperature Logger
 ```berk
 use arduino::{analog, serial, time};
 
 fn main() {
-    serial::begin(9600);
-    
-    loop {
-        let raw = analog::read(0);
-        let voltage = raw as f32 * 5.0 / 1023.0;
-        let temp_c = (voltage - 0.5) * 100.0;  // TMP36 sensor
-        
-        serial::println!("Temp: {:.1}°C", temp_c);
-        time::delay_ms(2000);
-    }
+ serial::begin(9600);
+
+ loop {
+ let raw = analog::read(0);
+ let voltage = raw as f32 * 5.0 / 1023.0;
+ let temp_c = (voltage - 0.5) * 100.0; // TMP36 sensor
+
+ serial::println!("Temp: {:.1}°C", temp_c);
+ time::delay_ms(2000);
+ }
 }
 ```
 **YouTube**: "Arduino Temperature Logger in BERK Programming Language"
@@ -163,18 +163,18 @@ fn main() {
 use arduino::{servo, time};
 
 fn main() {
-    let mut servo = servo::attach(9);
-    
-    loop {
-        for angle in 0..=180 {
-            servo.write(angle);
-            time::delay_ms(15);
-        }
-        for angle in (0..=180).rev() {
-            servo.write(angle);
-            time::delay_ms(15);
-        }
-    }
+ let mut servo = servo::attach(9);
+
+ loop {
+ for angle in 0..=180 {
+ servo.write(angle);
+ time::delay_ms(15);
+ }
+ for angle in (0..=180).rev() {
+ servo.write(angle);
+ time::delay_ms(15);
+ }
+ }
 }
 ```
 
@@ -205,27 +205,27 @@ fn main() {
 
 ## Viral Project Ideas
 
-### 1. Smart Plant Watering System 🌱
+### 1. Smart Plant Watering System 
 - Moisture sensor + servo pump
 - LED indicators
 - **Viral angle**: "Keep your plants alive with BERK!"
 
-### 2. Distance-Reactive LED Strip 🎨
+### 2. Distance-Reactive LED Strip 
 - Ultrasonic sensor + NeoPixels
 - Color changes with distance
 - **Viral angle**: "Gesture-controlled lights!"
 
-### 3. Mood Detection Music Player 🎵
+### 3. Mood Detection Music Player 
 - Heart rate sensor + buzzer
 - Plays different tones
 - **Viral angle**: "Music that feels your emotions!"
 
-### 4. Arduino Robot Car 🚗
+### 4. Arduino Robot Car 
 - Motor control + sensors
 - Obstacle avoidance
 - **Viral angle**: "Self-driving car in BERK!"
 
-### 5. Smart Doorbell with Logging 🔔
+### 5. Smart Doorbell with Logging 
 - Button + buzzer + SD card
 - Logs all presses
 - **Viral angle**: "Know who visited while you're away!"
@@ -236,13 +236,13 @@ fn main() {
 ```cpp
 int ledPin = 13;
 void setup() {
-    pinMode(ledPin, OUTPUT);
+ pinMode(ledPin, OUTPUT);
 }
 void loop() {
-    digitalWrite(ledPin, HIGH);
-    delay(1000);
-    digitalWrite(ledPin, LOW);
-    delay(1000);
+ digitalWrite(ledPin, HIGH);
+ delay(1000);
+ digitalWrite(ledPin, LOW);
+ delay(1000);
 }
 ```
 
@@ -251,13 +251,13 @@ void loop() {
 use arduino::{gpio, time};
 
 fn main() {
-    let led = gpio::pin(13).output();
-    loop {
-        led.high();
-        time::delay_ms(1000);
-        led.low();
-        time::delay_ms(1000);
-    }
+ let led = gpio::pin(13).output();
+ loop {
+ led.high();
+ time::delay_ms(1000);
+ led.low();
+ time::delay_ms(1000);
+ }
 }
 ```
 
@@ -310,17 +310,17 @@ fn main() {
 ## Metrics for Success
 
 ### Initial Goals (3 months)
-- 📱 10K+ Twitter followers for #BERKlang
-- 🎥 5 YouTubers cover BERK+Arduino
-- 💬 1K+ Discord members
-- ⭐ 5K+ GitHub stars
+- 10K+ Twitter followers for #BERKlang
+- 5 YouTubers cover BERK+Arduino
+- 1K+ Discord members
+- 5K+ GitHub stars
 
 ### Long-term Goals (1 year)
-- 📱 50K+ community members
-- 🎥 20+ tutorial channels
-- 💬 10K+ Discord members
-- ⭐ 20K+ GitHub stars
-- 🏆 Featured on Arduino.cc homepage
+- 50K+ community members
+- 20+ tutorial channels
+- 10K+ Discord members
+- 20K+ GitHub stars
+- Featured on Arduino.cc homepage
 
 ## Getting Started for Makers
 
@@ -345,11 +345,11 @@ berk upload --port /dev/ttyUSB0
 2. Open BERK IDE
 3. Copy blink example
 4. Click "Build & Upload"
-5. Watch LED blink! 💡
+5. Watch LED blink! 
 
 ---
 
-**Marketing Tagline**: "Arduino, but make it modern! 🚀"
+**Marketing Tagline**: "Arduino, but make it modern! "
 **Hashtags**: #Arduino #BERK #MakerMovement #EmbeddedProgramming
 **Target Audience**: 30M Arduino users, especially content creators
 **Expected Reach**: 1M+ impressions in first month with viral content
