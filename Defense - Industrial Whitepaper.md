@@ -140,7 +140,7 @@ The following results are real measured values on the current development machin
 
 Benchmark method notes:
 
-- SPSC test uses a warm-up and `black_box` to prevent optimization removal.
+- Measurements follow industry-standard microbenchmarking practices.
 - MPSC (4 producers) is expected to be limited by cache-line contention.
 
 | Metric | Target | Measured | Status | Note |
@@ -199,11 +199,11 @@ Profile note:
 
 ## Safety-Critical AI Orchestration (CUIO)
 
-BERK includes a concept for a certification-oriented inference orchestrator intended for edge deployments:
+CUIO concept for compile-time oriented, certifiable inference:
 
-- Statically planned memory and DMA
-- Deterministic scheduling
-- Compile-time verification hooks for pipeline structure
+- Predictable resource allocation
+- Deterministic execution model
+- Compile-time analyzability for certification workflows
 
 This section describes intent and direction; certification claims are program- and process-dependent.
 
@@ -234,5 +234,6 @@ Profile-specific risks:
 - Industrial Profile: mixing telemetry/convenience tasks into the control loop can reintroduce jitter via contention and backpressure.
 
 ## Summary
+
 
 BERK aims to reduce integration risk in defense and industrial systems by making RTOS semantics explicit and verifiable at compile-time, while providing a small deterministic runtime and a high-throughput messaging path. The result is a programming model that supports both analyzability and performance, with engineering limits stated up front.
