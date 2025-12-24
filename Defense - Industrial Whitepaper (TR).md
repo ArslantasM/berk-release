@@ -140,8 +140,6 @@ Aşağıdaki sonuçlar, mevcut geliştirme makinesinde (release build) ölçülm
 
 Benchmark yöntemi notları:
 
-- SPSC testi, soğuk etkileri azaltmak için warm-up ve optimizasyonu engellemek için `black_box` kullanır.
-- MPSC (4 producer) için cache-line contention sınırlaması beklenir.
 
 | Metrik | Hedef | Ölçülen | Durum | Not |
 |--------|-------|---------|-------|-----|
@@ -199,11 +197,11 @@ Profil notu:
 
 ## Emniyet-Kritik AI Orkestrasyonu (CUIO)
 
-BERK, edge dağıtımları için sertifikasyon odaklı bir inference orchestrator konsepti içerir:
+BERK, derleme zamanı odaklı, sertifikalandırılabilir çıkarım düzenlemesi için CUIO konsepti:
 
-- Statik planlanan bellek ve DMA
-- Deterministik scheduling
-- Pipeline yapısı için derleme zamanı doğrulama kancaları
+- Öngörülebilir kaynak tahsisi
+- Deterministik yürütme modeli
+- Sertifikasyon iş akışları için derleme zamanı analiz edilebilirliği
 
 Bu bölüm niyet ve yönü anlatır; sertifikasyon iddiaları program ve süreç bağımlıdır.
 
@@ -236,3 +234,4 @@ Profile özel riskler:
 ## Sonuç
 
 BERK, savunma ve endüstriyel sistemlerde entegrasyon riskini azaltmayı; RTOS semantiğini açık ve derleme zamanında doğrulanabilir hale getirerek, küçük deterministik bir runtime ve yüksek throughput’lu bir mesajlaşma yolu sunarak hedefler. Sonuç; hem analiz edilebilirliği hem performansı destekleyen, mühendislik limitlerini en baştan açıkça ifade eden bir programlama modelidir.
+
