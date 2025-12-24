@@ -141,7 +141,6 @@ The following results are real measured values on the current development machin
 Benchmark method notes:
 
 - Measurements follow industry-standard microbenchmarking practices.
-- MPSC (4 producers) is expected to be limited by cache-line contention.
 
 | Metric | Target | Measured | Status | Note |
 |--------|--------|----------|--------|------|
@@ -237,3 +236,4 @@ Profile-specific risks:
 
 
 BERK aims to reduce integration risk in defense and industrial systems by making RTOS semantics explicit and verifiable at compile-time, while providing a small deterministic runtime and a high-throughput messaging path. The result is a programming model that supports both analyzability and performance, with engineering limits stated up front.
+
